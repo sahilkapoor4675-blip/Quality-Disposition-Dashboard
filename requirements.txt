@@ -1,0 +1,3 @@
+# No external dependencies — this app uses only Python's standard library
+# (http.server, sqlite3, json, math). This file exists only because
+# Render's Python environment expects a requirements.txt during build.
