@@ -23,6 +23,39 @@ FILTER_KEYS = [
 DECISION_ORDER = ["PRIME", "FOR NEXT PROCESS", "SALVAGE", "HOLD FOR DECISION",
                    "REJECT", "RE-WORK", "DIVERT"]
 
+# Full canonical list of main-defect types (from the workbook's Lists sheet).
+# Used so the Defect Analysis register always shows every defect type,
+# even ones with zero occurrences in the current filter selection.
+MAIN_DEFECTS_FULL_LIST = [
+    "ACID STAINS", "BLACK PATCHES", "CASTING DEFECTS", "COOLANT PATCHES",
+    "CRACKED EDGE", "DENT", "DENT MARK", "EDGE FOLD", "GAUGE VARIATION",
+    "HIGH WEIGHT", "HOLE", "IMPROPER ANNEALING", "INTERWRAP SCRATCHES (R",
+    "INTERWRAP SCRATCHES (U", "LESS WEIGHT COIL", "LINE SCRT (ROLLED)",
+    "LINE SCRT (UNROLLED)", "MILLING TIP MARKS", "OTHERS", "PIN HOLE",
+    "POOR BUILD UP", "POOR PICKLING", "REDISH SURFACE", "ROLL MARK",
+    "ROLL PICK-UP", "ROLL SKIDDING MARK / R", "ROLL SOFT MARKS", "ROLL STOP",
+    "SCOOPING SCRT (UNROLLE", "SCRATCH", "SHINING SCRATCH", "SLIVER-B",
+    "STICKING", "SURFACE CRACKS", "SURFACE FOLD",
+]
+
+import datetime as _dt
+
+
+def _month_sort_key(m):
+    try:
+        return _dt.datetime.strptime(m, "%b-%Y")
+    except ValueError:
+        return _dt.datetime.max
+
+
+def _week_sort_key(w):
+    try:
+        # "Wk of 06-Apr-26" -> "06-Apr-26"
+        date_part = w.replace("Wk of ", "").strip()
+        return _dt.datetime.strptime(date_part, "%d-%b-%y")
+    except ValueError:
+        return _dt.datetime.max
+
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
@@ -61,11 +94,17 @@ def norm_sinv(p):
                 ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
 
 
-def build_where(filters):
-    """Build SQL WHERE clause + params replicating the workbook's Full_Match logic."""
+def build_where(filters, exclude=None):
+    """Build SQL WHERE clause + params replicating the workbook's Full_Match logic.
+    `exclude` is a set of filter keys to skip (used by analysis views where a
+    dimension is the thing being broken down, e.g. Work Center in the
+    Work Center analysis, or Month in the Monthly Trend)."""
+    exclude = exclude or set()
     clauses = []
     params = []
     for key in FILTER_KEYS:
+        if key in exclude:
+            continue
         val = filters.get(key, "All")
         if not val or val == "All":
             continue
@@ -234,6 +273,135 @@ def get_filter_options():
     return options
 
 
+def _group_metrics(cur, where_sql, params, group_col, group_val):
+    """Compute Coils/Output Qty/Defect Coils/Defect%/Reject Qty/Reject%Qty/FPY%
+    for rows where group_col = group_val, ANDed with an existing where_sql."""
+    extra = f"{group_col} = ?"
+    w2 = where_sql + (" AND " if where_sql else "WHERE ") + extra
+    p2 = params + [group_val]
+
+    cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
+    coils, qty = cur.fetchone()
+
+    dw = w2 + " AND main_defect <> '' AND main_defect <> 'NO DEFECT'"
+    cur.execute(f"SELECT COUNT(*) FROM disposition {dw}", p2)
+    defect_coils = cur.fetchone()[0]
+
+    rw = w2 + " AND quality_decision = ?"
+    cur.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {rw}", p2 + ["REJECT"])
+    reject_qty = cur.fetchone()[0]
+
+    pw = w2 + " AND quality_decision = ?"
+    cur.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {pw}", p2 + ["PRIME"])
+    prime_qty = cur.fetchone()[0]
+
+    return {
+        "name": group_val,
+        "coils": coils,
+        "output_qty": qty,
+        "defect_coils": defect_coils,
+        "defect_pct": (defect_coils / coils) if coils else 0.0,
+        "reject_qty": reject_qty,
+        "reject_pct_qty": (reject_qty / qty) if qty else 0.0,
+        "first_pass_yield_pct": (prime_qty / qty) if qty else 0.0,
+    }
+
+
+def compute_work_center_grade(filters):
+    """Work Center & Grade Analysis. Work Center and Grade filters do NOT
+    apply to their own breakdown (they are the analysis dimension), matching
+    the original workbook's behaviour."""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    wc_where, wc_params = build_where(filters, exclude={"work_center"})
+    cur.execute(f"SELECT DISTINCT work_center FROM disposition WHERE work_center <> '' ORDER BY 1")
+    work_centers = [r[0] for r in cur.fetchall()]
+    wc_rows = [_group_metrics(cur, wc_where, wc_params, "work_center", wc) for wc in work_centers]
+
+    gr_where, gr_params = build_where(filters, exclude={"grade"})
+    cur.execute(f"SELECT DISTINCT grade FROM disposition WHERE grade <> '' ORDER BY 1")
+    grades = [r[0] for r in cur.fetchall()]
+    gr_rows = [_group_metrics(cur, gr_where, gr_params, "grade", g) for g in grades]
+
+    conn.close()
+    return {"by_work_center": wc_rows, "by_grade": gr_rows}
+
+
+def compute_defect_analysis(filters):
+    """Complete defect occurrence register (all canonical defect types) +
+    Top 10 Pareto. All 8 filters apply here (defects are not a filter dim
+    that needs excluding)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    where_sql, params = build_where(filters)
+
+    dw = where_sql + (" AND " if where_sql else "WHERE ") + \
+        "main_defect <> '' AND main_defect <> 'NO DEFECT'"
+    cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {dw}", params)
+    total_defect_records, total_defect_qty = cur.fetchone()
+
+    register = []
+    for defect in MAIN_DEFECTS_FULL_LIST:
+        w2 = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect = ?"
+        cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {w2}",
+                    params + [defect])
+        cnt, qty = cur.fetchone()
+        register.append({
+            "defect": defect, "records": cnt, "qty": qty,
+            "pct_records": (cnt / total_defect_records) if total_defect_records else 0.0,
+        })
+    register.sort(key=lambda r: r["qty"], reverse=True)
+    for i, r in enumerate(register, start=1):
+        r["rank"] = i
+
+    top10 = [r for r in register if r["qty"] > 0][:10]
+    cum = 0.0
+    pareto = []
+    for r in top10:
+        pct = (r["qty"] / total_defect_qty) if total_defect_qty else 0.0
+        cum += pct
+        pareto.append({"defect": r["defect"], "records": r["records"], "qty": r["qty"],
+                        "pct": pct, "cum_pct": cum})
+
+    conn.close()
+    return {
+        "register": register,
+        "pareto": pareto,
+        "totals": {"records": total_defect_records, "qty": total_defect_qty},
+    }
+
+
+def compute_monthly_trend(filters):
+    """Trend across months (ignores the Month filter itself, applies the
+    other 7)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    where_sql, params = build_where(filters, exclude={"month"})
+
+    cur.execute("SELECT DISTINCT month FROM disposition WHERE month <> ''")
+    months = sorted([r[0] for r in cur.fetchall()], key=_month_sort_key)
+
+    rows = [_group_metrics(cur, where_sql, params, "month", m) for m in months]
+    conn.close()
+    return {"rows": rows}
+
+
+def compute_period_trend(filters):
+    """Trend across weeks (ignores the Week filter itself, applies the
+    other 7)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    where_sql, params = build_where(filters, exclude={"week"})
+
+    cur.execute("SELECT DISTINCT week FROM disposition WHERE week <> ''")
+    weeks = sorted([r[0] for r in cur.fetchall()], key=_week_sort_key)
+
+    rows = [_group_metrics(cur, where_sql, params, "week", w) for w in weeks]
+    conn.close()
+    return {"rows": rows}
+
+
 HTML_PAGE = None  # loaded lazily from index_template
 
 
@@ -273,6 +441,30 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 data = compute_kpis(filters)
                 self._send_json(data)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/work_center_grade":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_work_center_grade(filters))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/defect_analysis":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_defect_analysis(filters))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/monthly_trend":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_monthly_trend(filters))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/period_trend":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_period_trend(filters))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":

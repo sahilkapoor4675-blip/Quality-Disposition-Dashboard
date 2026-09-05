@@ -34,8 +34,20 @@ This rebuilds `quality.db` from the .xlsm file. Then restart `server.py`.
 - ✅ Exactly 16 KPI cards (matches original workbook formulas — verified against Aug-2026 sample: all 16 values matched exactly)
 - ✅ 4,820/4,820 records imported, all with Output Weight
 - ✅ 8 live filters: Month, Work Center, Grade, Quality Decision, Week, Quarter, Financial Year, Defect Intensity
-- ✅ KPIs, Quality Decision table, Top-5 Defect Pareto, and Intensity Breakdown all recalculate instantly when filters change
-- ✅ No external dependencies (no Flask, no CDN) — works fully offline
+- ✅ 5 tabs, replicating all sheets from your original workbook:
+  1. **📊 Dashboard** — 16 KPIs, Quality Decision table, Top-5 Defect Pareto, Intensity Breakdown
+  2. **🏭 Work Center & Grade** — performance comparison bar charts + tables (Work Center and Grade filters don't apply to their own breakdown, same as the original workbook)
+  3. **🎯 Defect Analysis** — full 35-defect occurrence register + Top-10 Pareto chart
+  4. **📈 Monthly Trend** — coils & defect % trend line chart across months
+  5. **📅 Period Trend** — same trend view broken down by week
+- ✅ All charts are hand-drawn inline SVG (no chart libraries, no CDN — fully offline)
+- ✅ No external dependencies (no Flask) — works fully offline
+
+### Note on Monthly/Period Trend
+The original workbook pre-lists every month/week through the year 2030 (mostly
+showing 0s for future dates that haven't happened yet). This web app instead
+shows only the months/weeks that actually have data in your file — cleaner to
+read, and it will automatically extend as you add new records via `build_db.py`.
 
 ## Next step for company-wide sharing
 This local version is great for testing. For real multi-user access with logins/roles,

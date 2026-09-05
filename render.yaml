@@ -3,5 +3,4 @@ services:
     name: quality-disposition-dashboard
     env: python
     plan: free
-    buildCommand: "echo 'no build needed'"
-    startCommand: "python3 server.py"
+    startCommand: python3 server.py
