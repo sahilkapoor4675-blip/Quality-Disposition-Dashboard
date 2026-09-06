@@ -55,8 +55,8 @@
   th:first-child,td:first-child{text-align:left;}
   th{color:#fff;background:var(--accent);font-weight:700;font-size:11px;text-transform:uppercase;}
   tbody tr:nth-child(even){background:#f8f8f8;}
-  tfoot td{background:var(--navy);color:#fff;font-weight:700;}
-  tr.grand-total-row td{background:var(--navy);color:#fff;font-weight:700;border-bottom:none;}
+  tfoot td{background:#1E3A8A;color:#fff;font-weight:700;}
+  tr.grand-total-row td{background:#1E3A8A;color:#fff;font-weight:700;border-bottom:none;}
 
   .footer-note{text-align:center;color:var(--muted);font-size:11px;margin:20px 0;}
 
@@ -487,7 +487,7 @@ function yAxisTitleH(text, h, padT, padB){
 function makePieChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
   const sorted = [...items].sort((a,b) => b[valueKey]-a[valueKey]);
-  const w = 860, h = 680, cx = 430, cy = 330, r = 195;
+  const w = 960, h = 760, cx = 480, cy = 350, r = 225, innerR = 118;
   const gapDeg = 0.018;
   const total = sorted.reduce((s,d) => s + d[valueKey], 0);
 
@@ -505,38 +505,42 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     return {d, val, frac, a0, a1, midAngle, color};
   });
 
-  // Pass 2: draw slice wedges
+  // Pass 2: draw donut segments (outer arc out, inner arc back)
   let slices = "";
   slicesData.forEach(s => {
-    const x1 = cx + r*Math.cos(s.a0), y1 = cy + r*Math.sin(s.a0);
-    const x2 = cx + r*Math.cos(s.a1), y2 = cy + r*Math.sin(s.a1);
+    const ox1 = cx + r*Math.cos(s.a0), oy1 = cy + r*Math.sin(s.a0);
+    const ox2 = cx + r*Math.cos(s.a1), oy2 = cy + r*Math.sin(s.a1);
+    const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
+    const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${s.color}" stroke="#fff" stroke-width="2.5"><title>${s.d[labelKey]}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
+    slices += `<path d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${s.color}" stroke="#fff" stroke-width="2.5"><title>${s.d[labelKey]}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
   });
 
-  // Pass 3: place outside labels. To keep both sides visually balanced
-  // (rather than however the raw geometry happens to fall), slices are
-  // assigned to left/right by rank (biggest goes right, next biggest goes
-  // left, alternating) so neither side gets overloaded. Each leader line
-  // still starts from the slice's TRUE position on the pie.
+  // Center label: grand total
+  const totalText = opts.valFmt ? opts.valFmt(total) : total.toFixed(2);
+  const centerLabel = `
+    <text x="${cx}" y="${cy-10}" font-size="14" font-weight="700" text-anchor="middle" fill="#6b7c93">TOTAL</text>
+    <text x="${cx}" y="${cy+16}" font-size="20" font-weight="700" text-anchor="middle" fill="#1c2b3a">${totalText}</text>`;
+
+  // Pass 3: place outside labels. To keep both sides visually balanced,
+  // slices are assigned to left/right by rank (alternating) so neither
+  // side gets overloaded. Each leader line still starts from the slice's
+  // TRUE position on the ring.
   const rightSlices = [], leftSlices = [];
   slicesData.forEach((s, i) => (i % 2 === 0 ? rightSlices : leftSlices).push(s));
-  // Within each side, order top-to-bottom by true vertical position so
-  // leader lines don't cross each other more than necessary.
   rightSlices.sort((a,b) => a.midAngle - b.midAngle);
   leftSlices.sort((a,b) => a.midAngle - b.midAngle);
 
-  const rowSpacing = 48;
-  const elbowOffset = 30;
-  const labelOffset = 66;
+  const rowSpacing = 50;
+  const elbowOffset = 34;
+  const labelOffset = 72;
 
   function layoutSide(list, side){
-    // side: +1 = right, -1 = left
     const n = list.length;
     if(n === 0) return "";
     const totalH = (n-1) * rowSpacing;
     let startY = cy - totalH/2;
-    startY = Math.max(36, Math.min(startY, h - 36 - totalH));
+    startY = Math.max(40, Math.min(startY, h - 40 - totalH));
     let out = "";
     list.forEach((s, idx) => {
       const targetY = startY + idx*rowSpacing;
@@ -547,14 +551,24 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
       const valText = opts.valFmt ? opts.valFmt(s.val) : s.val.toFixed(2);
       out += `<polyline points="${edgeX},${edgeY} ${elbowX},${targetY} ${labelX-side*4},${targetY}" fill="none" stroke="#94a3b8" stroke-width="1.2"/>`;
       out += `<circle cx="${edgeX}" cy="${edgeY}" r="3" fill="${s.color}"/>`;
-      out += `<text x="${labelX}" y="${targetY-6}" font-size="13" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${s.d[labelKey]}</text>`;
-      out += `<text x="${labelX}" y="${targetY+11}" font-size="12" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
+      out += `<text x="${labelX}" y="${targetY-6}" font-size="13.5" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${s.d[labelKey]}</text>`;
+      out += `<text x="${labelX}" y="${targetY+11}" font-size="12.5" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
     });
     return out;
   }
 
   const sliceLabels = layoutSide(rightSlices, 1) + layoutSide(leftSlices, -1);
-  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${sliceLabels}</svg>`;
+
+  // Bottom legend: name-only (with color swatch), separate from the
+  // detailed outside labels above.
+  let legend = "";
+  sorted.forEach((d, i) => {
+    const color = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
+    legend += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${d[labelKey]}</div>`;
+  });
+
+  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${centerLabel}${sliceLabels}</svg>
+    <div class="legend" style="justify-content:center;">${legend}</div>`;
 }
 
 /* Vertical bar chart — used for SHORT category names only (Months etc). */
