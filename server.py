@@ -136,24 +136,26 @@ def current_period_label(filters):
 # KPI metadata: card color + whether an increase is good/bad/neutral +
 # whether the trend is shown as a relative % change or absolute points (pts).
 # Colors match the original workbook exactly (extracted from its font colors).
-KPI_META = [
-    {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},  # Total Coils
-    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Defect Coils
-    {"color": "#16A34A", "direction": "up_good",   "change": "pct"},  # First Pass Yield %
-    {"color": "#D97706", "direction": "down_good", "change": "pct"},  # Hold for Decision % Qty
-    {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},  # Output Quantity (MT)
-    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # PPM Defective
-    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Reject Qty (MT)
-    {"color": "#D97706", "direction": "up_good",   "change": "pct"},  # Intensity Tagging %
-    {"color": "#7C3AED", "direction": "down_good", "change": "pct"},  # Salvage + Divert Qty (MT)
-    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Defect Rate
-    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Reject % Qty
-    {"color": "#16A34A", "direction": "up_good",   "change": "pct"},  # Process Sigma Level
-    {"color": "#D97706", "direction": "down_good", "change": "pct"},  # Hold For Decision Qty (MT)
-    {"color": "#7C3AED", "direction": "down_good", "change": "pct"},  # Salvage % Qty
-    {"color": "#D97706", "direction": "down_good", "change": "pct"},  # Rework % Qty
-    {"color": "#64748B", "direction": "down_good", "change": "pts"},  # Without Intensity %
-]
+# Keyed by label so metadata always travels with its metric, even if the
+# metric's position in the kpis list is later swapped for display purposes.
+KPI_META_BY_LABEL = {
+    "Total Coils":                   {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
+    "Defect Coils":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
+    "First Pass Yield %":            {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
+    "Hold for Decision % Qty":       {"color": "#D97706", "direction": "down_good", "change": "pct"},
+    "Output Quantity (MT)":          {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
+    "PPM Defective":                 {"color": "#DC2626", "direction": "down_good", "change": "pct"},
+    "Reject Qty (MT)":               {"color": "#DC2626", "direction": "down_good", "change": "pct"},
+    "Intensity Tagging %":           {"color": "#D97706", "direction": "up_good",   "change": "pct"},
+    "Salvage + Divert Qty (MT)":     {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
+    "Defect Rate":                   {"color": "#DC2626", "direction": "down_good", "change": "pct"},
+    "Reject % Qty":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
+    "Process Sigma Level (Approx.)": {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
+    "Hold For Decision Qty (MT)":    {"color": "#D97706", "direction": "down_good", "change": "pct"},
+    "Salvage % Qty":                 {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
+    "Rework % Qty":                  {"color": "#D97706", "direction": "down_good", "change": "pct"},
+    "Without Intensity %":           {"color": "#64748B", "direction": "down_good", "change": "pts"},
+}
 
 
 def get_conn():
@@ -300,6 +302,12 @@ def compute_kpis(filters, _skip_prev=False):
     ]
     assert len(kpis) == 16, "KPI count must be exactly 16"
 
+    # Swap display positions of "Reject Qty (MT)" (was index 6) and
+    # "Salvage % Qty" (was index 13) per requested card layout — metadata
+    # (color/direction) is looked up by label later, so it travels correctly
+    # with whichever metric now sits in that position.
+    kpis[6], kpis[13] = kpis[13], kpis[6]
+
     # Quality decision table
     decision_table = []
     for d in DECISION_ORDER:
@@ -371,7 +379,7 @@ def compute_kpis(filters, _skip_prev=False):
             result["period"]["previous"] = None
 
         for i, k in enumerate(kpis):
-            meta = KPI_META[i]
+            meta = KPI_META_BY_LABEL[k["label"]]
             prev_v = prev_values[i]
             cur_v = k["value"]
             k["color"] = meta["color"]

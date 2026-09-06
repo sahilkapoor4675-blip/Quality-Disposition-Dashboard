@@ -98,15 +98,14 @@
     <div class="period-banner" id="periodBanner"></div>
     <div class="kpi-grid" id="kpiGrid"></div>
 
-    <div class="charts-grid">
-      <div class="panel">
-        <h3>🥧 Quality Decision Mix — Qty (MT)</h3>
-        <div class="chart-scroll" id="decisionPie"></div>
-      </div>
-      <div class="panel">
-        <h3>📊 Quality Decision — Coils &amp; Qty (MT) by Category</h3>
-        <div class="chart-scroll" id="decisionBarChart"></div>
-      </div>
+    <div class="panel">
+      <h3>🥧 Quality Decision Mix — Qty (MT)</h3>
+      <div class="chart-scroll" id="decisionPie" style="max-width:700px;margin:0 auto;"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📊 Quality Decision — Coils &amp; Qty (MT) by Category</h3>
+      <div class="chart-scroll" id="decisionBarChart"></div>
     </div>
 
     <div class="panel">
@@ -204,7 +203,7 @@
   <!-- TAB 4: PERIOD TREND -->
   <div class="tab-panel hidden" id="tab-weekly">
     <div class="panel">
-      <h3>📅 Weekly Defect Rate % Trend</h3>
+      <h3>📅 Weekly Defect Rate % &amp; Reject % Trend</h3>
       <div class="chart-scroll" id="weeklyChart"></div>
     </div>
     <div class="panel">
@@ -217,7 +216,7 @@
     </div>
 
     <div class="panel">
-      <h3>📆 Quarterly Defect % vs First Pass Yield % Trend</h3>
+      <h3>📆 Quarterly Defect % vs First Pass Yield % vs Reject % Trend</h3>
       <div class="chart-scroll" id="quarterlyChart"></div>
     </div>
     <div class="panel">
@@ -230,7 +229,7 @@
     </div>
 
     <div class="panel">
-      <h3>🗓️ Yearly (FY) First Pass Yield % Trend</h3>
+      <h3>🗓️ Yearly (FY) First Pass Yield % &amp; Reject % Trend</h3>
       <div class="chart-scroll" id="yearlyChart"></div>
       <div class="subhead">Only one Financial Year is present in the current dataset — this chart will show a fuller trend line as more years of data are added.</div>
     </div>
@@ -452,39 +451,66 @@ function yAxisTitleH(text, h, padT, padB){
 
 function makePieChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  // Sort largest-first so labels are easier to place without collisions
   const sorted = [...items].sort((a,b) => b[valueKey]-a[valueKey]);
-  const w = 620, h = 520, cx = 310, cy = 260, r = 150;
-  const gapDeg = 0.018; // small angular gap between slices for visual separation
+  const w = 760, h = 620, cx = 380, cy = 300, r = 175;
+  const gapDeg = 0.018;
   const total = sorted.reduce((s,d) => s + d[valueKey], 0);
+
+  // Pass 1: compute each slice's geometry + mid-angle (needed before placing labels)
   let angle = -Math.PI/2;
-  let slices = "", sliceLabels = "", leaderLines = "";
-  sorted.forEach((d, i) => {
+  const slicesData = sorted.map((d, i) => {
     const val = d[valueKey];
     const frac = total ? val/total : 0;
     const sweep = frac * 2 * Math.PI;
     const a0 = angle + gapDeg/2;
     const a1 = angle + sweep - gapDeg/2;
-    const x1 = cx + r*Math.cos(a0), y1 = cy + r*Math.sin(a0);
-    const x2 = cx + r*Math.cos(a1), y2 = cy + r*Math.sin(a1);
-    const largeArc = (a1 - a0) > Math.PI ? 1 : 0;
-    const color = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
-    slices += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${color}" stroke="#fff" stroke-width="2.5"><title>${d[labelKey]}: ${(opts.valFmt?opts.valFmt(val):val.toFixed(2))} (${(frac*100).toFixed(1)}%)</title></path>`;
-
-    // Outside label with leader line: Name / Qty / %
     const midAngle = (a0 + a1) / 2;
-    const lx1 = cx + r * Math.cos(midAngle), ly1 = cy + r * Math.sin(midAngle);
-    const lx2 = cx + (r+22) * Math.cos(midAngle), ly2 = cy + (r+22) * Math.sin(midAngle);
-    const isRight = Math.cos(midAngle) >= 0;
-    const lx3 = lx2 + (isRight ? 28 : -28);
-    const anchor = isRight ? "start" : "end";
-    const valText = opts.valFmt ? opts.valFmt(val) : val.toFixed(2);
-    leaderLines += `<polyline points="${lx1},${ly1} ${lx2},${ly2} ${lx3},${ly2}" fill="none" stroke="#94a3b8" stroke-width="1.2"/>`;
-    sliceLabels += `<text x="${lx3}" y="${ly2-6}" font-size="12" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${d[labelKey]}</text>`;
-    sliceLabels += `<text x="${lx3}" y="${ly2+9}" font-size="11" font-weight="700" text-anchor="${anchor}" fill="${color}">${valText} (${(frac*100).toFixed(1)}%)</text>`;
     angle += sweep;
+    const color = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
+    return {d, val, frac, a0, a1, midAngle, color};
   });
-  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${leaderLines}${sliceLabels}</svg>`;
+
+  // Pass 2: draw slice wedges
+  let slices = "";
+  slicesData.forEach(s => {
+    const x1 = cx + r*Math.cos(s.a0), y1 = cy + r*Math.sin(s.a0);
+    const x2 = cx + r*Math.cos(s.a1), y2 = cy + r*Math.sin(s.a1);
+    const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
+    slices += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${s.color}" stroke="#fff" stroke-width="2.5"><title>${s.d[labelKey]}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
+  });
+
+  // Pass 3: place outside labels — split left/right, evenly space vertically
+  // within each side (in angle order) so they never overlap.
+  const rightSlices = slicesData.filter(s => Math.cos(s.midAngle) >= 0).sort((a,b) => a.midAngle - b.midAngle);
+  const leftSlices  = slicesData.filter(s => Math.cos(s.midAngle) < 0).sort((a,b) => b.midAngle - a.midAngle);
+  const rowSpacing = 44;
+  const elbowOffset = 26;
+  const labelOffset = 60;
+
+  function layoutSide(list, side){
+    // side: +1 = right, -1 = left
+    const n = list.length;
+    const totalH = (n-1) * rowSpacing;
+    let startY = cy - totalH/2;
+    startY = Math.max(30, Math.min(startY, h - 30 - totalH));
+    let out = "";
+    list.forEach((s, idx) => {
+      const targetY = startY + idx*rowSpacing;
+      const edgeX = cx + r*Math.cos(s.midAngle), edgeY = cy + r*Math.sin(s.midAngle);
+      const elbowX = cx + side*(r+elbowOffset);
+      const labelX = cx + side*(r+labelOffset);
+      const anchor = side > 0 ? "start" : "end";
+      const valText = opts.valFmt ? opts.valFmt(s.val) : s.val.toFixed(2);
+      out += `<polyline points="${edgeX},${edgeY} ${elbowX},${targetY} ${labelX-side*4},${targetY}" fill="none" stroke="#94a3b8" stroke-width="1.2"/>`;
+      out += `<circle cx="${edgeX}" cy="${edgeY}" r="2.5" fill="${s.color}"/>`;
+      out += `<text x="${labelX}" y="${targetY-6}" font-size="12.5" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${s.d[labelKey]}</text>`;
+      out += `<text x="${labelX}" y="${targetY+10}" font-size="11.5" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
+    });
+    return out;
+  }
+
+  const sliceLabels = layoutSide(rightSlices, 1) + layoutSide(leftSlices, -1);
+  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${sliceLabels}</svg>`;
 }
 
 /* Vertical bar chart — used for SHORT category names only (Months etc). */
@@ -794,17 +820,20 @@ async function loadPeriodTrend(){
 
   makeLineChart(document.getElementById("weeklyChart"), data.weekly, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Week"});
   renderMetricsTable("weeklyTable", data.weekly);
 
   makeLineChart(document.getElementById("quarterlyChart"), data.quarterly, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Quarter"});
   renderMetricsTable("quarterlyTable", data.quarterly);
 
   makeLineChart(document.getElementById("yearlyChart"), data.yearly, "name", [
     {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Financial Year"});
   renderMetricsTable("yearlyTable", data.yearly);
 }
