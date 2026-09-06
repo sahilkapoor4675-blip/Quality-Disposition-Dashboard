@@ -545,6 +545,32 @@ def compute_period_trend(filters):
     return {"rows": rows}
 
 
+def compute_quarterly_trend(filters):
+    """Trend across quarters (ignores the Quarter filter itself)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    where_sql, params = build_where(filters, exclude={"quarter"})
+
+    cur.execute("SELECT DISTINCT quarter FROM disposition WHERE quarter <> '' ORDER BY 1")
+    quarters = [r[0] for r in cur.fetchall()]
+    rows = [_group_metrics(cur, where_sql, params, "quarter", q) for q in quarters]
+    conn.close()
+    return {"rows": rows}
+
+
+def compute_yearly_trend(filters):
+    """Trend across financial years (ignores the Financial Year filter itself)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    where_sql, params = build_where(filters, exclude={"financial_year"})
+
+    cur.execute("SELECT DISTINCT financial_year FROM disposition WHERE financial_year <> '' ORDER BY 1")
+    fys = [r[0] for r in cur.fetchall()]
+    rows = [_group_metrics(cur, where_sql, params, "financial_year", fy) for fy in fys]
+    conn.close()
+    return {"rows": rows}
+
+
 HTML_PAGE = None  # loaded lazily from index_template
 
 
@@ -607,7 +633,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/period_trend":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             try:
-                self._send_json(compute_period_trend(filters))
+                weekly = compute_period_trend(filters)["rows"]
+                quarterly = compute_quarterly_trend(filters)["rows"]
+                yearly = compute_yearly_trend(filters)["rows"]
+                self._send_json({"weekly": weekly, "quarterly": quarterly, "yearly": yearly})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":
