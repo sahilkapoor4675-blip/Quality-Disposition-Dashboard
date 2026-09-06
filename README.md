@@ -31,15 +31,18 @@ python3 build_db.py
 This rebuilds `quality.db` from the .xlsm file. Then restart `server.py`.
 
 ## What's included
-- ✅ Exactly 16 KPI cards (matches original workbook formulas — verified against Aug-2026 sample: all 16 values matched exactly)
+- ✅ Exactly 16 KPI cards, colored exactly like the original workbook (green=good, red=bad, amber=caution, purple, slate — extracted directly from the workbook's cell font colors)
+- ✅ **Previous-period comparison on every KPI card** — "Prev: X" + ▲/▼ trend arrow + %/pts change, exactly replicating the "KPI Comparison" sheet engine (auto-detects Month/Week/Quarter/FY comparison mode based on which single filter is active)
 - ✅ 4,820/4,820 records imported, all with Output Weight
 - ✅ 8 live filters: Month, Work Center, Grade, Quality Decision, Week, Quarter, Financial Year, Defect Intensity
-- ✅ 5 tabs, replicating all sheets from your original workbook:
-  1. **📊 Dashboard** — 16 KPIs, Quality Decision table, Top-5 Defect Pareto, Intensity Breakdown
-  2. **🏭 Work Center & Grade** — performance comparison bar charts + tables (Work Center and Grade filters don't apply to their own breakdown, same as the original workbook)
-  3. **🎯 Defect Analysis** — full 35-defect occurrence register + Top-10 Pareto chart
-  4. **📈 Monthly Trend** — coils & defect % trend line chart across months
-  5. **📅 Period Trend** — same trend view broken down by week
+- ✅ Real charts matching the original workbook's embedded Excel charts:
+  - Pie chart — Quality Decision Mix (Qty MT)
+  - Bar chart — Quality Decision by category (color-coded: green=Prime, red=Reject, amber=Hold, etc.)
+  - Combo chart (bar + line) — Top 5 Defects Pareto with cumulative %
+  - Bar chart — Defect Intensity Breakdown
+  - Bar charts — Work Center & Grade performance
+  - Line charts — Monthly and Weekly trends
+- ✅ 5 tabs, replicating all sheets from your original workbook
 - ✅ All charts are hand-drawn inline SVG (no chart libraries, no CDN — fully offline)
 - ✅ No external dependencies (no Flask) — works fully offline
 
@@ -48,6 +51,13 @@ The original workbook pre-lists every month/week through the year 2030 (mostly
 showing 0s for future dates that haven't happened yet). This web app instead
 shows only the months/weeks that actually have data in your file — cleaner to
 read, and it will automatically extend as you add new records via `build_db.py`.
+
+### How the "Previous Period" comparison works
+Select exactly ONE time filter (Month, Week, Quarter, or Financial Year) —
+leave the others on "All". The dashboard automatically compares against the
+immediately preceding period of that type (e.g. selecting "Aug-2026" compares
+against "Jul-2026"). If no time filter is selected, comparison is not shown
+(same as the original workbook's behaviour).
 
 ## Next step for company-wide sharing
 This local version is great for testing. For real multi-user access with logins/roles,

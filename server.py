@@ -57,6 +57,105 @@ def _week_sort_key(w):
         return _dt.datetime.max
 
 
+# ---------------------------------------------------------------------------
+# Previous-period comparison engine (replicates the "KPI Comparison" sheet)
+# ---------------------------------------------------------------------------
+
+def _prev_month_label(m):
+    dt = _dt.datetime.strptime(m, "%b-%Y")
+    year, month = dt.year, dt.month - 1
+    if month == 0:
+        month = 12
+        year -= 1
+    return _dt.datetime(year, month, 1).strftime("%b-%Y")
+
+
+def _prev_week_label(w):
+    date_part = w.replace("Wk of ", "").strip()
+    dt = _dt.datetime.strptime(date_part, "%d-%b-%y")
+    prev_dt = dt - _dt.timedelta(days=7)
+    return "Wk of " + prev_dt.strftime("%d-%b-%y")
+
+
+def _prev_fy_label(fy):
+    import re
+    m = re.search(r"(\d{4})", fy)
+    start = int(m.group(1))
+    prev_start = start - 1
+    prev_end = (prev_start + 1) % 100
+    return f"FY {prev_start}-{prev_end:02d}"
+
+
+def _prev_quarter_label(q, fy):
+    qnum = int(q[1:])
+    if qnum == 1:
+        return "Q4", (_prev_fy_label(fy) if fy != "All" else "All")
+    return f"Q{qnum-1}", fy
+
+
+def compute_prev_filters(filters):
+    """Return the filter dict representing the 'previous period', following
+    the same priority as the workbook (Week > Month > Quarter > Year).
+    Returns None if no single time filter is active (comparison undefined)."""
+    if filters.get("week", "All") != "All":
+        pf = dict(filters)
+        pf["week"] = _prev_week_label(filters["week"])
+        pf["month"] = "All"; pf["quarter"] = "All"; pf["financial_year"] = "All"
+        return pf
+    if filters.get("month", "All") != "All":
+        pf = dict(filters)
+        pf["month"] = _prev_month_label(filters["month"])
+        pf["week"] = "All"; pf["quarter"] = "All"; pf["financial_year"] = "All"
+        return pf
+    if filters.get("quarter", "All") != "All":
+        pf = dict(filters)
+        prev_q, prev_fy = _prev_quarter_label(filters["quarter"], filters.get("financial_year", "All"))
+        pf["quarter"] = prev_q; pf["financial_year"] = prev_fy
+        pf["month"] = "All"; pf["week"] = "All"
+        return pf
+    if filters.get("financial_year", "All") != "All":
+        pf = dict(filters)
+        pf["financial_year"] = _prev_fy_label(filters["financial_year"])
+        pf["month"] = "All"; pf["week"] = "All"; pf["quarter"] = "All"
+        return pf
+    return None
+
+
+def current_period_label(filters):
+    if filters.get("week", "All") != "All":
+        return filters["week"]
+    if filters.get("month", "All") != "All":
+        return filters["month"]
+    if filters.get("quarter", "All") != "All":
+        return f'{filters["quarter"]} ({filters.get("financial_year","All")})'
+    if filters.get("financial_year", "All") != "All":
+        return filters["financial_year"]
+    return "All Periods"
+
+
+# KPI metadata: card color + whether an increase is good/bad/neutral +
+# whether the trend is shown as a relative % change or absolute points (pts).
+# Colors match the original workbook exactly (extracted from its font colors).
+KPI_META = [
+    {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},  # Total Coils
+    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Defect Coils
+    {"color": "#16A34A", "direction": "up_good",   "change": "pct"},  # First Pass Yield %
+    {"color": "#D97706", "direction": "down_good", "change": "pct"},  # Hold for Decision % Qty
+    {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},  # Output Quantity (MT)
+    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # PPM Defective
+    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Reject Qty (MT)
+    {"color": "#D97706", "direction": "up_good",   "change": "pct"},  # Intensity Tagging %
+    {"color": "#7C3AED", "direction": "down_good", "change": "pct"},  # Salvage + Divert Qty (MT)
+    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Defect Rate
+    {"color": "#DC2626", "direction": "down_good", "change": "pct"},  # Reject % Qty
+    {"color": "#16A34A", "direction": "up_good",   "change": "pct"},  # Process Sigma Level
+    {"color": "#D97706", "direction": "down_good", "change": "pct"},  # Hold For Decision Qty (MT)
+    {"color": "#7C3AED", "direction": "down_good", "change": "pct"},  # Salvage % Qty
+    {"color": "#D97706", "direction": "down_good", "change": "pct"},  # Rework % Qty
+    {"color": "#64748B", "direction": "down_good", "change": "pts"},  # Without Intensity %
+]
+
+
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -117,7 +216,7 @@ def build_where(filters, exclude=None):
     return (f"WHERE {where}" if where else "", params)
 
 
-def compute_kpis(filters):
+def compute_kpis(filters, _skip_prev=False):
     conn = get_conn()
     cur = conn.cursor()
     where_sql, params = build_where(filters)
@@ -250,13 +349,57 @@ def compute_kpis(filters):
         r["pct_qty"] = (r["qty"] / it_total_qty) if it_total_qty else 0.0
 
     conn.close()
-    return {
+    result = {
         "kpis": kpis,
         "decision_table": decision_table,
         "top_defects": top_defects,
         "intensity_table": intensity_table,
         "totals": {"total_coils": total_coils, "output_qty": output_qty},
+        "period": {"current": current_period_label(filters)},
     }
+
+    # ---- Previous-period comparison (skip when computing the prev period
+    # itself, to avoid infinite recursion) ----
+    if not _skip_prev:
+        prev_filters = compute_prev_filters(filters)
+        if prev_filters is not None:
+            prev_data = compute_kpis(prev_filters, _skip_prev=True)
+            prev_values = [k["value"] for k in prev_data["kpis"]]
+            result["period"]["previous"] = current_period_label(prev_filters)
+        else:
+            prev_values = [0] * 16
+            result["period"]["previous"] = None
+
+        for i, k in enumerate(kpis):
+            meta = KPI_META[i]
+            prev_v = prev_values[i]
+            cur_v = k["value"]
+            k["color"] = meta["color"]
+            k["prev"] = prev_v
+            if meta["change"] == "pts":
+                diff = cur_v - prev_v
+                k["change_value"] = diff
+                k["change_type"] = "pts"
+            else:
+                diff_pct = ((cur_v - prev_v) / abs(prev_v)) if prev_v else 0.0
+                k["change_value"] = diff_pct
+                k["change_type"] = "pct"
+            if cur_v > prev_v:
+                arrow = "up"
+            elif cur_v < prev_v:
+                arrow = "down"
+            else:
+                arrow = "flat"
+            k["arrow"] = arrow
+            if meta["direction"] == "neutral" or arrow == "flat":
+                k["trend_color"] = "neutral"
+            elif (meta["direction"] == "up_good" and arrow == "up") or \
+                 (meta["direction"] == "down_good" and arrow == "down"):
+                k["trend_color"] = "good"
+            else:
+                k["trend_color"] = "bad"
+
+    return result
 
 
 def get_filter_options():
