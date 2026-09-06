@@ -90,7 +90,6 @@
     <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
     <button class="tab-btn" data-tab="wcgrade">🏭 Work Center &amp; Grade</button>
     <button class="tab-btn" data-tab="defects">🎯 Defect Analysis</button>
-    <button class="tab-btn" data-tab="monthly">📈 Monthly Trend</button>
     <button class="tab-btn" data-tab="weekly">📅 Period Trend</button>
   </div>
 
@@ -141,6 +140,24 @@
         </table>
       </div>
     </div>
+
+    <div class="panel">
+      <h3>📈 Monthly Quality Trend — Defect % &amp; First Pass Yield %</h3>
+      <div class="chart-scroll" id="monthlyLineChart"></div>
+    </div>
+    <div class="panel">
+      <h3>📊 Monthly Coils &amp; Output Quantity</h3>
+      <div class="chart-scroll" id="monthlyBarChart"></div>
+    </div>
+    <div class="panel">
+      <h3>📋 Monthly Trend Data</h3>
+      <div class="panel-body">
+        <table id="monthlyTable">
+          <thead><tr><th>Month</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- TAB 2: WORK CENTER & GRADE -->
@@ -184,28 +201,7 @@
     </div>
   </div>
 
-  <!-- TAB 4: MONTHLY TREND -->
-  <div class="tab-panel hidden" id="tab-monthly">
-    <div class="panel">
-      <h3>📈 Monthly Quality Trend — Defect % &amp; First Pass Yield %</h3>
-      <div class="chart-scroll" id="monthlyLineChart"></div>
-    </div>
-    <div class="panel">
-      <h3>📊 Monthly Coils &amp; Output Quantity</h3>
-      <div class="chart-scroll" id="monthlyBarChart"></div>
-    </div>
-    <div class="panel">
-      <h3>📋 Monthly Trend Data</h3>
-      <div class="panel-body">
-        <table id="monthlyTable">
-          <thead><tr><th>Month</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- TAB 5: PERIOD TREND -->
+  <!-- TAB 4: PERIOD TREND -->
   <div class="tab-panel hidden" id="tab-weekly">
     <div class="panel">
       <h3>📅 Weekly Defect Rate % Trend</h3>
@@ -400,13 +396,15 @@ async function loadKpis(){
   makeHGroupedBarChart(document.getElementById("decisionBarChart"), data.decision_table, "decision", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
-  ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Quality Decision"});
+  ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Quality Decision", rowH: 92});
   makeComboChart(document.getElementById("pareto5Chart"), data.top_defects, "defect", "qty", "cum_pct",
-    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Defect Type"});
+    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Defect Type", colorful: true});
   makeHGroupedBarChart(document.getElementById("intensityChart"), data.intensity_table, "intensity", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
   ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Defect Intensity"});
+
+  await loadMonthlyTrend();
 }
 
 // =====================================================================
@@ -454,31 +452,39 @@ function yAxisTitleH(text, h, padT, padB){
 
 function makePieChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  const w = 380, h = 300, cx = 160, cy = 140, r = 100;
-  const total = items.reduce((s,d) => s + d[valueKey], 0);
+  // Sort largest-first so labels are easier to place without collisions
+  const sorted = [...items].sort((a,b) => b[valueKey]-a[valueKey]);
+  const w = 620, h = 520, cx = 310, cy = 260, r = 150;
+  const gapDeg = 0.018; // small angular gap between slices for visual separation
+  const total = sorted.reduce((s,d) => s + d[valueKey], 0);
   let angle = -Math.PI/2;
-  let slices = "", legend = "", sliceLabels = "";
-  items.forEach((d, i) => {
+  let slices = "", sliceLabels = "", leaderLines = "";
+  sorted.forEach((d, i) => {
     const val = d[valueKey];
     const frac = total ? val/total : 0;
-    const nextAngle = angle + frac * 2 * Math.PI;
-    const x1 = cx + r*Math.cos(angle), y1 = cy + r*Math.sin(angle);
-    const x2 = cx + r*Math.cos(nextAngle), y2 = cy + r*Math.sin(nextAngle);
-    const largeArc = (nextAngle - angle) > Math.PI ? 1 : 0;
+    const sweep = frac * 2 * Math.PI;
+    const a0 = angle + gapDeg/2;
+    const a1 = angle + sweep - gapDeg/2;
+    const x1 = cx + r*Math.cos(a0), y1 = cy + r*Math.sin(a0);
+    const x2 = cx + r*Math.cos(a1), y2 = cy + r*Math.sin(a1);
+    const largeArc = (a1 - a0) > Math.PI ? 1 : 0;
     const color = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
-    slices += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${color}" stroke="#fff" stroke-width="2"><title>${d[labelKey]}: ${(opts.valFmt?opts.valFmt(val):val.toFixed(2))} (${(frac*100).toFixed(1)}%)</title></path>`;
-    if(frac >= 0.05){
-      const midAngle = (angle + nextAngle) / 2;
-      const lx = cx + (r*0.65) * Math.cos(midAngle);
-      const ly = cy + (r*0.65) * Math.sin(midAngle);
-      sliceLabels += `<text x="${lx}" y="${ly}" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">${(frac*100).toFixed(1)}%</text>`;
-    }
+    slices += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${color}" stroke="#fff" stroke-width="2.5"><title>${d[labelKey]}: ${(opts.valFmt?opts.valFmt(val):val.toFixed(2))} (${(frac*100).toFixed(1)}%)</title></path>`;
+
+    // Outside label with leader line: Name / Qty / %
+    const midAngle = (a0 + a1) / 2;
+    const lx1 = cx + r * Math.cos(midAngle), ly1 = cy + r * Math.sin(midAngle);
+    const lx2 = cx + (r+22) * Math.cos(midAngle), ly2 = cy + (r+22) * Math.sin(midAngle);
+    const isRight = Math.cos(midAngle) >= 0;
+    const lx3 = lx2 + (isRight ? 28 : -28);
+    const anchor = isRight ? "start" : "end";
     const valText = opts.valFmt ? opts.valFmt(val) : val.toFixed(2);
-    legend += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span><b>${d[labelKey]}</b>&nbsp;— ${valText} (${(frac*100).toFixed(1)}%)</div>`;
-    angle = nextAngle;
+    leaderLines += `<polyline points="${lx1},${ly1} ${lx2},${ly2} ${lx3},${ly2}" fill="none" stroke="#94a3b8" stroke-width="1.2"/>`;
+    sliceLabels += `<text x="${lx3}" y="${ly2-6}" font-size="12" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${d[labelKey]}</text>`;
+    sliceLabels += `<text x="${lx3}" y="${ly2+9}" font-size="11" font-weight="700" text-anchor="${anchor}" fill="${color}">${valText} (${(frac*100).toFixed(1)}%)</text>`;
+    angle += sweep;
   });
-  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${sliceLabels}</svg>
-    <div class="legend">${legend}</div>`;
+  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${leaderLines}${sliceLabels}</svg>`;
 }
 
 /* Vertical bar chart — used for SHORT category names only (Months etc). */
@@ -556,7 +562,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
 function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
   const w = DESIGN_W;
-  const rowH = 58, padL = 200, padR = 70, padT = 20, padB = 55;
+  const rowH = opts.rowH || 58, padL = 200, padR = 70, padT = 20, padB = 55;
   const h = items.length * rowH + padT + padB;
   const plotW = w - padL - padR;
   const nSeries = seriesDefs.length;
@@ -575,11 +581,11 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const val = d[s.key];
       const maxV = maxes[si];
       const barW = (val / maxV) * plotW;
-      const y = groupY + si * (barH + 3);
-      bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
-      bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="10.5" font-weight="700" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
+      const y = groupY + si * (barH + 5);
+      bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${s.color}" rx="3"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
+      bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="13" font-weight="700" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${padL - 10}" y="${groupY + (barH+3)*nSeries/2 + 2}" font-size="11" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}</text>`;
+    labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="13" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}</text>`;
   });
 
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
@@ -636,7 +642,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
 
 function makeLineChart(container, items, labelKey, series, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  const w = DESIGN_W, h = 400, padL = 65, padR = 30, padT = 25, padB = 95;
+  const w = DESIGN_W, h = 400, padL = 65, padR = 30, padT = 45, padB = 95;
   const n = items.length;
   const stepX = n > 1 ? (w - padL - padR) / (n - 1) : 0;
   const maxV = opts.max !== undefined ? opts.max :
@@ -651,21 +657,26 @@ function makeLineChart(container, items, labelKey, series, opts={}){
   }
 
   let svgParts = "", legend = "";
-  series.forEach((s) => {
+  const maxLabels = 10;
+  const skip = Math.max(1, Math.ceil(n / maxLabels));
+  series.forEach((s, si) => {
     const vals = items.map(d => d[s.key]);
-    let points = "", dots = "";
+    let points = "", dots = "", valueLabels = "";
     vals.forEach((v, i) => {
       const x = padL + (n > 1 ? i * stepX : (w-padL-padR)/2);
       const y = h - padB - (v / maxV) * (h - padT - padB);
       points += `${x},${y} `;
       dots += `<circle cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"><title>${s.label} — ${items[i][labelKey]}: ${s.fmt ? s.fmt(v) : v}</title></circle>`;
+      // Show the actual value in bold near the point (skip some when crowded)
+      if(i % skip === 0 || i === n-1){
+        const labelY = y - 10 - (si * 14);
+        valueLabels += `<text x="${x}" y="${labelY}" font-size="10.5" font-weight="700" text-anchor="middle" fill="${s.color}">${s.fmt ? s.fmt(v) : v}</text>`;
+      }
     });
-    svgParts += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="2.5"/>${dots}`;
+    svgParts += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="2.5"/>${dots}${valueLabels}`;
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${s.label}</div>`;
   });
 
-  const maxLabels = 10;
-  const skip = Math.max(1, Math.ceil(n / maxLabels));
   let xLabels = "";
   items.forEach((d, i) => {
     if(i % skip !== 0 && i !== n-1) return;
@@ -702,7 +713,8 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const barH = (val / maxBar) * (h - padT - padB);
     const x = padL + i * gap + (gap - barW) / 2;
     const y = h - padB - barH;
-    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="#118DFF" rx="3"><title>${d[labelKey]}: ${opts.barFmt ? opts.barFmt(val) : val}</title></rect>`;
+    const barColor = opts.colorful ? CHART_COLORS[i % CHART_COLORS.length] : "#118DFF";
+    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.barFmt ? opts.barFmt(val) : val}</title></rect>`;
     bars += `<text x="${x+barW/2}" y="${y-8}" font-size="10" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt ? opts.barFmt(val) : val}</text>`;
     labels += `<text x="${x+barW/2}" y="${h-padB+20}" font-size="10" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-35 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey],16)}</text>`;
     const lineY = h - padB - (d[lineKey]) * (h - padT - padB);
@@ -744,7 +756,7 @@ async function loadDefectAnalysis(){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   makeComboChart(document.getElementById("paretoChart"), data.pareto, "defect", "qty", "cum_pct",
-    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Main Defect"});
+    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Main Defect", colorful: true});
   const tbody = document.querySelector("#registerTable tbody");
   tbody.innerHTML = "";
   data.register.forEach(r => {
@@ -802,7 +814,6 @@ const TAB_LOADERS = {
   dashboard: loadKpis,
   wcgrade: loadWcGrade,
   defects: loadDefectAnalysis,
-  monthly: loadMonthlyTrend,
   weekly: loadPeriodTrend,
 };
 
