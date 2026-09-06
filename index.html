@@ -105,7 +105,7 @@
         <div class="chart-scroll" id="decisionPie"></div>
       </div>
       <div class="panel">
-        <h3>📊 Quality Decision — Qty by Category (MT)</h3>
+        <h3>📊 Quality Decision — Coils &amp; Qty (MT) by Category</h3>
         <div class="chart-scroll" id="decisionBarChart"></div>
       </div>
     </div>
@@ -156,7 +156,7 @@
       </div>
     </div>
     <div class="panel">
-      <h3>🔬 Defect % by Alloy Grade</h3>
+      <h3>🔬 Reject % Qty by Alloy Grade</h3>
       <div class="chart-scroll" id="gradeChart"></div>
       <div class="panel-body">
         <table id="gradeTable">
@@ -395,15 +395,18 @@ async function loadKpis(){
   renderIntensityTable(data.intensity_table);
 
   const decisionRows = data.decision_table.filter(r => r.qty > 0);
-  makePieChart(document.getElementById("decisionPie"), decisionRows, "qty", "decision");
-  makeHBarChart(document.getElementById("decisionBarChart"), data.decision_table, "qty", "decision",
-    {fmt: v => v.toFixed(1), xLabel: "Qty (MT)"});
+  makePieChart(document.getElementById("decisionPie"), decisionRows, "qty", "decision",
+    {valFmt: v => v.toFixed(2) + " MT"});
+  makeHGroupedBarChart(document.getElementById("decisionBarChart"), data.decision_table, "decision", [
+    {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
+    {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
+  ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Quality Decision"});
   makeComboChart(document.getElementById("pareto5Chart"), data.top_defects, "defect", "qty", "cum_pct",
-    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%"});
+    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Defect Type"});
   makeHGroupedBarChart(document.getElementById("intensityChart"), data.intensity_table, "intensity", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
-  ]);
+  ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Defect Intensity"});
 }
 
 // =====================================================================
@@ -428,17 +431,33 @@ function niceMax(v){
   if(!isFinite(v) || v <= 0) return 1;
   return v * 1.2;
 }
+// Y-axis title for VERTICAL charts (rotated, placed at far left)
 function yAxisTitle(text, h, padT, padB){
   const cy = padT + (h - padT - padB) / 2;
-  return `<text x="14" y="${cy}" font-size="11" font-weight="700" fill="#6b7c93" text-anchor="middle" transform="rotate(-90 14 ${cy})">${text}</text>`;
+  return `<text x="16" y="${cy}" font-size="12" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
+}
+// X-axis title for VERTICAL charts (centered, placed at bottom)
+function xAxisTitleV(text, w, h, padL, padR){
+  const cx = padL + (w - padL - padR) / 2;
+  return `<text x="${cx}" y="${h - 6}" font-size="12" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
+}
+// X-axis title (value axis) for HORIZONTAL bar charts (centered, at bottom)
+function xAxisTitleH(text, w, h, padL, padR){
+  const cx = padL + (w - padL - padR) / 2;
+  return `<text x="${cx}" y="${h - 6}" font-size="12" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
+}
+// Y-axis title (category axis) for HORIZONTAL bar charts (rotated, far left)
+function yAxisTitleH(text, h, padT, padB){
+  const cy = padT + (h - padT - padB) / 2;
+  return `<text x="16" y="${cy}" font-size="12" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
 }
 
-function makePieChart(container, items, valueKey, labelKey){
+function makePieChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  const w = 340, h = 280, cx = 150, cy = 130, r = 95;
+  const w = 380, h = 300, cx = 160, cy = 140, r = 100;
   const total = items.reduce((s,d) => s + d[valueKey], 0);
   let angle = -Math.PI/2;
-  let slices = "", legend = "";
+  let slices = "", legend = "", sliceLabels = "";
   items.forEach((d, i) => {
     const val = d[valueKey];
     const frac = total ? val/total : 0;
@@ -447,18 +466,25 @@ function makePieChart(container, items, valueKey, labelKey){
     const x2 = cx + r*Math.cos(nextAngle), y2 = cy + r*Math.sin(nextAngle);
     const largeArc = (nextAngle - angle) > Math.PI ? 1 : 0;
     const color = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
-    slices += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${color}" stroke="#fff" stroke-width="2"><title>${d[labelKey]}: ${val.toFixed(2)} MT (${(frac*100).toFixed(1)}%)</title></path>`;
-    legend += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${d[labelKey]} — ${(frac*100).toFixed(1)}%</div>`;
+    slices += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${color}" stroke="#fff" stroke-width="2"><title>${d[labelKey]}: ${(opts.valFmt?opts.valFmt(val):val.toFixed(2))} (${(frac*100).toFixed(1)}%)</title></path>`;
+    if(frac >= 0.05){
+      const midAngle = (angle + nextAngle) / 2;
+      const lx = cx + (r*0.65) * Math.cos(midAngle);
+      const ly = cy + (r*0.65) * Math.sin(midAngle);
+      sliceLabels += `<text x="${lx}" y="${ly}" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">${(frac*100).toFixed(1)}%</text>`;
+    }
+    const valText = opts.valFmt ? opts.valFmt(val) : val.toFixed(2);
+    legend += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span><b>${d[labelKey]}</b>&nbsp;— ${valText} (${(frac*100).toFixed(1)}%)</div>`;
     angle = nextAngle;
   });
-  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}</svg>
+  container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${sliceLabels}</svg>
     <div class="legend">${legend}</div>`;
 }
 
-/* Vertical bar chart — used for SHORT category names only (Decision, Months). */
+/* Vertical bar chart — used for SHORT category names only (Months etc). */
 function makeBarChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  const w = DESIGN_W, h = 340, padL = 60, padR = 20, padT = 30, padB = 70;
+  const w = DESIGN_W, h = 380, padL = 65, padR = 20, padT = 30, padB = 95;
   const maxV = niceMax(Math.max(...items.map(d => d[valueKey]), 0));
   const plotW = w - padL - padR;
   const gap = plotW / items.length;
@@ -479,11 +505,12 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
     const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${x + barW/2}" y="${y - 8}" font-size="11" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${x + barW/2}" y="${h - padB + 16}" font-size="10.5" font-weight="700" text-anchor="middle" fill="#334155">${truncateLabel(d[labelKey], 12)}</text>`;
+    labels += `<text x="${x + barW/2}" y="${h - padB + 20}" font-size="11" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey], 12)}</text>`;
   });
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
+    ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
     <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
     ${bars}${labels}
   </svg>`;
@@ -494,7 +521,7 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
 function makeHBarChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
   const w = DESIGN_W;
-  const rowH = 40, padL = 190, padR = 70, padT = 20, padB = 30;
+  const rowH = 40, padL = 200, padR = 70, padT = 20, padB = 55;
   const h = items.length * rowH + padT + padB;
   const maxV = niceMax(Math.max(...items.map(d => d[valueKey]), 0));
   const plotW = w - padL - padR;
@@ -514,20 +541,22 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="11" font-weight="700" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="11" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 24)}<title>${d[labelKey]}</title></text>`;
+    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="11" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}<title>${d[labelKey]}</title></text>`;
   });
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
+    ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
+    ${opts.xLabel ? xAxisTitleH(opts.xLabel, w, h, padL, padR) : ""}
     <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
     ${bars}${labels}
-  </svg>${opts.xLabel ? `<div class="subhead" style="text-align:center;">${opts.xLabel}</div>` : ""}`;
+  </svg>`;
 }
 
 /* Horizontal GROUPED bar chart — e.g. Intensity: Coils + Qty side-by-side. */
-function makeHGroupedBarChart(container, items, labelKey, seriesDefs){
+function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
   const w = DESIGN_W;
-  const rowH = 54, padL = 190, padR = 70, padT = 20, padB = 30;
+  const rowH = 58, padL = 200, padR = 70, padT = 20, padB = 55;
   const h = items.length * rowH + padT + padB;
   const plotW = w - padL - padR;
   const nSeries = seriesDefs.length;
@@ -550,19 +579,21 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs){
       bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="10.5" font-weight="700" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${padL - 10}" y="${groupY + (barH+3)*nSeries/2 + 2}" font-size="11" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 24)}</text>`;
+    labels += `<text x="${padL - 10}" y="${groupY + (barH+3)*nSeries/2 + 2}" font-size="11" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}</text>`;
   });
 
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
+    ${opts.xLabel ? xAxisTitleH(opts.xLabel, w, h, padL, padR) : ""}
     <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
     ${bars}${labels}
   </svg><div class="legend">${legend}</div>`;
 }
 
 /* Vertical grouped bar chart — for time-series with SHORT labels (Months). */
-function makeGroupedBarChart(container, items, labelKey, seriesDefs){
+function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  const w = DESIGN_W, h = 360, padL = 60, padR = 20, padT = 30, padB = 70;
+  const w = DESIGN_W, h = 400, padL = 65, padR = 20, padT = 30, padB = 95;
   const plotW = w - padL - padR;
   const gap = plotW / items.length;
   const nSeries = seriesDefs.length;
@@ -591,11 +622,13 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs){
       bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="9.5" font-weight="700" text-anchor="middle" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 16}" font-size="10.5" font-weight="700" text-anchor="middle" fill="#334155">${truncateLabel(d[labelKey], 12)}</text>`;
+    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="10.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${truncateLabel(d[labelKey], 12)}</text>`;
   });
 
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
+    ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
+    ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
     <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
     ${bars}${labels}
   </svg><div class="legend">${legend}</div>`;
@@ -603,7 +636,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs){
 
 function makeLineChart(container, items, labelKey, series, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  const w = DESIGN_W, h = 360, padL = 60, padR = 30, padT = 25, padB = 70;
+  const w = DESIGN_W, h = 400, padL = 65, padR = 30, padT = 25, padB = 95;
   const n = items.length;
   const stepX = n > 1 ? (w - padL - padR) / (n - 1) : 0;
   const maxV = opts.max !== undefined ? opts.max :
@@ -631,20 +664,19 @@ function makeLineChart(container, items, labelKey, series, opts={}){
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${s.label}</div>`;
   });
 
-  // Only show every Nth x-label if there are many points, to avoid crowding —
-  // but ALWAYS keep first and last so the full range is visible.
-  const maxLabels = 12;
+  const maxLabels = 10;
   const skip = Math.max(1, Math.ceil(n / maxLabels));
   let xLabels = "";
   items.forEach((d, i) => {
     if(i % skip !== 0 && i !== n-1) return;
     const x = padL + (n > 1 ? i * stepX : (w-padL-padR)/2);
-    xLabels += `<text x="${x}" y="${h - padB + 18}" font-size="10" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-40 ${x} ${h-padB+18})">${truncateLabel((d[labelKey]||"").replace("Wk of ",""), 12)}</text>`;
+    xLabels += `<text x="${x}" y="${h - padB + 20}" font-size="10.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x} ${h-padB+20})">${truncateLabel((d[labelKey]||"").replace("Wk of ",""), 12)}</text>`;
   });
 
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
+    ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
     <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
     ${svgParts}${xLabels}
   </svg><div class="legend">${legend}</div>`;
@@ -652,7 +684,7 @@ function makeLineChart(container, items, labelKey, series, opts={}){
 
 function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
-  const w = DESIGN_W, h = 380, padL = 60, padR = 45, padT = 30, padB = 90;
+  const w = DESIGN_W, h = 420, padL = 65, padR = 45, padT = 30, padB = 110;
   const maxBar = niceMax(Math.max(...items.map(d => d[barKey]), 0));
   const plotW = w - padL - padR;
   const gap = plotW / items.length;
@@ -672,7 +704,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const y = h - padB - barH;
     bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="#118DFF" rx="3"><title>${d[labelKey]}: ${opts.barFmt ? opts.barFmt(val) : val}</title></rect>`;
     bars += `<text x="${x+barW/2}" y="${y-8}" font-size="10" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt ? opts.barFmt(val) : val}</text>`;
-    labels += `<text x="${x+barW/2}" y="${h-padB+16}" font-size="10" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-40 ${x+barW/2} ${h-padB+16})">${truncateLabel(d[labelKey],14)}</text>`;
+    labels += `<text x="${x+barW/2}" y="${h-padB+20}" font-size="10" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-35 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey],16)}</text>`;
     const lineY = h - padB - (d[lineKey]) * (h - padT - padB);
     points += `${x+barW/2},${lineY} `;
     dots += `<circle cx="${x+barW/2}" cy="${lineY}" r="4" fill="#DC2626" stroke="#fff" stroke-width="1.5"><title>Cumulative: ${opts.lineFmt ? opts.lineFmt(d[lineKey]) : d[lineKey]}</title></circle>`;
@@ -681,6 +713,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${yAxisTitle("Qty (MT)", h, padT, padB)}
+    ${xAxisTitleV(opts.xLabel || "Main Defect", w, h, padL, padR)}
     <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
     ${bars}<polyline points="${points}" fill="none" stroke="#DC2626" stroke-width="2.5"/>${dots}${labels}
   </svg>
@@ -697,10 +730,10 @@ async function loadWcGrade(){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   makeHBarChart(document.getElementById("wcChart"), data.by_work_center, "reject_pct_qty", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty"});
+    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Work Center"});
   renderMetricsTable("wcTable", data.by_work_center);
-  makeHBarChart(document.getElementById("gradeChart"), data.by_grade, "defect_pct", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Defect %"});
+  makeHBarChart(document.getElementById("gradeChart"), data.by_grade, "reject_pct_qty", "name",
+    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Grade"});
   renderMetricsTable("gradeTable", data.by_grade);
 }
 
@@ -711,7 +744,7 @@ async function loadDefectAnalysis(){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   makeComboChart(document.getElementById("paretoChart"), data.pareto, "defect", "qty", "cum_pct",
-    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%"});
+    {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Main Defect"});
   const tbody = document.querySelector("#registerTable tbody");
   tbody.innerHTML = "";
   data.register.forEach(r => {
@@ -732,11 +765,11 @@ async function loadMonthlyTrend(){
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
-  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%"});
+  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Month"});
   makeGroupedBarChart(document.getElementById("monthlyBarChart"), data.rows, "name", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"output_qty", label:"Output Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(0)},
-  ]);
+  ], {yLabel: "Coils / Qty (MT)", xLabel: "Month"});
   renderMetricsTable("monthlyTable", data.rows);
 }
 
@@ -749,18 +782,18 @@ async function loadPeriodTrend(){
 
   makeLineChart(document.getElementById("weeklyChart"), data.weekly, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
-  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%"});
+  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Week"});
   renderMetricsTable("weeklyTable", data.weekly);
 
   makeLineChart(document.getElementById("quarterlyChart"), data.quarterly, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
-  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%"});
+  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Quarter"});
   renderMetricsTable("quarterlyTable", data.quarterly);
 
   makeLineChart(document.getElementById("yearlyChart"), data.yearly, "name", [
     {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
-  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%"});
+  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Financial Year"});
   renderMetricsTable("yearlyTable", data.yearly);
 }
 
