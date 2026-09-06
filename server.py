@@ -360,8 +360,28 @@ def compute_kpis(filters, _skip_prev=False):
     result = {
         "kpis": kpis,
         "decision_table": decision_table,
+        "decision_total": {
+            "decision": "Grand Total",
+            "coils": sum(r["coils"] for r in decision_table),
+            "pct_coils": 1.0 if total_coils else 0.0,
+            "qty": sum(r["qty"] for r in decision_table),
+            "pct_qty": 1.0 if output_qty else 0.0,
+        },
         "top_defects": top_defects,
+        "top_defects_total": {
+            "defect": "Total (Top 5)",
+            "qty": sum(r["qty"] for r in top_defects),
+            "pct": sum(r["pct"] for r in top_defects),
+            "cum_pct": top_defects[-1]["cum_pct"] if top_defects else 0.0,
+        },
         "intensity_table": intensity_table,
+        "intensity_total": {
+            "intensity": "Grand Total",
+            "coils": it_total_coils,
+            "pct_coils": 1.0 if it_total_coils else 0.0,
+            "qty": it_total_qty,
+            "pct_qty": 1.0 if it_total_qty else 0.0,
+        },
         "totals": {"total_coils": total_coils, "output_qty": output_qty},
         "period": {"current": current_period_label(filters)},
     }
@@ -415,8 +435,14 @@ def get_filter_options():
     cur = conn.cursor()
     options = {}
     for key in FILTER_KEYS:
-        cur.execute(f"SELECT DISTINCT {key} FROM disposition WHERE {key} <> '' ORDER BY 1")
+        cur.execute(f"SELECT DISTINCT {key} FROM disposition WHERE {key} <> ''")
         vals = [r[0] for r in cur.fetchall()]
+        if key == "month":
+            vals.sort(key=_month_sort_key)
+        elif key == "week":
+            vals.sort(key=_week_sort_key)
+        else:
+            vals.sort()
         if key == "defect_intensity":
             vals = vals + ["NONE"]
         options[key] = ["All"] + vals
@@ -455,6 +481,28 @@ def _group_metrics(cur, where_sql, params, group_col, group_val):
         "reject_qty": reject_qty,
         "reject_pct_qty": (reject_qty / qty) if qty else 0.0,
         "first_pass_yield_pct": (prime_qty / qty) if qty else 0.0,
+        "prime_qty": prime_qty,
+    }
+
+
+def _grand_total_row(rows, name="Grand Total"):
+    """Aggregate a list of _group_metrics-shaped rows into one Grand Total
+    row, recomputing percentages from the summed totals (not an average of
+    averages)."""
+    coils = sum(r["coils"] for r in rows)
+    qty = sum(r["output_qty"] for r in rows)
+    defect_coils = sum(r["defect_coils"] for r in rows)
+    reject_qty = sum(r["reject_qty"] for r in rows)
+    prime_qty = sum(r.get("prime_qty", 0) for r in rows)
+    return {
+        "name": name,
+        "coils": coils,
+        "output_qty": qty,
+        "defect_coils": defect_coils,
+        "defect_pct": (defect_coils / coils) if coils else 0.0,
+        "reject_qty": reject_qty,
+        "reject_pct_qty": (reject_qty / qty) if qty else 0.0,
+        "first_pass_yield_pct": (prime_qty / qty) if qty else 0.0,
     }
 
 
@@ -476,7 +524,11 @@ def compute_work_center_grade(filters):
     gr_rows = [_group_metrics(cur, gr_where, gr_params, "grade", g) for g in grades]
 
     conn.close()
-    return {"by_work_center": wc_rows, "by_grade": gr_rows}
+    return {
+        "by_work_center": wc_rows, "by_grade": gr_rows,
+        "total_work_center": _grand_total_row(wc_rows),
+        "total_grade": _grand_total_row(gr_rows),
+    }
 
 
 def compute_defect_analysis(filters):
@@ -520,6 +572,17 @@ def compute_defect_analysis(filters):
         "register": register,
         "pareto": pareto,
         "totals": {"records": total_defect_records, "qty": total_defect_qty},
+        "register_total": {
+            "defect": "Grand Total", "records": total_defect_records,
+            "qty": total_defect_qty, "pct_records": 1.0 if total_defect_records else 0.0,
+        },
+        "pareto_total": {
+            "defect": "Total (Top 10)",
+            "records": sum(r["records"] for r in pareto),
+            "qty": sum(r["qty"] for r in pareto),
+            "pct": sum(r["pct"] for r in pareto),
+            "cum_pct": pareto[-1]["cum_pct"] if pareto else 0.0,
+        },
     }
 
 
@@ -535,7 +598,7 @@ def compute_monthly_trend(filters):
 
     rows = [_group_metrics(cur, where_sql, params, "month", m) for m in months]
     conn.close()
-    return {"rows": rows}
+    return {"rows": rows, "total": _grand_total_row(rows)}
 
 
 def compute_period_trend(filters):
@@ -550,7 +613,7 @@ def compute_period_trend(filters):
 
     rows = [_group_metrics(cur, where_sql, params, "week", w) for w in weeks]
     conn.close()
-    return {"rows": rows}
+    return {"rows": rows, "total": _grand_total_row(rows)}
 
 
 def compute_quarterly_trend(filters):
@@ -563,7 +626,7 @@ def compute_quarterly_trend(filters):
     quarters = [r[0] for r in cur.fetchall()]
     rows = [_group_metrics(cur, where_sql, params, "quarter", q) for q in quarters]
     conn.close()
-    return {"rows": rows}
+    return {"rows": rows, "total": _grand_total_row(rows)}
 
 
 def compute_yearly_trend(filters):
@@ -576,7 +639,7 @@ def compute_yearly_trend(filters):
     fys = [r[0] for r in cur.fetchall()]
     rows = [_group_metrics(cur, where_sql, params, "financial_year", fy) for fy in fys]
     conn.close()
-    return {"rows": rows}
+    return {"rows": rows, "total": _grand_total_row(rows)}
 
 
 HTML_PAGE = None  # loaded lazily from index_template
@@ -641,10 +704,14 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/period_trend":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             try:
-                weekly = compute_period_trend(filters)["rows"]
-                quarterly = compute_quarterly_trend(filters)["rows"]
-                yearly = compute_yearly_trend(filters)["rows"]
-                self._send_json({"weekly": weekly, "quarterly": quarterly, "yearly": yearly})
+                weekly_d = compute_period_trend(filters)
+                quarterly_d = compute_quarterly_trend(filters)
+                yearly_d = compute_yearly_trend(filters)
+                self._send_json({
+                    "weekly": weekly_d["rows"], "weekly_total": weekly_d["total"],
+                    "quarterly": quarterly_d["rows"], "quarterly_total": quarterly_d["total"],
+                    "yearly": yearly_d["rows"], "yearly_total": yearly_d["total"],
+                })
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":
