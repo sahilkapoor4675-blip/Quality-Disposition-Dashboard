@@ -50,8 +50,9 @@
   .tables{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
   @media (max-width:900px){.tables{grid-template-columns:1fr;}}
 
+  .table-scroll{overflow-x:auto;}
   table{width:100%;border-collapse:collapse;font-size:14px;}
-  th,td{padding:9px 12px;text-align:right;border:1px solid var(--border);}
+  th,td{padding:9px 12px;text-align:center;border:1px solid var(--border);white-space:nowrap;}
   th:first-child,td:first-child{text-align:left;}
   th{color:#fff;background:var(--accent);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.3px;border:1px solid var(--accent);}
   tbody tr:nth-child(even){background:#f8f8f8;}
@@ -112,10 +113,10 @@
     <div class="panel">
       <h3>📊 Quality Decision — Coils &amp; Quantity</h3>
       <div class="panel-body">
-        <table id="decisionTable">
+        <div class="table-scroll"><table id="decisionTable">
           <thead><tr><th>Decision</th><th>Coils</th><th>% Coils</th><th>Qty (MT)</th><th>% Qty</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
 
@@ -123,10 +124,10 @@
       <h3>🎯 Top 5 Defects — Pareto Analysis (Qty MT &amp; Cumulative %)</h3>
       <div class="chart-scroll" id="pareto5Chart"></div>
       <div class="panel-body">
-        <table id="defectTable">
+        <div class="table-scroll"><table id="defectTable">
           <thead><tr><th>Defect</th><th>Qty (MT)</th><th>%</th><th>Cum. %</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
 
@@ -134,10 +135,10 @@
       <h3>🔬 Defect Intensity Breakdown — Coils &amp; Quantity (MT)</h3>
       <div class="chart-scroll" id="intensityChart"></div>
       <div class="panel-body">
-        <table id="intensityTable">
+        <div class="table-scroll"><table id="intensityTable">
           <thead><tr><th>Intensity</th><th>Coils</th><th>% Coils</th><th>Qty (MT)</th><th>% Qty</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
 
@@ -152,10 +153,10 @@
     <div class="panel">
       <h3>📋 Monthly Trend Data</h3>
       <div class="panel-body">
-        <table id="monthlyTable">
+        <div class="table-scroll"><table id="monthlyTable">
           <thead><tr><th>Month</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   </div>
@@ -166,20 +167,20 @@
       <h3>🏭 Reject % Qty by Work Center</h3>
       <div class="chart-scroll" id="wcChart"></div>
       <div class="panel-body">
-        <table id="wcTable">
+        <div class="table-scroll"><table id="wcTable">
           <thead><tr><th>Work Center</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
     <div class="panel">
       <h3>🔬 Reject % Qty by Alloy Grade</h3>
       <div class="chart-scroll" id="gradeChart"></div>
       <div class="panel-body">
-        <table id="gradeTable">
+        <div class="table-scroll"><table id="gradeTable">
           <thead><tr><th>Grade</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   </div>
@@ -193,10 +194,10 @@
     <div class="panel">
       <h3>📋 Complete Defect Occurrence Register</h3>
       <div class="panel-body">
-        <table id="registerTable">
+        <div class="table-scroll"><table id="registerTable">
           <thead><tr><th>Rank</th><th>Main Defect</th><th>Records</th><th>Qty (MT)</th><th>% Defect Records</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   </div>
@@ -209,10 +210,10 @@
     </div>
     <div class="panel">
       <div class="panel-body">
-        <table id="weeklyTable">
+        <div class="table-scroll"><table id="weeklyTable">
           <thead><tr><th>Week</th><th>Records</th><th>Output MT</th><th>Defect Records</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
 
@@ -222,10 +223,10 @@
     </div>
     <div class="panel">
       <div class="panel-body">
-        <table id="quarterlyTable">
+        <div class="table-scroll"><table id="quarterlyTable">
           <thead><tr><th>Quarter</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
 
@@ -236,10 +237,10 @@
     </div>
     <div class="panel">
       <div class="panel-body">
-        <table id="yearlyTable">
+        <div class="table-scroll"><table id="yearlyTable">
           <thead><tr><th>Financial Year</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   </div>
@@ -466,22 +467,22 @@ function niceMax(v){
 // Y-axis title for VERTICAL charts (rotated, placed at far left)
 function yAxisTitle(text, h, padT, padB){
   const cy = padT + (h - padT - padB) / 2;
-  return `<text x="16" y="${cy}" font-size="15.5" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
+  return `<text x="16" y="${cy}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
 }
 // X-axis title for VERTICAL charts (centered, placed at bottom)
 function xAxisTitleV(text, w, h, padL, padR){
   const cx = padL + (w - padL - padR) / 2;
-  return `<text x="${cx}" y="${h - 6}" font-size="15.5" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
+  return `<text x="${cx}" y="${h - 6}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
 }
 // X-axis title (value axis) for HORIZONTAL bar charts (centered, at bottom)
 function xAxisTitleH(text, w, h, padL, padR){
   const cx = padL + (w - padL - padR) / 2;
-  return `<text x="${cx}" y="${h - 6}" font-size="15.5" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
+  return `<text x="${cx}" y="${h - 6}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
 }
 // Y-axis title (category axis) for HORIZONTAL bar charts (rotated, far left)
 function yAxisTitleH(text, h, padT, padB){
   const cy = padT + (h - padT - padB) / 2;
-  return `<text x="16" y="${cy}" font-size="15.5" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
+  return `<text x="16" y="${cy}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
 }
 
 function makePieChart(container, items, valueKey, labelKey, opts={}){
@@ -584,7 +585,7 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
   for(let g=0; g<=4; g++){
     const gy = padT + (h-padT-padB) * (1 - g/4);
     gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="13.5" text-anchor="end" fill="#6b7c93">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
+    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="#6b7c93">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
   }
 
   items.forEach((d, i) => {
@@ -595,7 +596,7 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
     const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${x + barW/2}" y="${y - 8}" font-size="14.5" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${x + barW/2}" y="${h - padB + 20}" font-size="14.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey], 12)}</text>`;
+    labels += `<text x="${x + barW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey], 12)}</text>`;
   });
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
@@ -620,7 +621,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
   for(let g=0; g<=4; g++){
     const gx = padL + plotW * g/4;
     gridlines += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${h-padB}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="13.5" text-anchor="middle" fill="#6b7c93">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
+    gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="#6b7c93">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
   }
 
   items.forEach((d, i) => {
@@ -631,7 +632,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}<title>${d[labelKey]}</title></text>`;
+    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}<title>${d[labelKey]}</title></text>`;
   });
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
@@ -669,7 +670,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${s.color}" rx="3"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="16.5" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}</text>`;
+    labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="12.5" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}</text>`;
   });
 
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
@@ -711,9 +712,9 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
       bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
-      bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="13" font-weight="700" text-anchor="middle" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
+      bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="14" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${truncateLabel(d[labelKey], truncLen)}<title>${d[labelKey]}</title></text>`;
+    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${truncateLabel(d[labelKey], truncLen)}<title>${d[labelKey]}</title></text>`;
   });
 
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
@@ -738,7 +739,7 @@ function makeLineChart(container, items, labelKey, series, opts={}){
     const gy = padT + (h-padT-padB) * (1 - g/4);
     gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#eef1f6" stroke-width="1"/>`;
     const gv = maxV*g/4;
-    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="13.5" text-anchor="end" fill="#6b7c93">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(2)}</text>`;
+    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="#6b7c93">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(2)}</text>`;
   }
 
   let svgParts = "", legend = "";
@@ -766,7 +767,7 @@ function makeLineChart(container, items, labelKey, series, opts={}){
   items.forEach((d, i) => {
     if(i % skip !== 0 && i !== n-1) return;
     const x = padL + (n > 1 ? i * stepX : (w-padL-padR)/2);
-    xLabels += `<text x="${x}" y="${h - padB + 20}" font-size="14" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x} ${h-padB+20})">${truncateLabel((d[labelKey]||"").replace("Wk of ",""), 12)}</text>`;
+    xLabels += `<text x="${x}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x} ${h-padB+20})">${truncateLabel((d[labelKey]||"").replace("Wk of ",""), 12)}</text>`;
   });
 
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
@@ -790,7 +791,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
   for(let g=0; g<=4; g++){
     const gy = padT + (h-padT-padB) * (1 - g/4);
     gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="13.5" text-anchor="end" fill="#6b7c93">${(opts.barFmt ? opts.barFmt(maxBar*g/4) : (maxBar*g/4).toFixed(0))}</text>`;
+    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="#6b7c93">${(opts.barFmt ? opts.barFmt(maxBar*g/4) : (maxBar*g/4).toFixed(0))}</text>`;
   }
 
   items.forEach((d, i) => {
@@ -800,12 +801,12 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const y = h - padB - barH;
     const barColor = opts.colorful ? CHART_COLORS[i % CHART_COLORS.length] : "#118DFF";
     bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.barFmt ? opts.barFmt(val) : val}</title></rect>`;
-    bars += `<text x="${x+barW/2}" y="${y-8}" font-size="13.5" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt ? opts.barFmt(val) : val}</text>`;
-    labels += `<text x="${x+barW/2}" y="${h-padB+20}" font-size="13.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-35 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey],16)}</text>`;
+    bars += `<text x="${x+barW/2}" y="${y-8}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt ? opts.barFmt(val) : val}</text>`;
+    labels += `<text x="${x+barW/2}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-35 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey],16)}</text>`;
     const lineY = h - padB - (d[lineKey]) * (h - padT - padB);
     points += `${x+barW/2},${lineY} `;
     dots += `<circle cx="${x+barW/2}" cy="${lineY}" r="4" fill="#DC2626" stroke="#fff" stroke-width="1.5"><title>Cumulative: ${opts.lineFmt ? opts.lineFmt(d[lineKey]) : d[lineKey]}</title></circle>`;
-    dots += `<text x="${x+barW/2}" y="${lineY-10}" font-size="13.5" font-weight="700" text-anchor="middle" fill="#DC2626">${opts.lineFmt ? opts.lineFmt(d[lineKey]) : d[lineKey]}</text>`;
+    dots += `<text x="${x+barW/2}" y="${lineY-10}" font-size="14" font-weight="700" text-anchor="middle" fill="#DC2626">${opts.lineFmt ? opts.lineFmt(d[lineKey]) : d[lineKey]}</text>`;
   });
   container.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
