@@ -558,8 +558,15 @@ def compute_defect_analysis(filters):
     cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {dw}", params)
     total_defect_records, total_defect_qty = cur.fetchone()
 
+    # Include canonical defect names plus any new defect names present in the
+    # live database (e.g. newly added monthly data), so new categories never
+    # disappear from the register/charts.
+    cur.execute("SELECT DISTINCT main_defect FROM disposition WHERE TRIM(COALESCE(main_defect,'')) <> '' AND UPPER(TRIM(main_defect)) <> 'NO DEFECT'")
+    db_defects = {r[0].strip() for r in cur.fetchall() if r[0]}
+    all_defects = sorted(set(MAIN_DEFECTS_FULL_LIST) | db_defects)
+
     register = []
-    for defect in MAIN_DEFECTS_FULL_LIST:
+    for defect in all_defects:
         w2 = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect = ?"
         cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {w2}",
                     params + [defect])

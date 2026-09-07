@@ -6,7 +6,7 @@ Everything runs locally, no internet connection required after setup.
 ## Contents
 - `server.py` — the web server (routes + KPI calculation engine)
 - `index.html` — the dashboard frontend (vanilla HTML/CSS/JS)
-- `quality.db` — SQLite database (4,820 records imported from your workbook)
+- `quality.db` — SQLite database (4,936 records imported from your workbook)
 - `build_db.py` — script used to (re)build `quality.db` from the original .xlsm
 
 ## How to run
@@ -33,7 +33,7 @@ This rebuilds `quality.db` from the .xlsm file. Then restart `server.py`.
 ## What's included
 - ✅ Exactly 16 KPI cards, colored exactly like the original workbook (green=good, red=bad, amber=caution, purple, slate — extracted directly from the workbook's cell font colors)
 - ✅ **Previous-period comparison on every KPI card** — "Prev: X" + ▲/▼ trend arrow + %/pts change, exactly replicating the "KPI Comparison" sheet engine (auto-detects Month/Week/Quarter/FY comparison mode based on which single filter is active)
-- ✅ 4,820/4,820 records imported, all with Output Weight
+- ✅ 4,820/4,936 records imported, all with Output Weight
 - ✅ 8 live filters: Month, Work Center, Grade, Quality Decision, Week, Quarter, Financial Year, Defect Intensity
 - ✅ Real charts matching the original workbook's embedded Excel charts:
   - Pie chart — Quality Decision Mix (Qty MT)
@@ -93,3 +93,8 @@ and everyone sees the new data on the same link.
 Note: Render's free tier "sleeps" after 15 minutes of no traffic and takes
 ~30 seconds to wake up on the next visit. For an always-instant company
 dashboard, a paid tier (~$7/month) removes the sleep delay.
+
+
+### Data update included
+- Sep-2026 data from the workbook's **Disposition Data** sheet has been imported (116 records), bringing the database to 4,936 records.
+- All existing filters are database-driven, so Sep-2026 values automatically appear in Month, Week, Quarter, Financial Year, Work Center, Grade, Quality Decision and Defect Intensity filters and in all dashboard/trend views.
