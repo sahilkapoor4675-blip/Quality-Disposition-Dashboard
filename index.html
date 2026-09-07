@@ -12,10 +12,21 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:'Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;}
-  header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:18px 24px;
-         display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
-  header h1{margin:0;font-size:20px;letter-spacing:.5px;}
-  header .sub{font-size:12px;opacity:.85;}
+  header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:20px 28px;
+         display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:18px;
+         box-shadow:0 4px 18px rgba(15,42,74,.18);border-bottom:1px solid rgba(255,255,255,.10);}
+  .executive-brand{min-width:300px;}
+  header h1{margin:0;font-size:25px;line-height:1.1;letter-spacing:1.3px;font-weight:800;}
+  header .sub{font-size:12px;opacity:.86;}
+  .executive-kicker{font-size:11px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#b9d9ff;margin-top:6px;}
+  .executive-meta{display:flex;align-items:center;gap:14px;margin-left:auto;}
+  .updated-block{text-align:right;min-width:150px;}
+  .updated-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:800;opacity:.68;margin-bottom:3px;}
+  .updated-time{font-size:12px;font-weight:600;letter-spacing:.2px;white-space:nowrap;}
+  .live-status{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);font-size:10px;font-weight:800;letter-spacing:.7px;white-space:nowrap;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.16),0 0 10px rgba(34,197,94,.65);animation:livePulse 1.8s ease-in-out infinite;}
+  @keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.86)}}
+  @media(max-width:700px){header{padding:16px 18px}.executive-meta{width:100%;margin-left:0;justify-content:space-between}.updated-block{text-align:left}.live-status{margin-left:auto}header h1{font-size:21px}}
   .container{padding:20px;max-width:1400px;margin:0 auto;}
   .filters{background:var(--card);border:1px solid var(--border);border-radius:10px;
            padding:16px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
@@ -103,15 +114,83 @@
   .legend-dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
   .no-data{color:var(--muted);font-size:13px;padding:16px;}
   .subhead{font-size:12px;color:var(--muted);padding:0 16px;margin:-6px 0 10px 0;}
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
+  body{font-family:Inter,'Segoe UI','Helvetica Neue',Arial,sans-serif;}
+  header{position:relative;}
+  .header-actions{display:flex;align-items:center;gap:10px;}
+  .original-look-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid rgba(255,255,255,.28);border-radius:8px;background:rgba(255,255,255,.10);color:#fff;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.2px;backdrop-filter:blur(6px);}
+  .original-look-btn:hover{background:rgba(255,255,255,.18);}
+  .filters{position:relative;display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:14px 14px 16px;border-radius:12px;box-shadow:0 5px 18px rgba(15,42,74,.07);}
+  @media(max-width:1050px){.filters{grid-template-columns:repeat(2,minmax(180px,1fr));}}
+  @media(max-width:600px){.filters{grid-template-columns:1fr;}}
+  .filter-toolbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:2px;}
+  .filter-toolbar-title{font-size:12px;font-weight:800;color:var(--navy);letter-spacing:.4px;text-transform:uppercase;}
+  .filter-actions{display:flex;align-items:center;gap:8px;}
+  .active-filter-badge{display:none;padding:5px 9px;border-radius:999px;background:#e8f3ff;color:#0369a1;font-size:11px;font-weight:800;}
+  .active-filter-badge.show{display:inline-flex;}
+  .reset-all{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;}
+  .reset-all:hover{box-shadow:0 5px 14px rgba(15,42,74,.10);border-color:#94a3b8;}
+  .filter-field{position:relative;}
+  .filter-field label{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+  .filter-control{position:relative;}
+  .filter-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid #dbe3ec;border-radius:8px;background:#fbfcfe;color:#24364b;font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:.16s ease;}
+  .filter-trigger:hover,.filter-control.open .filter-trigger{border-color:#8bbcf2;box-shadow:0 8px 22px rgba(17,141,255,.13);background:#fff;}
+  .filter-trigger .chevron{font-size:10px;color:#64748b;}
+  .filter-menu{position:absolute;z-index:50;left:0;right:0;top:calc(100% + 6px);display:none;background:#fff;border:1px solid #dbe3ec;border-radius:9px;box-shadow:0 14px 34px rgba(15,42,74,.18);padding:8px;}
+  .filter-control.open .filter-menu{display:block;animation:dropIn .14s ease-out;}
+  @keyframes dropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+  .filter-search{width:100%;padding:7px 8px;border:1px solid #dbe3ec;border-radius:7px;font-size:11px;outline:none;margin-bottom:6px;}
+  .filter-search:focus{border-color:#8bbcf2;box-shadow:0 0 0 3px rgba(17,141,255,.08);}
+  .filter-options{max-height:220px;overflow:auto;}
+  .filter-option{padding:7px 8px;border-radius:6px;font-size:11px;cursor:pointer;color:#334155;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .filter-option:hover{background:#f1f6fb;}
+  .filter-option.selected{background:#eaf4ff;color:#075985;font-weight:800;}
+  .filter-option.all-option{border-bottom:1px solid #edf1f5;margin-bottom:4px;font-weight:800;}
+  .filter-empty{padding:10px 8px;color:#94a3b8;font-size:11px;}
+  .kpi-grid{gap:12px;}
+  .kpi-card{padding:13px 14px 12px;border-radius:11px;min-height:145px;box-shadow:0 2px 8px rgba(15,42,74,.055);}
+  .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#cbd5e1;border-radius:11px 0 0 11px;}
+  .kpi-card.status-good::before{background:#16a34a}.kpi-card.status-bad::before{background:#dc2626}.kpi-card.status-amber::before{background:#d97706}.kpi-card.status-neutral::before{background:#118dff}
+  .kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .kpi-card .label{font-size:11px;letter-spacing:.35px;margin:0;text-transform:uppercase;font-weight:800;}
+  .kpi-card .kpi-icon{font-size:15px;width:24px;height:24px;border-radius:7px;background:#f1f6fb;display:inline-flex;align-items:center;justify-content:center;}
+  .kpi-status{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.35px;padding:3px 6px;border-radius:999px;}
+  .kpi-status.good{background:#dcfce7;color:#15803d}.kpi-status.bad{background:#fee2e2;color:#b91c1c}.kpi-status.amber{background:#fef3c7;color:#b45309}.kpi-status.neutral{background:#e0f2fe;color:#0369a1}
+  .kpi-card .value{font-family:'IBM Plex Mono',Inter,sans-serif;font-size:31px;font-weight:700;letter-spacing:-.5px;margin-top:9px;line-height:1.1;}
+  .kpi-bottom{display:grid;grid-template-columns:1fr 76px;align-items:end;gap:8px;margin-top:7px;}
+  .kpi-meta{min-width:0}.kpi-target{font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.kpi-trendline{display:flex;align-items:center;gap:7px;margin-top:4px;}
+  .kpi-card .prev{font-size:10px}.kpi-card .trend{font-size:10px;padding:2px 6px;border-radius:5px;}
+  .sparkline{width:76px;height:28px;display:block;overflow:visible;}
+  .sparkline polyline{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .kpi-card.shimmering{pointer-events:none;}
+  .kpi-card.shimmering>*{opacity:.35}
+  .kpi-card.shimmering::after{content:"";position:absolute;inset:0;opacity:1;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.75) 48%,transparent 66%);background-size:220% 100%;animation:shimmer .6s ease-in-out infinite;}
+  @keyframes shimmer{from{background-position:200% 0}to{background-position:-20% 0}}
+  .charts-grid .panel,.panel.chart-animated{transition:opacity .3s ease,transform .3s ease;}
+  .chart-refreshing{opacity:.35;transform:translateY(4px);}
+  .chart-ready{opacity:1;transform:translateY(0);}
+  .section-title{font-size:16px!important;}
+  .chart-scroll{font-family:Inter,sans-serif;}
+  @media(max-width:600px){.kpi-card .value{font-size:27px}.kpi-card{min-height:138px}}
+
 </style>
 </head>
 <body>
 <header>
-  <div>
-    <h1>CUPRO-NICKEL &nbsp;|&nbsp; QUALITY DISPOSITION CONTROL DASHBOARD</h1>
-    <div class="sub">Real-Time Quality Control</div>
+  <div class="executive-brand">
+    <h1>QUALITY INTELLIGENCE</h1>
+    <div class="executive-kicker">Disposition &amp; Defect Analytics</div>
+    <div class="sub">Plant Quality Performance Monitoring</div>
   </div>
-  <div class="sub" id="refreshed">Refreshed: --</div>
+  <div class="executive-meta">
+    <div class="updated-block">
+      <div class="updated-label">Last Updated</div>
+      <div class="updated-time" id="refreshed">07 Sep 2026 • --:--</div>
+    </div>
+    <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
+    <div class="header-actions"><a class="original-look-btn" href="index_original.html">↩ Original Look</a></div>
+  </div>
 </header>
 
 <div class="container">
@@ -310,35 +389,58 @@ async function loadFilters(){
   const res = await fetch("/api/filters");
   const options = await res.json();
   const container = document.getElementById("filters");
-  container.innerHTML = "";
+  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
-    const div = document.createElement("div");
-    div.className = "field";
-    const label = document.createElement("label");
-    label.textContent = f.label;
-    const select = document.createElement("select");
-    select.id = "filter_" + f.key;
-    (options[f.key] || ["All"]).forEach(item => {
-      const val = (item && typeof item === "object") ? item.value : item;
-      const text = (item && typeof item === "object") ? item.label : item;
-      const opt = document.createElement("option");
-      opt.value = val; opt.textContent = text;
-      select.appendChild(opt);
-    });
-    select.addEventListener("change", () => {
-      currentFilters[f.key] = select.value;
-      const activeBtn = document.querySelector(".tab-btn.active");
-      const activeTab = activeBtn ? activeBtn.dataset.tab : "dashboard";
-      const page = document.querySelector(".container");
-      if(page) page.classList.add("dashboard-refreshing");
-      Promise.resolve(TAB_LOADERS[activeTab]()).finally(() => {
-        if(page) requestAnimationFrame(() => page.classList.remove("dashboard-refreshing"));
+    const field = document.createElement("div"); field.className = "filter-field";
+    const label = document.createElement("label"); label.textContent = f.label;
+    const control = document.createElement("div"); control.className = "filter-control";
+    const trigger = document.createElement("button"); trigger.type="button"; trigger.className="filter-trigger";
+    const valueSpan = document.createElement("span"); valueSpan.textContent="All";
+    trigger.appendChild(valueSpan); trigger.insertAdjacentHTML("beforeend","<span class='chevron'>▼</span>");
+    const menu = document.createElement("div"); menu.className="filter-menu";
+    const search = document.createElement("input"); search.className="filter-search"; search.placeholder="Search options…"; search.type="text";
+    const list = document.createElement("div"); list.className="filter-options";
+    menu.appendChild(search); menu.appendChild(list); control.appendChild(trigger); control.appendChild(menu); field.appendChild(label); field.appendChild(control); container.appendChild(field);
+    const raw = options[f.key] || ["All"];
+    const items = raw.map(item => ({value:(item&&typeof item==='object')?item.value:item, label:(item&&typeof item==='object')?item.label:item}));
+    if(!items.some(x=>x.value==="All")) items.unshift({value:"All",label:"All"});
+    const renderOptions = (term="") => {
+      const q=term.trim().toLowerCase(); list.innerHTML="";
+      const filtered=items.filter(x=>String(x.label).toLowerCase().includes(q));
+      filtered.forEach((x,i)=>{
+        const opt=document.createElement("div"); opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
+        opt.textContent=x.label;
+        opt.addEventListener("click",()=>{
+          currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); updateActiveFilterBadge(); triggerFilterRefresh();
+        }); list.appendChild(opt);
       });
-    });
-    div.appendChild(label); div.appendChild(select);
-    container.appendChild(div);
+      if(!filtered.length) list.innerHTML='<div class="filter-empty">No matching options</div>';
+    };
+    trigger.addEventListener("click",()=>{document.querySelectorAll('.filter-control.open').forEach(c=>{if(c!==control)c.classList.remove('open')}); control.classList.toggle('open'); if(control.classList.contains('open')){search.focus();renderOptions(search.value);}});
+    search.addEventListener("input",()=>renderOptions(search.value));
+    renderOptions();
   });
+  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); updateActiveFilterBadge(); triggerFilterRefresh();});
+  document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));},{once:true});
+  updateActiveFilterBadge();
 }
+function updateActiveFilterBadge(){
+  const n=FILTER_DEFS.filter(f=>currentFilters[f.key] && currentFilters[f.key]!=="All").length;
+  const b=document.getElementById('activeFilterBadge'); if(!b)return; b.textContent=`${n} Active`; b.classList.toggle('show',n>0);
+}
+async function triggerFilterRefresh(){
+  const activeBtn=document.querySelector('.tab-btn.active'); const activeTab=activeBtn?activeBtn.dataset.tab:'dashboard';
+  const page=document.querySelector('.container'); if(page) page.classList.add('dashboard-refreshing');
+  document.querySelectorAll('.kpi-card').forEach(c=>c.classList.add('shimmering'));
+  document.querySelectorAll('.chart-scroll').forEach(c=>c.classList.add('chart-refreshing'));
+  document.querySelector('.filters')?.classList.add('filter-pulse');
+  const t0=performance.now();
+  try{await TAB_LOADERS[activeTab]();}finally{
+    const elapsed=performance.now()-t0; const wait=Math.max(0,400-elapsed);
+    setTimeout(()=>{document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('shimmering')); document.querySelectorAll('.chart-scroll').forEach(c=>{c.classList.remove('chart-refreshing');c.classList.add('chart-ready');setTimeout(()=>c.classList.remove('chart-ready'),350)}); if(page)page.classList.remove('dashboard-refreshing');},wait);
+  }
+}
+
 
 // Icon shown before each KPI card's name — purely cosmetic, keyed by label.
 const KPI_ICONS = {
@@ -360,46 +462,34 @@ const KPI_ICONS = {
   "Without Intensity %": "❔",
 };
 
+function kpiTarget(label){
+  const m={"First Pass Yield %":"Target > 97%","Hold for Decision % Qty":"Target < 1%","PPM Defective":"Target ≤ 10,000","Intensity Tagging %":"Target < 5%","Defect Rate":"Target < 1%","Reject % Qty":"Target < 1%","Process Sigma Level (Approx.)":"Target > 3.0","Salvage % Qty":"Target < 1%","Rework % Qty":"Target < 1%","Without Intensity %":"Target > 90%","Defect Coils":"Reference: < 1% of coils","Hold For Decision Qty (MT)":"Reference: < 1% of output","Reject Qty (MT)":"Reference: < 1% of output"}; return m[label]||"Reference: current period";
+}
+function kpiStatus(label,k){
+  const v=Number(k.value)||0; if(label==='First Pass Yield %') return v>.97?'good':v>=.90?'amber':'bad';
+  if(['Salvage % Qty','Reject % Qty','Rework % Qty','Hold for Decision % Qty'].includes(label)) return v<.01?'good':v<=.03?'amber':'bad';
+  if(label==='Process Sigma Level (Approx.)') return v>3?'good':v>=2?'amber':'bad';
+  if(label==='PPM Defective') return v<=10000?'good':v<=30000?'amber':'bad';
+  if(label==='Intensity Tagging %') return v<.05?'good':v<=.10?'amber':'bad';
+  if(label==='Without Intensity %') return v>.90?'good':v>=.85?'amber':'bad';
+  return 'neutral';
+}
+function sparklineSvg(oldValue,currentValue,status){
+  const a=Number.isFinite(oldValue)?oldValue:Number(currentValue); const b=Number(currentValue)||0; const pts=[]; for(let i=0;i<6;i++){const t=i/5; const v=a+(b-a)*t; pts.push(v)}
+  let min=Math.min(...pts),max=Math.max(...pts); if(min===max){min-=1;max+=1;} const points=pts.map((v,i)=>`${(i*15.2).toFixed(1)},${(24-(v-min)/(max-min)*20).toFixed(1)}`).join(' ');
+  const stroke=status==='good'?'#16a34a':status==='bad'?'#dc2626':status==='amber'?'#d97706':'#118dff';
+  return `<svg class="sparkline" viewBox="0 0 76 28" preserveAspectRatio="none"><polyline points="${points}" stroke="${stroke}"/><circle cx="76" cy="${(24-(b-min)/(max-min)*20).toFixed(1)}" r="2.2" fill="${stroke}"/></svg>`;
+}
 function renderKpis(kpis){
-  const grid = document.getElementById("kpiGrid");
-  const nextValues = new Map();
-  const token = ++kpiAnimationToken;
-  grid.innerHTML = "";
-
-  kpis.forEach(k => {
-    const card = document.createElement("div");
-    card.className = "kpi-card kpi-pulse";
-    const icon = KPI_ICONS[k.label] || "📊";
-    const oldValue = previousKpiValues.get(k.label);
-    const changed = Number.isFinite(oldValue) && Number.isFinite(Number(k.value)) && Math.abs(oldValue - Number(k.value)) > 1e-12;
-    const direction = changed ? (Number(k.value) > oldValue ? "up" : "down") : "";
-    if(direction) card.classList.add(direction === "up" ? "kpi-up" : "kpi-down");
-
-    let trendHtml = "";
-    if(k.arrow !== undefined){
-      const arrowChar = k.arrow === "up" ? "▲" : (k.arrow === "down" ? "▼" : "▬");
-      const changeText = k.change_type === "pts"
-        ? (k.change_value >= 0 ? "+" : "") + (k.change_value*100).toFixed(3) + " pts"
-        : (k.change_value >= 0 ? "+" : "") + (k.change_value*100).toFixed(3) + "%";
-      const prevText = "Prev: " + fmtValue(k.prev, k.fmt);
-      trendHtml = `<div class="prev-row">
-        <span class="prev">${prevText}</span>
-        <span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>
-      </div>`;
-    }
-    card.innerHTML = `<div class="label"><span class="kpi-icon">${icon}</span>${k.label}</div>
-      <div class="value" data-target="${Number(k.value) || 0}" style="color:${k.color || '#0f2a4a'}">${fmtValue(k.value, k.fmt)}</div>
-      ${trendHtml}`;
-    grid.appendChild(card);
-
-    const valueEl = card.querySelector(".value");
-    if(changed && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
-      animateKpiValue(valueEl, oldValue, Number(k.value), k.fmt, token);
-    }
-    nextValues.set(k.label, Number(k.value));
-  });
-
-  previousKpiValues = nextValues;
+  const grid=document.getElementById('kpiGrid'); const nextValues=new Map(); const token=++kpiAnimationToken; grid.innerHTML='';
+  kpis.forEach(k=>{
+    const card=document.createElement('div'); const oldValue=previousKpiValues.get(k.label); const cur=Number(k.value)||0; const changed=Number.isFinite(oldValue)&&Math.abs(oldValue-cur)>1e-12; const direction=changed?(cur>oldValue?'up':'down'):''; const status=kpiStatus(k.label,k);
+    card.className=`kpi-card status-${status} kpi-pulse`; if(direction)card.classList.add(direction==='up'?'kpi-up':'kpi-down');
+    let trendHtml=''; if(k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; const changeText=k.change_type==='pts'?`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`:`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
+    const statusText=status==='good'?'On Target':status==='amber'?'Watch':status==='bad'?'Action':'Neutral';
+    card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${k.color||'#0f2a4a'}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta"><div class="kpi-target">${kpiTarget(k.label)}</div><div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
+    grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
+  }); previousKpiValues=nextValues;
 }
 
 function animateKpiValue(el, from, to, fmt, token){
@@ -436,7 +526,7 @@ function renderDecisionTable(rows, total){
       <td>${fmtPct(r.pct_coils)}</td><td>${fmtNum2(r.qty)}</td><td>${fmtPct(r.pct_qty)}</td>`;
     tbody.appendChild(tr);
   });
-  if(total){
+  if(false && total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
     tr.innerHTML = `<td>${total.decision}</td><td>${total.coils.toLocaleString()}</td>
@@ -454,7 +544,7 @@ function renderDefectTable(rows, total){
       <td>${fmtPct(r.pct)}</td><td>${fmtPct(r.cum_pct)}</td>`;
     tbody.appendChild(tr);
   });
-  if(total){
+  if(false && total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
     tr.innerHTML = `<td>${total.defect}</td><td>${fmtNum2(total.qty)}</td>
@@ -472,7 +562,7 @@ function renderIntensityTable(rows, total){
       <td>${fmtPct(r.pct_coils)}</td><td>${fmtNum2(r.qty)}</td><td>${fmtPct(r.pct_qty)}</td>`;
     tbody.appendChild(tr);
   });
-  if(total){
+  if(false && total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
     tr.innerHTML = `<td>${total.intensity}</td><td>${total.coils.toLocaleString()}</td>
@@ -492,7 +582,7 @@ function renderMetricsTable(tableId, rows, total){
       <td>${fmtPct(r.reject_pct_qty)}</td><td>${fmtPct(r.first_pass_yield_pct)}</td>`;
     tbody.appendChild(tr);
   });
-  if(total){
+  if(false && total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
     tr.innerHTML = `<td>${total.name}</td><td>${total.coils.toLocaleString()}</td>
@@ -531,6 +621,8 @@ async function loadKpis(){
   await loadMonthlyTrend();
 }
 
+
+function markChartsReady(){document.querySelectorAll('.chart-scroll').forEach(c=>{c.classList.remove('chart-refreshing');c.classList.add('chart-ready');});}
 // =====================================================================
 // SVG CHART HELPERS (no external libraries). All charts use a FIXED
 // design width that scales responsively to the container (CSS width:100%)
@@ -924,7 +1016,7 @@ async function loadWcGrade(){
   renderMetricsTable("wcTable", data.by_work_center, data.total_work_center);
   makeHBarChart(document.getElementById("gradeChart"), data.by_grade, "reject_pct_qty", "name",
     {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Grade"});
-  renderMetricsTable("gradeTable", data.by_grade, data.total_grade);
+  renderMetricsTable("gradeTable", data.by_grade, data.total_grade); markChartsReady();
 }
 
 // ---------- Tab: Defect Analysis ----------
@@ -943,14 +1035,8 @@ async function loadDefectAnalysis(){
       <td>${fmtNum2(r.qty)}</td><td>${fmtPct(r.pct_records)}</td>`;
     tbody.appendChild(tr);
   });
-  if(data.register_total){
-    const t = data.register_total;
-    const tr = document.createElement("tr");
-    tr.className = "grand-total-row";
-    tr.innerHTML = `<td></td><td>${t.defect}</td><td>${t.records.toLocaleString()}</td>
-      <td>${fmtNum2(t.qty)}</td><td>${fmtPct(t.pct_records)}</td>`;
-    tbody.appendChild(tr);
-  }
+
+  markChartsReady();
 }
 
 // ---------- Tab: Monthly Trend ----------
@@ -968,7 +1054,7 @@ async function loadMonthlyTrend(){
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"output_qty", label:"Output Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(0)},
   ], {yLabel: "Coils / Qty (MT)", xLabel: "Month"});
-  renderMetricsTable("monthlyTable", data.rows, data.total);
+  renderMetricsTable("monthlyTable", data.rows, data.total); markChartsReady();
 }
 
 // ---------- Tab: Period Trend (Weekly / Quarterly / Yearly) ----------
@@ -995,7 +1081,7 @@ async function loadPeriodTrend(){
     {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Financial Year"});
-  renderMetricsTable("yearlyTable", data.yearly, data.yearly_total);
+  renderMetricsTable("yearlyTable", data.yearly, data.yearly_total); markChartsReady();
 }
 
 // ---------- Tab switching ----------
@@ -1024,7 +1110,10 @@ function setRefreshed(){
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const m = months[now.getMonth()];
   const y = now.getFullYear();
-  document.getElementById("refreshed").textContent = `Refreshed: ${d}-${m}-${y}`;
+  const hh = String(now.getHours()).padStart(2,"0");
+  const mm = String(now.getMinutes()).padStart(2,"0");
+  document.getElementById("refreshed").textContent = `${d} ${m} ${y} • ${hh}:${mm}`;
+  document.getElementById("liveLabel").textContent = "LIVE DATA";
 }
 
 (async function init(){
