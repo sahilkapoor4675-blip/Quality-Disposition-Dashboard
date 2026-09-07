@@ -419,8 +419,17 @@ def compute_kpis(filters, _skip_prev=False):
             else:
                 arrow = "flat"
             k["arrow"] = arrow
-            if meta["direction"] == "neutral" or arrow == "flat":
-                k["trend_color"] = "neutral"
+            # Exact 4-state logic extracted from the workbook's real
+            # conditional-formatting rules (x14 extLst on the Quality
+            # Dashboard sheet, e.g. "D9<'KPI Comparison'!$B$21" -> green,
+            # "D9>...' -> red, "D9=...' -> gray). Neutral-direction KPIs
+            # (Total Coils, Output Quantity) only ever get the blue "info"
+            # badge whenever the value changed at all — they never turn
+            # green/red since there's no inherent "good" direction.
+            if meta["direction"] == "neutral":
+                k["trend_color"] = "info" if arrow != "flat" else "equal"
+            elif arrow == "flat":
+                k["trend_color"] = "equal"
             elif (meta["direction"] == "up_good" and arrow == "up") or \
                  (meta["direction"] == "down_good" and arrow == "down"):
                 k["trend_color"] = "good"

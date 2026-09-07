@@ -32,10 +32,14 @@
   .kpi-card .value{font-size:26px;font-weight:700;}
   .kpi-card .prev-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;gap:8px;}
   .kpi-card .prev{font-size:11px;color:var(--muted);white-space:nowrap;}
-  .kpi-card .trend{font-size:12px;font-weight:700;white-space:nowrap;text-align:right;}
-  .kpi-card .trend.good{color:var(--green);}
-  .kpi-card .trend.bad{color:var(--red);}
-  .kpi-card .trend.neutral{color:var(--muted);}
+  .kpi-card .trend{font-size:12px;font-weight:700;white-space:nowrap;text-align:right;
+    padding:2px 8px;border-radius:5px;}
+  /* Exact colors extracted from the workbook's real conditional-formatting
+     rules (x14 extLst on the Quality Dashboard sheet). */
+  .kpi-card .trend.good{color:#15803D;background:#DCFCE7;}
+  .kpi-card .trend.bad{color:#B91C1C;background:#FEE2E2;}
+  .kpi-card .trend.equal{color:#475569;background:#F3F4F6;}
+  .kpi-card .trend.info{color:#0369A1;background:#E0F2FE;}
 
   .period-banner{background:#eef4ff;border:1px solid #cfe0fb;border-radius:8px;padding:8px 14px;
                   font-size:12px;color:var(--navy);margin-bottom:16px;}
