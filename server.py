@@ -56,6 +56,15 @@ def _week_sort_key(w):
     except ValueError:
         return _dt.datetime.max
 
+def _week_display_label(w):
+    """Convert stored week label (Monday start) to a full Monday-Sunday date range."""
+    try:
+        start = _dt.datetime.strptime(w.replace("Wk of ", "").strip(), "%d-%b-%y")
+        end = start + _dt.timedelta(days=6)
+        return f"{start.strftime('%d-%b-%Y')} to {end.strftime('%d-%b-%Y')}"
+    except ValueError:
+        return w
+
 
 # ---------------------------------------------------------------------------
 # Previous-period comparison engine (replicates the "KPI Comparison" sheet)
@@ -123,7 +132,7 @@ def compute_prev_filters(filters):
 
 def current_period_label(filters):
     if filters.get("week", "All") != "All":
-        return filters["week"]
+        return _week_display_label(filters["week"])
     if filters.get("month", "All") != "All":
         return filters["month"]
     if filters.get("quarter", "All") != "All":
@@ -223,7 +232,7 @@ def kpi_threshold_color(label, value):
     green, amber, red = "#16A34A", "#D97706", "#DC2626"
     if label in ("First Pass Yield %", "For Next Process %"):
         return green if value > 0.97 else amber if value >= 0.90 else red
-    if label in ("Salvage % Qty", "Reject % Qty", "Hold for Decision % Qty", "Hold For Decision % Qty"):
+    if label in ("Salvage % Qty", "Reject % Qty", "Rework % Qty", "Hold for Decision % Qty", "Hold For Decision % Qty"):
         return green if value < 0.01 else amber if value <= 0.03 else red
     if label == "Process Sigma Level (Approx.)":
         return green if value > 3 else amber if value >= 2 else red
@@ -487,7 +496,12 @@ def get_filter_options():
             vals.sort()
         if key == "defect_intensity":
             vals = vals + ["NONE"]
-        options[key] = ["All"] + vals
+        if key == "week":
+            options[key] = [{"value":"All", "label":"All"}] + [
+                {"value": v, "label": _week_display_label(v)} for v in vals
+            ]
+        else:
+            options[key] = ["All"] + vals
     conn.close()
     return options
 
@@ -661,6 +675,8 @@ def compute_period_trend(filters):
     weeks = sorted([r[0] for r in cur.fetchall()], key=_week_sort_key)
 
     rows = [_group_metrics(cur, where_sql, params, "week", w) for w in weeks]
+    for row in rows:
+        row["name"] = _week_display_label(row["name"])
     conn.close()
     return {"rows": rows, "total": _grand_total_row(rows)}
 

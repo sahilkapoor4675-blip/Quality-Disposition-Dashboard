@@ -21,6 +21,9 @@
            padding:16px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
   .filters .field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;}
   .filters select{width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);font-size:13px;background:#fbfcfe;}
+  .filters .field label{display:flex;align-items:center;gap:6px;}
+  #registerTable th:first-child,#registerTable td:first-child{text-align:center;}
+  #registerTable th:nth-child(2),#registerTable td:nth-child(2){text-align:left;}
 
   .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
   @media (max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
@@ -256,14 +259,14 @@
 
 <script>
 const FILTER_DEFS = [
-  {key:"month", label:"Month"},
-  {key:"work_center", label:"Work Center"},
-  {key:"grade", label:"Grade"},
-  {key:"quality_decision", label:"Quality Decision"},
-  {key:"week", label:"Week"},
-  {key:"quarter", label:"Quarter"},
-  {key:"financial_year", label:"Financial Year"},
-  {key:"defect_intensity", label:"Defect Intensity"},
+  {key:"month", label:"📅 Month"},
+  {key:"work_center", label:"🏭 Work Center"},
+  {key:"grade", label:"🧪 Grade"},
+  {key:"quality_decision", label:"⚖️ Quality Decision"},
+  {key:"week", label:"🗓️ Week"},
+  {key:"quarter", label:"📊 Quarter"},
+  {key:"financial_year", label:"📆 Financial Year"},
+  {key:"defect_intensity", label:"🏷️ Defect Intensity"},
 ];
 
 let currentFilters = {};
@@ -293,9 +296,11 @@ async function loadFilters(){
     label.textContent = f.label;
     const select = document.createElement("select");
     select.id = "filter_" + f.key;
-    (options[f.key] || ["All"]).forEach(val => {
+    (options[f.key] || ["All"]).forEach(item => {
+      const val = (item && typeof item === "object") ? item.value : item;
+      const text = (item && typeof item === "object") ? item.label : item;
       const opt = document.createElement("option");
-      opt.value = val; opt.textContent = val;
+      opt.value = val; opt.textContent = text;
       select.appendChild(opt);
     });
     select.addEventListener("change", () => {
