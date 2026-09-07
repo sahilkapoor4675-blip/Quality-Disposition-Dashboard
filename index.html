@@ -108,7 +108,7 @@
 
     <div class="panel">
       <h3>🥧 Quality Decision Mix — Qty (MT)</h3>
-      <div class="chart-scroll" id="decisionPie" style="max-width:700px;margin:0 auto;"></div>
+      <div class="chart-scroll" id="decisionPie" style="max-width:1050px;margin:0 auto;"></div>
     </div>
 
     <div class="panel">
@@ -517,7 +517,7 @@ function yAxisTitleH(text, h, padT, padB){
 function makePieChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
   const sorted = [...items].sort((a,b) => b[valueKey]-a[valueKey]);
-  const w = 960, h = 760, cx = 480, cy = 350, r = 225, innerR = 118;
+  const w = 1100, h = 820, cx = 550, cy = 380, r = 280, innerR = 145;
   const gapDeg = 0.018;
   const total = sorted.reduce((s,d) => s + d[valueKey], 0);
 
@@ -549,8 +549,8 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
   // Center label: grand total
   const totalText = opts.valFmt ? opts.valFmt(total) : total.toFixed(2);
   const centerLabel = `
-    <text x="${cx}" y="${cy-10}" font-size="17.5" font-weight="700" text-anchor="middle" fill="#6b7c93">TOTAL</text>
-    <text x="${cx}" y="${cy+16}" font-size="24" font-weight="700" text-anchor="middle" fill="#1c2b3a">${totalText}</text>`;
+    <text x="${cx}" y="${cy-10}" font-size="21" font-weight="700" text-anchor="middle" fill="#6b7c93">TOTAL</text>
+    <text x="${cx}" y="${cy+16}" font-size="29" font-weight="700" text-anchor="middle" fill="#1c2b3a">${totalText}</text>`;
 
   // Pass 3: place outside labels. To keep both sides visually balanced,
   // slices are assigned to left/right by rank (alternating) so neither
@@ -561,9 +561,9 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
   rightSlices.sort((a,b) => a.midAngle - b.midAngle);
   leftSlices.sort((a,b) => a.midAngle - b.midAngle);
 
-  const rowSpacing = 50;
-  const elbowOffset = 34;
-  const labelOffset = 72;
+  const rowSpacing = 58;
+  const elbowOffset = 44;
+  const labelOffset = 88;
 
   function layoutSide(list, side){
     const n = list.length;
@@ -581,8 +581,8 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
       const valText = opts.valFmt ? opts.valFmt(s.val) : s.val.toFixed(2);
       out += `<polyline points="${edgeX},${edgeY} ${elbowX},${targetY} ${labelX-side*4},${targetY}" fill="none" stroke="#94a3b8" stroke-width="1.2"/>`;
       out += `<circle cx="${edgeX}" cy="${edgeY}" r="3" fill="${s.color}"/>`;
-      out += `<text x="${labelX}" y="${targetY-6}" font-size="17" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${s.d[labelKey]}</text>`;
-      out += `<text x="${labelX}" y="${targetY+11}" font-size="16" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
+      out += `<text x="${labelX}" y="${targetY-6}" font-size="21" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${s.d[labelKey]}</text>`;
+      out += `<text x="${labelX}" y="${targetY+11}" font-size="19" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
     });
     return out;
   }
