@@ -210,7 +210,7 @@ def build_where(filters, exclude=None):
         if not val or val == "All":
             continue
         if key == "defect_intensity" and val == "NONE":
-            clauses.append("(defect_intensity IS NULL OR defect_intensity = '')")
+            clauses.append("TRIM(COALESCE(defect_intensity,'')) = ''")
         else:
             clauses.append(f"{key} = ?")
             params.append(val)
@@ -269,18 +269,23 @@ def compute_kpis(filters, _skip_prev=False):
     except (ValueError, ZeroDivisionError):
         process_sigma = 0.0
 
-    # Intensity Tagging % and Without Intensity %
-    intensity_filter = filters.get("defect_intensity", "All")
-    if intensity_filter == "NONE":
-        intensity_tagging_pct = 0.0
-    else:
-        it_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-            "main_defect <> '' AND main_defect <> 'NO DEFECT' AND defect_intensity <> ''"
-        cur.execute(f"SELECT COUNT(*) FROM disposition {it_where}", params)
-        with_intensity = cur.fetchone()[0]
-        intensity_tagging_pct = (with_intensity / defect_coils) if defect_coils else 0.0
+    # Intensity Tagging % / Without Intensity %
+    # Rule: denominator = all defect records in the current filter context.
+    # Tagged = defect records where intensity is actually mentioned (non-blank).
+    # Without intensity = defect records where intensity is blank/NULL.
+    # Calculate both independently so filtered views (including NONE) remain correct.
+    tagged_where = where_sql + (" AND " if where_sql else "WHERE ") + \
+        "main_defect <> '' AND main_defect <> 'NO DEFECT' AND TRIM(COALESCE(defect_intensity,'')) <> ''"
+    blank_where = where_sql + (" AND " if where_sql else "WHERE ") + \
+        "main_defect <> '' AND main_defect <> 'NO DEFECT' AND TRIM(COALESCE(defect_intensity,'')) = ''"
 
-    without_intensity_pct = (1 - intensity_tagging_pct) if intensity_filter != "NONE" else 0.0
+    cur.execute(f"SELECT COUNT(*) FROM disposition {tagged_where}", params)
+    tagged_intensity_count = cur.fetchone()[0]
+    cur.execute(f"SELECT COUNT(*) FROM disposition {blank_where}", params)
+    blank_intensity_count = cur.fetchone()[0]
+
+    intensity_tagging_pct = (tagged_intensity_count / defect_coils) if defect_coils else 0.0
+    without_intensity_pct = (blank_intensity_count / defect_coils) if defect_coils else 0.0
 
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
@@ -345,7 +350,7 @@ def compute_kpis(filters, _skip_prev=False):
         intensity_table.append({"intensity": level, "coils": cnt, "qty": qty})
     # WITHOUT INTENSITY row = defect coils with blank intensity
     wi_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "main_defect <> '' AND main_defect <> 'NO DEFECT' AND defect_intensity = ''"
+        "main_defect <> '' AND main_defect <> 'NO DEFECT' AND TRIM(COALESCE(defect_intensity,'')) = ''"
     cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {wi_where}", params)
     cnt, qty = cur.fetchone()
     intensity_table.append({"intensity": "WITHOUT INTENSITY", "coils": cnt, "qty": qty})
