@@ -153,14 +153,14 @@
   .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#cbd5e1;border-radius:11px 0 0 11px;}
   .kpi-card.status-good::before{background:#16a34a}.kpi-card.status-bad::before{background:#dc2626}.kpi-card.status-amber::before{background:#d97706}.kpi-card.status-neutral::before{background:#118dff}
   .kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-  .kpi-card .label{font-size:11px;letter-spacing:.35px;margin:0;text-transform:uppercase;font-weight:800;}
-  .kpi-card .kpi-icon{font-size:15px;width:24px;height:24px;border-radius:7px;background:#f1f6fb;display:inline-flex;align-items:center;justify-content:center;}
+  .kpi-card .label{font-size:12.5px;letter-spacing:.35px;margin:0;text-transform:uppercase;font-weight:800;}
+  .kpi-card .kpi-icon{font-size:18px;width:28px;height:28px;border-radius:8px;background:#f1f6fb;display:inline-flex;align-items:center;justify-content:center;}
   .kpi-status{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.35px;padding:3px 6px;border-radius:999px;}
   .kpi-status.good{background:#dcfce7;color:#15803d}.kpi-status.bad{background:#fee2e2;color:#b91c1c}.kpi-status.amber{background:#fef3c7;color:#b45309}.kpi-status.neutral{background:#e0f2fe;color:#0369a1}
   .kpi-card .value{font-family:'IBM Plex Mono',Inter,sans-serif;font-size:31px;font-weight:700;letter-spacing:-.5px;margin-top:9px;line-height:1.1;}
   .kpi-bottom{display:grid;grid-template-columns:1fr 76px;align-items:end;gap:8px;margin-top:7px;}
   .kpi-meta{min-width:0}.kpi-target{font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.kpi-trendline{display:flex;align-items:center;gap:7px;margin-top:4px;}
-  .kpi-card .prev{font-size:10px}.kpi-card .trend{font-size:10px;padding:2px 6px;border-radius:5px;}
+  .kpi-card .prev{font-size:10px}.kpi-card .trend{font-size:11.5px;padding:3px 7px;border-radius:6px;}
   .sparkline{width:76px;height:28px;display:block;overflow:visible;}
   .sparkline polyline{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
   .kpi-card.shimmering{pointer-events:none;}
@@ -174,6 +174,53 @@
   .plant-name{font-size:14px;font-weight:700;letter-spacing:.35px;margin-top:4px;color:#0f766e;}
   .chart-scroll{font-family:Inter,sans-serif;}
   @media(max-width:600px){.kpi-card .value{font-size:27px}.kpi-card{min-height:138px}}
+
+
+/* White Executive Aesthetic Theme */
+:root{
+  --navy:#16324F;--navy2:#244E70;--accent:#2388C9;--green:#1B9A63;--red:#D94A4A;--amber:#D9901A;--purple:#7566D8;--slate:#64748B;
+  --bg:#F6F9FC;--card:#FFFFFF;--text:#24364B;--muted:#718096;--border:#DDE6EF;
+}
+body{background:linear-gradient(180deg,#F8FAFC 0%,#F3F7FB 100%);color:var(--text);}
+header{background:linear-gradient(135deg,#FFFFFF 0%,#F4F8FC 100%);color:#16324F;border-bottom:1px solid #DCE7F0;box-shadow:0 6px 22px rgba(31,61,90,.08);}
+header h1{color:#16324F;letter-spacing:1.4px;}
+header .sub{color:#5E7185;opacity:1;}
+.executive-kicker{color:#2388C9;}
+.updated-label{color:#718096;opacity:1;}
+.updated-time{color:#40566B;}
+.live-status{color:#1B7F58;border-color:#CFE8DB;background:#F2FBF6;}
+.live-dot{background:#1B9A63;box-shadow:0 0 0 3px rgba(27,154,99,.12),0 0 10px rgba(27,154,99,.35);}
+.container{max-width:1480px;padding:22px 24px;}
+.filters{border-color:#DCE6EF;background:rgba(255,255,255,.94);box-shadow:0 8px 26px rgba(30,65,95,.07);}
+.filter-toolbar-title{color:#16324F;}
+.filter-trigger{background:#FBFDFF;border-color:#D5E0EA;color:#29445C;}
+.filter-trigger:hover,.filter-control.open .filter-trigger{border-color:#7FB7DE;box-shadow:0 10px 24px rgba(35,136,201,.14);}
+.filter-menu{box-shadow:0 18px 38px rgba(24,55,82,.18);}
+.filter-option:hover{background:#F2F7FB;}
+.filter-option.selected{background:#EAF5FC;color:#176A9D;}
+.active-filter-badge{background:#E9F5FC;color:#176A9D;}
+.reset-all{border-color:#D3DEE8;background:#fff;color:#40566B;}
+.kpi-grid{gap:14px;}
+.kpi-card{background:linear-gradient(180deg,#FFFFFF 0%,#FBFDFF 100%);border-color:#DCE6EF;border-radius:12px;box-shadow:0 5px 16px rgba(28,62,91,.065);}
+.kpi-card:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(28,62,91,.11);}
+.kpi-card .label{color:#53697D;}
+.kpi-card .kpi-icon{background:#F0F6FA;box-shadow:inset 0 0 0 1px #E1EBF2;}
+.kpi-card .value{color:#18354F;}
+.kpi-target{color:#718096;}
+.period-banner{background:#F0F7FC;border-color:#D6E7F3;color:#31546D;}
+.section-header{background:linear-gradient(90deg,#183A58,#245777);}
+.panel{border-color:#DDE6EF;box-shadow:0 5px 18px rgba(30,65,95,.055);}
+.panel h3{color:#1C3A55;}
+.tabs{gap:7px;}
+.tab-btn{background:#fff;border-color:#DCE6EF;color:#617487;box-shadow:0 2px 6px rgba(30,65,95,.035);}
+.tab-btn.active{background:#183A58;border-color:#183A58;box-shadow:0 5px 14px rgba(24,58,88,.16);}
+th{background:#2B78A8;border-color:#2B78A8;}
+tbody tr:nth-child(even){background:#F7FAFC;}
+tbody tr:hover{background:#EEF7FC;}
+tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
+.chart-scroll{background:#fff;}
+.legend{color:#53697D;}
+.footer-note{color:#7A8B9B;}
 
 </style>
 </head>
