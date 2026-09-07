@@ -103,89 +103,6 @@
   .legend-dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
   .no-data{color:var(--muted);font-size:13px;padding:16px;}
   .subhead{font-size:12px;color:var(--muted);padding:0 16px;margin:-6px 0 10px 0;}
-
-  /* ===== PREMIUM INDUSTRIAL INTELLIGENCE THEME ===== */
-  :root{
-    --navy:#08111F; --navy2:#0E1B2E; --accent:#16C7B7; --accent2:#3B82F6;
-    --green:#22C55E; --red:#EF4444; --amber:#F59E0B; --purple:#8B5CF6; --slate:#64748B;
-    --bg:#08111F; --card:#101C2D; --card2:#132238; --text:#F8FAFC; --muted:#94A3B8; --border:#26354D;
-  }
-  html{background:var(--bg);scroll-behavior:smooth;}
-  body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-       background:radial-gradient(circle at 15% 0%,rgba(22,199,183,.09),transparent 26%),
-                  radial-gradient(circle at 100% 10%,rgba(59,130,246,.08),transparent 28%),
-                  var(--bg);color:var(--text);}
-  body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.20;
-    background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
-    background-size:32px 32px;mask-image:linear-gradient(to bottom,black,transparent 85%);}
-  header{position:sticky;top:0;z-index:50;min-height:82px;padding:16px 28px;
-    background:rgba(8,17,31,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-    border-bottom:1px solid rgba(148,163,184,.15);box-shadow:0 10px 30px rgba(0,0,0,.20);}
-  header h1{font-size:21px;font-weight:800;letter-spacing:.35px;}
-  header .sub{color:#A9B7CA;}
-  header>div:last-child{display:flex;align-items:center;gap:12px;}
-  #refreshed:before{content:"●";color:var(--green);margin-right:7px;font-size:10px;}
-  .container{max-width:none;margin:0;padding:24px 30px 40px 260px;position:relative;}
-  .filters{background:linear-gradient(180deg,rgba(19,34,56,.96),rgba(16,28,45,.96));border:1px solid var(--border);border-radius:14px;
-    padding:18px;margin-bottom:20px;display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:14px;
-    box-shadow:0 12px 35px rgba(0,0,0,.20);}
-  .filters .field label{color:#A7B5C8;font-size:10px;font-weight:800;letter-spacing:.8px;}
-  .filters select{color:var(--text);background:#0B1728;border:1px solid #2A3B55;border-radius:9px;padding:10px 11px;font-size:13px;outline:none;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.03);transition:border-color .2s,box-shadow .2s,transform .2s;}
-  .filters select:hover,.filters select:focus{border-color:rgba(22,199,183,.65);box-shadow:0 0 0 3px rgba(22,199,183,.10);}
-  .tabs{position:fixed;left:0;top:82px;bottom:0;width:230px;z-index:40;margin:0;padding:22px 14px;
-    display:flex;flex-direction:column;gap:8px;background:rgba(10,21,36,.94);border-right:1px solid rgba(148,163,184,.14);
-    box-shadow:10px 0 30px rgba(0,0,0,.12);}
-  .tabs:before{content:"QUALITY IQ";display:block;color:#F8FAFC;font-size:14px;font-weight:900;letter-spacing:1.4px;padding:4px 12px 18px;}
-  .tabs:after{content:"Executive Industrial Analytics";color:#64748B;font-size:10px;line-height:1.4;padding:2px 12px;order:10;}
-  .tab-btn{width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:10px;padding:11px 13px;font-size:12px;cursor:pointer;color:#91A1B6;font-weight:700;
-    transition:all .2s ease;}
-  .tab-btn:hover{background:rgba(255,255,255,.045);color:#E5EDF7;transform:translateX(2px);}
-  .tab-btn.active{background:linear-gradient(90deg,rgba(22,199,183,.16),rgba(22,199,183,.05));color:#DFFFFB;border-color:rgba(22,199,183,.26);box-shadow:inset 3px 0 0 var(--accent),0 7px 20px rgba(0,0,0,.12);}
-  .period-banner{background:linear-gradient(90deg,rgba(22,199,183,.12),rgba(59,130,246,.08));border:1px solid rgba(22,199,183,.22);border-radius:11px;padding:10px 14px;
-    color:#D8E7F5;margin-bottom:18px;box-shadow:0 8px 25px rgba(0,0,0,.12);}
-  .section-header{background:linear-gradient(90deg,#10233A,#132A45);color:#fff;}
-  .panel{background:linear-gradient(180deg,rgba(16,28,45,.98),rgba(14,25,41,.98));border:1px solid var(--border);border-radius:14px;
-    box-shadow:0 14px 40px rgba(0,0,0,.18);margin-bottom:20px;}
-  .panel h3{color:#EAF2FB;font-size:15px;letter-spacing:.1px;padding:17px 19px 0;}
-  .panel-body{color:#DCE7F2;}
-  .kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px;}
-  .kpi-card{background:linear-gradient(145deg,#132238,#0F1B2C);border:1px solid #263A55;border-radius:13px;padding:15px 16px;
-    box-shadow:0 10px 28px rgba(0,0,0,.18);min-height:126px;}
-  .kpi-card:hover{transform:translateY(-2px);border-color:rgba(22,199,183,.34);box-shadow:0 16px 36px rgba(0,0,0,.24);}
-  .kpi-card .label{color:#91A1B6;font-size:10px;font-weight:800;letter-spacing:.75px;}
-  .kpi-card .kpi-icon{filter:saturate(.9);}
-  .kpi-card .value{font-family:"IBM Plex Mono",Inter,ui-monospace,SFMono-Regular,Menlo,monospace;font-size:31px;font-weight:800;letter-spacing:-.8px;margin-top:5px;}
-  .kpi-card .prev{color:#73859B;}
-  .kpi-card .trend{font-size:11px;border-radius:999px;padding:3px 8px;}
-  .kpi-card .trend.good{color:#7EE2A4;background:rgba(34,197,94,.12);}
-  .kpi-card .trend.bad{color:#FF8F8F;background:rgba(239,68,68,.12);}
-  .kpi-card .trend.equal{color:#AAB7C7;background:rgba(148,163,184,.10);}
-  .kpi-card .trend.info{color:#7FC3FF;background:rgba(59,130,246,.12);}
-  .kpi-card:has(.label){}
-  .kpi-group-title{grid-column:1/-1;display:flex;align-items:center;gap:10px;margin:5px 2px -2px;color:#A7B7C9;font-size:10px;font-weight:900;letter-spacing:1.25px;text-transform:uppercase;}
-  .kpi-group-title:after{content:"";height:1px;flex:1;background:linear-gradient(90deg,#29415D,transparent);}
-  .quality-health{display:grid;grid-template-columns:1.1fr 2.9fr;gap:16px;margin-bottom:20px;}
-  .health-card{background:linear-gradient(135deg,#10263B,#101C2D);border:1px solid #2B405C;border-radius:14px;padding:18px;box-shadow:0 14px 35px rgba(0,0,0,.18);}
-  .health-main{display:flex;align-items:center;gap:16px;}
-  .health-score{font-family:"IBM Plex Mono",ui-monospace;font-size:38px;font-weight:900;line-height:1;color:#F8FAFC;}
-  .health-title{font-size:10px;font-weight:900;letter-spacing:1.2px;color:#8EA1B7;text-transform:uppercase;}
-  .health-status{font-size:12px;font-weight:800;margin-top:5px;}
-  .health-status.good{color:#7EE2A4}.health-status.warn{color:#FCD06A}.health-status.bad{color:#FF8F8F}
-  .health-bars{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-  .health-mini{padding:12px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(148,163,184,.12);}
-  .health-mini .m-label{font-size:9px;color:#8395AA;text-transform:uppercase;font-weight:800;letter-spacing:.7px;}
-  .health-mini .m-value{font-family:"IBM Plex Mono",ui-monospace;font-size:16px;font-weight:800;margin-top:7px;}
-  .health-track{height:4px;border-radius:99px;background:#1E3048;margin-top:9px;overflow:hidden;}.health-track i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent2));}
-  .chart-scroll{padding:16px;overflow:auto;}
-  .chart-svg{min-height:300px;}
-  .legend{color:#9EB0C3;font-size:11px;}
-  .no-data{color:#8192A7;}
-  table{font-size:12px;color:#DCE7F2;} th,td{border-color:#273951;padding:10px 12px;} th{background:#132A45;border-color:#2A405C;color:#BFD0E1;font-size:10px;} tbody tr:nth-child(even){background:rgba(255,255,255,.018);} tbody tr:hover{background:rgba(22,199,183,.055);}
-  tfoot td,.grand-total-row td{background:#12283F;color:#EAF2FB;border-color:#29415D;}
-  .footer-note{color:#61748B;}
-  @media(max-width:1100px){.container{padding-left:24px}.tabs{position:sticky;top:82px;width:100%;height:auto;flex-direction:row;overflow:auto;padding:10px;bottom:auto}.tabs:before,.tabs:after{display:none}.tab-btn{width:auto;white-space:nowrap}.kpi-grid{grid-template-columns:repeat(2,1fr)}.quality-health{grid-template-columns:1fr}.health-bars{grid-template-columns:repeat(4,1fr)}}
-  @media(max-width:700px){header{padding:14px 16px}.container{padding:16px}.filters{grid-template-columns:1fr 1fr}.kpi-grid{grid-template-columns:1fr}.health-bars{grid-template-columns:1fr 1fr}.kpi-card .value{font-size:27px}}
 </style>
 </head>
 <body>
@@ -194,7 +111,7 @@
     <h1>CUPRO-NICKEL &nbsp;|&nbsp; QUALITY DISPOSITION CONTROL DASHBOARD</h1>
     <div class="sub">Real-Time Quality Control</div>
   </div>
-  <div class="sub" id="refreshed">Refreshed: --</div><a href="index_original.html" target="_self" style="text-decoration:none;color:#9FB0C3;border:1px solid #30435E;border-radius:9px;padding:7px 10px;font-size:10px;font-weight:800;letter-spacing:.4px">Original Look</a>
+  <div class="sub" id="refreshed">Refreshed: --</div>
 </header>
 
 <div class="container">
@@ -210,7 +127,6 @@
   <!-- TAB 1: DASHBOARD -->
   <div class="tab-panel" id="tab-dashboard">
     <div class="period-banner" id="periodBanner"></div>
-    <div class="quality-health" id="qualityHealth"></div>
     <div class="kpi-grid" id="kpiGrid"></div>
 
     <div class="panel">
@@ -444,42 +360,13 @@ const KPI_ICONS = {
   "Without Intensity %": "❔",
 };
 
-
-function kpiGroup(label){
-  const l=(label||"").toLowerCase();
-  if(["first pass yield %","for next process %","process sigma level (approx.)","ppm defective"].includes(l)) return "QUALITY PERFORMANCE";
-  if(l.includes("salvage")||l.includes("reject")||l.includes("rework")||l.includes("hold for decision")) return "DISPOSITION";
-  if(l.includes("intensity")||l.includes("defect rate")||l.includes("defect coils")) return "DEFECT INTELLIGENCE";
-  return "QUANTITY & FLOW";
-}
-function renderQualityHealth(kpis){
-  const el=document.getElementById("qualityHealth"); if(!el) return;
-  const map=new Map(kpis.map(k=>[k.label,Number(k.value)]));
-  const fpy=map.get("First Pass Yield %"), ppm=map.get("PPM Defective"), sigma=map.get("Process Sigma Level (Approx.)"), reject=map.get("Reject % Qty");
-  const vals=[
-    {label:"First Pass Yield",value:fpy,fmt:v=>v.toFixed(2)+"%",score:fpy==null?0:Math.min(100,fpy),cls:fpy==null?"":(fpy>97?"good":fpy>=90?"warn":"bad")},
-    {label:"PPM Defective",value:ppm,fmt:v=>Math.round(v).toLocaleString(),score:ppm==null?0:Math.max(0,100-(ppm/30000)*100),cls:ppm==null?"":(ppm<=10000?"good":ppm<=30000?"warn":"bad")},
-    {label:"Sigma",value:sigma,fmt:v=>v.toFixed(2),score:sigma==null?0:Math.min(100,(sigma/4)*100),cls:sigma==null?"":(sigma>3?"good":sigma>=2?"warn":"bad")},
-    {label:"Reject %",value:reject,fmt:v=>(v*100).toFixed(2)+"%",score:reject==null?0:Math.max(0,100-(reject*100/3)*100),cls:reject==null?"":(reject<.01?"good":reject<=.03?"warn":"bad")}
-  ];
-  const usable=vals.filter(x=>Number.isFinite(x.value));
-  const score=usable.length?usable.reduce((a,x)=>a+x.score,0)/usable.length:0;
-  const overall=score>=90?"good":score>=75?"warn":"bad";
-  el.innerHTML=`<div class="health-card"><div class="health-title">QUALITY HEALTH</div><div class="health-main"><div class="health-score">${score.toFixed(0)}</div><div><div class="health-status ${overall}">● ${overall==="good"?"GOOD":overall==="warn"?"WATCH":"ACTION"}</div><div class="sub" style="font-size:11px;margin-top:4px">Composite executive view</div></div></div></div>
-    <div class="health-card"><div class="health-title">QUALITY PULSE</div><div class="health-bars">${vals.map(x=>`<div class="health-mini"><div class="m-label">${x.label}</div><div class="m-value">${Number.isFinite(x.value)?x.fmt(x.value):"—"}</div><div class="health-track"><i style="width:${Math.max(0,Math.min(100,x.score))}%"></i></div></div>`).join("")}</div></div>`;
-}
-
 function renderKpis(kpis){
   const grid = document.getElementById("kpiGrid");
   const nextValues = new Map();
   const token = ++kpiAnimationToken;
   grid.innerHTML = "";
-  renderQualityHealth(kpis);
-  let lastGroup = "";
 
   kpis.forEach(k => {
-    const group = kpiGroup(k.label);
-    if(group !== lastGroup){ const gh=document.createElement("div"); gh.className="kpi-group-title"; gh.textContent=group; grid.appendChild(gh); lastGroup=group; }
     const card = document.createElement("div");
     card.className = "kpi-card kpi-pulse";
     const icon = KPI_ICONS[k.label] || "📊";
@@ -500,11 +387,9 @@ function renderKpis(kpis){
         <span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>
       </div>`;
     }
-    const targetMap = {"First Pass Yield %":"Target 97%","For Next Process %":"Target 97%","Salvage % Qty":"Target <1%","Reject % Qty":"Target <1%","Rework % Qty":"Target <1%","Hold for Decision % Qty":"Target <1%","PPM Defective":"Target ≤10,000","Process Sigma Level (Approx.)":"Target >3","Intensity Tagging %":"Target <5%","Without Intensity %":"Target >90%"};
-    const target = targetMap[k.label] || "";
     card.innerHTML = `<div class="label"><span class="kpi-icon">${icon}</span>${k.label}</div>
-      <div class="value" data-target="${Number(k.value) || 0}" style="color:${k.color || '#F8FAFC'}">${fmtValue(k.value, k.fmt)}</div>
-      ${trendHtml}${target?`<div style="margin-top:9px;font-size:9px;color:#6F839B;font-weight:800;letter-spacing:.4px;text-transform:uppercase">${target}</div>`:""}`;
+      <div class="value" data-target="${Number(k.value) || 0}" style="color:${k.color || '#0f2a4a'}">${fmtValue(k.value, k.fmt)}</div>
+      ${trendHtml}`;
     grid.appendChild(card);
 
     const valueEl = card.querySelector(".value");
