@@ -146,7 +146,7 @@ KPI_META_BY_LABEL = {
     "Output Quantity (MT)":          {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
     "PPM Defective":                 {"color": "#DC2626", "direction": "down_good", "change": "pct"},
     "Reject Qty (MT)":               {"color": "#DC2626", "direction": "down_good", "change": "pct"},
-    "Intensity Tagging %":           {"color": "#D97706", "direction": "up_good",   "change": "pct"},
+    "Intensity Tagging %":           {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Salvage + Divert Qty (MT)":     {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
     "Defect Rate":                   {"color": "#DC2626", "direction": "down_good", "change": "pct"},
     "Reject % Qty":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
@@ -154,7 +154,7 @@ KPI_META_BY_LABEL = {
     "Hold For Decision Qty (MT)":    {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Salvage % Qty":                 {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
     "Rework % Qty":                  {"color": "#D97706", "direction": "down_good", "change": "pct"},
-    "Without Intensity %":           {"color": "#64748B", "direction": "down_good", "change": "pct"},
+    "Without Intensity %":           {"color": "#64748B", "direction": "up_good",   "change": "pct"},
 }
 
 
@@ -216,6 +216,24 @@ def build_where(filters, exclude=None):
             params.append(val)
     where = " AND ".join(clauses)
     return (f"WHERE {where}" if where else "", params)
+
+
+def kpi_threshold_color(label, value):
+    """Return KPI value color according to the requested operating bands."""
+    green, amber, red = "#16A34A", "#D97706", "#DC2626"
+    if label in ("First Pass Yield %", "For Next Process %"):
+        return green if value > 0.97 else amber if value >= 0.90 else red
+    if label in ("Salvage % Qty", "Reject % Qty", "Hold for Decision % Qty", "Hold For Decision % Qty"):
+        return green if value < 0.01 else amber if value <= 0.03 else red
+    if label == "Process Sigma Level (Approx.)":
+        return green if value > 3 else amber if value >= 2 else red
+    if label == "PPM Defective":
+        return green if value <= 10000 else amber if value <= 30000 else red
+    if label == "Intensity Tagging %":
+        return green if value < 0.05 else amber if value <= 0.10 else red
+    if label == "Without Intensity %":
+        return green if value > 0.90 else amber if value >= 0.85 else red
+    return None
 
 
 def compute_kpis(filters, _skip_prev=False):
@@ -309,6 +327,12 @@ def compute_kpis(filters, _skip_prev=False):
         {"label": "Without Intensity %", "value": without_intensity_pct, "fmt": "pct"},
     ]
     assert len(kpis) == 16, "KPI count must be exactly 16"
+
+    # Apply threshold-based KPI value colors independently of period comparison.
+    for k in kpis:
+        threshold_color = kpi_threshold_color(k["label"], k["value"])
+        if threshold_color:
+            k["color"] = threshold_color
 
     # Swap display positions of "Reject Qty (MT)" (was index 6) and
     # "Salvage % Qty" (was index 13) per requested card layout — metadata
@@ -410,7 +434,8 @@ def compute_kpis(filters, _skip_prev=False):
             meta = KPI_META_BY_LABEL[k["label"]]
             prev_v = prev_values[i]
             cur_v = k["value"]
-            k["color"] = meta["color"]
+            threshold_color = kpi_threshold_color(k["label"], cur_v)
+            k["color"] = threshold_color or meta["color"]
             k["prev"] = prev_v
             if meta["change"] == "pts":
                 diff = cur_v - prev_v
