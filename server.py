@@ -154,7 +154,7 @@ KPI_META_BY_LABEL = {
     "Hold For Decision Qty (MT)":    {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Salvage % Qty":                 {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
     "Rework % Qty":                  {"color": "#D97706", "direction": "down_good", "change": "pct"},
-    "Without Intensity %":           {"color": "#64748B", "direction": "down_good", "change": "pts"},
+    "Without Intensity %":           {"color": "#64748B", "direction": "down_good", "change": "pct"},
 }
 
 
@@ -270,22 +270,25 @@ def compute_kpis(filters, _skip_prev=False):
         process_sigma = 0.0
 
     # Intensity Tagging % / Without Intensity %
-    # Rule: denominator = all defect records in the current filter context.
-    # Tagged = defect records where intensity is actually mentioned (non-blank).
-    # Without intensity = defect records where intensity is blank/NULL.
-    # Calculate both independently so filtered views (including NONE) remain correct.
+    # Rule: classify EVERY record in the current filter context by the
+    # Defect Intensity field itself. A value is tagged when intensity is
+    # actually entered; a blank/NULL value is without intensity.
+    # This intentionally does NOT depend on Main Defect / Defect Coils,
+    # because the KPI is measuring completeness of intensity tagging across
+    # the selected disposition data. Therefore: Tagged % + Without Intensity % = 100%.
     tagged_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "main_defect <> '' AND main_defect <> 'NO DEFECT' AND TRIM(COALESCE(defect_intensity,'')) <> ''"
+        "TRIM(COALESCE(defect_intensity,'')) <> ''"
     blank_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "main_defect <> '' AND main_defect <> 'NO DEFECT' AND TRIM(COALESCE(defect_intensity,'')) = ''"
+        "TRIM(COALESCE(defect_intensity,'')) = ''"
 
     cur.execute(f"SELECT COUNT(*) FROM disposition {tagged_where}", params)
     tagged_intensity_count = cur.fetchone()[0]
     cur.execute(f"SELECT COUNT(*) FROM disposition {blank_where}", params)
     blank_intensity_count = cur.fetchone()[0]
 
-    intensity_tagging_pct = (tagged_intensity_count / defect_coils) if defect_coils else 0.0
-    without_intensity_pct = (blank_intensity_count / defect_coils) if defect_coils else 0.0
+    intensity_total_count = tagged_intensity_count + blank_intensity_count
+    intensity_tagging_pct = (tagged_intensity_count / intensity_total_count) if intensity_total_count else 0.0
+    without_intensity_pct = (blank_intensity_count / intensity_total_count) if intensity_total_count else 0.0
 
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
@@ -348,9 +351,9 @@ def compute_kpis(filters, _skip_prev=False):
         cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {iw}", ip)
         cnt, qty = cur.fetchone()
         intensity_table.append({"intensity": level, "coils": cnt, "qty": qty})
-    # WITHOUT INTENSITY row = defect coils with blank intensity
+    # WITHOUT INTENSITY row = ALL selected records with blank intensity
     wi_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "main_defect <> '' AND main_defect <> 'NO DEFECT' AND TRIM(COALESCE(defect_intensity,'')) = ''"
+        "TRIM(COALESCE(defect_intensity,'')) = ''"
     cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {wi_where}", params)
     cnt, qty = cur.fetchone()
     intensity_table.append({"intensity": "WITHOUT INTENSITY", "coils": cnt, "qty": qty})
