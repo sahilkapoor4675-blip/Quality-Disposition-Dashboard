@@ -373,6 +373,7 @@ let currentFilters = {};
 FILTER_DEFS.forEach(f => currentFilters[f.key] = "All");
 let previousKpiValues = new Map();
 let kpiAnimationToken = 0;
+let refreshController = null;
 
 // Used ONLY for KPI cards — 3 decimal places after the point, per request.
 function fmtValue(v, fmt){
@@ -430,14 +431,18 @@ function updateActiveFilterBadge(){
   const b=document.getElementById('activeFilterBadge'); if(!b)return; b.textContent=`${n} Active`; b.classList.toggle('show',n>0);
 }
 async function triggerFilterRefresh(){
+  // Cancel an older in-flight dashboard request when filters are changed again.
+  if(refreshController) refreshController.abort();
+  refreshController = new AbortController();
+  const signal = refreshController.signal;
   const activeBtn=document.querySelector('.tab-btn.active'); const activeTab=activeBtn?activeBtn.dataset.tab:'dashboard';
   const page=document.querySelector('.container'); if(page) page.classList.add('dashboard-refreshing');
   document.querySelectorAll('.kpi-card').forEach(c=>c.classList.add('shimmering'));
   document.querySelectorAll('.chart-scroll').forEach(c=>c.classList.add('chart-refreshing'));
   document.querySelector('.filters')?.classList.add('filter-pulse');
   const t0=performance.now();
-  try{await TAB_LOADERS[activeTab]();}finally{
-    const elapsed=performance.now()-t0; const wait=Math.max(0,400-elapsed);
+  try{await TAB_LOADERS[activeTab](signal);}catch(e){if(e.name!=="AbortError") console.error(e);}finally{
+    const elapsed=performance.now()-t0; const wait=Math.max(0,250-elapsed);
     setTimeout(()=>{document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('shimmering')); document.querySelectorAll('.chart-scroll').forEach(c=>{c.classList.remove('chart-refreshing');c.classList.add('chart-ready');setTimeout(()=>c.classList.remove('chart-ready'),350)}); if(page)page.classList.remove('dashboard-refreshing');},wait);
   }
 }
@@ -594,9 +599,11 @@ function renderMetricsTable(tableId, rows, total){
   }
 }
 
-async function loadKpis(){
+async function loadKpis(signal){
   const params = new URLSearchParams(currentFilters).toString();
-  const res = await fetch("/api/kpis?" + params);
+  // Dashboard KPI and monthly trend are independent; fetch them together.
+  const monthlyPromise = loadMonthlyTrend(signal);
+  const res = await fetch("/api/kpis?" + params, {signal});
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   renderKpis(data.kpis);
@@ -619,7 +626,7 @@ async function loadKpis(){
     {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
   ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Defect Intensity"});
 
-  await loadMonthlyTrend();
+  await monthlyPromise;
 }
 
 
@@ -1041,9 +1048,9 @@ async function loadDefectAnalysis(){
 }
 
 // ---------- Tab: Monthly Trend ----------
-async function loadMonthlyTrend(){
+async function loadMonthlyTrend(signal){
   const params = new URLSearchParams(currentFilters).toString();
-  const res = await fetch("/api/monthly_trend?" + params);
+  const res = await fetch("/api/monthly_trend?" + params, {signal});
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   makeLineChart(document.getElementById("monthlyLineChart"), data.rows, "name", [

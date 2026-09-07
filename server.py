@@ -168,9 +168,30 @@ KPI_META_BY_LABEL = {
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    # Fast read-oriented dashboard connections.
+    conn.execute("PRAGMA busy_timeout=3000")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-16000")
     return conn
+
+
+def ensure_fast_indexes():
+    """Create lightweight indexes used by dashboard filter/group queries."""
+    conn = sqlite3.connect(DB_PATH)
+    indexes = [
+        ("idx_disp_month", "month"), ("idx_disp_work_center", "work_center"),
+        ("idx_disp_grade", "grade"), ("idx_disp_quality_decision", "quality_decision"),
+        ("idx_disp_week", "week"), ("idx_disp_quarter", "quarter"),
+        ("idx_disp_financial_year", "financial_year"),
+        ("idx_disp_defect_intensity", "defect_intensity"),
+        ("idx_disp_main_defect", "main_defect"),
+    ]
+    for name, col in indexes:
+        conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON disposition({col})")
+    conn.commit()
+    conn.close()
 
 
 def norm_sinv(p):
@@ -791,6 +812,7 @@ def main():
     # environment variable. Fall back to a CLI arg, then default 8000
     # for local use.
     port = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8000))
+    ensure_fast_indexes()
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"Quality Disposition Dashboard running on port {port}")
     server.serve_forever()
