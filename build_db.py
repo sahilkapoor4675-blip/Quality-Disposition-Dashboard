@@ -17,6 +17,7 @@ CREATE TABLE disposition (
     heat_no TEXT,
     batch_no TEXT,
     insp_lot_date TEXT,
+    ud_date TEXT DEFAULT '',
     work_center TEXT,
     grade TEXT,
     output_weight REAL,
@@ -33,6 +34,7 @@ CREATE TABLE disposition (
 rows_to_insert = []
 for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
     insp_lot_date = row[0]
+    ud_date = row[1]
     batch_no = row[3]
     heat_no = row[2]   # C
     if heat_no is None or str(heat_no).strip() == "":
@@ -54,7 +56,7 @@ for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
         return str(v).strip()
 
     rows_to_insert.append((
-        norm(heat_no), norm(batch_no), norm(insp_lot_date.isoformat()[:10] if hasattr(insp_lot_date, "isoformat") else insp_lot_date), norm(work_center), norm(grade),
+        norm(heat_no), norm(batch_no), norm(insp_lot_date.isoformat()[:10] if hasattr(insp_lot_date, "isoformat") else insp_lot_date), norm(ud_date.isoformat()[:10] if hasattr(ud_date, "isoformat") else ud_date), norm(work_center), norm(grade),
         float(output_weight) if output_weight not in (None, "") else 0.0,
         norm(main_defect), norm(defect_intensity), norm(quality_decision),
         norm(month), norm(week), norm(quarter), norm(fy)
@@ -62,7 +64,7 @@ for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
 
 cur.executemany("""
 INSERT INTO disposition
-(heat_no, batch_no, insp_lot_date, work_center, grade, output_weight, main_defect, defect_intensity,
+(heat_no, batch_no, insp_lot_date, ud_date, work_center, grade, output_weight, main_defect, defect_intensity,
  quality_decision, month, week, quarter, financial_year)
 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 """, rows_to_insert)

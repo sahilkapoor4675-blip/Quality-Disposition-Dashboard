@@ -1582,14 +1582,20 @@ async function loadControlRoom(signal){
     const holdRow=(k.decision_table||[]).find(x=>x.decision==='HOLD FOR DECISION');
     const holdQs=new URLSearchParams(currentFilters); holdQs.set('metric','Hold For Decision % Qty');
     const hd=await fetch('/api/drilldown?'+holdQs.toString(),{signal}).then(r=>r.json());
-    const pendingRows=(hd.rows||[]).filter(r=>!String(r.ud_date||'').trim());
+    const pendingRows=(hd.rows||[]).filter(r=>String(r.quality_decision||'').toUpperCase()==='HOLD FOR DECISION');
     const pendingHeatSet=new Set(pendingRows.map(r=>String(r.heat_no||'').trim().toUpperCase()).filter(Boolean));
     const pendingCoils=pendingHeatSet.size, pendingQty=pendingRows.reduce((a,r)=>a+Number(r.output_weight||0),0);
     const holdPctBase=Number(k.overall?.output_qty||k.total_output_qty||0)||Number(m.total?.output_qty||0)||0;
     const pendingPct=holdPctBase?pendingQty/holdPctBase:0;
     document.getElementById('qcrPending').innerHTML=`<div class="qcr-pending-box"><b>${pendingCoils.toLocaleString()}</b><span>Pending Coils</span></div><div class="qcr-pending-box"><b>${pendingQty.toFixed(2)}</b><span>Pending Qty (MT)</span></div><div class="qcr-pending-box"><b>${(pendingPct*100).toFixed(2)}%</b><span>Pending % Qty</span></div>`;
     const today=new Date(); const buckets=[{label:'0–1 Day',min:0,max:1,n:0},{label:'>1–3 Days',min:1,max:3,n:0},{label:'>3–7 Days',min:3,max:7,n:0},{label:'>7 Days',min:7,max:Infinity,n:0}];
-    (hd.rows||[]).forEach(r=>{if(String(r.quality_decision||'').toUpperCase()!=='HOLD FOR DECISION')return; const a=String(r.insp_lot_date||'').slice(0,10); const u=String(r.ud_date||'').slice(0,10); if(!a)return; const end=u?new Date(u+'T00:00:00'):new Date(today.getFullYear(),today.getMonth(),today.getDate()); const st=new Date(a+'T00:00:00'); let days=Math.max(0,Math.floor((end-st)/86400000)); const b=buckets.find(x=>days<=x.max && days>x.min) || (days<=1?buckets[0]:days<=3?buckets[1]:days<=7?buckets[2]:buckets[3]); if(b)b.n++;});
+    // Ageing is coil-based (unique Heat No.), not source-row based. A coil remains
+    // in Disposition Data permanently; while it is HOLD FOR DECISION with blank UD Date,
+    // ageing runs from Insp Lot Date to today. If a closed record is inspected, UD Date is
+    // the ageing end date. Group duplicate source rows by heat so one coil is counted once.
+    const ageByHeat=new Map();
+    (hd.rows||[]).forEach(r=>{if(String(r.quality_decision||'').toUpperCase()!=='HOLD FOR DECISION')return; const heat=String(r.heat_no||'').trim().toUpperCase(); const a=String(r.insp_lot_date||'').slice(0,10); const u=String(r.ud_date||'').slice(0,10); if(!heat||!a)return; const end=u?new Date(u+'T00:00:00'):new Date(today.getFullYear(),today.getMonth(),today.getDate()); const st=new Date(a+'T00:00:00'); const days=Math.max(0,Math.floor((end-st)/86400000)); const prev=ageByHeat.get(heat); if(prev==null||days>prev) ageByHeat.set(heat,days);});
+    ageByHeat.forEach(days=>{const b=buckets.find(x=>days<=x.max && days>x.min) || (days<=1?buckets[0]:days<=3?buckets[1]:days<=7?buckets[2]:buckets[3]); if(b)b.n++;});
     document.getElementById('qcrAgeing').innerHTML=buckets.map((b,i)=>`<div class="qcr-age ${i===3?'critical':''}"><b>${b.n}</b><span>${b.label}${i===3?' • Critical':''}</span></div>`).join('');
     document.getElementById('qcrPendingNote').innerHTML=pendingCoils?'<div class="qcr-opportunity"><span class="qcr-opportunity-icon">⚠️</span><div class="qcr-opportunity-text"><b>Investigation queue active.</b> Ageing uses UD Date − Insp Lot Date; if UD Date is blank, ageing runs to today. Records remain permanently in Disposition Data after decision closure.</div></div>':'<div class="qcr-empty">No HOLD FOR DECISION quantity in the current selection.</div>';
     qcrRenderActions(critical,worstWc,worstGr,topDefects,pendingCoils,pendingQty);

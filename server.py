@@ -1069,6 +1069,7 @@ HEADER_ALIASES = {
     "defect_intensity": ["defect intensity", "intensity", "defect intensity tag"],
     "quality_decision": ["quality decision", "decision"],
     "insp_lot_date": ["insp lot date", "inspection lot date", "date", "inspection date"],
+    "ud_date": ["ud date", "ud_date", "update date", "decision date", "ud date/time", "ud date time"],
     "month": ["_sourcemmonth", "_source month", "source month", "month"],
     "week": ["week"],
     "quarter": ["quarter (fy)", "quarter", "qtr"],
@@ -1123,6 +1124,7 @@ def _record_from_values(values, mapping):
         return values[idx]
 
     insp_date = _parse_date(get("insp_lot_date"))
+    ud_date = _parse_date(get("ud_date"))
     derived_month, derived_week, derived_quarter, derived_fy = _derive_period_fields(insp_date)
     month = str(get("month") or derived_month).strip()
     week = str(get("week") or derived_week).strip()
@@ -1146,6 +1148,7 @@ def _record_from_values(values, mapping):
         "defect_intensity": str(get("defect_intensity") or "").strip().upper(),
         "quality_decision": str(get("quality_decision") or "").strip().upper(),
         "insp_lot_date": insp_date.isoformat() if insp_date else "",
+        "ud_date": ud_date.isoformat() if ud_date else "",
         "month": month,
         "week": week,
         "quarter": quarter,
@@ -1169,7 +1172,7 @@ def _validate_record(r):
 
 def _record_signature(r):
     keys = ["heat_no", "batch_no", "work_center", "grade", "output_weight", "main_defect", "defect_intensity",
-            "quality_decision", "insp_lot_date", "month", "week", "quarter", "financial_year"]
+            "quality_decision", "insp_lot_date", "ud_date", "month", "week", "quarter", "financial_year"]
     raw = "|".join(str(r.get(k, "")) for k in keys)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -1246,9 +1249,9 @@ def _insert_records(records):
         cur.executemany("""
             INSERT INTO disposition
             (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,
-             insp_lot_date,month,week,quarter,financial_year)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, [tuple(r[k] for k in ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]) for r in good])
+             insp_lot_date,ud_date,month,week,quarter,financial_year)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, [tuple(r[k] for k in ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]) for r in good])
         inserted = len(good)
     conn.commit()
     conn.close()
@@ -1262,7 +1265,7 @@ def _ensure_admin_schema():
             id BIGSERIAL PRIMARY KEY, heat_no TEXT, batch_no TEXT DEFAULT '', work_center TEXT, grade TEXT,
             output_weight DOUBLE PRECISION, main_defect TEXT, defect_intensity TEXT,
             quality_decision TEXT, insp_lot_date TEXT DEFAULT '', month TEXT, week TEXT,
-            quarter TEXT, financial_year TEXT
+            quarter TEXT, financial_year TEXT, ud_date TEXT DEFAULT ''
         )""")
     else:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(disposition)").fetchall()}
@@ -1270,8 +1273,11 @@ def _ensure_admin_schema():
             conn.execute("ALTER TABLE disposition ADD COLUMN insp_lot_date TEXT DEFAULT ''")
         if "batch_no" not in cols:
             conn.execute("ALTER TABLE disposition ADD COLUMN batch_no TEXT DEFAULT ''")
+        if "ud_date" not in cols:
+            conn.execute("ALTER TABLE disposition ADD COLUMN ud_date TEXT DEFAULT ''")
     if USE_POSTGRES:
         conn.execute("ALTER TABLE disposition ADD COLUMN IF NOT EXISTS batch_no TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE disposition ADD COLUMN IF NOT EXISTS ud_date TEXT DEFAULT ''")
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL,
             password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'viewer', active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -1365,15 +1371,15 @@ def _seed_postgres_if_empty():
         src.row_factory = sqlite3.Row
         
         try:
-            rows = src.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition").fetchall()
+            rows = src.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall()
         except Exception:
             rows = src.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition").fetchall()
-            rows = [dict(r, batch_no="") for r in rows]
+            rows = [dict(r, batch_no="", insp_lot_date="", ud_date="") for r in rows]
         src.close()
         if rows:
             conn.cursor().executemany("""INSERT INTO disposition
-                (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r) for r in rows])
+                (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r) for r in rows])
             conn.commit()
     conn.close()
 
@@ -1678,13 +1684,18 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
 
 def compute_data_freshness(filters):
     conn=get_conn(); cur=conn.cursor(); where_sql, params=build_where(filters)
-    cur.execute(f"SELECT COUNT(*), MAX(NULLIF(TRIM(COALESCE(ud_date,'')),'')), MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition {where_sql}", params)
-    rec, max_ud, max_insp=cur.fetchone(); conn.close()
+    try:
+        cur.execute(f"SELECT COUNT(*), MAX(NULLIF(TRIM(COALESCE(ud_date,'')),'')), MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition {where_sql}", params)
+        rec, max_ud, max_insp=cur.fetchone()
+    except Exception:
+        cur.execute(f"SELECT COUNT(*), MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition {where_sql}", params)
+        rec, max_insp=cur.fetchone(); max_ud=''
     latest=max_ud or max_insp or ''
     display=latest
     try:
         dt=_dt.datetime.strptime(str(latest)[:10], '%Y-%m-%d'); display=dt.strftime('%d-%b-%Y')
     except Exception: pass
+    conn.close()
     return {'records':int(rec or 0),'updated_display':display,'latest_date':latest}
 
 class Handler(BaseHTTPRequestHandler):
