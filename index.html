@@ -760,7 +760,7 @@ async function triggerFilterRefresh(){
   document.querySelectorAll('.chart-scroll').forEach(c=>c.classList.add('chart-refreshing'));
   document.querySelector('.filters')?.classList.add('filter-pulse');
   const t0=performance.now();
-  try{await TAB_LOADERS[activeTab](signal);}catch(e){if(e.name!=="AbortError") console.error(e);}finally{
+  try{await TAB_LOADERS[activeTab](signal); if(activeTab==='dashboard') prefetchQcrCore({...currentFilters});}catch(e){if(e.name!=="AbortError") console.error(e);}finally{
     const elapsed=performance.now()-t0; const wait=Math.max(0,250-elapsed);
     setTimeout(()=>{document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('shimmering')); document.querySelectorAll('.chart-scroll').forEach(c=>{c.classList.remove('chart-refreshing');c.classList.add('chart-ready');setTimeout(()=>c.classList.remove('chart-ready'),350)}); if(page)page.classList.remove('dashboard-refreshing');},wait);
   }
@@ -1578,14 +1578,76 @@ function qcrRenderComparison(rows){
   const delta=(m)=>{if(!prev)return '—'; const a=Number(prev[m[1]]||0),b=Number(cur[m[1]]||0),diff=b-a; if(m[2]){const pp=diff*100; const good=m[3]==='higher'?diff>0:diff<0; return `<span class="qcr-delta ${Math.abs(pp)<0.005?'equal':good?'good':'bad'}">${pp>=0?'+':''}${pp.toFixed(2)} pp ${Math.abs(pp)<0.005?'→':good?'↑':'↓'}</span>`;} const good=m[3]==='higher'?diff>0:diff<0; return `<span class="qcr-delta ${Math.abs(diff)<0.000001?'equal':good?'good':'bad'}">${diff>=0?'+':''}${diff.toFixed(2)} ${Math.abs(diff)<0.000001?'→':good?'↑':'↓'}</span>`;};
   el.innerHTML=`<table class="qcr-compare"><thead><tr><th>Metric</th><th>${prev?prev.name:'Previous'}</th><th>${cur.name}</th><th>Change</th></tr></thead><tbody>${metrics.map(m=>`<tr><td>${m[0]}</td><td>${prev?cell(m,prev):'—'}</td><td>${cell(m,cur)}</td><td>${delta(m)}</td></tr>`).join('')}</tbody></table>`;
 }
-async function loadControlRoom(signal){
-  const params=new URLSearchParams(currentFilters).toString();
+const qcrCoreCache = new Map();
+window.qcrLoadToken=0;
+function qcrCacheKey(filters){ return new URLSearchParams(filters).toString(); }
+async function fetchQcrCore(filters, signal){
+  const key=qcrCacheKey(filters);
+  const cached=qcrCoreCache.get(key);
+  if(cached && (Date.now()-cached.ts)<15000) return cached.data;
+  const params=new URLSearchParams(filters).toString();
+  const [kRes,dRes,wRes,mRes,frRes]=await Promise.all([
+    fetch('/api/kpis?'+params,{signal}),
+    fetch('/api/defect_analysis?'+params,{signal}),
+    fetch('/api/work_center_grade?'+params,{signal}),
+    fetch('/api/monthly_trend?'+params,{signal}),
+    fetch('/api/data_freshness?'+params,{signal})
+  ]);
+  const [k,d,w,m,fr]=await Promise.all([kRes.json(),dRes.json(),wRes.json(),mRes.json(),frRes.json()]);
+  if(k.error||d.error||w.error||m.error||fr.error) throw new Error(k.error||d.error||w.error||m.error||fr.error||'Control Room data error');
+  const data={k,d,w,m,fr}; qcrCoreCache.set(key,{ts:Date.now(),data}); return data;
+}
+function prefetchQcrCore(filters){
+  const key=qcrCacheKey(filters), cached=qcrCoreCache.get(key);
+  if(cached && (Date.now()-cached.ts)<15000) return;
+  fetchQcrCore(filters).catch(()=>{});
+}
+async function loadQcrSecondary(filterSnapshot, d, w, m, signal, loadToken){
   try{
-    const [kRes,dRes,wRes,mRes,frRes]=await Promise.all([
-      fetch('/api/kpis?'+params,{signal}), fetch('/api/defect_analysis?'+params,{signal}), fetch('/api/work_center_grade?'+params,{signal}), fetch('/api/monthly_trend?'+params,{signal}), fetch('/api/data_freshness?'+params,{signal})
-    ]);
-    const [k,d,w,m,fr]=await Promise.all([kRes.json(),dRes.json(),wRes.json(),mRes.json(),frRes.json()]);
-    if(k.error||d.error||w.error||m.error||fr.error) throw new Error(k.error||d.error||w.error||m.error||fr.error||'Control Room data error');
+    const gc=document.getElementById('qcrGradeConcentration');
+    if(gc){
+      const gradesForDetail=([...((w.by_grade||[]))].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,3));
+      const details=[];
+      for(const gr of gradesForDetail){
+        if(loadToken!==window.qcrLoadToken) return;
+        const p=new URLSearchParams(filterSnapshot); p.set('grade',gr.name);
+        const [dd,ww]=await Promise.all([
+          fetch('/api/defect_analysis?'+p.toString(),{signal}).then(r=>r.json()),
+          fetch('/api/work_center_grade?'+p.toString(),{signal}).then(r=>r.json())
+        ]);
+        const td=(dd.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0))[0];
+        const mw=(ww.by_work_center||[]).filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0];
+        details.push({grade:gr.name,defect:td?.defect||'—',wc:mw?.name||'—',qty:Number(gr.output_qty||0),reject:Number(gr.reject_pct_qty||0)});
+      }
+      gc.innerHTML=details.length?`<div class="qcr-subtitle">Problem concentration</div>`+details.map(x=>`<div class="qcr-grade-item"><b>${x.grade}</b><span>Defect: ${x.defect}</span><span>WC: ${x.wc}</span><em>Reject ${(x.reject*100).toFixed(2)}%</em></div>`).join(''):'<div class="qcr-empty">No grade concentration available.</div>';
+    }
+    const why=document.getElementById('qcrWhyChanged');
+    if(why){
+      const rows=m.rows||[], cur=rows[rows.length-1], prev=rows.length>1?rows[rows.length-2]:null;
+      if(!cur||!prev){why.innerHTML='';}
+      else{
+        const p1=new URLSearchParams(filterSnapshot); p1.set('month',cur.name);
+        const p0=new URLSearchParams(filterSnapshot); p0.set('month',prev.name);
+        const [dc,dp,wcC,wcP]=await Promise.all([
+          fetch('/api/defect_analysis?'+p1.toString(),{signal}).then(r=>r.json()), fetch('/api/defect_analysis?'+p0.toString(),{signal}).then(r=>r.json()),
+          fetch('/api/work_center_grade?'+p1.toString(),{signal}).then(r=>r.json()), fetch('/api/work_center_grade?'+p0.toString(),{signal}).then(r=>r.json())
+        ]);
+        if(loadToken!==window.qcrLoadToken)return;
+        const defectDelta=(dc.register||[]).map(x=>{const old=(dp.register||[]).find(y=>y.defect===x.defect);const nowQty=Number(x.qty||0),oldQty=Number(old?.qty||0),outNow=Number(dc.totals?.qty||0),outOld=Number(dp.totals?.qty||0);return {name:x.defect,change:((outNow?nowQty/outNow:0)-(outOld?oldQty/outOld:0))*100};}).sort((a,b)=>Math.abs(b.change)-Math.abs(a.change))[0];
+        const wcDelta=(wcC.by_work_center||[]).map(x=>{const old=(wcP.by_work_center||[]).find(y=>y.name===x.name);return {name:x.name,change:(Number(x.reject_pct_qty||0)-Number(old?.reject_pct_qty||0))*100};}).sort((a,b)=>Math.abs(b.change)-Math.abs(a.change))[0];
+        const fpyd=(Number(cur.first_pass_yield_pct||0)-Number(prev.first_pass_yield_pct||0))*100, rejD=(Number(cur.reject_pct_qty||0)-Number(prev.reject_pct_qty||0))*100;
+        const fpyContrib=defectDelta?.name?`Main contributor: <b>${defectDelta.name}</b> ${defectDelta.change>=0?'+':''}${defectDelta.change.toFixed(2)} pp defect share`:'No dominant defect contributor identified.';
+        const rejContrib=wcDelta?.name?`Major contributor: <b>${wcDelta.name}</b> ${wcDelta.change>=0?'+':''}${wcDelta.change.toFixed(2)} pp Reject`:'No dominant work-center contributor identified.';
+        why.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${fpyd>=0?'↑':'↓'} ${Math.abs(fpyd).toFixed(2)} pp</b><span>${fpyContrib}</span></div><div><b>Reject ${rejD>=0?'↑':'↓'} ${Math.abs(rejD).toFixed(2)} pp</b><span>${rejContrib}</span></div></div>`;
+      }
+    }
+  }catch(e){ if(e.name!=='AbortError') console.error(e); }
+}
+async function loadControlRoom(signal){
+  const filterSnapshot={...currentFilters};
+  const params=new URLSearchParams(filterSnapshot).toString();
+  try{
+    const {k,d,w,m,fr}=await fetchQcrCore(filterSnapshot,signal);
     document.getElementById('qcrFreshness').textContent=`Data Through: ${fr.data_through_display||'—'} • Filtered Records: ${Number(fr.filtered_records||0).toLocaleString()}`;
     const criticalLabels=['First Pass Yield % (Prime%)','Defect Rate','Reject % Qty','Hold for Decision % Qty','Salvage % Qty','Rework % Qty'];
     const critical=(k.kpis||[]).filter(x=>criticalLabels.includes(x.label));
@@ -1624,45 +1686,10 @@ async function loadControlRoom(signal){
     qcrRenderList('qcrWorkCenters',worstWc,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
     qcrRenderList('qcrGrades',worstGr,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
 
-    // Grade problem concentration: Grade -> top defect -> main work center.
-    const gc=document.getElementById('qcrGradeConcentration');
-    if(gc){
-      const gradesForDetail=worstGr.slice(0,3);
-      const detailResults=await Promise.all(gradesForDetail.map(async gr=>{
-        const p=new URLSearchParams(currentFilters); p.set('grade',gr.name);
-        const qs=p.toString();
-        const [dd,ww]=await Promise.all([
-          fetch('/api/defect_analysis?'+qs,{signal}).then(r=>r.json()),
-          fetch('/api/work_center_grade?'+qs,{signal}).then(r=>r.json())
-        ]);
-        const td=(dd.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0))[0];
-        const mw=(ww.by_work_center||[]).filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0];
-        return {grade:gr.name,defect:td?.defect||'—',wc:mw?.name||'—',qty:Number(gr.output_qty||0),reject:Number(gr.reject_pct_qty||0)};
-      }));
-      const details=detailResults;
-      gc.innerHTML=details.length?`<div class="qcr-subtitle">Problem concentration</div>`+details.map(x=>`<div class="qcr-grade-item"><b>${x.grade}</b><span>Defect: ${x.defect}</span><span>WC: ${x.wc}</span><em>Reject ${(x.reject*100).toFixed(2)}%</em></div>`).join(''):'<div class="qcr-empty">No grade concentration available.</div>';
-    }
-
-    qcrRenderComparison(m.rows||[]);
-    const why=document.getElementById('qcrWhyChanged');
-    if(why){
-      const rows=m.rows||[]; const cur=rows[rows.length-1], prev=rows.length>1?rows[rows.length-2]:null;
-      if(!cur||!prev){why.innerHTML='';}
-      else{
-        const p1=new URLSearchParams(currentFilters); p1.set('month',cur.name);
-        const p0=new URLSearchParams(currentFilters); p0.set('month',prev.name);
-        const [dc,dp,wcC,wcP]=await Promise.all([
-          fetch('/api/defect_analysis?'+p1.toString(),{signal}).then(r=>r.json()), fetch('/api/defect_analysis?'+p0.toString(),{signal}).then(r=>r.json()),
-          fetch('/api/work_center_grade?'+p1.toString(),{signal}).then(r=>r.json()), fetch('/api/work_center_grade?'+p0.toString(),{signal}).then(r=>r.json())
-        ]);
-        const defectDelta=(dc.register||[]).map(x=>{const old=(dp.register||[]).find(y=>y.defect===x.defect);const nowQty=Number(x.qty||0),oldQty=Number(old?.qty||0);const outNow=Number(dc.totals?.qty||0),outOld=Number(dp.totals?.qty||0);return {name:x.defect,change:((outNow?nowQty/outNow:0)-(outOld?oldQty/outOld:0))*100};}).sort((a,b)=>Math.abs(b.change)-Math.abs(a.change))[0];
-        const wcDelta=(wcC.by_work_center||[]).map(x=>{const old=(wcP.by_work_center||[]).find(y=>y.name===x.name);return {name:x.name,change:(Number(x.reject_pct_qty||0)-Number(old?.reject_pct_qty||0))*100};}).sort((a,b)=>Math.abs(b.change)-Math.abs(a.change))[0];
-        const fpyd=(Number(cur.first_pass_yield_pct||0)-Number(prev.first_pass_yield_pct||0))*100, rejD=(Number(cur.reject_pct_qty||0)-Number(prev.reject_pct_qty||0))*100;
-        const fpyContrib=defectDelta?.name?`Main contributor: <b>${defectDelta.name}</b> ${defectDelta.change>=0?'+':''}${defectDelta.change.toFixed(2)} pp defect share`:'';
-        const rejContrib=wcDelta?.name?`Major contributor: <b>${wcDelta.name}</b> ${wcDelta.change>=0?'+':''}${wcDelta.change.toFixed(2)} pp Reject`:'';
-        why.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${fpyd>=0?'↑':'↓'} ${Math.abs(fpyd).toFixed(2)} pp</b><span>${fpyContrib||'No dominant defect contributor identified.'}</span></div><div><b>Reject ${rejD>=0?'↑':'↓'} ${Math.abs(rejD).toFixed(2)} pp</b><span>${rejContrib||'No dominant work-center contributor identified.'}</span></div></div>`;
-      }
-    }
+    // Secondary intelligence is deliberately deferred so the main QCR paints immediately.
+    const loadToken=++window.qcrLoadToken;
+    const secondarySignalController=new AbortController();
+    setTimeout(()=>loadQcrSecondary(filterSnapshot,d,w,m,secondarySignalController.signal,loadToken),0);
 
     // Improvement Opportunities: ranked, action-oriented and de-duplicated.
     const opp=[];

@@ -14,11 +14,9 @@ import sqlite3
 try:
     import psycopg2
     from psycopg2.extras import DictCursor
-    from psycopg2.pool import SimpleConnectionPool
 except ImportError:
     psycopg2 = None
     DictCursor = None
-    SimpleConnectionPool = None
 import secrets
 import hashlib
 import hmac
@@ -61,12 +59,6 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DB_PATH = os.environ.get("DB_PATH", os.path.join(APP_DIR, "quality.db"))
 USE_POSTGRES = bool(DATABASE_URL)
-_PG_POOL = None
-if USE_POSTGRES and psycopg2 is not None and SimpleConnectionPool is not None:
-    try:
-        _PG_POOL = SimpleConnectionPool(1, 8, DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require"))
-    except Exception:
-        _PG_POOL = None
 
 def _ensure_database():
     """Create the local SQLite DB from the bundled seed DB when needed."""
@@ -289,23 +281,17 @@ class _PGCursor:
     def rowcount(self): return self.cur.rowcount
 
 class _PGConn:
-    def __init__(self, conn, pooled=False): self.conn = conn; self.pooled = pooled
+    def __init__(self, conn): self.conn = conn
     def cursor(self): return _PGCursor(self.conn.cursor(cursor_factory=DictCursor))
     def execute(self, sql, params=None):
         c=self.cursor(); c.execute(sql, params); return c
     def commit(self): self.conn.commit()
-    def close(self):
-        if self.pooled and _PG_POOL is not None:
-            try: _PG_POOL.putconn(self.conn)
-            except Exception: self.conn.close()
-        else: self.conn.close()
+    def close(self): self.conn.close()
 
 def get_conn():
     if USE_POSTGRES:
         if psycopg2 is None:
             raise RuntimeError("PostgreSQL support requires psycopg2-binary. Add DATABASE_URL only after dependencies are installed.")
-        if _PG_POOL is not None:
-            return _PGConn(_PG_POOL.getconn(), pooled=True)
         return _PGConn(psycopg2.connect(DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require")))
     conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -325,11 +311,6 @@ def ensure_fast_indexes():
         ("idx_disp_financial_year", "financial_year"),
         ("idx_disp_defect_intensity", "defect_intensity"),
         ("idx_disp_main_defect", "main_defect"),
-        ("idx_disp_heat_no", "heat_no"), ("idx_disp_batch_no", "batch_no"),
-        ("idx_disp_insp_lot_date", "insp_lot_date"), ("idx_disp_ud_date", "ud_date"),
-        ("idx_disp_month_decision", "month, quality_decision"),
-        ("idx_disp_month_wc", "month, work_center"),
-        ("idx_disp_month_grade", "month, grade"),
     ]
     for name, col in indexes:
         conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON disposition({col})")
@@ -408,22 +389,30 @@ def compute_kpis(filters, _skip_prev=False):
     cur = conn.cursor()
     where_sql, params = build_where(filters)
 
-    # One aggregate pass for the core totals. This replaces several full-table scans.
-    cur.execute(f"""SELECT
-        COUNT(DISTINCT {HEAT_KEY_SQL}),
-        COUNT(DISTINCT CASE WHEN TRIM(COALESCE(main_defect,'')) <> '' AND UPPER(TRIM(main_defect)) <> 'NO DEFECT' THEN {HEAT_KEY_SQL} END),
-        COALESCE(SUM(output_weight),0)
-        FROM disposition {where_sql}""", params)
-    total_coils, defect_coils, output_qty = cur.fetchone()
+    # Total Coils
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {where_sql}", params)
+    total_coils = cur.fetchone()[0]
 
-    # Per-decision sums/counts in a single grouped query.
-    decision_qty = {d: 0.0 for d in DECISION_ORDER}
-    decision_coils = {d: 0 for d in DECISION_ORDER}
-    cur.execute(f"SELECT quality_decision, COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY quality_decision", params)
-    for r in cur.fetchall():
-        d = r[0]
-        if d in decision_qty:
-            decision_coils[d], decision_qty[d] = int(r[1] or 0), float(r[2] or 0)
+    # Defect Coils: main_defect present and not 'NO DEFECT'
+    dc_where = where_sql + (" AND " if where_sql else "WHERE ") + \
+        "main_defect <> '' AND main_defect <> 'NO DEFECT'"
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {dc_where}", params)
+    defect_coils = cur.fetchone()[0]
+
+    # Output Quantity (MT) = sum of output_weight for filtered rows
+    cur.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
+    output_qty = cur.fetchone()[0]
+
+    # Per-decision sums (Qty MT) and coil counts for filtered rows
+    decision_qty = {}
+    decision_coils = {}
+    for d in DECISION_ORDER:
+        w2 = where_sql + (" AND " if where_sql else "WHERE ") + "quality_decision = ?"
+        p2 = params + [d]
+        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
+        cnt, qty = cur.fetchone()
+        decision_coils[d] = cnt
+        decision_qty[d] = qty
 
     prime_qty = decision_qty["PRIME"]
     reject_qty = decision_qty["REJECT"]
@@ -488,7 +477,7 @@ def compute_kpis(filters, _skip_prev=False):
                     GROUP BY main_defect ORDER BY qty DESC LIMIT 5""", params)
     top_defects_raw = cur.fetchall()
     cur.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {dw}", params)
-    total_defect_qty = float(cur.fetchone()[0] or 0.0)
+    total_defect_qty = cur.fetchone()[0] or 0.0
     top_defects = []
     cum = 0.0
     for r in top_defects_raw:
@@ -496,11 +485,20 @@ def compute_kpis(filters, _skip_prev=False):
         cum += pct
         top_defects.append({"defect": r["main_defect"], "qty": r["qty"], "pct": pct, "cum_pct": cum})
 
-    # Intensity breakdown in one grouped query (including blank intensity).
-    intensity_map = {}
-    cur.execute(f"SELECT CASE WHEN TRIM(COALESCE(defect_intensity,''))='' THEN 'WITHOUT INTENSITY' ELSE UPPER(TRIM(defect_intensity)) END, COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY 1", params)
-    for r in cur.fetchall(): intensity_map[r[0]] = (int(r[1] or 0), float(r[2] or 0))
-    intensity_table = [{"intensity": level, "coils": intensity_map.get(level,(0,0))[0], "qty": intensity_map.get(level,(0,0))[1]} for level in ["LIGHT","MEDIUM","DEEP","WITHOUT INTENSITY"]]
+    # Defect intensity breakdown
+    intensity_table = []
+    for level in ["LIGHT", "MEDIUM", "DEEP"]:
+        iw = where_sql + (" AND " if where_sql else "WHERE ") + "defect_intensity = ?"
+        ip = params + [level]
+        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {iw}", ip)
+        cnt, qty = cur.fetchone()
+        intensity_table.append({"intensity": level, "coils": cnt, "qty": qty})
+    # WITHOUT INTENSITY row = ALL selected records with blank intensity
+    wi_where = where_sql + (" AND " if where_sql else "WHERE ") + \
+        "TRIM(COALESCE(defect_intensity,'')) = ''"
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {wi_where}", params)
+    cnt, qty = cur.fetchone()
+    intensity_table.append({"intensity": "WITHOUT INTENSITY", "coils": cnt, "qty": qty})
 
     it_total_coils = sum(r["coils"] for r in intensity_table)
     it_total_qty = sum(r["qty"] for r in intensity_table)
