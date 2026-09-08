@@ -945,7 +945,7 @@ async function loadQcrSecondary(filterSnapshot, d, w, m, signal, loadToken){
     }
     const why=document.getElementById('qcrWhyChanged');
     if(why){
-      const rows=m.rows||[], cur=rows[rows.length-1], prev=rows.length>1?rows[rows.length-2]:null;
+      const rows=m.rows||[]; let idx=rows.length-1; const selectedMonth=filterSnapshot.month && filterSnapshot.month!=='All' ? filterSnapshot.month : ''; if(selectedMonth){ const found=rows.findIndex(r=>r.name===selectedMonth); if(found>=0) idx=found; } const cur=rows[idx], prev=idx>0?rows[idx-1]:null;
       if(!cur||!prev){why.innerHTML='';}
       else{
         const p1=new URLSearchParams(filterSnapshot); p1.set('month',cur.name);
@@ -1007,14 +1007,19 @@ async function loadControlRoom(signal){
     const worstGr=[...(w.by_grade||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
     qcrRenderList('qcrWorkCenters',worstWc,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
     qcrRenderList('qcrGrades',worstGr,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
-    // Keep the original, useful month-vs-previous table visible on every QCR load.
+    // Keep the proven Month vs Previous Month table visible on every QCR load.
+    // The monthly trend API deliberately ignores the Month filter, so this also
+    // remains available when a specific month is selected.
     qcrRenderComparison(m.rows||[]);
     qcrRenderTrendPrediction(m.rows||[],d,w); qcrRenderKpiRanking(critical);
 
     // Secondary intelligence is deliberately deferred so the main QCR paints immediately.
     const loadToken=++window.qcrLoadToken;
     const secondarySignalController=new AbortController();
-    setTimeout(()=>loadQcrSecondary(filterSnapshot,d,w,m,secondarySignalController.signal,loadToken),0);
+    setTimeout(()=>{
+      if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect);
+      loadQcrSecondary(filterSnapshot,d,w,m,secondarySignalController.signal,loadToken);
+    },0);
 
     // Improvement Opportunities: ranked, action-oriented and de-duplicated.
     const opp=[];
