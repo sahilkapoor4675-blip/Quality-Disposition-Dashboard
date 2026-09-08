@@ -207,10 +207,10 @@ def current_period_label(filters):
 # Colors match the original workbook exactly (extracted from its font colors).
 # Keyed by label so metadata always travels with its metric, even if the
 # metric's position in the kpis list is later swapped for display purposes.
-REMOVED_KPIS = {"PPM Defective", "Intensity Tagging %", "Process Sigma Level (Approx.)", "Without Intensity %", "First Pass Yield %"}
+REMOVED_KPIS = {"PPM Defective", "Intensity Tagging %", "Process Sigma Level (Approx.)", "Without Intensity %", "First Pass Yield %", "Prime %"}
 
 DEFAULT_KPI_TARGETS = {
-    "Prime %": {"target": 0.97, "warning": 0.90, "critical": 0.80, "direction": "higher"},
+    "First Pass Yield % (Prime%)": {"target": 0.97, "warning": 0.90, "critical": 0.80, "direction": "higher"},
     "Hold for Decision % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Defect Rate": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Reject % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
@@ -253,7 +253,7 @@ def _kpi_target_status(label,value):
 KPI_META_BY_LABEL = {
     "Total Coils":                   {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
     "Defect Coils":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
-    "Prime %":            {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
+    "First Pass Yield % (Prime%)":            {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
     "Hold for Decision % Qty":       {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Output Quantity (MT)":          {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
     "Reject Qty (MT)":               {"color": "#DC2626", "direction": "down_good", "change": "pct"},
@@ -433,7 +433,7 @@ def compute_kpis(filters, _skip_prev=False):
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
         {"label": "Defect Coils", "value": defect_coils, "fmt": "int"},
-        {"label": "Prime %", "value": first_pass_yield, "fmt": "pct"},
+        {"label": "First Pass Yield % (Prime%)", "value": first_pass_yield, "fmt": "pct"},
         {"label": "Hold for Decision % Qty", "value": hold_pct_qty, "fmt": "pct"},
         {"label": "Output Quantity (MT)", "value": output_qty, "fmt": "num2"},
         {"label": "Reject Qty (MT)", "value": reject_qty, "fmt": "num2"},
@@ -1311,10 +1311,10 @@ def _ensure_admin_schema():
             imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     # Remove the legacy KPI target name so the public/admin target APIs are
-    # fully consistent with the renamed Prime % KPI. This is idempotent and
+    # fully consistent with the renamed First Pass Yield % (Prime%) KPI. This is idempotent and
     # also cleans existing deployed databases during startup.
     try:
-        conn.execute("DELETE FROM kpi_targets WHERE label = ?", ("First Pass Yield %",))
+        conn.execute("DELETE FROM kpi_targets WHERE label IN (?, ?)", ("First Pass Yield %", "Prime %"))
     except Exception:
         pass
     for label,cfg in DEFAULT_KPI_TARGETS.items():
@@ -1638,7 +1638,7 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
     clauses=[]; extra=[]
     if metric in {'Defect Coils','Defect Rate'}:
         clauses.append("main_defect <> '' AND main_defect <> 'NO DEFECT'")
-    elif metric in {'Prime %'}:
+    elif metric in {'First Pass Yield % (Prime%)'}:
         clauses.append("quality_decision = ?"); extra.append('PRIME')
     elif metric in {'Hold for Decision % Qty','Hold For Decision Qty (MT)'}:
         clauses.append("quality_decision = ?"); extra.append('HOLD FOR DECISION')

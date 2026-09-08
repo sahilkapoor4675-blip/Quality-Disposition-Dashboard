@@ -508,7 +508,7 @@ body > *{position:relative;z-index:1;}
     </div>
 
     <div class="panel">
-      <h3>📈 Monthly Quality Trend — Defect % &amp; Prime %</h3>
+      <h3>📈 Monthly Quality Trend — Defect % &amp; First Pass Yield % (Prime%)</h3>
       <div class="chart-scroll" id="monthlyLineChart"></div>
     </div>
     <div class="panel">
@@ -519,7 +519,7 @@ body > *{position:relative;z-index:1;}
       <h3>📋 Monthly Trend Data</h3>
       <div class="panel-body">
         <div class="table-scroll"><table id="monthlyTable">
-          <thead><tr><th>Month</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
+          <thead><tr><th>Month</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -533,7 +533,7 @@ body > *{position:relative;z-index:1;}
       <div class="chart-scroll" id="wcChart"></div>
       <div class="panel-body">
         <div class="table-scroll"><table id="wcTable">
-          <thead><tr><th>Work Center</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
+          <thead><tr><th>Work Center</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -543,7 +543,7 @@ body > *{position:relative;z-index:1;}
       <div class="chart-scroll" id="gradeChart"></div>
       <div class="panel-body">
         <div class="table-scroll"><table id="gradeTable">
-          <thead><tr><th>Grade</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
+          <thead><tr><th>Grade</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -576,34 +576,34 @@ body > *{position:relative;z-index:1;}
     <div class="panel">
       <div class="panel-body">
         <div class="table-scroll"><table id="weeklyTable">
-          <thead><tr><th>Week</th><th>Records</th><th>Output MT</th><th>Defect Records</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
+          <thead><tr><th>Week</th><th>Records</th><th>Output MT</th><th>Defect Records</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
     </div>
 
     <div class="panel">
-      <h3>📆 Quarterly Defect % vs Prime % vs Reject % Trend</h3>
+      <h3>📆 Quarterly Defect % vs First Pass Yield % (Prime%) vs Reject % Trend</h3>
       <div class="chart-scroll" id="quarterlyChart"></div>
     </div>
     <div class="panel">
       <div class="panel-body">
         <div class="table-scroll"><table id="quarterlyTable">
-          <thead><tr><th>Quarter</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
+          <thead><tr><th>Quarter</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
     </div>
 
     <div class="panel">
-      <h3>🗓️ Yearly (FY) Prime % &amp; Reject % Trend</h3>
+      <h3>🗓️ Yearly (FY) First Pass Yield % (Prime%) &amp; Reject % Trend</h3>
       <div class="chart-scroll" id="yearlyChart"></div>
       <div class="subhead">Only one Financial Year is present in the current dataset — this chart will show a fuller trend line as more years of data are added.</div>
     </div>
     <div class="panel">
       <div class="panel-body">
         <div class="table-scroll"><table id="yearlyTable">
-          <thead><tr><th>Financial Year</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
+          <thead><tr><th>Financial Year</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -712,7 +712,7 @@ async function triggerFilterRefresh(){
 const KPI_ICONS = {
   "Total Coils": "📦",
   "Defect Coils": "⚠️",
-  "Prime %": "✅",
+  "First Pass Yield % (Prime%)": "✅",
   "Hold for Decision % Qty": "⏳",
   "Output Quantity (MT)": "🏭",
   "Salvage % Qty": "♻️",
@@ -935,7 +935,7 @@ function renderInsights(kpiPayload){
   const grid=document.getElementById('insightGrid'); if(!grid||!kpiPayload)return;
   const by={}; (kpiPayload.kpis||[]).forEach(k=>by[k.label]=k);
   const targets=KPI_TARGETS||{}; const items=[];
-  const fp=by['Prime %']; const rej=by['Reject % Qty']; const defect=by['Defect Rate'];
+  const fp=by['First Pass Yield % (Prime%)']; const rej=by['Reject % Qty']; const defect=by['Defect Rate'];
   const pct=v=>((Number(v)||0)*100).toFixed(2)+'%';
   const relativeGap=(v,t)=>t ? Math.abs((Number(v)-Number(t))/Number(t))*100 : 0;
   if(fp&&targets[fp.label]){
@@ -1186,12 +1186,12 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const barW = (val / maxV) * plotW;
     const y = padT + i * rowH + rowH*0.2;
     const barH = rowH * 0.6;
-    const barColor = opts.color || "#118DFF";
+    const barColor = opts.color || CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}<title>${d[labelKey]}</title></text>`;
   });
-  const legendColor = opts.color || "#118DFF";
+  const legendColor = opts.color || CHART_COLORS[0];
   const legend = `<div class="legend-item"><span class="legend-dot" style="background:${legendColor}"></span>${opts.legend || opts.xLabel || valueKey}</div>`;
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
@@ -1372,7 +1372,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
   items.forEach((d,i)=>{
     const val=Number(d[barKey])||0, barH=(val/maxBar)*plotH;
     const x=padL+i*gap+(gap-barW)/2, y=h-padB-barH;
-    const barColor=opts.barColor || "#118DFF";
+    const barColor = opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.barFmt?opts.barFmt(val):val}</title></rect>`;
     bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt?opts.barFmt(val):val}</text>`;
     const lineVal=Math.max(0,Math.min(maxLine,Number(d[lineKey])||0));
@@ -1382,7 +1382,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     dots += `<text x="${px}" y="${Math.max(lineY-10,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="#DC2626">${opts.lineFmt?opts.lineFmt(lineVal):lineVal}</text>`;
     labels += `<text x="${px}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-35 ${px} ${h-padB+20})">${truncateLabel(d[labelKey],16)}<title>${d[labelKey]}</title></text>`;
   });
-  const legend=`<div class="legend-item"><span class="legend-dot" style="background:#118DFF"></span>${opts.barLegend||"Qty (MT)"}</div><div class="legend-item"><span class="legend-dot" style="background:#DC2626"></span>${opts.lineLegend||"Cumulative %"}</div>`;
+  const legend=`<div class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS[0]}"></span>${opts.barLegend||"Qty (MT)"}</div><div class="legend-item"><span class="legend-dot" style="background:#DC2626"></span>${opts.lineLegend||"Cumulative %"}</div>`;
   container.innerHTML=`<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${yAxisTitle(opts.barAxisLabel||"Qty (MT)",h,padT,padB)}
@@ -1448,7 +1448,7 @@ async function loadMonthlyTrend(signal){
   if(data.error){ console.error(data.error); return; }
   makeLineChart(document.getElementById("monthlyLineChart"), data.rows, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
-    {key:"first_pass_yield_pct", label:"Prime %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"first_pass_yield_pct", label:"First Pass Yield % (Prime%)", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Month"});
   makeGroupedBarChart(document.getElementById("monthlyBarChart"), data.rows, "name", [
@@ -1473,13 +1473,13 @@ async function loadPeriodTrend(){
 
   makeLineChart(document.getElementById("quarterlyChart"), data.quarterly, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
-    {key:"first_pass_yield_pct", label:"Prime %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"first_pass_yield_pct", label:"First Pass Yield % (Prime%)", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Quarter"});
   renderMetricsTable("quarterlyTable", data.quarterly, data.quarterly_total);
 
   makeLineChart(document.getElementById("yearlyChart"), data.yearly, "name", [
-    {key:"first_pass_yield_pct", label:"Prime %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"first_pass_yield_pct", label:"First Pass Yield % (Prime%)", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Financial Year"});
   renderMetricsTable("yearlyTable", data.yearly, data.yearly_total); markChartsReady();
