@@ -426,6 +426,23 @@ body > *{position:relative;z-index:1;}
   .qcr-breach{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid #f1d3d3;background:#fffafa;border-radius:8px}.qcr-breach-name{font:800 12px Manrope,sans-serif;color:#263f54}.qcr-breach-meta{font:600 10px Manrope,sans-serif;color:#75899a;margin-top:3px}.qcr-breach-val{font:800 13px 'Space Grotesk',sans-serif;color:#b91c1c;white-space:nowrap}
   .qcr-opportunity{display:flex;gap:10px;padding:9px 10px;border:1px solid #e1e9ef;background:#fbfdff;border-radius:8px}.qcr-opportunity-icon{font-size:15px}.qcr-opportunity-text{font:700 11px Manrope,sans-serif;color:#38536a;line-height:1.4}.qcr-opportunity-text b{color:#183A58}
   .qcr-pending{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.qcr-pending-box{padding:11px;border-radius:9px;background:#fff8ec;border:1px solid #f3dfbd}.qcr-pending-box b{display:block;font:800 22px 'Space Grotesk',sans-serif;color:#a16207}.qcr-pending-box span{font:700 10px Manrope,sans-serif;color:#7b6746}
+  /* QCR visual parity: same polished depth/hover language as the main dashboard panels */
+  .tab-btn[data-tab="controlroom"]{position:relative;overflow:hidden}
+  .tab-btn[data-tab="controlroom"].active{background:linear-gradient(135deg,#183A58 0%,#245b80 100%);border-color:#183A58;box-shadow:0 6px 16px rgba(24,58,88,.20),inset 0 1px 0 rgba(255,255,255,.16)}
+  .tab-btn[data-tab="controlroom"].active::after{content:"";position:absolute;left:10%;right:10%;bottom:3px;height:2px;border-radius:2px;background:rgba(255,255,255,.75)}
+  .qcr-grid{align-items:stretch}
+  .qcr-card{height:100%;min-width:0;display:flex;flex-direction:column;border:1.5px solid #d8e3ec;border-bottom-width:3px;box-shadow:0 2px 5px rgba(15,42,74,.07),0 9px 20px rgba(15,42,74,.08),inset 0 1px 0 rgba(255,255,255,.96);transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
+  .qcr-card:hover{transform:translateY(-3px);border-color:#b8cad9;box-shadow:0 4px 8px rgba(15,42,74,.10),0 15px 30px rgba(15,42,74,.13),inset 0 1px 0 rgba(255,255,255,1)}
+  .qcr-card h3{min-height:47px;display:flex;align-items:center;gap:7px;background:linear-gradient(180deg,#ffffff 0%,#f6f9fb 100%);letter-spacing:.1px}
+  .qcr-body{flex:1;min-height:0}
+  .qcr-card.qcr-wide{grid-column:1 / -1}
+  .qcr-card.qcr-wide .qcr-body{min-height:112px}
+  .qcr-opportunity{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:52px;padding:9px 11px;background:linear-gradient(180deg,#fff 0%,#f9fbfd 100%);border:1px solid #dfe8ef;border-left:3px solid #2388c9;box-shadow:0 2px 6px rgba(20,55,85,.045)}
+  .qcr-opportunity-icon{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:#eef6fb}
+  .qcr-opportunity-text{font:700 11px/1.4 Manrope,sans-serif;color:#38536a}
+  .qcr-opportunity-text b{color:#183A58}
+  .qcr-opportunity-action{font:800 10px Manrope,sans-serif;padding:5px 8px;border-radius:6px;border:1px solid #cbddea;background:#fff;color:#31516b;white-space:nowrap}
+  @media(max-width:900px){.qcr-card.qcr-wide{grid-column:auto}}
   @media(max-width:900px){.qcr-grid{grid-template-columns:1fr}.qcr-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}} @media(max-width:600px){.qcr-kpi-grid{grid-template-columns:1fr}.qcr-pending{grid-template-columns:1fr}}
   .drill-modal{position:fixed;inset:0;z-index:20000;background:rgba(15,35,55,.38);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:22px}.drill-modal.open{display:flex}.drill-dialog{width:min(1280px,96vw);height:min(780px,92vh);background:#fff;border-radius:15px;box-shadow:0 24px 70px rgba(12,34,55,.28);display:flex;flex-direction:column;overflow:hidden;border:1px solid #d7e2eb}.drill-head{display:flex;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid #e2eaf0;background:linear-gradient(135deg,#fff,#f5f9fc)}.drill-head h3{margin:0;font:800 16px Manrope,sans-serif;color:#16324f}.drill-sub{font:600 11px Manrope,sans-serif;color:#718496}.drill-head-actions{margin-left:auto;display:flex;gap:8px}.drill-head button,.drill-export{font:700 12px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:7px 10px;color:#31516b;cursor:pointer;text-decoration:none}.drill-export{background:#edf7ff;border-color:#abd0ea;color:#12669d}.drill-body{padding:12px 15px;overflow:auto;flex:1}.drill-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;font:600 12px Manrope,sans-serif;color:#5b7183}.drill-count{font-weight:800;color:#16324f}.drill-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font:600 11px Manrope,sans-serif}.drill-table th{position:sticky;top:0;background:#f3f7fa;color:#38536a;text-align:left;padding:8px;border-bottom:2px solid #d7e2eb;white-space:normal;overflow-wrap:anywhere;word-break:break-word;z-index:50}.drill-table td{padding:7px 8px;border-bottom:1px solid #edf1f4;white-space:normal;overflow-wrap:anywhere;word-break:break-word;vertical-align:top;line-height:1.35}.drill-table th:nth-child(1),.drill-table td:nth-child(1){width:10%}.drill-table th:nth-child(2),.drill-table td:nth-child(2){width:10%}.drill-table th:nth-child(3),.drill-table td:nth-child(3){width:11%}.drill-table th:nth-child(4),.drill-table td:nth-child(4){width:11%}.drill-table th:nth-child(5),.drill-table td:nth-child(5){width:14%}.drill-table th:nth-child(6),.drill-table td:nth-child(6){width:16%}.drill-table th:nth-child(7),.drill-table td:nth-child(7){width:10%}.drill-table th:nth-child(8),.drill-table td:nth-child(8){width:11%}.drill-table th:nth-child(9),.drill-table td:nth-child(9){width:7%;text-align:right}.drill-table tr:nth-child(even){background:#fbfdff}.drill-table .grand-total-row td{background:#f3f7fa;color:#38536a;font-weight:800;border-top:2px solid #d7e2eb;border-bottom:0}.drill-table .grand-total-row td:first-child{font-weight:900}.drill-empty{padding:50px;text-align:center;color:#7b8d9d;font:600 13px Manrope,sans-serif}
   @media(max-width:700px){.insight-grid{grid-template-columns:1fr}.drill-modal{padding:8px}.drill-dialog{width:100%;height:95vh}.drill-head h3{font-size:14px}.filter-summary-bar .summary-actions{width:100%;margin-left:0}}
@@ -486,7 +503,7 @@ body > *{position:relative;z-index:1;}
       <div class="qcr-card"><h3>🧪 Worst Grades</h3><div class="qcr-body"><div class="qcr-list" id="qcrGrades"></div></div></div>
       <div class="qcr-card"><h3>📈 Current Month vs Previous Month</h3><div class="qcr-body"><div id="qcrComparison"></div></div></div>
       <div class="qcr-card"><h3>⏳ Pending Investigation</h3><div class="qcr-body"><div class="qcr-pending" id="qcrPending"></div><div class="qcr-ageing-grid" id="qcrAgeing"></div><div id="qcrPendingNote" style="margin-top:10px"></div></div></div>
-      <div class="qcr-card"><h3>💡 Improvement Opportunities</h3><div class="qcr-body"><div class="qcr-list" id="qcrOpportunities"></div></div></div>
+      <div class="qcr-card qcr-wide"><h3>💡 Improvement Opportunities</h3><div class="qcr-body"><div class="qcr-list" id="qcrOpportunities"></div></div></div>
     </div>
   </div>
 
@@ -1599,12 +1616,19 @@ async function loadControlRoom(signal){
     document.getElementById('qcrAgeing').innerHTML=buckets.map((b,i)=>`<div class="qcr-age ${i===3?'critical':''}"><b>${b.n}</b><span>${b.label}${i===3?' • Critical':''}</span></div>`).join('');
     document.getElementById('qcrPendingNote').innerHTML=pendingCoils?'<div class="qcr-opportunity"><span class="qcr-opportunity-icon">⚠️</span><div class="qcr-opportunity-text"><b>Investigation queue active.</b> Ageing uses UD Date − Insp Lot Date; if UD Date is blank, ageing runs to today. Records remain permanently in Disposition Data after decision closure.</div></div>':'<div class="qcr-empty">No HOLD FOR DECISION quantity in the current selection.</div>';
     qcrRenderActions(critical,worstWc,worstGr,topDefects,pendingCoils,pendingQty);
+    // Improvement Opportunities: ranked, action-oriented and de-duplicated.
     const opp=[];
-    critical.forEach(x=>{const st=qcrStatus(x.label,x.value);if(st!=='good')opp.push({icon:st==='bad'?'🚨':'👀',text:`<b>${x.label}</b> is ${st==='bad'?'above the critical threshold':'in the watch zone'} — prioritize corrective action.`});});
-    worstWc.slice(0,3).forEach((x,i)=>opp.push({icon:'🏭',text:`<b>#${i+1} ${x.name}</b> — Reject % Qty ${(Number(x.reject_pct_qty||0)*100).toFixed(2)}%.` }));
-    worstGr.slice(0,3).forEach((x,i)=>opp.push({icon:'🧪',text:`<b>#${i+1} ${x.name}</b> — Reject % Qty ${(Number(x.reject_pct_qty||0)*100).toFixed(2)}%.` }));
-    topDefects.slice(0,3).forEach((x,i)=>opp.push({icon:'🎯',text:`<b>#${i+1} ${x.defect}</b> — ${(Number(x.qty||0)).toFixed(2)} MT / ${defectTotalQty?(Number(x.qty||0)/defectTotalQty*100).toFixed(2):'0.00'}% of defect quantity.`}));
-    const oe=document.getElementById('qcrOpportunities'); oe.innerHTML=opp.length?opp.slice(0,8).map(o=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text">${o.text}</div></div>`).join(''):'<div class="qcr-empty">No immediate improvement opportunity detected.</div>';
+    critical.forEach(x=>{
+      const st=qcrStatus(x.label,x.value); if(st==='good') return;
+      const c=KPI_TARGETS[x.label]||{}; const v=Number(x.value)||0; const target=Number(c.target)||0;
+      const gap=c.direction==='lower' ? Math.max(0,v-target) : Math.max(0,target-v);
+      opp.push({score:st==='bad'?100:60,icon:st==='bad'?'🚨':'👀',title:x.label,detail:`${qcrFmtKpi(x)} vs target ${qcrTargetText(x.label)}`,action:st==='bad'?'Investigate':'Review'});
+    });
+    worstWc.slice(0,3).forEach((x,i)=>opp.push({score:85-i*5,icon:'🏭',title:`#${i+1} ${x.name}`,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Investigate'}));
+    worstGr.slice(0,3).forEach((x,i)=>opp.push({score:75-i*5,icon:'🧪',title:`#${i+1} ${x.name}`,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Review'}));
+    topDefects.slice(0,3).forEach((x,i)=>opp.push({score:70-i*5,icon:'🎯',title:`#${i+1} ${x.defect}`,detail:`${Number(x.qty||0).toFixed(2)} MT • ${defectTotalQty?(Number(x.qty||0)/defectTotalQty*100).toFixed(2):'0.00'}% of defect qty • ${Number(x.records||0).toLocaleString()} coils`,action:'Investigate'}));
+    const seen=new Set(); const ranked=opp.sort((a,b)=>b.score-a.score).filter(o=>{const k=o.title.toUpperCase();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
+    const oe=document.getElementById('qcrOpportunities'); oe.innerHTML=ranked.length?ranked.map(o=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>${o.title}</b><br>${o.detail}</div><span class="qcr-opportunity-action">${o.action}</span></div>`).join(''):'<div class="qcr-empty">✓ No immediate improvement opportunity detected.</div>';
     markChartsReady();
   }catch(e){if(e.name!=='AbortError'){console.error(e);document.getElementById('qcrCriticalKpis').innerHTML='<div class="qcr-empty">Unable to load Control Room data.</div>';}}
 }
