@@ -1628,15 +1628,18 @@ async function loadControlRoom(signal){
     const gc=document.getElementById('qcrGradeConcentration');
     if(gc){
       const gradesForDetail=worstGr.slice(0,3);
-      const details=[];
-      for(const gr of gradesForDetail){
+      const detailResults=await Promise.all(gradesForDetail.map(async gr=>{
         const p=new URLSearchParams(currentFilters); p.set('grade',gr.name);
-        const [dr,wr]=await Promise.all([fetch('/api/defect_analysis?'+p.toString(),{signal}),fetch('/api/work_center_grade?'+p.toString(),{signal})]);
-        const [dd,ww]=await Promise.all([dr.json(),wr.json()]);
+        const qs=p.toString();
+        const [dd,ww]=await Promise.all([
+          fetch('/api/defect_analysis?'+qs,{signal}).then(r=>r.json()),
+          fetch('/api/work_center_grade?'+qs,{signal}).then(r=>r.json())
+        ]);
         const td=(dd.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0))[0];
         const mw=(ww.by_work_center||[]).filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0];
-        details.push({grade:gr.name,defect:td?.defect||'—',wc:mw?.name||'—',qty:Number(gr.output_qty||0),reject:Number(gr.reject_pct_qty||0)});
-      }
+        return {grade:gr.name,defect:td?.defect||'—',wc:mw?.name||'—',qty:Number(gr.output_qty||0),reject:Number(gr.reject_pct_qty||0)};
+      }));
+      const details=detailResults;
       gc.innerHTML=details.length?`<div class="qcr-subtitle">Problem concentration</div>`+details.map(x=>`<div class="qcr-grade-item"><b>${x.grade}</b><span>Defect: ${x.defect}</span><span>WC: ${x.wc}</span><em>Reject ${(x.reject*100).toFixed(2)}%</em></div>`).join(''):'<div class="qcr-empty">No grade concentration available.</div>';
     }
 
