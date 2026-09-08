@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quality Intelligence — Admin</title>
+<style>
+:root{--navy:#183A58;--blue:#2B78A8;--bg:#F5F8FB;--card:#fff;--border:#DCE6EF;--text:#24364B;--muted:#718096;--red:#D94A4A;--green:#1B9A63}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#F8FAFC,#F1F6FA);font-family:Inter,"Segoe UI",Arial,sans-serif;color:var(--text)}
+.top{background:linear-gradient(135deg,#fff,#F2F7FB);border-bottom:1px solid var(--border);padding:20px 28px;display:flex;justify-content:space-between;align-items:center;gap:16px}.brand h1{margin:0;color:var(--navy);font-size:23px;letter-spacing:1px}.brand p{margin:4px 0 0;color:var(--muted);font-size:12px}.actions{display:flex;gap:8px;align-items:center}.btn{border:1px solid var(--border);background:#fff;color:var(--navy);border-radius:8px;padding:9px 13px;font-weight:800;font-size:12px;cursor:pointer;text-decoration:none}.btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}.btn.danger{color:#B91C1C;border-color:#F0CACA}.btn:hover{filter:brightness(.98);box-shadow:0 5px 15px rgba(30,65,95,.08)}
+.wrap{max-width:1400px;margin:22px auto;padding:0 22px}.login,.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 7px 22px rgba(30,65,95,.06)}.login{max-width:430px;margin:65px auto;padding:28px}.login h2{margin:0 0 6px;color:var(--navy)}.hint{font-size:12px;color:var(--muted);line-height:1.5;margin:0 0 18px}.field{margin-bottom:12px}.field label{display:block;font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:5px;letter-spacing:.4px}.field input,.field select{width:100%;padding:10px;border:1px solid #D5E0EA;border-radius:8px;font-size:13px;outline:none}.field input:focus,.field select:focus{border-color:#7FB7DE;box-shadow:0 0 0 3px rgba(35,136,201,.08)}.msg{font-size:12px;margin-top:10px;min-height:18px}.msg.err{color:#B91C1C}.msg.ok{color:#15803D}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.panel{padding:18px}.panel h2{font-size:16px;margin:0 0 4px;color:var(--navy)}.panel .desc{font-size:11px;color:var(--muted);margin:0 0 15px}.full{grid-column:1/-1}.form-grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:10px}.wide{grid-column:span 2}.submit-row{display:flex;justify-content:flex-end;margin-top:12px}.filebox{border:1px dashed #BFD0DF;border-radius:10px;padding:15px;background:#F8FBFD}.filebox input{font-size:12px}.result{margin-top:12px;padding:11px;border-radius:8px;background:#F1F7FB;font-size:12px;line-height:1.5}.result strong{color:var(--navy)}
+.table-wrap{overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:8px}table{border-collapse:collapse;width:100%;font-size:11px;min-width:1000px}th{position:sticky;top:0;background:var(--blue);color:#fff;text-align:left;padding:8px;border:1px solid var(--blue);z-index:1}td{padding:7px 8px;border-bottom:1px solid #E8EEF3;white-space:nowrap}tbody tr:nth-child(even){background:#F8FAFC}tbody tr:hover{background:#EEF7FC}.delete{border:1px solid #F0CACA;background:#fff;color:#B91C1C;border-radius:6px;padding:4px 7px;font-size:10px;font-weight:800;cursor:pointer}.stats{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}.stat{background:#F4F8FB;border:1px solid var(--border);padding:9px 12px;border-radius:8px;font-size:11px}.stat b{font-size:15px;color:var(--navy);display:block;margin-top:2px}.secure{font-size:10px;color:var(--green);font-weight:800}
+.hidden{display:none!important}@media(max-width:900px){.grid{grid-template-columns:1fr}.form-grid{grid-template-columns:repeat(2,minmax(150px,1fr))}.wide{grid-column:span 2}}@media(max-width:600px){.top{padding:16px;align-items:flex-start}.wrap{padding:0 12px}.form-grid{grid-template-columns:1fr}.wide{grid-column:span 1}.actions{flex-wrap:wrap}.brand h1{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="top"><div class="brand"><h1>QUALITY INTELLIGENCE — ADMIN</h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div><div class="actions"><span class="secure">● SECURE ADMIN</span><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
+<div class="wrap">
+  <section class="login" id="loginBox">
+    <h2>🔐 Admin Login</h2><p class="hint">Only the authorized administrator can add, import or delete data. Viewer access to the dashboard remains read-only.</p>
+    <div class="field"><label>Username</label><input id="username" autocomplete="username" value="admin"></div>
+    <div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Enter admin password"></div>
+    <button class="btn primary" style="width:100%" id="loginBtn">Login</button><div class="msg" id="loginMsg"></div>
+  </section>
+
+  <section class="grid hidden" id="adminApp">
+    <div class="panel full"><h2>➕ Add One Record</h2><p class="desc">Enter a single disposition record. Month, week, quarter and financial year are automatically derived from Inspection Lot Date when left blank.</p>
+      <div class="form-grid">
+        <div class="field"><label>Insp Lot Date</label><input id="f_insp_lot_date" type="date"></div>
+        <div class="field"><label>HEAT NO *</label><input id="f_heat_no"></div>
+        <div class="field"><label>Work Center</label><input id="f_work_center"></div>
+        <div class="field"><label>Grade</label><input id="f_grade"></div>
+        <div class="field"><label>Output Weight (MT)</label><input id="f_output_weight" type="number" min="0" step="0.001"></div>
+        <div class="field"><label>Main Defect</label><input id="f_main_defect" placeholder="Use NO DEFECT when applicable"></div>
+        <div class="field"><label>Defect Intensity</label><select id="f_defect_intensity"><option value="">Blank / Without Intensity</option><option>LIGHT</option><option>MEDIUM</option><option>DEEP</option></select></div>
+        <div class="field"><label>Quality Decision *</label><select id="f_quality_decision"><option value="">Select</option><option>PRIME</option><option>FOR NEXT PROCESS</option><option>SALVAGE</option><option>HOLD FOR DECISION</option><option>REJECT</option><option>RE-WORK</option><option>DIVERT</option></select></div>
+        <div class="field"><label>Month (optional)</label><input id="f_month" placeholder="Sep-2026"></div>
+        <div class="field"><label>Week (optional)</label><input id="f_week" placeholder="Wk of 07-Sep-26"></div>
+        <div class="field"><label>Quarter (optional)</label><input id="f_quarter" placeholder="Q2"></div>
+        <div class="field"><label>Financial Year (optional)</label><input id="f_financial_year" placeholder="FY 2026-27"></div>
+      </div>
+      <div class="submit-row"><button class="btn primary" id="addBtn">Save Record</button></div><div class="msg" id="addMsg"></div>
+    </div>
+
+    <div class="panel"><h2>📥 Bulk Import</h2><p class="desc">Upload Excel (.xlsx/.xlsm), TSV or CSV. The importer validates the required fields, skips exact duplicates and reports errors.</p>
+      <div class="filebox"><input id="fileInput" type="file" accept=".xlsx,.xlsm,.tsv,.csv"></div>
+      <div class="submit-row"><button class="btn primary" id="importBtn">Import File</button></div><div class="msg" id="importMsg"></div><div id="importResult"></div>
+    </div>
+    <div class="panel"><h2>📊 Database Status</h2><p class="desc">Current database size and latest records.</p><div class="stats"><div class="stat">Total Records<b id="totalRecords">—</b></div><div class="stat">Access<b>Admin only</b></div></div><button class="btn" id="refreshBtn">Refresh Records</button></div>
+    <div class="panel full"><h2>🗃️ Latest Records</h2><p class="desc">Newest 100 records. Delete is permanently applied to the live database.</p><div class="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>HEAT NO</th><th>Work Center</th><th>Grade</th><th>Weight MT</th><th>Main Defect</th><th>Intensity</th><th>Decision</th><th>Month</th><th>Week</th><th>Quarter</th><th>FY</th><th>Action</th></tr></thead><tbody id="recordsBody"></tbody></table></div></div>
+  </section>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+async function api(url,opts={}){const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{};if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
+async function status(){try{return await api('/api/auth/status')}catch{return {authenticated:false}}}
+function setMsg(id,text,kind=''){const e=$(id);e.textContent=text;e.className='msg '+kind}
+async function boot(){const s=await status();if(s.authenticated)showAdmin();else showLogin()}
+function showLogin(){$('loginBox').classList.remove('hidden');$('adminApp').classList.add('hidden');$('logoutBtn').classList.add('hidden')}
+function showAdmin(){$('loginBox').classList.add('hidden');$('adminApp').classList.remove('hidden');$('logoutBtn').classList.remove('hidden');loadRecords()}
+$('loginBtn').onclick=async()=>{setMsg('loginMsg','');try{await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value,password:$('password').value})});showAdmin()}catch(e){setMsg('loginMsg',e.message,'err')}};
+$('password').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click()});
+$('logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});location.reload()};
+function formData(){return {insp_lot_date:$('f_insp_lot_date').value,heat_no:$('f_heat_no').value,work_center:$('f_work_center').value,grade:$('f_grade').value,output_weight:$('f_output_weight').value,main_defect:$('f_main_defect').value,defect_intensity:$('f_defect_intensity').value,quality_decision:$('f_quality_decision').value,month:$('f_month').value,week:$('f_week').value,quarter:$('f_quarter').value,financial_year:$('f_financial_year').value}}
+$('addBtn').onclick=async()=>{setMsg('addMsg','Saving…');try{const d=await api('/api/admin/record',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData())});setMsg('addMsg',`Saved successfully. ${d.inserted} record added.`,'ok');document.querySelectorAll('#adminApp input').forEach(e=>{if(e.id.startsWith('f_')&&e.id!=='f_insp_lot_date')e.value=''});$('f_defect_intensity').value='';$('f_quality_decision').value='';loadRecords()}catch(e){setMsg('addMsg',e.message,'err')}};
+$('importBtn').onclick=async()=>{const file=$('fileInput').files[0];if(!file){setMsg('importMsg','Please select a file.','err');return}setMsg('importMsg','Uploading and validating…');$('importResult').innerHTML='';try{const fd=new FormData();fd.append('file',file);const d=await api('/api/admin/import',{method:'POST',body:fd});setMsg('importMsg','Import completed.','ok');$('importResult').innerHTML=`<div class="result"><strong>Detected:</strong> ${d.detected.toLocaleString()} &nbsp; | &nbsp; <strong>Inserted:</strong> ${d.inserted.toLocaleString()} &nbsp; | &nbsp; <strong>Duplicates skipped:</strong> ${d.duplicates.toLocaleString()} &nbsp; | &nbsp; <strong>Validation errors:</strong> ${d.errors.length.toLocaleString()}${d.errors.length?'<br><br>'+d.errors.slice(0,15).map(x=>`Row ${x.row}: ${x.error}`).join('<br>'):''}</div>`;loadRecords()}catch(e){setMsg('importMsg',e.message,'err')}};
+async function loadRecords(){try{const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:100})});$('totalRecords').textContent=d.total.toLocaleString();$('recordsBody').innerHTML=d.rows.map(r=>`<tr><td>${r.id}</td><td>${r.insp_lot_date||''}</td><td>${esc(r.heat_no)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${Number(r.output_weight||0).toFixed(3)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity)}</td><td>${esc(r.quality_decision)}</td><td>${esc(r.month)}</td><td>${esc(r.week)}</td><td>${esc(r.quarter)}</td><td>${esc(r.financial_year)}</td><td><button class="delete" onclick="del(${r.id})">Delete</button></td></tr>`).join('')}catch(e){setMsg('loginMsg',e.message,'err')}}
+function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function del(id){if(!confirm('Delete record ID '+id+' permanently?'))return;try{await api('/api/admin/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});loadRecords()}catch(e){alert(e.message)}}
+$('refreshBtn').onclick=loadRecords;boot();
+</script>
+</body></html>

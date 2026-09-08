@@ -10,6 +10,13 @@ import json
 import math
 import os
 import sqlite3
+import secrets
+import hashlib
+import hmac
+import csv
+import io
+from email.parser import BytesParser
+from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -728,6 +735,260 @@ def compute_yearly_trend(filters):
     return {"rows": rows, "total": _grand_total_row(rows)}
 
 
+
+# ---------------------------------------------------------------------------
+# Admin authentication / data-management layer
+# ---------------------------------------------------------------------------
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "ChangeMe@123")
+SESSION_TTL = 8 * 60 * 60
+SESSIONS = {}
+
+
+def _cleanup_sessions():
+    now = _dt.datetime.now().timestamp()
+    for token, meta in list(SESSIONS.items()):
+        if meta.get("expires", 0) < now:
+            SESSIONS.pop(token, None)
+
+
+def _cookie_value(cookie_header, name):
+    if not cookie_header:
+        return ""
+    for part in cookie_header.split(";"):
+        part = part.strip()
+        if part.startswith(name + "="):
+            return part.split("=", 1)[1]
+    return ""
+
+
+def _is_admin(handler):
+    _cleanup_sessions()
+    token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_admin")
+    meta = SESSIONS.get(token)
+    if not meta:
+        return False
+    if meta.get("expires", 0) < _dt.datetime.now().timestamp():
+        SESSIONS.pop(token, None)
+        return False
+    return hmac.compare_digest(meta.get("username", ""), ADMIN_USERNAME)
+
+
+def _json_body(handler):
+    length = int(handler.headers.get("Content-Length", "0") or 0)
+    raw = handler.rfile.read(length)
+    return json.loads(raw.decode("utf-8")) if raw else {}
+
+
+def _auth_error(handler, message="Admin login required"):
+    handler._send_json({"error": message, "authenticated": False}, status=401)
+
+
+def _norm_header(v):
+    return " ".join(str(v or "").strip().lower().replace("_", " ").split())
+
+
+HEADER_ALIASES = {
+    "heat_no": ["heat no", "heat number", "heat"],
+    "work_center": ["work center", "workcentre", "work center name"],
+    "grade": ["grade"],
+    "output_weight": ["output weight", "output weight (mt)", "output qty", "quantity", "qty"],
+    "main_defect": ["main defect", "defect", "main defect type"],
+    "defect_intensity": ["defect intensity", "intensity", "defect intensity tag"],
+    "quality_decision": ["quality decision", "decision"],
+    "insp_lot_date": ["insp lot date", "inspection lot date", "date", "inspection date"],
+    "month": ["_sourcemmonth", "_source month", "source month", "month"],
+    "week": ["week"],
+    "quarter": ["quarter (fy)", "quarter", "qtr"],
+    "financial_year": ["financial year", "fy", "fy year"],
+}
+
+
+def _map_headers(headers):
+    normalized = {_norm_header(h): i for i, h in enumerate(headers)}
+    mapping = {}
+    for key, aliases in HEADER_ALIASES.items():
+        for alias in aliases:
+            if _norm_header(alias) in normalized:
+                mapping[key] = normalized[_norm_header(alias)]
+                break
+    return mapping
+
+
+def _parse_date(v):
+    if v in (None, ""):
+        return None
+    if isinstance(v, (_dt.datetime, _dt.date)):
+        return v.date() if isinstance(v, _dt.datetime) else v
+    text = str(v).strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%b-%Y", "%d-%b-%y", "%d/%m/%y", "%m/%d/%Y"):
+        try:
+            return _dt.datetime.strptime(text, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _derive_period_fields(insp_date):
+    if not insp_date:
+        return "", "", "", ""
+    month = insp_date.strftime("%b-%Y")
+    monday = insp_date - _dt.timedelta(days=insp_date.weekday())
+    week = "Wk of " + monday.strftime("%d-%b-%y")
+    # Apr-Jun Q1, Jul-Sep Q2, Oct-Dec Q3, Jan-Mar Q4.
+    q = ((insp_date.month - 4) % 12) // 3 + 1
+    fy_start = insp_date.year if insp_date.month >= 4 else insp_date.year - 1
+    quarter = f"Q{q}"
+    fy = f"FY {fy_start}-{(fy_start + 1) % 100:02d}"
+    return month, week, quarter, fy
+
+
+def _record_from_values(values, mapping):
+    def get(key, default=""):
+        idx = mapping.get(key)
+        if idx is None or idx >= len(values):
+            return default
+        return values[idx]
+
+    insp_date = _parse_date(get("insp_lot_date"))
+    derived_month, derived_week, derived_quarter, derived_fy = _derive_period_fields(insp_date)
+    month = str(get("month") or derived_month).strip()
+    week = str(get("week") or derived_week).strip()
+    quarter = str(get("quarter") or derived_quarter).strip()
+    fy = str(get("financial_year") or derived_fy).strip()
+    try:
+        weight_raw = get("output_weight", 0)
+        if isinstance(weight_raw, str):
+            weight_raw = weight_raw.replace(",", "").strip()
+        weight = float(weight_raw or 0)
+    except (TypeError, ValueError):
+        raise ValueError("Output Weight must be numeric")
+
+    return {
+        "heat_no": str(get("heat_no") or "").strip(),
+        "work_center": str(get("work_center") or "").strip(),
+        "grade": str(get("grade") or "").strip(),
+        "output_weight": weight,
+        "main_defect": str(get("main_defect") or "").strip(),
+        "defect_intensity": str(get("defect_intensity") or "").strip().upper(),
+        "quality_decision": str(get("quality_decision") or "").strip().upper(),
+        "insp_lot_date": insp_date.isoformat() if insp_date else "",
+        "month": month,
+        "week": week,
+        "quarter": quarter,
+        "financial_year": fy,
+    }
+
+
+def _validate_record(r):
+    if not r["heat_no"]:
+        return "HEAT NO is required"
+    if not r["quality_decision"]:
+        return "QUALITY DECISION is required"
+    if r["output_weight"] < 0:
+        return "Output Weight cannot be negative"
+    if r["quality_decision"] not in DECISION_ORDER:
+        return "Unknown QUALITY DECISION: " + r["quality_decision"]
+    return ""
+
+
+def _record_signature(r):
+    keys = ["heat_no", "work_center", "grade", "output_weight", "main_defect", "defect_intensity",
+            "quality_decision", "insp_lot_date", "month", "week", "quarter", "financial_year"]
+    raw = "|".join(str(r.get(k, "")) for k in keys)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _parse_uploaded_file(filename, data):
+    ext = os.path.splitext(filename.lower())[1]
+    rows = []
+    if ext in (".xlsx", ".xlsm"):
+        try:
+            import openpyxl
+        except ImportError:
+            raise ValueError("Excel import requires openpyxl. Please use TSV/CSV or install openpyxl.")
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        ws = wb["Disposition Data"] if "Disposition Data" in wb.sheetnames else wb[wb.sheetnames[0]]
+        iterator = ws.iter_rows(values_only=True)
+        try:
+            headers = list(next(iterator))
+        except StopIteration:
+            raise ValueError("The uploaded Excel file is empty")
+        mapping = _map_headers(headers)
+        if "heat_no" not in mapping:
+            raise ValueError("Could not find HEAT NO column in the uploaded file")
+        for values in iterator:
+            if not any(v not in (None, "") for v in values):
+                continue
+            rows.append(_record_from_values(list(values), mapping))
+        wb.close()
+    else:
+        text = data.decode("utf-8-sig")
+        sample = text[:4096]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters="\t,;")
+        except csv.Error:
+            dialect = csv.excel_tab if "\t" in sample else csv.excel
+        reader = csv.reader(io.StringIO(text), dialect)
+        try:
+            headers = next(reader)
+        except StopIteration:
+            raise ValueError("The uploaded file is empty")
+        mapping = _map_headers(headers)
+        if "heat_no" not in mapping:
+            raise ValueError("Could not find HEAT NO column in the uploaded file")
+        for values in reader:
+            if not any(str(v).strip() for v in values):
+                continue
+            rows.append(_record_from_values(values, mapping))
+    return rows
+
+
+def _insert_records(records):
+    conn = get_conn()
+    cur = conn.cursor()
+    # Build signatures only for the imported rows and the current database.
+    existing = set()
+    cur.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,month,week,quarter,financial_year FROM disposition")
+    for row in cur.fetchall():
+        existing.add(_record_signature(dict(row)))
+    inserted = 0
+    duplicates = 0
+    errors = []
+    seen = set()
+    good = []
+    for idx, r in enumerate(records, start=2):
+        err = _validate_record(r)
+        sig = _record_signature(r)
+        if err:
+            errors.append({"row": idx, "error": err})
+        elif sig in existing or sig in seen:
+            duplicates += 1
+        else:
+            seen.add(sig)
+            good.append(r)
+    if good:
+        cur.executemany("""
+            INSERT INTO disposition
+            (heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,
+             insp_lot_date,month,week,quarter,financial_year)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        """, [tuple(r[k] for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]) for r in good])
+        inserted = len(good)
+    conn.commit()
+    conn.close()
+    return {"inserted": inserted, "duplicates": duplicates, "errors": errors}
+
+
+def _ensure_admin_schema():
+    conn = sqlite3.connect(DB_PATH)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(disposition)").fetchall()}
+    if "insp_lot_date" not in cols:
+        conn.execute("ALTER TABLE disposition ADD COLUMN insp_lot_date TEXT DEFAULT ''")
+    conn.commit()
+    conn.close()
+
+
 HTML_PAGE = None  # loaded lazily from index_template
 
 
@@ -739,6 +1000,7 @@ class Handler(BaseHTTPRequestHandler):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -760,6 +1022,16 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
                        "r", encoding="utf-8") as f:
                 self._send_html(f.read())
+        elif path == "/admin":
+            if not _is_admin(self):
+                # Serve the login/admin shell; the page itself never exposes write APIs without auth.
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
+                    self._send_html(f.read())
+            else:
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
+                    self._send_html(f.read())
+        elif path == "/api/auth/status":
+            self._send_json({"authenticated": _is_admin(self), "username": ADMIN_USERNAME if _is_admin(self) else ""})
         elif path == "/api/filters":
             self._send_json(get_filter_options())
         elif path == "/api/kpis":
@@ -806,14 +1078,126 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "not found"}, status=404)
 
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == "/api/login":
+            try:
+                body = _json_body(self)
+                username = str(body.get("username", ""))
+                password = str(body.get("password", ""))
+                if hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD):
+                    token = secrets.token_urlsafe(32)
+                    SESSIONS[token] = {"username": ADMIN_USERNAME, "expires": _dt.datetime.now().timestamp() + SESSION_TTL}
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+                    cookie = f"qdash_admin={token}; Path=/; HttpOnly; SameSite=Lax"
+                    if secure:
+                        cookie += "; Secure"
+                    self.send_header("Set-Cookie", cookie)
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"authenticated": True, "username": ADMIN_USERNAME}).encode("utf-8"))
+                else:
+                    self._send_json({"error": "Invalid username or password"}, status=401)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/logout":
+            token = _cookie_value(self.headers.get("Cookie", ""), "qdash_admin")
+            SESSIONS.pop(token, None)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie", "qdash_admin=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
+            self.end_headers()
+            self.wfile.write(b'{"authenticated":false}')
+            return
+
+        if not _is_admin(self):
+            _auth_error(self)
+            return
+
+        if path == "/api/admin/record":
+            try:
+                body = _json_body(self)
+                r = _record_from_values([body.get(k, "") for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]], {k:i for i,k in enumerate(["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"])})
+                result = _insert_records([r])
+                if result["errors"]:
+                    self._send_json({"error": result["errors"][0]["error"]}, status=400)
+                elif result["duplicates"]:
+                    self._send_json({"error": "This record already exists"}, status=409)
+                else:
+                    self._send_json({"ok": True, **result})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/import":
+            try:
+                ctype = self.headers.get("Content-Type", "")
+                length = int(self.headers.get("Content-Length", "0") or 0)
+                raw = self.rfile.read(length)
+                msg = BytesParser(policy=default).parsebytes((f"Content-Type: {ctype}\r\nMIME-Version: 1.0\r\n\r\n").encode() + raw)
+                uploaded = None
+                if msg.is_multipart():
+                    for part in msg.iter_parts():
+                        disp = part.get("Content-Disposition", "")
+                        if "filename=" in disp:
+                            uploaded = (part.get_filename() or "upload", part.get_payload(decode=True) or b"")
+                            break
+                if not uploaded:
+                    raise ValueError("No file was uploaded")
+                records = _parse_uploaded_file(uploaded[0], uploaded[1])
+                if len(records) > 10000:
+                    raise ValueError("Import limited to 10,000 records per upload")
+                result = _insert_records(records)
+                self._send_json({"ok": True, "detected": len(records), **result})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/records":
+            try:
+                body = _json_body(self)
+                limit = min(max(int(body.get("limit", 100)), 1), 500)
+                conn = get_conn()
+                rows = [dict(r) for r in conn.execute("SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+                total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                conn.close()
+                self._send_json({"rows": rows, "total": total})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/delete":
+            try:
+                body = _json_body(self)
+                record_id = int(body.get("id"))
+                conn = get_conn()
+                cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
+                conn.commit()
+                conn.close()
+                self._send_json({"ok": True, "deleted": cur.rowcount})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        self._send_json({"error": "not found"}, status=404)
+
+
 def main():
     import sys
     # Cloud hosts (Render, Railway, etc.) provide the port via the PORT
     # environment variable. Fall back to a CLI arg, then default 8000
     # for local use.
     port = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8000))
+    _ensure_admin_schema()
     ensure_fast_indexes()
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    if ADMIN_PASSWORD == "ChangeMe@123":
+        print("WARNING: using the default admin password. Set ADMIN_PASSWORD before sharing this app publicly.")
     print(f"Quality Disposition Dashboard running on port {port}")
     server.serve_forever()
 

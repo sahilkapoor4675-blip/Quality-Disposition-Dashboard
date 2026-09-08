@@ -59,6 +59,38 @@ immediately preceding period of that type (e.g. selecting "Aug-2026" compares
 against "Jul-2026"). If no time filter is selected, comparison is not shown
 (same as the original workbook's behaviour).
 
+## 🔐 Admin / Viewer security and data updates
+The web app now has two access levels:
+
+- **Viewer:** dashboard, filters, charts and tables are read-only. Viewers cannot add, import or delete records.
+- **Admin:** protected `/admin` page for adding one record, bulk importing `.xlsx/.xlsm/.tsv/.csv`, reviewing the latest records and deleting incorrect records. Write APIs are checked server-side, so hiding a button is not the security mechanism.
+
+### Admin credentials
+For local testing the default credentials are:
+- Username: `admin`
+- Password: `ChangeMe@123`
+
+**Before publishing the link, change these using environment variables:**
+```
+ADMIN_USERNAME=your_admin_name
+ADMIN_PASSWORD=your_strong_password
+```
+Do not put the production password inside the source code or Git repository.
+
+### Adding future data
+1. Open the shared dashboard link.
+2. Open **🔐 Admin**.
+3. Login.
+4. Either use **Add One Record** for a single coil/record, or **Bulk Import** for an Excel/TSV/CSV file.
+5. The importer validates required fields, skips exact duplicates, and derives Month/Week/Quarter/FY from `Insp Lot Date` when those fields are not supplied.
+6. The existing 16 KPIs, filters, charts, tables and dynamic totals read the live database and update after the new records are saved.
+
+### Important for online deployment
+The database must live on **persistent storage**. A temporary/free cloud filesystem can be reset when a service restarts or is redeployed. For a company-wide production deployment, use a persistent disk/volume or a managed database. The current package is designed so the SQLite database remains the single source of truth; the dashboard stays read-only for viewers while only authenticated admins can write to it.
+
+### Local sharing
+If the server runs on an always-on company PC/server, colleagues can use `http://<server-ip>:8000/`. They do not need Python installed. Keep the server machine secured and use a strong admin password.
+
 ## Next step for company-wide sharing
 This local version is great for testing. For real multi-user access with logins/roles,
 this same server.py logic can be deployed to a small always-on machine or cloud VM

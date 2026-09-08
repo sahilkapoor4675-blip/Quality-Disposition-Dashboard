@@ -222,6 +222,11 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 .legend{color:#53697D;}
 .footer-note{color:#7A8B9B;}
 
+
+.admin-link{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #D5E0EA;border-radius:8px;background:#fff;color:#183A58;text-decoration:none;font-size:11px;font-weight:800;box-shadow:0 2px 6px rgba(30,65,95,.05);}
+.admin-link:hover{background:#F2F7FB;border-color:#AFC9DC;}
+.header-actions{display:flex;align-items:center;gap:9px;}
+@media(max-width:600px){.header-actions{gap:5px}.admin-link{padding:6px 8px;font-size:10px}.live-status{font-size:9px!important;}}
 </style>
 </head>
 <body>
@@ -237,7 +242,10 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
       <div class="updated-label">Last Updated</div>
       <div class="updated-time" id="refreshed">07 Sep 2026 • --:--</div>
     </div>
-    <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
+    <div class="header-actions">
+      <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
+      <a class="admin-link" href="/admin">🔐 Admin</a>
+    </div>
   </div>
 </header>
 
