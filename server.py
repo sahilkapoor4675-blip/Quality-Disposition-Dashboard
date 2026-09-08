@@ -15,9 +15,11 @@ import sqlite3
 try:
     import psycopg2
     from psycopg2.extras import DictCursor
+    from psycopg2.pool import SimpleConnectionPool
 except ImportError:
     psycopg2 = None
     DictCursor = None
+    SimpleConnectionPool = None
 import secrets
 import hashlib
 import hmac
@@ -60,6 +62,10 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DB_PATH = os.environ.get("DB_PATH", os.path.join(APP_DIR, "quality.db"))
 USE_POSTGRES = bool(DATABASE_URL)
+PG_POOL = None
+RESPONSE_CACHE = {}
+RESPONSE_CACHE_TTL = 10
+
 
 def _ensure_database():
     """Create the local SQLite DB from the bundled seed DB when needed."""
@@ -282,18 +288,27 @@ class _PGCursor:
     def rowcount(self): return self.cur.rowcount
 
 class _PGConn:
-    def __init__(self, conn): self.conn = conn
+    def __init__(self, conn, pooled=False): self.conn = conn; self.pooled = pooled
     def cursor(self): return _PGCursor(self.conn.cursor(cursor_factory=DictCursor))
     def execute(self, sql, params=None):
         c=self.cursor(); c.execute(sql, params); return c
     def commit(self): self.conn.commit()
-    def close(self): self.conn.close()
+    def close(self):
+        if self.pooled and PG_POOL is not None:
+            try: PG_POOL.putconn(self.conn)
+            except Exception: self.conn.close()
+        else: self.conn.close()
 
 def get_conn():
+    global PG_POOL
     if USE_POSTGRES:
-        if psycopg2 is None:
-            raise RuntimeError("PostgreSQL support requires psycopg2-binary. Add DATABASE_URL only after dependencies are installed.")
-        return _PGConn(psycopg2.connect(DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require")))
+        if psycopg2 is None or SimpleConnectionPool is None:
+            raise RuntimeError("PostgreSQL support requires psycopg2-binary.")
+        if PG_POOL is None:
+            minconn = max(1, int(os.environ.get("PG_POOL_MIN", "1")))
+            maxconn = max(minconn, int(os.environ.get("PG_POOL_MAX", "8")))
+            PG_POOL = SimpleConnectionPool(minconn, maxconn, DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require"), application_name="quality-disposition-dashboard")
+        return _PGConn(PG_POOL.getconn(), pooled=True)
     conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=3000")
@@ -313,6 +328,15 @@ def ensure_fast_indexes():
         ("idx_disp_defect_intensity", "defect_intensity"),
         ("idx_disp_main_defect", "main_defect"),
     ]
+    if USE_POSTGRES:
+        for name, expr in [
+            ("idx_disp_month_wc_grade", "month, work_center, grade"),
+            ("idx_disp_month_decision", "month, quality_decision"),
+            ("idx_disp_wc_decision", "work_center, quality_decision"),
+            ("idx_disp_grade_decision", "grade, quality_decision"),
+            ("idx_disp_heat_batch", "heat_no, batch_no"),
+        ]:
+            conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON disposition({expr})")
     for name, col in indexes:
         conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON disposition({col})")
     conn.commit()
@@ -390,30 +414,19 @@ def compute_kpis(filters, _skip_prev=False):
     cur = conn.cursor()
     where_sql, params = build_where(filters)
 
-    # Total Coils
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {where_sql}", params)
-    total_coils = cur.fetchone()[0]
+    # One aggregate scan for overall coils, defects and quantity.
+    dc_expr = "CASE WHEN main_defect <> '' AND main_defect <> 'NO DEFECT' THEN " + HEAT_KEY_SQL + " END"
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COUNT(DISTINCT {dc_expr}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
+    total_coils, defect_coils, output_qty = cur.fetchone()
 
-    # Defect Coils: main_defect present and not 'NO DEFECT'
-    dc_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {dc_where}", params)
-    defect_coils = cur.fetchone()[0]
-
-    # Output Quantity (MT) = sum of output_weight for filtered rows
-    cur.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
-    output_qty = cur.fetchone()[0]
-
-    # Per-decision sums (Qty MT) and coil counts for filtered rows
-    decision_qty = {}
-    decision_coils = {}
-    for d in DECISION_ORDER:
-        w2 = where_sql + (" AND " if where_sql else "WHERE ") + "quality_decision = ?"
-        p2 = params + [d]
-        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
-        cnt, qty = cur.fetchone()
-        decision_coils[d] = cnt
-        decision_qty[d] = qty
+    # One grouped scan for all decision counts and quantities.
+    decision_qty = {d: 0.0 for d in DECISION_ORDER}
+    decision_coils = {d: 0 for d in DECISION_ORDER}
+    cur.execute(f"SELECT quality_decision, COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY quality_decision", params)
+    for r in cur.fetchall():
+        d = r[0]
+        if d in decision_qty:
+            decision_coils[d], decision_qty[d] = int(r[1] or 0), float(r[2] or 0)
 
     prime_qty = decision_qty["PRIME"]
     reject_qty = decision_qty["REJECT"]
@@ -487,19 +500,13 @@ def compute_kpis(filters, _skip_prev=False):
         top_defects.append({"defect": r["main_defect"], "qty": r["qty"], "pct": pct, "cum_pct": cum})
 
     # Defect intensity breakdown
+    intensity_map = {}
+    cur.execute(f"SELECT CASE WHEN TRIM(COALESCE(defect_intensity,''))='' THEN 'WITHOUT INTENSITY' ELSE defect_intensity END, COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY 1", params)
+    for r in cur.fetchall(): intensity_map[str(r[0])] = (int(r[1] or 0), float(r[2] or 0))
     intensity_table = []
-    for level in ["LIGHT", "MEDIUM", "DEEP"]:
-        iw = where_sql + (" AND " if where_sql else "WHERE ") + "defect_intensity = ?"
-        ip = params + [level]
-        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {iw}", ip)
-        cnt, qty = cur.fetchone()
+    for level in ["LIGHT", "MEDIUM", "DEEP", "WITHOUT INTENSITY"]:
+        cnt, qty = intensity_map.get(level, (0,0.0))
         intensity_table.append({"intensity": level, "coils": cnt, "qty": qty})
-    # WITHOUT INTENSITY row = ALL selected records with blank intensity
-    wi_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "TRIM(COALESCE(defect_intensity,'')) = ''"
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {wi_where}", params)
-    cnt, qty = cur.fetchone()
-    intensity_table.append({"intensity": "WITHOUT INTENSITY", "coils": cnt, "qty": qty})
 
     it_total_coils = sum(r["coils"] for r in intensity_table)
     it_total_qty = sum(r["qty"] for r in intensity_table)
@@ -1246,7 +1253,7 @@ def _insert_records(records):
         cur.executemany("""INSERT INTO disposition (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r[k] for k in ["heat_no","batch_no"]+fields) for r in good]); inserted=len(good)
     for r,rid in updates:
         cur.execute("""UPDATE disposition SET work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
-    conn.commit(); conn.close(); return {"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
+    conn.commit(); conn.close(); RESPONSE_CACHE.clear(); return {"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
 
 
 def _ensure_admin_schema():
@@ -1648,7 +1655,7 @@ HTML_PAGE = None  # loaded lazily from index_template
 
 
 
-def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
+def _drilldown_rows(filters, metric, drill_value=None, limit=5000, offset=0):
     """Return viewer-safe source records for KPI/chart drill-down using the same filters as dashboard."""
     where_sql, params = build_where(filters)
     metric = (metric or '').strip()
@@ -1678,8 +1685,8 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
         where_sql = where_sql + (' AND ' if where_sql else 'WHERE ') + ' AND '.join(clauses)
         params = params + extra
     conn=get_conn(); cur=conn.cursor()
-    sql=f"SELECT insp_lot_date, ud_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ?"
-    cur.execute(sql, params+[limit]); raw=cur.fetchall(); conn.close()
+    sql=f"SELECT insp_lot_date, ud_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
+    cur.execute(sql, params+[limit,offset]); raw=cur.fetchall(); conn.close()
     rows=[]
     for r in raw:
         rows.append({'insp_lot_date':r[0] or '', 'ud_date':r[1] or '', 'heat_no':r[2] or '', 'batch_no':r[3] or '', 'coil_lot':r[3] or '', 'work_center':r[4] or '', 'grade':r[5] or '', 'main_defect':r[6] or '', 'defect_intensity':r[7] or '', 'quality_decision':r[8] or '', 'output_weight':float(r[9] or 0)})
@@ -1770,6 +1777,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "public, max-age=31536000, immutable")
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self._write_body(body)
+                return
             else:
                 self.send_error(404)
         # Static browser identity assets (favicon / PWA manifest).
@@ -1792,8 +1800,11 @@ class Handler(BaseHTTPRequestHandler):
                     body = f.read()
                 self.send_response(200)
                 self.send_header("Content-Type", mime)
-                self.send_header("Cache-Control", "public, max-age=3600")
+                cache_value = "public, max-age=31536000, immutable" if path.endswith((".png", ".ico")) else "public, max-age=3600"
+                self.send_header("Cache-Control", cache_value)
+                self.send_header("X-Content-Type-Options", "nosniff")
                 self._write_body(body)
+                return
             else:
                 self.send_error(404)
         elif path == "/" or path == "/index.html":
@@ -1833,11 +1844,20 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/drilldown":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             try:
-                metric = qs.get('metric',''); drill_value = qs.get('drill_value')
-                rows = _drilldown_rows(filters, metric, drill_value, limit=5000)
-                unique_heats={str(r.get('heat_no','')).strip().upper() for r in rows if str(r.get('heat_no','')).strip()}
-                total_weight=sum(float(r.get('output_weight') or 0) for r in rows)
-                self._send_json({'count':len(unique_heats),'row_count':len(rows),'total_weight':total_weight,'rows':rows,'scope':_filter_summary(filters)})
+                metric = qs.get('metric',''); drill_value = qs.get('drill_value'); page=max(1,int(qs.get('page','1') or 1)); page_size=min(500,max(50,int(qs.get('page_size','250') or 250)))
+                offset=(page-1)*page_size
+                where_sql, base_params=build_where(filters); clauses=[]; extra=[]
+                if metric in {'Defect Coils','Defect Rate'}: clauses.append("main_defect <> '' AND main_defect <> 'NO DEFECT'")
+                elif metric in {'First Pass Yield % (Prime%)'}: clauses.append("quality_decision = ?"); extra.append('PRIME')
+                elif metric in {'Hold for Decision % Qty','Hold For Decision Qty (MT)'}: clauses.append("quality_decision = ?"); extra.append('HOLD FOR DECISION')
+                elif metric in {'Reject Qty (MT)','Reject % Qty'}: clauses.append("quality_decision = ?"); extra.append('REJECT')
+                elif metric == 'decision_category': clauses.append("quality_decision = ?"); extra.append(drill_value or '')
+                elif metric == 'defect_category': clauses.append("main_defect = ?"); extra.append(drill_value or '')
+                elif metric == 'heat_detail': clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
+                if clauses: where_sql=where_sql+(' AND ' if where_sql else 'WHERE ')+' AND '.join(clauses); base_params+=extra
+                conn=get_conn(); cur=conn.cursor(); cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}",base_params); total_rows,total_coils,total_weight=cur.fetchone(); conn.close()
+                rows=_drilldown_rows(filters, metric, drill_value, limit=page_size, offset=offset)
+                self._send_json({'count':int(total_coils or 0),'row_count':int(total_rows or 0),'total_weight':float(total_weight or 0),'rows':rows,'scope':_filter_summary(filters),'page':page,'page_size':page_size,'total_pages':max(1,(int(total_rows or 0)+page_size-1)//page_size)})
             except Exception as e:
                 self._send_json({'error':str(e)}, status=500)
         elif path == "/api/drilldown/export":
@@ -1851,6 +1871,33 @@ class Handler(BaseHTTPRequestHandler):
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
             except Exception as e:
                 self._send_json({'error':str(e)}, status=500)
+        elif path == "/api/qcr":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            cache_key = "qcr:" + json.dumps(filters, sort_keys=True, separators=(",", ":"))
+            now = time.time(); hit = RESPONSE_CACHE.get(cache_key)
+            if hit and now-hit[0] < RESPONSE_CACHE_TTL:
+                self._send_json(hit[1]); return
+            try:
+                payload = {"k": compute_kpis(filters), "d": compute_defect_analysis(filters), "w": compute_work_center_grade(filters), "m": compute_monthly_trend(filters), "fr": compute_data_freshness(filters)}
+                RESPONSE_CACHE[cache_key] = (now, payload)
+                if len(RESPONSE_CACHE) > 100:
+                    oldest = sorted(RESPONSE_CACHE.items(), key=lambda x:x[1][0])[:20]
+                    for k,_ in oldest: RESPONSE_CACHE.pop(k, None)
+                self._send_json(payload)
+            except Exception as e: self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/root_cause":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}; defect = qs.get("defect", "").strip()
+            if not defect: self._send_json({"error":"defect required"}, status=400); return
+            try:
+                where, params = build_where(filters)
+                conn=get_conn(); cur=conn.cursor(); extra=(where + (" AND " if where else "WHERE ") + "main_defect = ?")
+                p=params+[defect]
+                cur.execute(f"SELECT grade, work_center, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty FROM disposition {extra} GROUP BY grade,work_center ORDER BY qty DESC LIMIT 10",p)
+                paths=[{"grade":r[0] or "—","work_center":r[1] or "—","coils":int(r[2] or 0),"qty":float(r[3] or 0)} for r in cur.fetchall()]
+                cur.execute(f"SELECT heat_no,batch_no,grade,work_center,COALESCE(SUM(output_weight),0) qty,COUNT(*) rows FROM disposition {extra} GROUP BY heat_no,batch_no,grade,work_center ORDER BY qty DESC LIMIT 20",p)
+                records=[{"heat_no":r[0] or "","batch_no":r[1] or "","grade":r[2] or "—","work_center":r[3] or "—","qty":float(r[4] or 0),"rows":int(r[5] or 0)} for r in cur.fetchall()]
+                conn.close(); self._send_json({"defect":defect,"paths":paths,"records":records})
+            except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/data_freshness":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             try: self._send_json(compute_data_freshness(filters))

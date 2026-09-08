@@ -289,30 +289,33 @@ function saveCurrentView(){const name=prompt('Enter a name for this filter view:
 function manageSavedViews(){const views=savedViews(); const names=Object.keys(views); if(!names.length){alert('No saved views yet.');return;} const name=prompt('Enter the exact saved view name to delete:\n\n'+names.join('\n')); if(name&&views[name]){delete views[name];localStorage.setItem('qdash_saved_views',JSON.stringify(views));renderSavedViews();}}
 function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); document.querySelectorAll('.filter-field').forEach(field=>{const key=field.dataset.filterKey; const val=currentFilters[key]||'All'; const span=field.querySelector('.filter-trigger span'); if(span){const opts=[...field.querySelectorAll('.filter-option')]; const match=opts.find(o=>o.dataset.value===val); span.textContent=match?match.textContent:val;}}); updateActiveFilterBadge(); triggerFilterRefresh();}
 function drilldownFiltersQuery(extra={}){const p=new URLSearchParams(currentFilters); Object.keys(extra).forEach(k=>p.set(k,extra[k])); return p.toString();}
-function openDrilldown(metric, title, extra={}){
-  const modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
-  document.getElementById('drillTitle').textContent=title||'Underlying Records';
-  document.getElementById('drillSubtitle').textContent=activeFilterSummary();
+let drillState={metric:'',title:'',extra:{},page:1};
+function renderDrillPage(page=1){
+  const {metric,title,extra}=drillState, modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
+  drillState.page=page; document.getElementById('drillTitle').textContent=title||'Underlying Records'; document.getElementById('drillSubtitle').textContent=activeFilterSummary();
   content.innerHTML='<div class="drill-empty">Loading underlying records…</div>'; document.getElementById('drillCount').textContent='Loading…';
-  const qs=drilldownFiltersQuery(Object.assign({metric},extra));
-  document.getElementById('drillExportBtn').href='/api/drilldown/export?'+qs;
-  modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+  const qs=drilldownFiltersQuery(Object.assign({metric,page,page_size:250},extra)); document.getElementById('drillExportBtn').href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric},extra));
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
     if(data.error)throw new Error(data.error); document.getElementById('drillCount').textContent=Number(data.count||0).toLocaleString()+' coils'; document.getElementById('drillScope').textContent=(data.scope||'')+' • '+Number(data.row_count||data.rows?.length||0).toLocaleString()+' records';
     if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">No underlying records found for this KPI/selection.</div>';return;}
-    const esc=v=>String(v??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
+    const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     const fmtDate=v=>{const s=String(v||''); if(/^\d{4}-\d{2}-\d{2}/.test(s)){const [y,m,d]=s.slice(0,10).split('-'); return `${d}-${m}-${y}`;} return s;};
     const heads=['Date','Heat No','Batch No','Work Center','Grade','Main Defect','Defect Intensity','Decision','Weight (MT)'];
     let html='<div class="table-scroll"><table class="drill-table"><thead><tr>'+heads.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
     data.rows.forEach(r=>{const heat=esc(r.heat_no); html+=`<tr><td>${esc(fmtDate(r.insp_lot_date))}</td><td><button class="heat-detail-btn" type="button" data-heat="${heat}">${heat||'—'}</button></td><td>${esc(r.batch_no||r.coil_lot)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity||'—')}</td><td>${esc(r.quality_decision)}</td><td>${Number(r.output_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr>`});
-    html+=`</tbody><tfoot><tr class="grand-total-row"><td colspan="2">Grand Total — ${Number(data.count||0).toLocaleString()} coils</td><td></td><td></td><td></td><td></td><td></td><td>Records: ${Number(data.row_count||data.rows.length).toLocaleString()}</td><td>${Number(data.total_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr></tfoot></table></div>`; content.innerHTML=html;
+    html+=`</tbody><tfoot><tr class="grand-total-row"><td colspan="2">Grand Total — ${Number(data.count||0).toLocaleString()} coils</td><td></td><td></td><td></td><td></td><td></td><td>Records: ${Number(data.row_count||0).toLocaleString()}</td><td>${Number(data.total_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr></tfoot></table></div>`;
+    if(Number(data.total_pages||1)>1) html+=`<div class="drill-pagination"><button type="button" data-drill-page="${Math.max(1,Number(data.page||1)-1)}" ${Number(data.page||1)<=1?'disabled':''}>‹ Previous</button><span>Page ${Number(data.page||1)} of ${Number(data.total_pages||1)}</span><button type="button" data-drill-page="${Math.min(Number(data.total_pages||1),Number(data.page||1)+1)}" ${Number(data.page||1)>=Number(data.total_pages||1)?'disabled':''}>Next ›</button></div>`;
+    content.innerHTML=html;
   }).catch(e=>{content.innerHTML='<div class="drill-empty">Unable to load records. '+String(e.message||e)+'</div>';document.getElementById('drillCount').textContent='Error';});
 }
+function openDrilldown(metric,title,extra={}){ drillState={metric,title,extra,page:1}; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); renderDrillPage(1); }
+
 function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');}}
+document.getElementById('qcrDefects')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-defect-btn');if(b)loadRootCause(b.dataset.defect||'');});
 function wireDrilldown(){
   document.getElementById('drillCloseBtn')?.addEventListener('click',closeDrilldown);
   document.getElementById('drillModal')?.addEventListener('click',e=>{if(e.target.id==='drillModal')closeDrilldown();});
-document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.target.closest('.heat-detail-btn');if(!b)return;const heat=b.dataset.heat;if(heat)openDrilldown('heat_detail',`Heat ${heat} — Complete History`,{drill_value:heat});});
+document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.target.closest('.heat-detail-btn');if(b){const heat=b.dataset.heat;if(heat)openDrilldown('heat_detail',`Heat ${heat} — Complete History`,{drill_value:heat});return;} const pg=e.target.closest('[data-drill-page]');if(pg&&!pg.disabled)renderDrillPage(Number(pg.dataset.drillPage));});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrilldown();});
   document.getElementById('saveViewBtn')?.addEventListener('click',saveCurrentView);
   document.getElementById('clearViewsBtn')?.addEventListener('click',manageSavedViews);
@@ -884,25 +887,42 @@ const qcrCoreCache = new Map();
 window.qcrLoadToken=0;
 function qcrCacheKey(filters){ return new URLSearchParams(filters).toString(); }
 async function fetchQcrCore(filters, signal){
-  const key=qcrCacheKey(filters);
-  const cached=qcrCoreCache.get(key);
+  const key=qcrCacheKey(filters); const cached=qcrCoreCache.get(key);
   if(cached && (Date.now()-cached.ts)<15000) return cached.data;
   const params=new URLSearchParams(filters).toString();
-  const [kRes,dRes,wRes,mRes,frRes]=await Promise.all([
-    fetch('/api/kpis?'+params,{signal}),
-    fetch('/api/defect_analysis?'+params,{signal}),
-    fetch('/api/work_center_grade?'+params,{signal}),
-    fetch('/api/monthly_trend?'+params,{signal}),
-    fetch('/api/data_freshness?'+params,{signal})
-  ]);
-  const [k,d,w,m,fr]=await Promise.all([kRes.json(),dRes.json(),wRes.json(),mRes.json(),frRes.json()]);
-  if(k.error||d.error||w.error||m.error||fr.error) throw new Error(k.error||d.error||w.error||m.error||fr.error||'Control Room data error');
-  const data={k,d,w,m,fr}; qcrCoreCache.set(key,{ts:Date.now(),data}); return data;
+  const r=await fetch('/api/qcr?'+params,{signal}); const data=await r.json();
+  if(data.error) throw new Error(data.error); qcrCoreCache.set(key,{ts:Date.now(),data}); return data;
 }
 function prefetchQcrCore(filters){
   const key=qcrCacheKey(filters), cached=qcrCoreCache.get(key);
   if(cached && (Date.now()-cached.ts)<15000) return;
   fetchQcrCore(filters).catch(()=>{});
+}
+function qcrRenderTrendPrediction(rows,d,w){
+  const el=document.getElementById('qcrTrendPrediction'); if(!el)return;
+  const valid=(rows||[]).filter(r=>Number.isFinite(Number(r.first_pass_yield_pct))); const recent=valid.slice(-4);
+  if(recent.length<3){el.innerHTML='<div class="qcr-empty">Need at least 3 monthly periods for trend intelligence.</div>';return;}
+  const fpy=recent.map(r=>Number(r.first_pass_yield_pct||0)); const rej=recent.map(r=>Number(r.reject_pct_qty||0));
+  const slope=a=>{const n=a.length, xm=(n-1)/2, ym=a.reduce((x,y)=>x+y,0)/n; return a.reduce((x,y,i)=>x+(i-xm)*(y-ym),0)/a.reduce((x,_,i)=>x+(i-xm)**2,0);};
+  const sf=slope(fpy), sr=slope(rej); const deteriorating=sf<-0.001 || sr>0.001; const stable=!deteriorating && Math.abs(sf)<0.0005 && Math.abs(sr)<0.0005;
+  const status=deteriorating?'⚠️ Deteriorating Trend':stable?'✓ Stable Trend':'↕ Mixed Trend';
+  const cls=deteriorating?'bad':stable?'good':'amber'; const next=Math.max(0,Math.min(1,fpy.at(-1)+sf));
+  const topDef=(d?.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0))[0]; const topWc=(w?.by_work_center||[]).filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0]; el.innerHTML=`<div class="qcr-intel-status ${cls}">${status}</div><div class="qcr-intel-main">FPY ${ (fpy.at(-1)*100).toFixed(2)}% <span>→ projected ${(next*100).toFixed(2)}%</span></div><div class="qcr-intel-meta">Last ${recent.length} months: ${recent.map(r=>r.name).join(' → ')}</div><div class="qcr-intel-meta">${sf<0?'FPY is trending down.':'FPY is not declining.'} ${sr>0?'Reject % is increasing.':'Reject % is not increasing.'}</div><div class="qcr-contributor"><b>Main contributors:</b> Grade ${w?.by_grade?.slice().sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0]?.name||'—'} • Defect ${topDef?.defect||'—'} • Work Center ${topWc?.name||'—'}</div>`;
+}
+function qcrRenderKpiRanking(kpis){
+  const el=document.getElementById('qcrKpiRanking'); if(!el)return;
+  const rows=(kpis||[]).map(k=>{const c=KPI_TARGETS[k.label]; if(!c||c.target==null)return null; const v=Number(k.value||0),t=Number(c.target),gap=(c.direction||'higher')==='lower'?v-t:v-t; const status=qcrStatus(k.label,v); const severity=status==='bad'?3:status==='amber'?2:1; const gapPct=Math.abs(gap)/(Math.abs(t)||1); return {...k,status,severity,gap,gapPct};}).filter(Boolean).sort((a,b)=>b.severity-a.severity||b.gapPct-a.gapPct);
+  el.innerHTML=rows.map((k,i)=>`<div class="qcr-kpi-rank"><b>${i+1}. ${k.label}</b><span>${qcrFmtKpi(k)} • Target ${qcrTargetText(k.label)}</span><em class="${k.status}">${k.status==='bad'?'CRITICAL':k.status==='amber'?'WARNING':'ON TARGET'}</em></div>`).join('')||'<div class="qcr-empty">No target-configured KPIs.</div>';
+}
+function loadRootCause(defect){
+  const el=document.getElementById('qcrRootCause'); if(!el||!defect)return; el.innerHTML='<div class="qcr-empty">Loading root-cause path…</div>';
+  const p=new URLSearchParams(currentFilters);p.set('defect',defect); fetch('/api/root_cause?'+p.toString(),{cache:'no-store'}).then(r=>r.json()).then(d=>{
+    if(d.error)throw new Error(d.error); const paths=d.paths||[]; const rec=d.records||[];
+    const top=paths[0]; let html=`<div class="qcr-root-title">${defect}</div>`;
+    if(top) html+=`<div class="qcr-root-path"><span>Grade<br><b>${top.grade}</b></span><i>→</i><span>Work Center<br><b>${top.work_center}</b></span><i>→</i><span>Heat / Batch<br><b>${rec[0]?.heat_no||'—'} / ${rec[0]?.batch_no||'—'}</b></span></div>`;
+    html+=`<div class="qcr-root-meta">Top contributing combinations</div><div class="qcr-root-list">${paths.slice(0,6).map((x,i)=>`<div><b>#${i+1} ${x.grade}</b><span>${x.work_center} • ${x.qty.toFixed(2)} MT • ${x.coils.toLocaleString()} coils</span></div>`).join('')}</div>`;
+    el.innerHTML=html;
+  }).catch(e=>{el.innerHTML='<div class="qcr-empty">Root-cause data unavailable.</div>';});
 }
 async function loadQcrSecondary(filterSnapshot, d, w, m, signal, loadToken){
   try{
@@ -981,12 +1001,13 @@ async function loadControlRoom(signal){
 
     qcrRenderBreaches(critical);
     const defectTotalQty=Number(d.totals?.qty||0); const topDefects=(d.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0)).slice(0,5); const qcrDefEl=document.getElementById('qcrDefects');
-    if(!topDefects.length){qcrDefEl.innerHTML='<div class="qcr-empty">No defect data available for current selection.</div>';}else{qcrDefEl.innerHTML=topDefects.map((r,i)=>{const qty=Number(r.qty||0);const pct=defectTotalQty?qty/defectTotalQty:0;return `<div class="qcr-row"><div class="qcr-rank">${i+1}</div><div class="qcr-name">${String(r.defect??'—')}</div><div class="qcr-metric"><span class="qcr-qty">${qty.toFixed(2)} MT</span><span class="qcr-pct">${(pct*100).toFixed(2)}% of Defect Qty • ${Number(r.records||0).toLocaleString()} coils</span></div></div>`;}).join('');}
+    if(!topDefects.length){qcrDefEl.innerHTML='<div class="qcr-empty">No defect data available for current selection.</div>';}else{qcrDefEl.innerHTML=topDefects.map((r,i)=>{const qty=Number(r.qty||0);const pct=defectTotalQty?qty/defectTotalQty:0;return `<button class="qcr-row qcr-defect-btn" data-defect="${String(r.defect??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><span class="qcr-rank">${i+1}</span><span class="qcr-name">${String(r.defect??'—')}</span><span class="qcr-metric"><span class="qcr-qty">${qty.toFixed(2)} MT</span><span class="qcr-pct">${(pct*100).toFixed(2)}% of Defect Qty • ${Number(r.records||0).toLocaleString()} coils</span></span></button>`;}).join('');}
 
     const worstWc=[...(w.by_work_center||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
     const worstGr=[...(w.by_grade||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
     qcrRenderList('qcrWorkCenters',worstWc,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
     qcrRenderList('qcrGrades',worstGr,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
+    qcrRenderTrendPrediction(m.rows||[],d,w); qcrRenderKpiRanking(critical);
 
     // Secondary intelligence is deliberately deferred so the main QCR paints immediately.
     const loadToken=++window.qcrLoadToken;
