@@ -313,8 +313,8 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 }
 
 /* Final requested typography adjustments */
-.executive-kicker{font-weight:800!important;}
-.filters .field label{font-size:12px!important;font-weight:700!important;}
+.executive-kicker{font-weight:800!important;font-size:12px!important;letter-spacing:1.25px!important;}
+.filters .field label{font-size:13px!important;font-weight:700!important;}
 .filters .field label .filter-icon,.filters .field label .kpi-icon{font-size:14px!important;}
 .filter-trigger{font-size:13px!important;}
 .filter-trigger .chevron{font-size:11px!important;}
@@ -342,6 +342,10 @@ body::before{
 body > *{position:relative;z-index:1;}
 @media(max-width:900px){body::before{background-size:min(82vw,650px) auto;opacity:.09;}}
 @media(max-width:600px){body::before{background-size:min(94vw,520px) auto;opacity:.075;}}
+
+/* Disposition filter label — subtle emphasis */
+.filter-field[data-filter-key="quality_decision"] label,
+.filter-field[data-filter-key="disposition"] label{font-size:14px!important;font-weight:800!important;}
 </style>
 </head>
 <body>
@@ -568,7 +572,7 @@ async function loadFilters(){
   const container = document.getElementById("filters");
   container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 PDF</button><button id="exportCsvBtn" class="export-btn" type="button">📋 CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
-    const field = document.createElement("div"); field.className = "filter-field";
+    const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
     const label = document.createElement("label"); label.textContent = f.label;
     const control = document.createElement("div"); control.className = "filter-control";
     const trigger = document.createElement("button"); trigger.type="button"; trigger.className="filter-trigger";
