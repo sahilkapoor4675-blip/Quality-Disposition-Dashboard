@@ -21,21 +21,28 @@
 .hidden{display:none!important}@media(max-width:900px){.grid{grid-template-columns:1fr}.form-grid{grid-template-columns:repeat(2,minmax(150px,1fr))}.wide{grid-column:span 2}}@media(max-width:600px){.top{padding:16px;align-items:flex-start}.wrap{padding:0 12px}.form-grid{grid-template-columns:1fr}.wide{grid-column:span 1}.actions{flex-wrap:wrap}.brand h1{font-size:18px}}
 </style>
 <style id="jsl-watermark-style">
-/* JSL Quality Assurance watermark — subtle, fixed and non-interactive across the entire web app. */
+/* Exact JSL Jindal Stainless logo watermark — background only; all app UI stays above it. */
 html{background:#F8FAFC;}
 body{
-  background-image:url("jsl-watermark.png"),linear-gradient(180deg,#F8FAFC 0%,#F3F7FB 100%) !important;
-  background-repeat:no-repeat,no-repeat !important;
-  background-position:center center,center top !important;
-  background-size:min(58vw,760px) auto,100% 100% !important;
-  background-attachment:fixed,fixed !important;
+  background:linear-gradient(180deg,#F8FAFC 0%,#F3F7FB 100%) !important;
+  position:relative;
+  min-height:100vh;
 }
-@media (max-width:900px){
-  body{background-size:min(82vw,560px) auto,100% 100% !important;}
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background-image:url("jsl-watermark.png");
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-size:min(62vw,900px) auto;
+  opacity:.105;
 }
-@media (max-width:600px){
-  body{background-size:min(92vw,460px) auto,100% 100% !important;}
-}
+body > *{position:relative;z-index:1;}
+@media(max-width:900px){body::before{background-size:min(82vw,650px) auto;opacity:.09;}}
+@media(max-width:600px){body::before{background-size:min(94vw,520px) auto;opacity:.075;}}
 </style>
 </head>
 <body>
