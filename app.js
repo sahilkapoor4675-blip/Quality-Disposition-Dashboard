@@ -900,19 +900,27 @@ function prefetchQcrCore(filters){
 }
 function qcrRenderTrendPrediction(rows,d,w){
   const el=document.getElementById('qcrTrendPrediction'); if(!el)return;
-  const valid=(rows||[]).filter(r=>Number.isFinite(Number(r.first_pass_yield_pct))); const recent=valid.slice(-4);
-  if(recent.length<3){el.innerHTML='<div class="qcr-empty">Need at least 3 monthly periods for trend intelligence.</div>';return;}
-  const fpy=recent.map(r=>Number(r.first_pass_yield_pct||0)); const rej=recent.map(r=>Number(r.reject_pct_qty||0));
-  const slope=a=>{const n=a.length, xm=(n-1)/2, ym=a.reduce((x,y)=>x+y,0)/n; return a.reduce((x,y,i)=>x+(i-xm)*(y-ym),0)/a.reduce((x,_,i)=>x+(i-xm)**2,0);};
-  const sf=slope(fpy), sr=slope(rej); const deteriorating=sf<-0.001 || sr>0.001; const stable=!deteriorating && Math.abs(sf)<0.0005 && Math.abs(sr)<0.0005;
-  const status=deteriorating?'⚠️ Deteriorating Trend':stable?'✓ Stable Trend':'↕ Mixed Trend';
-  const cls=deteriorating?'bad':stable?'good':'amber'; const next=Math.max(0,Math.min(1,fpy.at(-1)+sf));
-  const topDef=(d?.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0))[0]; const topWc=(w?.by_work_center||[]).filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0]; el.innerHTML=`<div class="qcr-intel-status ${cls}">${status}</div><div class="qcr-intel-main">FPY ${ (fpy.at(-1)*100).toFixed(2)}% <span>→ projected ${(next*100).toFixed(2)}%</span></div><div class="qcr-intel-meta">Last ${recent.length} months: ${recent.map(r=>r.name).join(' → ')}</div><div class="qcr-intel-meta">${sf<0?'FPY is trending down.':'FPY is not declining.'} ${sr>0?'Reject % is increasing.':'Reject % is not increasing.'}</div><div class="qcr-contributor"><b>Main contributors:</b> Grade ${w?.by_grade?.slice().sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0]?.name||'—'} • Defect ${topDef?.defect||'—'} • Work Center ${topWc?.name||'—'}</div>`;
+  try{
+    const valid=Array.isArray(rows)?rows.filter(r=>Number.isFinite(Number(r?.first_pass_yield_pct))):[];
+    const recent=valid.slice(-4);
+    if(recent.length<3){el.innerHTML='<div class="qcr-empty">Need at least 3 monthly periods for trend intelligence.</div>';return;}
+    const fpy=recent.map(r=>Number(r.first_pass_yield_pct)||0), rej=recent.map(r=>Number(r.reject_pct_qty)||0);
+    const slope=a=>{const n=a.length,xm=(n-1)/2,ym=a.reduce((x,y)=>x+y,0)/n,den=a.reduce((x,_,i)=>x+(i-xm)*(i-xm),0);return den? a.reduce((x,y,i)=>x+(i-xm)*(y-ym),0)/den:0;};
+    const sf=slope(fpy),sr=slope(rej),deteriorating=sf<-0.001||sr>0.001,stable=!deteriorating&&Math.abs(sf)<0.0005&&Math.abs(sr)<0.0005;
+    const status=deteriorating?'⚠️ Deteriorating Trend':stable?'✓ Stable Trend':'↕ Mixed Trend',cls=deteriorating?'bad':stable?'good':'amber',next=Math.max(0,Math.min(1,fpy[fpy.length-1]+sf));
+    const grades=Array.isArray(w?.by_grade)?w.by_grade:[],wcs=Array.isArray(w?.by_work_center)?w.by_work_center:[],defs=Array.isArray(d?.register)?d.register:[];
+    const gr=grades.filter(x=>Number(x?.coils||0)>0).sort((a,b)=>Number(b?.reject_pct_qty||0)-Number(a?.reject_pct_qty||0))[0];
+    const wc=wcs.filter(x=>Number(x?.coils||0)>0).sort((a,b)=>Number(b?.reject_pct_qty||0)-Number(a?.reject_pct_qty||0))[0];
+    const df=defs.filter(x=>Number(x?.qty||0)>0).sort((a,b)=>Number(b?.qty||0)-Number(a?.qty||0))[0];
+    el.innerHTML=`<div class="qcr-intel-status ${cls}">${status}</div><div class="qcr-intel-main">FPY ${ (fpy[fpy.length-1]*100).toFixed(2)}% <span>→ projected ${(next*100).toFixed(2)}%</span></div><div class="qcr-intel-meta">Last ${recent.length} months: ${recent.map(r=>r.name).join(' → ')}</div><div class="qcr-intel-meta">${sf<0?'FPY is trending down.':'FPY is not declining.'} ${sr>0?'Reject % is increasing.':'Reject % is not increasing.'}</div><div class="qcr-contributor"><b>Main contributors:</b> Grade ${gr?.name||'—'} • Defect ${df?.defect||'—'} • Work Center ${wc?.name||'—'}</div>`;
+  }catch(e){console.error('QCR trend intelligence',e);el.innerHTML='<div class="qcr-empty">Trend intelligence unavailable.</div>';}
 }
 function qcrRenderKpiRanking(kpis){
   const el=document.getElementById('qcrKpiRanking'); if(!el)return;
-  const rows=(kpis||[]).map(k=>{const c=KPI_TARGETS[k.label]; if(!c||c.target==null)return null; const v=Number(k.value||0),t=Number(c.target),gap=(c.direction||'higher')==='lower'?v-t:v-t; const status=qcrStatus(k.label,v); const severity=status==='bad'?3:status==='amber'?2:1; const gapPct=Math.abs(gap)/(Math.abs(t)||1); return {...k,status,severity,gap,gapPct};}).filter(Boolean).sort((a,b)=>b.severity-a.severity||b.gapPct-a.gapPct);
-  el.innerHTML=rows.map((k,i)=>`<div class="qcr-kpi-rank"><b>${i+1}. ${k.label}</b><span>${qcrFmtKpi(k)} • Target ${qcrTargetText(k.label)}</span><em class="${k.status}">${k.status==='bad'?'CRITICAL':k.status==='amber'?'WARNING':'ON TARGET'}</em></div>`).join('')||'<div class="qcr-empty">No target-configured KPIs.</div>';
+  try{
+    const rows=(Array.isArray(kpis)?kpis:[]).map(k=>{const c=KPI_TARGETS[k.label];if(!c||c.target==null)return null;const v=Number(k.value||0),t=Number(c.target),status=qcrStatus(k.label,v),severity=status==='bad'?3:status==='amber'?2:1,gapPct=Math.abs(v-t)/(Math.abs(t)||1);return {...k,status,severity,gapPct};}).filter(Boolean).sort((a,b)=>b.severity-a.severity||b.gapPct-a.gapPct);
+    el.innerHTML=rows.length?rows.map((k,i)=>`<div class="qcr-kpi-rank"><b>${i+1}. ${k.label}</b><span>Actual ${qcrFmtKpi(k)} • Target ${qcrTargetText(k.label)} • Gap ${k.gapPct>=0?'':''}${((Number(k.value||0)-Number(KPI_TARGETS[k.label].target||0))*100).toFixed(2)} pp</span><em class="${k.status}">${k.status==='bad'?'CRITICAL':k.status==='amber'?'WARNING':'ON TARGET'}</em></div>`).join(''):'<div class="qcr-empty">No target-configured KPIs.</div>';
+  }catch(e){console.error('QCR KPI intelligence',e);el.innerHTML='<div class="qcr-empty">KPI target intelligence unavailable.</div>';}
 }
 function loadRootCause(defect){
   const el=document.getElementById('qcrRootCause'); if(!el||!defect)return; el.innerHTML='<div class="qcr-empty">Loading root-cause path…</div>';
@@ -969,7 +977,7 @@ async function loadControlRoom(signal){
   const filterSnapshot={...currentFilters};
   const params=new URLSearchParams(filterSnapshot).toString();
   try{
-    const {k,d,w,m,fr}=await fetchQcrCore(filterSnapshot,signal);
+    const data=await fetchQcrCore(filterSnapshot,signal); const {k,d,w,m,fr}=data;
     document.getElementById('qcrFreshness').textContent=`Data Through: ${fr.data_through_display||'—'} • Filtered Records: ${Number(fr.filtered_records||0).toLocaleString()}`;
     const criticalLabels=['First Pass Yield % (Prime%)','Defect Rate','Reject % Qty','Hold for Decision % Qty','Salvage % Qty','Rework % Qty'];
     const critical=(k.kpis||[]).filter(x=>criticalLabels.includes(x.label));
@@ -1007,19 +1015,17 @@ async function loadControlRoom(signal){
     const worstGr=[...(w.by_grade||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
     qcrRenderList('qcrWorkCenters',worstWc,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
     qcrRenderList('qcrGrades',worstGr,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
-    // Keep the proven Month vs Previous Month table visible on every QCR load.
-    // The monthly trend API deliberately ignores the Month filter, so this also
-    // remains available when a specific month is selected.
-    qcrRenderComparison(m.rows||[]);
-    qcrRenderTrendPrediction(m.rows||[],d,w); qcrRenderKpiRanking(critical);
-
-    // Secondary intelligence is deliberately deferred so the main QCR paints immediately.
+    // All QCR intelligence is now returned by the consolidated endpoint so these
+    // sections never depend on a chain of secondary browser requests.
+    qcrRenderComparison((m&&m.rows)||[]);
+    qcrRenderTrendPrediction((m&&m.rows)||[],d,w); qcrRenderKpiRanking(critical);
+    const intel=data?.intel||{};
+    const gc=document.getElementById('qcrGradeConcentration');
+    if(gc){const rows=Array.isArray(intel.grade_concentration)?intel.grade_concentration:[];gc.innerHTML=rows.length?'<div class="qcr-subtitle">Problem concentration</div>'+rows.map(x=>`<div class="qcr-grade-item"><b>${x.grade||'—'}</b><span>Defect: ${x.defect||'—'}</span><span>WC: ${x.wc||'—'}</span><em>Reject ${(Number(x.reject_pct||0)*100).toFixed(2)}%</em></div>`).join(''):'<div class="qcr-empty">No grade concentration available.</div>';}
+    const why=document.getElementById('qcrWhyChanged');
+    if(why){const z=intel.why_changed;if(z&&z.current&&z.previous){const fc=z.defect_contributor,fw=z.wc_contributor;why.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b><span>${fc?.name?`Main contributor: <b>${fc.name}</b> ${Number(fc.change_pp||0)>=0?'+':''}${Number(fc.change_pp||0).toFixed(2)} pp defect share`:'No dominant defect contributor identified.'}</span></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b><span>${fw?.name?`Major contributor: <b>${fw.name}</b> ${Number(fw.change_pp||0)>=0?'+':''}${Number(fw.change_pp||0).toFixed(2)} pp Reject`:'No dominant work-center contributor identified.'}</span></div></div>`;}else{why.innerHTML='<div class="qcr-why-title">Why changed?</div><div class="qcr-empty">Previous month comparison is not available for this selection.</div>';}}
     const loadToken=++window.qcrLoadToken;
-    const secondarySignalController=new AbortController();
-    setTimeout(()=>{
-      if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect);
-      loadQcrSecondary(filterSnapshot,d,w,m,secondarySignalController.signal,loadToken);
-    },0);
+    if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect);
 
     // Improvement Opportunities: ranked, action-oriented and de-duplicated.
     const opp=[];

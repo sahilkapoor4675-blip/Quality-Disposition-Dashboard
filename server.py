@@ -1651,6 +1651,87 @@ def _pdf_report(payload):
     doc.build(story); return bio.getvalue()
 
 
+
+def compute_qcr_intelligence(filters, monthly, defects, wcg):
+    """Build all secondary QCR intelligence in one server response.
+    Keeps the browser from making a chain of secondary API calls and guarantees
+    the QCR sections have data on first paint."""
+    rows = list((monthly or {}).get("rows") or [])
+    selected = str(filters.get("month") or "All")
+    idx = len(rows) - 1
+    if selected and selected != "All":
+        for i, r in enumerate(rows):
+            if str(r.get("name")) == selected:
+                idx = i
+                break
+    cur = rows[idx] if 0 <= idx < len(rows) else None
+    prev = rows[idx-1] if cur is not None and idx > 0 else None
+
+    # KPI ranking is deterministic and uses the same configured targets as the dashboard.
+    critical_labels = ["First Pass Yield % (Prime%)", "Defect Rate", "Reject % Qty",
+                       "Hold for Decision % Qty", "Salvage % Qty", "Rework % Qty"]
+    kpis = [x for x in ((monthly or {}).get("_kpis") or []) if x.get("label") in critical_labels]
+    # Caller supplies KPI list separately; leave this field for compatibility.
+    ranking = []
+
+    # Why changed: compute the two strongest contributors for the selected month.
+    why = None
+    if cur and prev:
+        try:
+            # Compare defect share by month in a single grouped query pair.
+            def month_contributors(month_name):
+                conn = get_conn(); c = conn.cursor()
+                where, params = build_where(filters, exclude={"month"})
+                where = where + (" AND " if where else "WHERE ") + "month = ?"
+                pp = list(params) + [month_name]
+                c.execute(f"SELECT main_defect, COALESCE(SUM(output_weight),0) qty FROM disposition {where} AND main_defect <> '' AND main_defect <> 'NO DEFECT' GROUP BY main_defect ORDER BY qty DESC LIMIT 10", pp)
+                defs = [(r[0] or "—", float(r[1] or 0)) for r in c.fetchall()]
+                c.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {where}", pp)
+                total = float(c.fetchone()[0] or 0)
+                c.execute(f"SELECT work_center, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {where} GROUP BY work_center ORDER BY reject_qty DESC LIMIT 10", pp)
+                wcs = [(r[0] or "—", int(r[1] or 0), float(r[2] or 0), float(r[3] or 0)) for r in c.fetchall()]
+                c.close(); conn.close()
+                return defs, total, wcs
+            dc, tc, wc = month_contributors(cur["name"])
+            dp, tp, wp = month_contributors(prev["name"])
+            olddef={n:q for n,q in dp}; newdef={n:q for n,q in dc}
+            candidates=[(n, ((newdef.get(n,0)/tc if tc else 0)-(olddef.get(n,0)/tp if tp else 0))*100) for n in set(newdef)|set(olddef)]
+            candidates.sort(key=lambda x:abs(x[1]), reverse=True)
+            oldwc={n:q for n,_,q,_ in wp}; newwc={n:q for n,_,q,_ in wc}
+            oldrej={n:(r/tp if tp else 0) for n,_,_,r in wp}; newrej={n:(r/tc if tc else 0) for n,_,_,r in wc}
+            wcc=[(n,(newrej.get(n,0)-oldrej.get(n,0))*100) for n in set(newrej)|set(oldrej)]
+            wcc.sort(key=lambda x:abs(x[1]), reverse=True)
+            fpyd=(float(cur.get("first_pass_yield_pct") or 0)-float(prev.get("first_pass_yield_pct") or 0))*100
+            rejd=(float(cur.get("reject_pct_qty") or 0)-float(prev.get("reject_pct_qty") or 0))*100
+            why={"current":cur,"previous":prev,"fpy_change_pp":fpyd,"reject_change_pp":rejd,
+                 "defect_contributor":{"name":candidates[0][0],"change_pp":candidates[0][1]} if candidates else None,
+                 "wc_contributor":{"name":wcc[0][0],"change_pp":wcc[0][1]} if wcc else None}
+        except Exception:
+            why={"current":cur,"previous":prev,"fpy_change_pp":(float(cur.get("first_pass_yield_pct") or 0)-float(prev.get("first_pass_yield_pct") or 0))*100,
+                 "reject_change_pp":(float(cur.get("reject_pct_qty") or 0)-float(prev.get("reject_pct_qty") or 0))*100}
+
+    # Grade concentration: one grouped query instead of N grade API requests.
+    grade_concentration=[]
+    try:
+        conn=get_conn(); c=conn.cursor(); where,params=build_where(filters)
+        sql=f"""SELECT grade, main_defect, work_center, COALESCE(SUM(output_weight),0) qty,
+                       COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty
+                FROM disposition {where}
+                GROUP BY grade, main_defect, work_center
+                ORDER BY reject_qty DESC, qty DESC"""
+        c.execute(sql,params); grouped={}
+        for r in c.fetchall():
+            g=r[0] or "—"; q=float(r[3] or 0); rq=float(r[4] or 0)
+            if g not in grouped: grouped[g]={"grade":g,"defect":r[1] or "—","wc":r[2] or "—","qty":0.0,"reject_qty":0.0}
+            grouped[g]["qty"] += q; grouped[g]["reject_qty"] += rq
+            if len(grouped)>=5: pass
+        for x in grouped.values(): x["reject_pct"]=(x["reject_qty"]/x["qty"] if x["qty"] else 0)
+        grade_concentration=sorted(grouped.values(),key=lambda x:x["reject_pct"],reverse=True)[:3]
+        c.close();conn.close()
+    except Exception:
+        grade_concentration=[]
+    return {"comparison":{"current":cur,"previous":prev,"rows":rows},"why_changed":why,"grade_concentration":grade_concentration}
+
 HTML_PAGE = None  # loaded lazily from index_template
 
 
@@ -1881,7 +1962,16 @@ class Handler(BaseHTTPRequestHandler):
                 # Consolidated QCR endpoint: one request for all core sections.
                 # Keep the DB work in one process/connection sequence for SQLite stability;
                 # the response is cached briefly and the frontend renders sections immediately.
-                payload = {"k": compute_kpis(filters), "d": compute_defect_analysis(filters), "w": compute_work_center_grade(filters), "m": compute_monthly_trend(filters), "fr": compute_data_freshness(filters)}
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=5) as ex:
+                    fk=ex.submit(compute_kpis, filters)
+                    fd=ex.submit(compute_defect_analysis, filters)
+                    fw=ex.submit(compute_work_center_grade, filters)
+                    fm=ex.submit(compute_monthly_trend, filters)
+                    ff=ex.submit(compute_data_freshness, filters)
+                    k,d,w,m,fr=fk.result(),fd.result(),fw.result(),fm.result(),ff.result()
+                intel=compute_qcr_intelligence(filters, m, d, w)
+                payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel}
                 RESPONSE_CACHE[cache_key] = (now, payload)
                 if len(RESPONSE_CACHE) > 100:
                     oldest = sorted(RESPONSE_CACHE.items(), key=lambda x:x[1][0])[:20]

@@ -10,7 +10,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quality Disposition Control Dashboard</title>
-<link rel="stylesheet" href="/app.css?v=3">
+<link rel="stylesheet" href="/app.css?v=4">
 </head>
 <body>
 </div></div>
@@ -61,11 +61,11 @@
       <div class="qcr-card"><h3>🏆 Top 5 Defects</h3><div class="qcr-body"><div class="qcr-list" id="qcrDefects"></div></div></div>
       <div class="qcr-card"><h3>🏭 Worst Work Centers</h3><div class="qcr-body"><div class="qcr-list" id="qcrWorkCenters"></div></div></div>
       <div class="qcr-card"><h3>🧪 Worst Grades</h3><div class="qcr-body"><div class="qcr-list" id="qcrGrades"></div><div id="qcrGradeConcentration" class="qcr-grade-concentration"></div></div></div>
-      <div class="qcr-card"><h3>📈 Current Month vs Previous Month</h3><div class="qcr-body"><div id="qcrComparison"></div><div id="qcrWhyChanged" class="qcr-why-changed"></div></div></div>
+      <div class="qcr-card qcr-comparison-card"><h3>📈 Current Month vs Previous Month</h3><div class="qcr-body"><div id="qcrComparison"></div><div id="qcrWhyChanged" class="qcr-why-changed"></div></div></div>
       <div class="qcr-card qcr-wide"><h3>💡 Improvement Opportunities</h3><div class="qcr-body"><div class="qcr-list" id="qcrOpportunities"></div></div></div>
-      <div class="qcr-card"><h3>📈 Quality Trend Intelligence</h3><div class="qcr-body"><div id="qcrTrendPrediction"></div></div></div>
-      <div class="qcr-card"><h3>🎯 KPI Target Intelligence</h3><div class="qcr-body"><div id="qcrKpiRanking"></div></div></div>
-      <div class="qcr-card qcr-wide"><h3>🔥 Pareto → Root Cause</h3><div class="qcr-body"><div id="qcrRootCause" class="qcr-root-cause"><div class="qcr-empty">Select a defect from Top 5 Defects to investigate its Grade → Work Center → Heat → Batch path.</div></div></div></div>
+      <div class="qcr-card qcr-intelligence-card"><h3>📈 Quality Trend Intelligence</h3><div class="qcr-body"><div id="qcrTrendPrediction"></div></div></div>
+      <div class="qcr-card qcr-intelligence-card"><h3>🎯 KPI Target Intelligence</h3><div class="qcr-body"><div id="qcrKpiRanking"></div></div></div>
+      <div class="qcr-card qcr-wide qcr-root-card"><h3>🔥 Pareto → Root Cause</h3><div class="qcr-body"><div id="qcrRootCause" class="qcr-root-cause"><div class="qcr-empty">Select a defect from Top 5 Defects to investigate its Grade → Work Center → Heat → Batch path.</div></div></div></div>
     </div>
   </div>
 
@@ -222,6 +222,6 @@
   <div class="footer-note">Data source: Disposition Data (live database) &nbsp;•&nbsp; Runs locally via Python HTTP server + SQLite</div>
 </div>
 
-<script src="/app.js?v=3" defer></script>
+<script src="/app.js?v=4" defer></script>
 </body>
 </html>
