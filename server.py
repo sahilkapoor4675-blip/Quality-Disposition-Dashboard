@@ -1662,17 +1662,30 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
         clauses.append("quality_decision = ?"); extra.append(drill_value or '')
     elif metric == 'defect_category':
         clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(drill_value or '')
+    elif metric == 'heat_detail':
+        clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
     # Total Coils / Output Quantity / unknown => current filtered selection.
     if clauses:
         where_sql = where_sql + (' AND ' if where_sql else 'WHERE ') + ' AND '.join(clauses)
         params = params + extra
     conn=get_conn(); cur=conn.cursor()
-    sql=f"SELECT insp_lot_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ?"
+    sql=f"SELECT insp_lot_date, ud_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ?"
     cur.execute(sql, params+[limit]); raw=cur.fetchall(); conn.close()
     rows=[]
     for r in raw:
-        rows.append({'insp_lot_date':r[0] or '', 'heat_no':r[1] or '', 'batch_no':r[2] or '', 'coil_lot':r[2] or '', 'work_center':r[3] or '', 'grade':r[4] or '', 'main_defect':r[5] or '', 'defect_intensity':r[6] or '', 'quality_decision':r[7] or '', 'output_weight':float(r[8] or 0)})
+        rows.append({'insp_lot_date':r[0] or '', 'ud_date':r[1] or '', 'heat_no':r[2] or '', 'batch_no':r[3] or '', 'coil_lot':r[3] or '', 'work_center':r[4] or '', 'grade':r[5] or '', 'main_defect':r[6] or '', 'defect_intensity':r[7] or '', 'quality_decision':r[8] or '', 'output_weight':float(r[9] or 0)})
     return rows
+
+def compute_data_freshness(filters):
+    conn=get_conn(); cur=conn.cursor(); where_sql, params=build_where(filters)
+    cur.execute(f"SELECT COUNT(*), MAX(NULLIF(TRIM(COALESCE(ud_date,'')),'')), MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition {where_sql}", params)
+    rec, max_ud, max_insp=cur.fetchone(); conn.close()
+    latest=max_ud or max_insp or ''
+    display=latest
+    try:
+        dt=_dt.datetime.strptime(str(latest)[:10], '%Y-%m-%d'); display=dt.strftime('%d-%b-%Y')
+    except Exception: pass
+    return {'records':int(rec or 0),'updated_display':display,'latest_date':latest}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -1778,6 +1791,10 @@ class Handler(BaseHTTPRequestHandler):
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
             except Exception as e:
                 self._send_json({'error':str(e)}, status=500)
+        elif path == "/api/data_freshness":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try: self._send_json(compute_data_freshness(filters))
+            except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/kpis":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             try:
