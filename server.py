@@ -1027,16 +1027,16 @@ def _client_ip(handler):
         return real.strip()[:80]
     return (handler.client_address[0] if handler.client_address else "")[:80]
 
-def _activity_event(handler, event_type, tab="", filters=None):
-    # Activity is intentionally anonymous for now. The IP address is stored
-    # so Admin can see usage without requiring viewer username/password login.
+def _activity_event(handler, event_type, tab="", filters=None, visitor_id=""):
+    # Activity is anonymous. visitor_id is a browser-generated random identifier
+    # used only to count currently active dashboard users without requiring login.
     try:
         conn = get_conn()
         meta = _viewer_meta(handler)
         user_id = meta.get("user_id") if meta else None
-        conn.execute("INSERT INTO activity_log (user_id,event_type,tab,filters_json,user_agent,ip_address) VALUES (?,?,?,?,?,?)",
+        conn.execute("INSERT INTO activity_log (user_id,event_type,tab,filters_json,user_agent,ip_address,visitor_id) VALUES (?,?,?,?,?,?,?)",
                      (user_id, event_type, tab or "", json.dumps(filters or {}, separators=(",",":")),
-                      (handler.headers.get("User-Agent", "")[:300]), _client_ip(handler)))
+                      (handler.headers.get("User-Agent", "")[:300]), _client_ip(handler), str(visitor_id or "")[:100]))
         conn.commit(); conn.close()
     except Exception:
         pass
@@ -1275,7 +1275,7 @@ def _ensure_admin_schema():
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS activity_log (
             id BIGSERIAL PRIMARY KEY, user_id BIGINT, event_type TEXT NOT NULL, tab TEXT DEFAULT '',
-            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', visitor_id TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     else:
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
@@ -1285,8 +1285,14 @@ def _ensure_admin_schema():
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS activity_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT NOT NULL, tab TEXT DEFAULT '',
-            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', visitor_id TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    if USE_POSTGRES:
+        conn.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS visitor_id TEXT DEFAULT ''")
+    else:
+        cols_al={r[1] for r in conn.execute("PRAGMA table_info(activity_log)").fetchall()}
+        if "visitor_id" not in cols_al:
+            conn.execute("ALTER TABLE activity_log ADD COLUMN visitor_id TEXT DEFAULT ''")
     if USE_POSTGRES:
         conn.execute("ALTER TABLE import_history ADD COLUMN IF NOT EXISTS updated INTEGER DEFAULT 0")
     else:
@@ -1789,6 +1795,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"authenticated": False, "username":"", "display_name":"", "role":""})
         elif path == "/api/filters":
             self._send_json(get_filter_options())
+        elif path == "/api/activity/live":
+            try:
+                conn = get_conn()
+                if USE_POSTGRES:
+                    row = conn.execute("SELECT COUNT(DISTINCT COALESCE(NULLIF(visitor_id,''), NULLIF(ip_address,''))) AS active FROM activity_log WHERE event_type='viewer_heartbeat' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '75 seconds'").fetchone()
+                else:
+                    row = conn.execute("SELECT COUNT(DISTINCT CASE WHEN COALESCE(visitor_id,'')<>'' THEN visitor_id ELSE ip_address END) AS active FROM activity_log WHERE event_type='viewer_heartbeat' AND datetime(created_at) >= datetime('now','-75 seconds')").fetchone()
+                conn.close()
+                self._send_json({"active_users": int((row[0] if row else 0) or 0), "window_seconds": 75})
+            except Exception as e:
+                self._send_json({"active_users": 0, "error": str(e)}, status=200)
         elif path == "/api/drilldown":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             try:
@@ -2177,7 +2194,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/activity/event":
             if not _is_viewer(self): _viewer_auth_error(self); return
             try:
-                body=_json_body(self); _activity_event(self,str(body.get("event_type","event")),str(body.get("tab","")),body.get("filters") or {}); self._send_json({"ok":True})
+                body=_json_body(self); _activity_event(self,str(body.get("event_type","event")),str(body.get("tab","")),body.get("filters") or {},str(body.get("visitor_id",""))); self._send_json({"ok":True})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
+        if path == "/api/activity/heartbeat":
+            if not _is_viewer(self): _viewer_auth_error(self); return
+            try:
+                body=_json_body(self); visitor_id=str(body.get("visitor_id","")).strip()
+                if not visitor_id or len(visitor_id)>100:
+                    self._send_json({"error":"visitor_id required"},status=400); return
+                tab=str(body.get("tab","dashboard"))[:50]
+                _activity_event(self,"viewer_heartbeat",tab,{},visitor_id)
+                self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
