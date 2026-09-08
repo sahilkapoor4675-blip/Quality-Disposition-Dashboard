@@ -539,17 +539,17 @@ def compute_kpis(filters, _skip_prev=False):
         "decision_table": decision_table,
         "decision_total": {
             "decision": "Grand Total",
-            "coils": sum(r["coils"] for r in decision_table),
+            "coils": total_coils,
             "pct_coils": 1.0 if total_coils else 0.0,
-            "qty": sum(r["qty"] for r in decision_table),
+            "qty": output_qty,
             "pct_qty": 1.0 if output_qty else 0.0,
         },
         "top_defects": top_defects,
         "top_defects_total": {
-            "defect": "Total (Top 5)",
-            "qty": sum(r["qty"] for r in top_defects),
-            "pct": sum(r["pct"] for r in top_defects),
-            "cum_pct": top_defects[-1]["cum_pct"] if top_defects else 0.0,
+            "defect": "Grand Total",
+            "qty": total_defect_qty,
+            "pct": 1.0 if total_defect_qty else 0.0,
+            "cum_pct": 1.0 if total_defect_qty else 0.0,
         },
         "intensity_table": intensity_table,
         "intensity_total": {
@@ -710,6 +710,39 @@ def _grand_total_row(rows, name="Grand Total"):
     }
 
 
+
+def _overall_metrics_total(cur, where_sql, params, name="Grand Total"):
+    """Calculate a true grand total directly from the filtered source rows.
+    This intentionally does not sum displayed groups, because grouped tables
+    may omit blank dimension values; direct aggregation keeps totals tied to
+    the exact filter scope."""
+    cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
+    coils, qty = cur.fetchone()
+
+    dw = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect <> '' AND main_defect <> 'NO DEFECT'"
+    cur.execute(f"SELECT COUNT(*) FROM disposition {dw}", params)
+    defect_coils = cur.fetchone()[0]
+
+    rw = where_sql + (" AND " if where_sql else "WHERE ") + "quality_decision = ?"
+    cur.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {rw}", params + ["REJECT"])
+    reject_qty = cur.fetchone()[0] or 0.0
+
+    pw = where_sql + (" AND " if where_sql else "WHERE ") + "quality_decision = ?"
+    cur.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {pw}", params + ["PRIME"])
+    prime_qty = cur.fetchone()[0] or 0.0
+
+    return {
+        "name": name,
+        "coils": coils,
+        "output_qty": qty or 0.0,
+        "defect_coils": defect_coils,
+        "defect_pct": (defect_coils / coils) if coils else 0.0,
+        "reject_qty": reject_qty,
+        "reject_pct_qty": (reject_qty / qty) if qty else 0.0,
+        "first_pass_yield_pct": (prime_qty / qty) if qty else 0.0,
+        "prime_qty": prime_qty,
+    }
+
 def compute_work_center_grade(filters):
     """Work Center & Grade Analysis. Work Center and Grade filters do NOT
     apply to their own breakdown (they are the analysis dimension), matching
@@ -727,11 +760,13 @@ def compute_work_center_grade(filters):
     grades = [r[0] for r in cur.fetchall()]
     gr_rows = [_group_metrics(cur, gr_where, gr_params, "grade", g) for g in grades]
 
+    total_wc = _overall_metrics_total(cur, wc_where, wc_params)
+    total_gr = _overall_metrics_total(cur, gr_where, gr_params)
     conn.close()
     return {
         "by_work_center": wc_rows, "by_grade": gr_rows,
-        "total_work_center": _grand_total_row(wc_rows),
-        "total_grade": _grand_total_row(gr_rows),
+        "total_work_center": total_wc,
+        "total_grade": total_gr,
     }
 
 
@@ -808,8 +843,9 @@ def compute_monthly_trend(filters):
     months = sorted([r[0] for r in cur.fetchall()], key=_month_sort_key)
 
     rows = [_group_metrics(cur, where_sql, params, "month", m) for m in months]
+    total = _overall_metrics_total(cur, where_sql, params)
     conn.close()
-    return {"rows": rows, "total": _grand_total_row(rows)}
+    return {"rows": rows, "total": total}
 
 
 def compute_period_trend(filters):
@@ -825,8 +861,9 @@ def compute_period_trend(filters):
     rows = [_group_metrics(cur, where_sql, params, "week", w) for w in weeks]
     for row in rows:
         row["name"] = _week_display_label(row["name"])
+    total = _overall_metrics_total(cur, where_sql, params)
     conn.close()
-    return {"rows": rows, "total": _grand_total_row(rows)}
+    return {"rows": rows, "total": total}
 
 
 def compute_quarterly_trend(filters):
@@ -838,8 +875,9 @@ def compute_quarterly_trend(filters):
     cur.execute("SELECT DISTINCT quarter FROM disposition WHERE quarter <> '' ORDER BY 1")
     quarters = [r[0] for r in cur.fetchall()]
     rows = [_group_metrics(cur, where_sql, params, "quarter", q) for q in quarters]
+    total = _overall_metrics_total(cur, where_sql, params)
     conn.close()
-    return {"rows": rows, "total": _grand_total_row(rows)}
+    return {"rows": rows, "total": total}
 
 
 def compute_yearly_trend(filters):
@@ -851,8 +889,9 @@ def compute_yearly_trend(filters):
     cur.execute("SELECT DISTINCT financial_year FROM disposition WHERE financial_year <> '' ORDER BY 1")
     fys = [r[0] for r in cur.fetchall()]
     rows = [_group_metrics(cur, where_sql, params, "financial_year", fy) for fy in fys]
+    total = _overall_metrics_total(cur, where_sql, params)
     conn.close()
-    return {"rows": rows, "total": _grand_total_row(rows)}
+    return {"rows": rows, "total": total}
 
 
 
@@ -1515,7 +1554,7 @@ def _excel_report(payload):
     for sheet_name, rows, total, labels in [("Monthly Trend",payload["monthly"]["rows"],payload["monthly"].get("total"),["Month","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Weekly Trend",payload["period"]["rows"],payload["period"].get("total"),["Week","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Quarterly Trend",payload["quarterly"]["rows"],payload["quarterly"].get("total"),["Quarter","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Financial Year",payload["yearly"]["rows"],payload["yearly"].get("total"),["Financial Year","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"])]:
         w=wb.create_sheet(sheet_name); title(w,sheet_name,1,len(labels)); header(w,3,labels)
         for r in rows:
-            w.append([r.get("name"),r.get("coils"),r.get("output_qty"),r.get("defect_coils"),r.get("defect_pct"),r.get("reject_qty"),r.get("reject_pct_qty"),r.get("fpy")])
+            w.append([r.get("name"),r.get("coils"),r.get("output_qty"),r.get("defect_coils"),r.get("defect_pct"),r.get("reject_qty"),r.get("reject_pct_qty"),r.get("first_pass_yield_pct")])
         if total: w.append(["Total",total.get("coils"),total.get("output_qty"),total.get("defect_coils"),total.get("defect_pct"),total.get("reject_qty"),total.get("reject_pct_qty"),total.get("fpy")])
         for rr in range(4, w.max_row+1):
             w.cell(rr,3).number_format="#,##0.000"
