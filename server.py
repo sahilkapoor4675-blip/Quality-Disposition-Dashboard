@@ -1457,7 +1457,33 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         qs = {k: v[0] for k, v in parse_qs(parsed.query).items()}
 
-        if path == "/" or path == "/index.html":
+        # Static browser identity assets (favicon / PWA manifest).
+        # These must be served by the Python server; otherwise browser requests
+        # for /favicon.ico and /favicon-*.png would fall through to a 404.
+        if path in {"/favicon.ico", "/favicon-16.png", "/favicon-32.png", "/favicon-48.png",
+                    "/favicon-64.png", "/favicon-128.png", "/favicon-180.png",
+                    "/favicon-192.png", "/favicon-256.png", "/favicon-512.png",
+                    "/site.webmanifest"}:
+            asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
+            if os.path.isfile(asset):
+                mime = "application/octet-stream"
+                if path.endswith(".png"):
+                    mime = "image/png"
+                elif path.endswith(".ico"):
+                    mime = "image/x-icon"
+                elif path.endswith(".webmanifest"):
+                    mime = "application/manifest+json"
+                with open(asset, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Cache-Control", "public, max-age=3600")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_error(404)
+        elif path == "/" or path == "/index.html":
             _activity_event(self, "dashboard_open", tab="dashboard")
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
                        "r", encoding="utf-8") as f:
