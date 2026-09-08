@@ -297,7 +297,7 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 @media(max-width:600px){.header-logo{height:32px;max-width:125px;margin-right:8px;}.executive-header-inner .plant-name,.executive-header-inner .sub{display:none;}}
 @media(max-width:600px){.header-actions{gap:5px}.admin-link{padding:6px 8px;font-size:10px}.live-status{font-size:9px!important;}}
 
-/* Final KPI card professional 3D treatment + hover information popup */
+/* Final KPI card professional 3D treatment — no hover popup */
 .kpi-card{
   border:1px solid #c9d6e2!important;
   border-bottom:3px solid #b8c8d8!important;
@@ -311,21 +311,13 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
   box-shadow:0 3px 6px rgba(15,42,74,.10), 0 16px 30px rgba(15,42,74,.18), inset 0 1px 0 rgba(255,255,255,1)!important;
   z-index:20;
 }
-.kpi-card .kpi-hover-popup{
-  position:absolute;left:14px;right:14px;bottom:14px;
-  padding:11px 12px;border-radius:10px;
-  background:rgba(255,255,255,.98);border:1px solid #d7e2ec;
-  box-shadow:0 12px 30px rgba(15,42,74,.18);
-  opacity:0;visibility:hidden;transform:translateY(8px) scale(.985);
-  transition:opacity .18s ease,transform .18s ease,visibility .18s ease;
-  pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-}
-.kpi-card:hover .kpi-hover-popup{opacity:1;visibility:visible;transform:translateY(0) scale(1)}
-.kpi-hover-popup .hp-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:800;color:#16324F;margin-bottom:5px}
-.kpi-hover-popup .hp-row{display:flex;justify-content:space-between;gap:10px;font-family:'Manrope',sans-serif;font-size:10px;line-height:1.45;color:#52677b}
-.kpi-hover-popup .hp-row b{color:#24364B;font-weight:800}
-@media(max-width:700px){.kpi-card .kpi-hover-popup{left:8px;right:8px;bottom:8px}.kpi-card:hover{transform:translateY(-2px)!important}}
 
+/* Final requested typography adjustments */
+.executive-kicker{font-weight:800!important;}
+.filters .field label{font-size:12px!important;font-weight:700!important;}
+.filters .field label .filter-icon,.filters .field label .kpi-icon{font-size:14px!important;}
+.filter-trigger{font-size:13px!important;}
+.filter-trigger .chevron{font-size:11px!important;}
 </style>
 <style id="jsl-watermark-style">
 /* Exact JSL Jindal Stainless logo watermark — background only; all app UI stays above it. */
@@ -702,7 +694,7 @@ function renderKpis(kpis){
     const directionText=targetCfg ? ((targetCfg.direction||'higher').toLowerCase()==='lower'?'Lower is better':'Higher is better') : 'Reference KPI';
     const targetText=targetCfg ? fmtValue(targetCfg.target,k.fmt) : 'Not set';
     const prevText=(k.prev!==null && k.prev!==undefined) ? fmtValue(k.prev,k.fmt) : 'N/A';
-    card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div><div class="kpi-hover-popup"><div class="hp-title">${k.label}</div><div class="hp-row"><span>Current</span><b>${fmtValue(cur,k.fmt)}</b></div><div class="hp-row"><span>Target</span><b>${targetText}</b></div><div class="hp-row"><span>Previous</span><b>${prevText}</b></div><div class="hp-row"><span>Status</span><b>${statusText} · ${directionText}</b></div></div>`;
+    card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
     grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
   }); previousKpiValues=nextValues;
 }
