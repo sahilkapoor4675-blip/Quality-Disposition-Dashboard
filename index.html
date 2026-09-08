@@ -403,6 +403,92 @@ body > *{position:relative;z-index:1;}
 /* Calibri is intentionally limited to Management Insights only. */
 .insights-panel,.insights-panel .insights-title,.insights-panel .insight-grid,.insights-panel .insight-item,.insights-panel .insight-item b{font-family:Calibri,Arial,sans-serif!important;}
 </style>
+
+<style id="final-dashboard-layout">
+/* Final executive dashboard layout: filters + tabs fixed in a left rail; KPIs remain visible in the main pane. */
+.dashboard-layout{
+  display:grid !important;
+  grid-template-columns:250px minmax(0,1fr) !important;
+  gap:18px !important;
+  align-items:start !important;
+  max-width:1600px !important;
+}
+.dashboard-sidebar{
+  grid-column:1;
+  position:sticky;
+  top:12px;
+  align-self:start;
+  max-height:calc(100vh - 24px);
+  overflow:auto;
+  scrollbar-width:thin;
+  padding:10px;
+  border:1px solid #dce7f0;
+  border-radius:14px;
+  background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(244,249,253,.96));
+  box-shadow:0 8px 24px rgba(31,61,90,.08);
+}
+.sidebar-title{
+  padding:3px 5px 9px;
+  color:#536b7e;
+  font:800 11px/1.2 'Plus Jakarta Sans','Manrope',sans-serif;
+  letter-spacing:1.1px;
+}
+.dashboard-sidebar .filters{
+  position:static !important;
+  display:flex !important;
+  flex-direction:column !important;
+  gap:9px !important;
+  padding:0 !important;
+  margin:0 !important;
+  border:0 !important;
+  box-shadow:none !important;
+  background:transparent !important;
+  backdrop-filter:none !important;
+}
+.dashboard-sidebar .filters::before{display:none !important;}
+.dashboard-sidebar .filter-field{width:100%;}
+.dashboard-sidebar .filter-trigger{width:100%;min-height:40px;font-size:12px !important;}
+.dashboard-sidebar .tabs{
+  display:flex !important;
+  flex-direction:column !important;
+  gap:7px !important;
+  margin:14px 0 0 !important;
+  padding-top:13px;
+  border-top:1px solid #dce7f0;
+}
+.dashboard-sidebar .tab-btn{
+  width:100%;
+  text-align:left;
+  padding:10px 11px !important;
+  font-size:12px !important;
+  border-radius:9px !important;
+}
+.dashboard-main{grid-column:2;min-width:0;display:flex;flex-direction:column;}
+/* Keep the active dashboard/KPI area at the top of the main pane; supporting summary/insights follow it. */
+.dashboard-main > .tab-panel{order:1;}
+.dashboard-main > .filter-summary-bar{order:2;}
+.dashboard-main > .insights-panel{order:3;}
+.dashboard-main > .footer-note{order:4;}
+.dashboard-main .filter-summary-bar{margin-top:0;}
+.dashboard-main .kpi-grid{margin-top:0;}
+.dashboard-main #tab-dashboard{margin-top:0;}
+/* Soft matching background behind the entire dashboard */
+body{
+  background:
+    radial-gradient(circle at 8% 8%,rgba(35,136,201,.055),transparent 28%),
+    radial-gradient(circle at 92% 18%,rgba(124,58,237,.035),transparent 25%),
+    linear-gradient(180deg,#f8fbfd 0%,#f1f6fa 100%) !important;
+}
+@media(max-width:900px){
+  .dashboard-layout{display:block !important;}
+  .dashboard-sidebar{position:sticky;top:0;max-height:none;margin-bottom:14px;z-index:1100;}
+  .dashboard-sidebar .tabs{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .dashboard-main{display:block;}
+}
+@media(max-width:600px){
+  .dashboard-sidebar .tabs{grid-template-columns:1fr !important;}
+}
+</style>
 </head>
 <body>
 </div></div>
@@ -429,18 +515,22 @@ body > *{position:relative;z-index:1;}
   </div>
 </header>
 
-<div class="container">
-  <div class="filters" id="filters"></div>
+<div class="container dashboard-layout">
+  <aside class="dashboard-sidebar" aria-label="Dashboard filters and tabs">
+    <div class="sidebar-title">FILTERS &amp; ANALYSIS</div>
+    <div class="filters" id="filters"></div>
+    <div class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
+      <button class="tab-btn" data-tab="wcgrade">🏭 Work Center &amp; Grade</button>
+      <button class="tab-btn" data-tab="defects">🎯 Defect Analysis</button>
+      <button class="tab-btn" data-tab="weekly">📅 Period Trend</button>
+    </div>
+  </aside>
+  <main class="dashboard-main">
 <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- records</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
 <div class="insights-panel" id="insightsPanel"><div class="insights-title">Management Insights</div><div class="insight-grid" id="insightGrid"><div class="insight-item info">Loading current quality insights…</div></div></div>
 <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div></div></div>
 
-  <div class="tabs" id="tabs">
-    <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
-    <button class="tab-btn" data-tab="wcgrade">🏭 Work Center &amp; Grade</button>
-    <button class="tab-btn" data-tab="defects">🎯 Defect Analysis</button>
-    <button class="tab-btn" data-tab="weekly">📅 Period Trend</button>
-  </div>
 
   <!-- TAB 1: DASHBOARD -->
   <div class="tab-panel" id="tab-dashboard">
@@ -593,6 +683,7 @@ body > *{position:relative;z-index:1;}
   </div>
 
   <div class="footer-note">Data source: Disposition Data (live database) &nbsp;•&nbsp; Runs locally via Python HTTP server + SQLite</div>
+  </main>
 </div>
 
 <script>

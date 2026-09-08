@@ -45,6 +45,23 @@ body > *{position:relative;z-index:1;}
 @media(max-width:900px){body::before{background-size:min(82vw,650px) auto;opacity:.09;}}
 @media(max-width:600px){body::before{background-size:min(94vw,520px) auto;opacity:.075;}}
 </style>
+
+<style id="dashboard-matched-admin-header">
+/* Match the main dashboard's light, subtle executive header treatment. */
+.top{
+  background:linear-gradient(135deg,#ffffff 0%,#f7fafc 55%,#eef5fa 100%) !important;
+  color:#16324f !important;
+  border-bottom:1px solid #d6e2ec !important;
+  box-shadow:0 4px 16px rgba(31,61,90,.07) !important;
+  padding:18px 28px !important;
+}
+.brand h1{color:#16324f !important;font-weight:800 !important;letter-spacing:1.1px !important;}
+.brand p{color:#6b7c93 !important;}
+.top-logo{filter:drop-shadow(0 3px 7px rgba(15,42,74,.10)) !important;}
+.actions .btn{background:rgba(255,255,255,.88) !important;color:#31516b !important;border-color:#cbd9e5 !important;}
+.actions .btn.primary{background:#183a58 !important;color:#fff !important;border-color:#183a58 !important;}
+.security-badge{box-shadow:0 2px 7px rgba(22,101,52,.06);}
+</style>
 </head>
 <body>
 <div class="top"><div class="top-brand"><img class="top-logo" src="/jsl-header-logo.png" alt="Jindal Stainless"><div class="brand"><h1>QUALITY INTELLIGENCE — ADMIN</h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div></div><div class="actions"><span class="secure">● SECURE ADMIN</span><span class="security-badge">CSRF • RATE LIMIT • SESSION PROTECTED</span><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
