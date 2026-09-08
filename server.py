@@ -849,12 +849,14 @@ def _cookie_value(cookie_header, name):
 
 def _is_admin(handler):
     _cleanup_sessions()
-    for cname in ("qdash_admin", "qdash_user"):
-        token = _cookie_value(handler.headers.get("Cookie", ""), cname)
-        meta = SESSIONS.get(token)
-        if meta and meta.get("expires",0) >= _dt.datetime.now().timestamp() and (meta.get("role") == "admin" or hmac.compare_digest(meta.get("username", ""), ADMIN_USERNAME)):
-            return True
-    return False
+    token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_admin")
+    meta = SESSIONS.get(token)
+    if not meta:
+        return False
+    if meta.get("expires", 0) < _dt.datetime.now().timestamp():
+        SESSIONS.pop(token, None)
+        return False
+    return hmac.compare_digest(meta.get("username", ""), ADMIN_USERNAME)
 
 
 def _viewer_meta(handler):
@@ -1093,24 +1095,6 @@ def _insert_records(records):
     return {"inserted": inserted, "duplicates": duplicates, "errors": errors}
 
 
-
-def _actor_meta(handler):
-    return _viewer_meta(handler) or (SESSIONS.get(_cookie_value(handler.headers.get("Cookie", ""), "qdash_admin")) if _is_admin(handler) else None) or {}
-
-def _audit(handler, action, entity_type="", entity_id=None, details=None):
-    meta = _actor_meta(handler)
-    try:
-        conn=get_conn(); conn.execute("INSERT INTO audit_log (user_id,username,action,entity_type,entity_id,details,user_agent) VALUES (?,?,?,?,?,?,?)",
-            (meta.get("user_id"),meta.get("username",ADMIN_USERNAME if _is_admin(handler) else ""),action,entity_type,str(entity_id or ""),json.dumps(details or {},separators=(",",":")),handler.headers.get("User-Agent","")[:300])); conn.commit(); conn.close()
-    except Exception: pass
-
-def _actor(handler):
-    m=_actor_meta(handler); return m.get("username","")
-
-def _master_list(conn, category):
-    rows=conn.execute("SELECT id,category,value,active,sort_order FROM master_data WHERE category=? ORDER BY sort_order,value",(category,)).fetchall()
-    return [dict(r) for r in rows]
-
 def _ensure_admin_schema():
     conn = get_conn()
     if USE_POSTGRES:
@@ -1144,48 +1128,6 @@ def _ensure_admin_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT NOT NULL, tab TEXT DEFAULT '',
             filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
-    # Extended Admin Control Center tables. Existing data is preserved.
-    try:
-        conn.execute("ALTER TABLE users ADD COLUMN department TEXT DEFAULT ''")
-    except Exception:
-        pass
-    if USE_POSTGRES:
-        conn.execute("""CREATE TABLE IF NOT EXISTS audit_log (
-            id BIGSERIAL PRIMARY KEY, user_id BIGINT, username TEXT, action TEXT NOT NULL,
-            entity_type TEXT DEFAULT '', entity_id TEXT DEFAULT '', details TEXT DEFAULT '{}',
-            user_agent TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
-            id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, inserted INTEGER DEFAULT 0,
-            duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, imported_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
-            id BIGSERIAL PRIMARY KEY, kpi_key TEXT UNIQUE NOT NULL, label TEXT NOT NULL, target DOUBLE PRECISION,
-            warning DOUBLE PRECISION, critical DOUBLE PRECISION, direction TEXT DEFAULT 'max', active BOOLEAN DEFAULT TRUE, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS master_data (
-            id BIGSERIAL PRIMARY KEY, category TEXT NOT NULL, value TEXT NOT NULL, active BOOLEAN DEFAULT TRUE, sort_order INTEGER DEFAULT 0,
-            UNIQUE(category,value)
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS app_settings (
-            setting_key TEXT PRIMARY KEY, setting_value TEXT DEFAULT '', updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        )""")
-    else:
-        conn.execute("""CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,username TEXT,action TEXT NOT NULL,entity_type TEXT DEFAULT '',entity_id TEXT DEFAULT '',details TEXT DEFAULT '{}',user_agent TEXT DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (id INTEGER PRIMARY KEY AUTOINCREMENT,filename TEXT,detected INTEGER DEFAULT 0,inserted INTEGER DEFAULT 0,duplicates INTEGER DEFAULT 0,errors INTEGER DEFAULT 0,imported_by TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (id INTEGER PRIMARY KEY AUTOINCREMENT,kpi_key TEXT UNIQUE NOT NULL,label TEXT NOT NULL,target REAL,warning REAL,critical REAL,direction TEXT DEFAULT 'max',active INTEGER DEFAULT 1,updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS master_data (id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,value TEXT NOT NULL,active INTEGER DEFAULT 1,sort_order INTEGER DEFAULT 0,UNIQUE(category,value))""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS app_settings (setting_key TEXT PRIMARY KEY,setting_value TEXT DEFAULT '',updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
-    # Seed useful master values without overwriting admin changes.
-    seeds={"quality_decision":DECISION_ORDER,"defect_intensity":["LIGHT","MEDIUM","DEEP","NO DEFECT"]}
-    for cat,vals in seeds.items():
-        for i,v in enumerate(vals):
-            try: conn.execute("INSERT INTO master_data (category,value,sort_order) VALUES (?,?,?)",(cat,v,i))
-            except Exception: pass
-    defaults=[("fpy","FPY",0.95,0.90,0.85,"max"),("ppm","PPM Defective",10000,20000,50000,"min"),("reject_pct","Reject %",0.01,0.02,0.05,"min"),("salvage_pct","Salvage %",0.10,0.15,0.25,"min")]
-    for x in defaults:
-        try: conn.execute("INSERT INTO kpi_targets (kpi_key,label,target,warning,critical,direction) VALUES (?,?,?,?,?,?)",x)
-        except Exception: pass
     # Create/update the environment-backed admin account without overwriting its password on every restart.
     existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
     if not existing:
@@ -1497,62 +1439,13 @@ class Handler(BaseHTTPRequestHandler):
                     "error": str(e)[:180],
                     "checked_at": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
                 }, status=503)
-        if path == "/api/admin/control_summary":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                c=get_conn();
-                vals={
-                    "users":c.execute("SELECT COUNT(*) FROM users").fetchone()[0],
-                    "active_users":c.execute("SELECT COUNT(*) FROM users WHERE active=1").fetchone()[0],
-                    "records":c.execute("SELECT COUNT(*) FROM disposition").fetchone()[0],
-                    "imports":c.execute("SELECT COUNT(*) FROM import_history").fetchone()[0],
-                    "audit":c.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0],
-                    "exports":c.execute("SELECT COUNT(*) FROM activity_log WHERE event_type LIKE 'export_%'").fetchone()[0],
-                    "failed_logins":c.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='login_failed' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'").fetchone()[0] if USE_POSTGRES else c.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='login_failed' AND datetime(created_at)>=datetime('now','-30 days')").fetchone()[0]
-                }; c.close(); self._send_json(vals)
-            except Exception as e:self._send_json({"error":str(e)},status=500)
-            return
-        if path == "/api/admin/import_history":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                c=get_conn(); rows=c.execute("SELECT id,filename,detected,inserted,duplicates,errors,imported_by,created_at FROM import_history ORDER BY id DESC LIMIT 100").fetchall(); c.close(); self._send_json({"rows":[dict(r) for r in rows]})
-            except Exception as e:self._send_json({"error":str(e)},status=500)
-            return
-        if path == "/api/admin/audit_log":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                c=get_conn(); rows=c.execute("SELECT id,username,action,entity_type,entity_id,details,created_at FROM audit_log ORDER BY id DESC LIMIT 150").fetchall(); c.close(); self._send_json({"rows":[dict(r) for r in rows]})
-            except Exception as e:self._send_json({"error":str(e)},status=500)
-            return
-        if path == "/api/admin/kpi_targets":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                c=get_conn(); rows=c.execute("SELECT id,kpi_key,label,target,warning,critical,direction,active,updated_at FROM kpi_targets ORDER BY id").fetchall(); c.close(); self._send_json({"rows":[dict(r) for r in rows]})
-            except Exception as e:self._send_json({"error":str(e)},status=500)
-            return
-        if path == "/api/admin/master_data":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                c=get_conn(); cats=[r[0] for r in c.execute("SELECT DISTINCT category FROM master_data ORDER BY category").fetchall()]; out={cat:_master_list(c,cat) for cat in cats}; c.close(); self._send_json(out)
-            except Exception as e:self._send_json({"error":str(e)},status=500)
-            return
-        if path == "/api/admin/data_explorer":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                term=qs.get("q","").strip(); c=get_conn();
-                if term:
-                    like="%"+term+"%"; rows=c.execute("SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition WHERE heat_no LIKE ? OR work_center LIKE ? OR grade LIKE ? OR main_defect LIKE ? ORDER BY id DESC LIMIT 200",(like,like,like,like)).fetchall()
-                else: rows=c.execute("SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id DESC LIMIT 200").fetchall()
-                c.close(); self._send_json({"rows":[dict(r) for r in rows]})
-            except Exception as e:self._send_json({"error":str(e)},status=500)
-            return
         if path == "/api/activity":
             if not _is_admin(self): _auth_error(self); return
             meta=_viewer_meta(self)
             _activity_event(self,"activity_view")
             try:
                 conn=get_conn()
-                total_users=conn.execute("SELECT COUNT(*) FROM users WHERE active=TRUE").fetchone()[0] if USE_POSTGRES else conn.execute("SELECT COUNT(*) FROM users WHERE active=1").fetchone()[0]
+                total_users=conn.execute("SELECT COUNT(*) FROM users WHERE active=1").fetchone()[0]
                 if USE_POSTGRES:
                     active_today=conn.execute("SELECT COUNT(DISTINCT user_id) FROM activity_log WHERE created_at >= CURRENT_DATE").fetchone()[0]
                     opens_today=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open' AND created_at >= CURRENT_DATE").fetchone()[0]
@@ -1615,17 +1508,21 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/viewer/login":
             try:
                 body = _json_body(self); username = str(body.get("username","")).strip(); password = str(body.get("password",""))
+                # The environment-backed administrator must also be able to enter the main dashboard.
+                # This avoids the common first-deployment problem where the dashboard viewer table contains
+                # an older admin hash while Render's ADMIN_PASSWORD has been changed.
+                admin_login = hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD)
                 conn=get_conn(); row=conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?",(username,)).fetchone(); conn.close()
-                if row and bool(row[5]) and _verify_password(password,row[3]):
-                    token=secrets.token_urlsafe(32); SESSIONS[token]={"username":row[1],"display_name":row[2],"role":row[4],"user_id":row[0],"expires":_dt.datetime.now().timestamp()+VIEWER_SESSION_TTL}
+                valid = admin_login or (row and bool(row[5]) and _verify_password(password,row[3]))
+                if valid:
+                    role = "admin" if admin_login else row[4]
+                    uid = row[0] if row else None
+                    display = "Administrator" if admin_login else row[2]
+                    token=secrets.token_urlsafe(32); SESSIONS[token]={"username":username,"display_name":display,"role":role,"user_id":uid,"expires":_dt.datetime.now().timestamp()+VIEWER_SESSION_TTL}
                     self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store")
-                    secure=self.headers.get("X-Forwarded-Proto","").lower()=="https"; cookie=f"qdash_user={token}; Path=/; HttpOnly; SameSite=Lax"; cookie += "; Secure" if secure else ""; self.send_header("Set-Cookie",cookie); self.end_headers(); self.wfile.write(json.dumps({"authenticated":True,"username":row[1],"display_name":row[2],"role":row[4]}).encode())
-                    meta={"user_id":row[0],"username":row[1],"display_name":row[2],"role":row[4]}; SESSIONS[token].update(meta); _activity_event(self,"login")
-                else:
-                    try:
-                        c=get_conn(); c.execute("INSERT INTO activity_log (user_id,event_type,tab,filters_json,user_agent) VALUES (?,?,?,?,?)",(row[0] if row else None,"login_failed","","{}",self.headers.get("User-Agent","")[:300])); c.commit(); c.close()
-                    except Exception: pass
-                    self._send_json({"error":"Invalid username or password"},status=401)
+                    secure=self.headers.get("X-Forwarded-Proto","").lower()=="https"; cookie=f"qdash_user={token}; Path=/; HttpOnly; SameSite=Lax"; cookie += "; Secure" if secure else ""; self.send_header("Set-Cookie",cookie); self.end_headers(); self.wfile.write(json.dumps({"authenticated":True,"username":username,"display_name":display,"role":role}).encode())
+                    meta={"user_id":uid,"username":username,"display_name":display,"role":role}; SESSIONS[token].update(meta); _activity_event(self,"login")
+                else: self._send_json({"error":"Invalid username or password"},status=401)
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -1634,97 +1531,53 @@ class Handler(BaseHTTPRequestHandler):
             if meta: _activity_event(self,"logout")
             SESSIONS.pop(token,None); self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Set-Cookie","qdash_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); self.end_headers(); self.wfile.write(b'{"authenticated":false}'); return
 
-        if path == "/api/admin/user_update":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                b=_json_body(self); uid=int(b["id"]); fields=[]; vals=[]
-                for k in ("display_name","department","role"):
-                    if k in b: fields.append(k+"=?"); vals.append(str(b[k]))
-                if b.get("password"):
-                    if len(str(b["password"]))<8: raise ValueError("Password must be at least 8 characters")
-                    fields.append("password_hash=?"); vals.append(_hash_password(str(b["password"])))
-                if not fields: raise ValueError("Nothing to update")
-                vals.append(uid); c=get_conn(); c.execute("UPDATE users SET "+",".join(fields)+" WHERE id=?",vals); c.commit(); c.close(); _audit(self,"user_update","user",uid,{k:b.get(k) for k in ("display_name","department","role")}); self._send_json({"ok":True})
-            except Exception as e:self._send_json({"error":str(e)},status=400)
-            return
-        if path == "/api/admin/user_delete":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                uid=int(_json_body(self).get("id")); c=get_conn(); row=c.execute("SELECT username FROM users WHERE id=?",(uid,)).fetchone();
-                if not row: raise ValueError("User not found")
-                if row[0]==ADMIN_USERNAME: raise ValueError("Primary admin cannot be deleted")
-                c.execute("UPDATE users SET active=? WHERE id=?",(False,uid)); c.commit(); c.close(); _audit(self,"user_deactivated","user",uid,{"username":row[0]}); self._send_json({"ok":True})
-            except Exception as e:self._send_json({"error":str(e)},status=400)
-            return
-        if path == "/api/admin/kpi_target":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                b=_json_body(self); vals=(str(b["kpi_key"]),str(b["label"]),float(b["target"]),float(b["warning"]),float(b["critical"]),str(b.get("direction","max")),bool(b.get("active",True))); c=get_conn();
-                if USE_POSTGRES: c.execute("INSERT INTO kpi_targets (kpi_key,label,target,warning,critical,direction,active,updated_at) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(kpi_key) DO UPDATE SET label=EXCLUDED.label,target=EXCLUDED.target,warning=EXCLUDED.warning,critical=EXCLUDED.critical,direction=EXCLUDED.direction,active=EXCLUDED.active,updated_at=CURRENT_TIMESTAMP",vals)
-                else: c.execute("INSERT INTO kpi_targets (kpi_key,label,target,warning,critical,direction,active,updated_at) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(kpi_key) DO UPDATE SET label=excluded.label,target=excluded.target,warning=excluded.warning,critical=excluded.critical,direction=excluded.direction,active=excluded.active,updated_at=CURRENT_TIMESTAMP",vals)
-                c.commit(); c.close(); _audit(self,"kpi_target_update","kpi",b["kpi_key"],b); self._send_json({"ok":True})
-            except Exception as e:self._send_json({"error":str(e)},status=400)
-            return
-        if path == "/api/admin/master_data":
-            if not _is_admin(self): _auth_error(self); return
-            try:
-                b=_json_body(self); cat=str(b.get("category","")).strip(); val=str(b.get("value","")).strip(); active=bool(b.get("active",True));
-                if not cat or not val: raise ValueError("Category and value are required")
-                c=get_conn();
-                if USE_POSTGRES: c.execute("INSERT INTO master_data(category,value,active,sort_order) VALUES (?,?,?,?) ON CONFLICT(category,value) DO UPDATE SET active=EXCLUDED.active",(cat,val,active,int(b.get("sort_order",0))))
-                else: c.execute("INSERT INTO master_data(category,value,active,sort_order) VALUES (?,?,?,?) ON CONFLICT(category,value) DO UPDATE SET active=excluded.active",(cat,val,active,int(b.get("sort_order",0))))
-                c.commit(); c.close(); _audit(self,"master_data_update","master",cat,{"value":val,"active":active}); self._send_json({"ok":True})
-            except Exception as e:self._send_json({"error":str(e)},status=400)
-            return
-        if path == "/api/admin/backup_import":
-            if not _is_admin(self): _auth_error(self); return
-            self._send_json({"error":"Use the standard validated Import Data control to restore a CSV/XLSX backup."},status=400); return
         if path == "/api/admin/users":
             if not _is_admin(self): _auth_error(self); return
             try:
-                conn=get_conn(); rows=conn.execute("SELECT id,username,display_name,COALESCE(department,'') department,role,active,created_at FROM users ORDER BY role DESC,display_name").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                conn=get_conn(); rows=conn.execute("SELECT id,username,display_name,role,active,created_at FROM users ORDER BY role DESC,display_name").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
             except Exception as e: self._send_json({"error":str(e)},status=500)
             return
 
         if path == "/api/admin/user":
             if not _is_admin(self): _auth_error(self); return
             try:
-                body=_json_body(self); username=str(body.get("username","")).strip(); display_name=str(body.get("display_name","")).strip() or username; department=str(body.get("department","")).strip(); password=str(body.get("password","")); role=str(body.get("role","viewer"))
+                body=_json_body(self); username=str(body.get("username","")).strip(); display_name=str(body.get("display_name","")).strip() or username; password=str(body.get("password","")); role=str(body.get("role","viewer"))
                 if not username or not password: raise ValueError("Username and password are required")
                 if role not in ("viewer","admin"): raise ValueError("Invalid role")
                 if len(password)<8: raise ValueError("Password must be at least 8 characters")
-                conn=get_conn(); conn.execute("INSERT INTO users (username,display_name,department,password_hash,role,active) VALUES (?,?,?,?,?,?)",(username,display_name,department,_hash_password(password),role,True)); conn.commit(); conn.close(); _audit(self,"user_create","user",username,{"display_name":display_name,"department":department,"role":role}); self._send_json({"ok":True})
+                conn=get_conn(); conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",(username,display_name,_hash_password(password),role,True)); conn.commit(); conn.close(); self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/admin/user_toggle":
             if not _is_admin(self): _auth_error(self); return
             try:
-                body=_json_body(self); uid=int(body.get("id")); active=bool(body.get("active")); conn=get_conn(); row=conn.execute("SELECT username FROM users WHERE id=?",(uid,)).fetchone();
-                if not row: raise ValueError("User not found")
-                if row[0]==ADMIN_USERNAME and not active: raise ValueError("Primary admin cannot be disabled")
-                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); _audit(self,"user_status_change","user",uid,{"active":active}); self._send_json({"ok":True})
+                body=_json_body(self); uid=int(body.get("id")); active=bool(body.get("active")); conn=get_conn(); conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/login":
             try:
-                body=_json_body(self); username=str(body.get("username","")).strip(); password=str(body.get("password","")); conn=get_conn(); row=conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?",(username,)).fetchone(); conn.close()
-                valid=False
-                if row and bool(row[5]): valid=_verify_password(password,row[3])
-                # Backward-compatible environment admin fallback if the database account has not been created yet.
-                if not valid and hmac.compare_digest(username,ADMIN_USERNAME) and hmac.compare_digest(password,ADMIN_PASSWORD):
-                    token=secrets.token_urlsafe(32); SESSIONS[token]={"username":ADMIN_USERNAME,"display_name":"Administrator","role":"admin","expires":_dt.datetime.now().timestamp()+SESSION_TTL}
-                elif valid and row[4]=="admin":
-                    token=secrets.token_urlsafe(32); SESSIONS[token]={"username":row[1],"display_name":row[2],"role":"admin","user_id":row[0],"expires":_dt.datetime.now().timestamp()+SESSION_TTL}
+                body = _json_body(self)
+                username = str(body.get("username", ""))
+                password = str(body.get("password", ""))
+                if hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD):
+                    token = secrets.token_urlsafe(32)
+                    SESSIONS[token] = {"username": ADMIN_USERNAME, "expires": _dt.datetime.now().timestamp() + SESSION_TTL}
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+                    cookie = f"qdash_admin={token}; Path=/; HttpOnly; SameSite=Lax"
+                    if secure:
+                        cookie += "; Secure"
+                    self.send_header("Set-Cookie", cookie)
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"authenticated": True, "username": ADMIN_USERNAME}).encode("utf-8"))
                 else:
-                    try:
-                        c=get_conn(); c.execute("INSERT INTO activity_log (user_id,event_type,tab,filters_json,user_agent) VALUES (?,?,?,?,?)",(row[0] if row else None,"login_failed","","{}",self.headers.get("User-Agent","")[:300])); c.commit(); c.close()
-                    except Exception: pass
-                    self._send_json({"error":"Invalid admin username or password"},status=401); return
-                secure=self.headers.get("X-Forwarded-Proto","").lower()=="https"; cookie=f"qdash_admin={token}; Path=/; HttpOnly; SameSite=Lax" + ("; Secure" if secure else "")
-                self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Set-Cookie",cookie); self.end_headers(); self.wfile.write(json.dumps({"authenticated":True,"username":SESSIONS[token]["username"],"display_name":SESSIONS[token].get("display_name",""),"role":"admin"}).encode())
-            except Exception as e: self._send_json({"error":str(e)},status=400)
+                    self._send_json({"error": "Invalid username or password"}, status=401)
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
             return
 
         if path == "/api/logout":
@@ -1758,7 +1611,6 @@ class Handler(BaseHTTPRequestHandler):
                 elif result["duplicates"]:
                     self._send_json({"error": "This record already exists"}, status=409)
                 else:
-                    _audit(self,"record_create","disposition",None,{"heat_no":r["heat_no"]})
                     self._send_json({"ok": True, **result})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -1783,10 +1635,6 @@ class Handler(BaseHTTPRequestHandler):
                 if len(records) > 10000:
                     raise ValueError("Import limited to 10,000 records per upload")
                 result = _insert_records(records)
-                try:
-                    c=get_conn(); c.execute("INSERT INTO import_history(filename,detected,inserted,duplicates,errors,imported_by) VALUES (?,?,?,?,?,?)",(uploaded[0],len(records),result["inserted"],result["duplicates"],len(result["errors"]),_actor(self))); c.commit(); c.close()
-                    _audit(self,"data_import","import",uploaded[0],{"detected":len(records),"inserted":result["inserted"],"duplicates":result["duplicates"],"errors":len(result["errors"])} )
-                except Exception: pass
                 self._send_json({"ok": True, "detected": len(records), **result})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -1813,7 +1661,7 @@ class Handler(BaseHTTPRequestHandler):
                 cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
                 conn.commit()
                 conn.close()
-                _audit(self,"record_delete","disposition",record_id,{"deleted":cur.rowcount}); self._send_json({"ok": True, "deleted": cur.rowcount})
+                self._send_json({"ok": True, "deleted": cur.rowcount})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
