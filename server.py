@@ -8,6 +8,7 @@ Then open http://localhost:8000/  (default port 8000)
 
 import json
 import math
+import gzip
 import os
 import sqlite3
 
@@ -1716,8 +1717,22 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # keep console quiet
 
+    def _compression_allowed(self):
+        return "gzip" in self.headers.get("Accept-Encoding", "").lower()
+
+    def _write_body(self, body, compress=True):
+        if compress and len(body) >= 512 and self._compression_allowed():
+            encoded = gzip.compress(body, compresslevel=6, mtime=0)
+            if len(encoded) < len(body):
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Vary", "Accept-Encoding")
+                body = encoded
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _send_json(self, payload, status=200):
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -1725,27 +1740,38 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._write_body(body)
 
     def _send_html(self, html, status=200):
         body = html.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._write_body(body)
 
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
         qs = {k: v[0] for k, v in parse_qs(parsed.query).items()}
 
+        # Versioned static CSS/JS: aggressively cached by browsers.
+        if path in {"/app.css", "/app.js"}:
+            asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
+            if os.path.isfile(asset):
+                mime = "text/css; charset=utf-8" if path.endswith(".css") else "application/javascript; charset=utf-8"
+                with open(asset, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self._write_body(body)
+            else:
+                self.send_error(404)
         # Static browser identity assets (favicon / PWA manifest).
         # These must be served by the Python server; otherwise browser requests
         # for /favicon.ico and /favicon-*.png would fall through to a 404.
@@ -1767,9 +1793,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", mime)
                 self.send_header("Cache-Control", "public, max-age=3600")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
+                self._write_body(body)
             else:
                 self.send_error(404)
         elif path == "/" or path == "/index.html":
