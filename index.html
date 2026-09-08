@@ -86,7 +86,10 @@
   @keyframes legendEnter{0%{opacity:.25;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}
   .section-header{font-size:12px;letter-spacing:.35px;padding:10px 15px;}
   .tab-btn{font-size:12px;font-weight:700;padding:9px 15px;}
-  .filters{padding:17px;gap:13px;border-radius:11px;box-shadow:0 2px 9px rgba(15,42,74,.035);}
+  /* Sticky dashboard filters: remain accessible while scrolling through KPIs/charts/tables. */
+  .filters{position:sticky;top:0;z-index:1000;padding:17px;gap:13px;border-radius:11px;box-shadow:0 8px 22px rgba(15,42,74,.10);background:rgba(255,255,255,.97);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+  .filters::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.9);}
+
   .filter-trigger{font-size:12px;min-height:38px;}
   table{font-size:13px;} th{font-size:11px;} th,td{padding:9px 11px;}
   @media (min-width:1500px){.kpi-card .value{font-size:32px}.chart-scroll{min-height:410px;}}
@@ -151,7 +154,7 @@
   .original-look-btn:hover{background:rgba(255,255,255,.18);}
   .filters{position:relative;display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:14px 14px 16px;border-radius:12px;box-shadow:0 5px 18px rgba(15,42,74,.07);}
   @media(max-width:1050px){.filters{grid-template-columns:repeat(2,minmax(180px,1fr));}}
-  @media(max-width:600px){.filters{grid-template-columns:1fr;}}
+  @media(max-width:600px){.filters{grid-template-columns:1fr;top:0;padding:12px;gap:10px;}.filter-menu{max-height:55vh;}.filter-options{max-height:180px;}}
   .filter-toolbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:2px;}
   .filter-toolbar-title{font-size:12px;font-weight:800;color:var(--navy);letter-spacing:.4px;text-transform:uppercase;}
   .filter-actions{display:flex;align-items:center;gap:8px;}
@@ -557,8 +560,18 @@ const KPI_ICONS = {
   "Without Intensity %": "❔",
 };
 
-function kpiTarget(label,k){ return (k&&k.target_text) || "Target: Not set"; }
-function kpiStatus(label,k){ if(k&&k.target_status) return k.target_status; return "neutral"; }
+function kpiTarget(label){
+  const m={"First Pass Yield %":"Target > 97%","Hold for Decision % Qty":"Target < 1%","PPM Defective":"Target ≤ 10,000","Intensity Tagging %":"Target < 5%","Defect Rate":"Target < 1%","Reject % Qty":"Target < 1%","Process Sigma Level (Approx.)":"Target > 3.0","Salvage % Qty":"Target < 1%","Rework % Qty":"Target < 1%","Without Intensity %":"Target > 90%","Defect Coils":"Reference: < 1% of coils","Hold For Decision Qty (MT)":"Reference: < 1% of output","Reject Qty (MT)":"Reference: < 1% of output"}; return m[label]||"Reference: current period";
+}
+function kpiStatus(label,k){
+  const v=Number(k.value)||0; if(label==='First Pass Yield %') return v>.97?'good':v>=.90?'amber':'bad';
+  if(['Salvage % Qty','Reject % Qty','Rework % Qty','Hold for Decision % Qty'].includes(label)) return v<.01?'good':v<=.03?'amber':'bad';
+  if(label==='Process Sigma Level (Approx.)') return v>3?'good':v>=2?'amber':'bad';
+  if(label==='PPM Defective') return v<=10000?'good':v<=30000?'amber':'bad';
+  if(label==='Intensity Tagging %') return v>=.90?'good':v>=.85?'amber':'bad';
+  if(label==='Without Intensity %') return v<=.05?'good':v<=.15?'amber':'bad';
+  return 'neutral';
+}
 function sparklineSvg(oldValue,currentValue,status){
   const a=Number.isFinite(oldValue)?oldValue:Number(currentValue); const b=Number(currentValue)||0; const pts=[]; for(let i=0;i<6;i++){const t=i/5; const v=a+(b-a)*t; pts.push(v)}
   let min=Math.min(...pts),max=Math.max(...pts); if(min===max){min-=1;max+=1;} const points=pts.map((v,i)=>`${(i*15.2).toFixed(1)},${(24-(v-min)/(max-min)*20).toFixed(1)}`).join(' ');
@@ -572,7 +585,7 @@ function renderKpis(kpis){
     card.className=`kpi-card status-${status} kpi-pulse`; if(direction)card.classList.add(direction==='up'?'kpi-up':'kpi-down');
     let trendHtml=''; if(k.arrow!==null && k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; let changeText=''; if(k.change_type==='pts') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`; else if(k.change_type==='new') changeText='New'; else if(k.change_type==='pct') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; else changeText='No change'; trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
     const statusText=status==='good'?'On Target':status==='amber'?'Watch':status==='bad'?'Action':'Neutral';
-    card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${k.color||'#0f2a4a'}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta"><div class="kpi-target">${kpiTarget(k.label,k)}</div><div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
+    card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${k.color||'#0f2a4a'}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta"><div class="kpi-target">${kpiTarget(k.label)}</div><div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
     grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
   }); previousKpiValues=nextValues;
 }

@@ -32,15 +32,23 @@ from urllib.parse import urlparse, parse_qs
 
 try:
     from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as XLImage
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 except ImportError:
     Workbook = None
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except Exception:
+    plt = None
+
 try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image as RLImage
 except ImportError:
     SimpleDocTemplate = None
 
@@ -325,56 +333,21 @@ def build_where(filters, exclude=None):
     return (f"WHERE {where}" if where else "", params)
 
 
-def _kpi_default_targets():
-    return {
-        "First Pass Yield %": (.97, .90, .80, "higher"),
-        "Hold for Decision % Qty": (.01, .03, .05, "lower"),
-        "PPM Defective": (10000, 30000, 50000, "lower"),
-        "Intensity Tagging %": (.90, .85, .70, "higher"),
-        "Defect Rate": (.01, .03, .05, "lower"),
-        "Reject % Qty": (.01, .03, .05, "lower"),
-        "Process Sigma Level (Approx.)": (3.0, 2.0, 1.0, "higher"),
-        "Salvage % Qty": (.01, .03, .05, "lower"),
-        "Rework % Qty": (.01, .03, .05, "lower"),
-        "Without Intensity %": (.05, .15, .30, "lower"),
-    }
-
-def _kpi_target_rows(conn):
-    rows = conn.execute("SELECT id,kpi_key,label,target,warning,critical,direction,updated_at FROM kpi_targets ORDER BY id").fetchall()
-    return [dict(r) for r in rows]
-
-def _target_status(target, value):
-    if not target or target.get("target") is None or target.get("direction") == "neutral": return "neutral"
-    direction=target.get("direction","lower"); t=float(target["target"]); w=target.get("warning"); w=float(w) if w is not None else None; v=float(value)
-    if direction=="higher": return "good" if v>=t else ("amber" if w is not None and v>=w else "bad")
-    return "good" if v<=t else ("amber" if w is not None and v<=w else "bad")
-
-def _format_target_text(label, target):
-    if not target or target.get("target") is None: return "Target: Not set"
-    pct="%" in label
-    def f(x):
-        if x is None: return "—"
-        if pct: return f"{float(x)*100:.1f}%"
-        if label=="PPM Defective": return f"{float(x):,.0f}"
-        if "Sigma" in label: return f"{float(x):.1f}"
-        return f"{float(x):,.2f}"
-    symbol="≥" if target.get("direction")=="higher" else "≤"
-    return f"Target {symbol} {f(target.get('target'))} • Warn {symbol} {f(target.get('warning'))} • Critical {symbol} {f(target.get('critical'))}"
-
-def kpi_threshold_color(label, value, target=None):
-    status = _target_status(target, value)
-    if status == "good": return "#16A34A"
-    if status == "amber": return "#D97706"
-    if status == "bad": return "#DC2626"
+def kpi_threshold_color(label, value):
+    """Return KPI value color according to the requested operating bands."""
     green, amber, red = "#16A34A", "#D97706", "#DC2626"
     if label in ("First Pass Yield %", "For Next Process %"):
         return green if value > 0.97 else amber if value >= 0.90 else red
     if label in ("Salvage % Qty", "Reject % Qty", "Rework % Qty", "Hold for Decision % Qty", "Hold For Decision % Qty"):
         return green if value < 0.01 else amber if value <= 0.03 else red
-    if label == "Process Sigma Level (Approx.)": return green if value > 3 else amber if value >= 2 else red
-    if label == "PPM Defective": return green if value <= 10000 else amber if value <= 30000 else red
-    if label == "Intensity Tagging %": return green if value >= 0.90 else amber if value >= 0.85 else red
-    if label == "Without Intensity %": return green if value <= 0.05 else amber if value <= 0.15 else red
+    if label == "Process Sigma Level (Approx.)":
+        return green if value > 3 else amber if value >= 2 else red
+    if label == "PPM Defective":
+        return green if value <= 10000 else amber if value <= 30000 else red
+    if label == "Intensity Tagging %":
+        return green if value >= 0.90 else amber if value >= 0.85 else red
+    if label == "Without Intensity %":
+        return green if value <= 0.05 else amber if value <= 0.15 else red
     return None
 
 
@@ -450,14 +423,6 @@ def compute_kpis(filters, _skip_prev=False):
     intensity_tagging_pct = (tagged_intensity_count / intensity_total_count) if intensity_total_count else 0.0
     without_intensity_pct = (blank_intensity_count / intensity_total_count) if intensity_total_count else 0.0
 
-    # Load administrator-defined KPI targets so card status/color always follows the live target table.
-    targets = {}
-    try:
-        for tr in conn.execute("SELECT label,target,warning,critical,direction FROM kpi_targets").fetchall():
-            targets[tr[0]] = dict(tr)
-    except Exception:
-        targets = {}
-
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
         {"label": "Defect Coils", "value": defect_coils, "fmt": "int"},
@@ -478,13 +443,9 @@ def compute_kpis(filters, _skip_prev=False):
     ]
     assert len(kpis) == 16, "KPI count must be exactly 16"
 
-    # Apply administrator-defined target bands. If no target is configured, keep legacy fallback.
+    # Apply threshold-based KPI value colors independently of period comparison.
     for k in kpis:
-        t = targets.get(k["label"])
-        k["target"] = t
-        k["target_status"] = _target_status(t, k["value"])
-        k["target_text"] = _format_target_text(k["label"], t)
-        threshold_color = kpi_threshold_color(k["label"], k["value"], t)
+        threshold_color = kpi_threshold_color(k["label"], k["value"])
         if threshold_color:
             k["color"] = threshold_color
 
@@ -588,7 +549,7 @@ def compute_kpis(filters, _skip_prev=False):
             meta = KPI_META_BY_LABEL[k["label"]]
             prev_v = prev_values[i]
             cur_v = k["value"]
-            threshold_color = kpi_threshold_color(k["label"], cur_v, k.get("target"))
+            threshold_color = kpi_threshold_color(k["label"], cur_v)
             k["color"] = threshold_color or meta["color"]
             if prev_v is None:
                 # No comparison period selected: do not fabricate a 0 baseline
@@ -962,15 +923,6 @@ def _viewer_auth_error(handler):
     # Retained for compatibility with older clients; current dashboard does not use it.
     handler._send_json({"error":"Viewer authentication is disabled","authenticated":True}, status=200)
 
-def _audit(actor, action, entity="", details=""):
-    try:
-        conn=get_conn(); conn.execute("INSERT INTO audit_log (actor,action,entity,details) VALUES (?,?,?,?)", (actor or "admin", action, entity, details[:2000])); conn.commit(); conn.close()
-    except Exception:
-        pass
-
-def _admin_actor(handler):
-    token=_cookie_value(handler.headers.get("Cookie", ""), "qdash_admin"); meta=SESSIONS.get(token) or {}; return meta.get("username", ADMIN_USERNAME)
-
 def _json_body(handler):
     length = int(handler.headers.get("Content-Length", "0") or 0)
     raw = handler.rfile.read(length)
@@ -1086,17 +1038,6 @@ def _validate_record(r):
         return "Output Weight cannot be negative"
     if r["quality_decision"] not in DECISION_ORDER:
         return "Unknown QUALITY DECISION: " + r["quality_decision"]
-    try:
-        conn = get_conn()
-        allowed_q = {str(x[0]).upper() for x in conn.execute("SELECT value FROM master_data WHERE list_name=? AND active=1", ("Quality Decision",)).fetchall()}
-        allowed_i = {str(x[0]).upper() for x in conn.execute("SELECT value FROM master_data WHERE list_name=? AND active=1", ("Defect Intensity",)).fetchall()}
-        conn.close()
-        if allowed_q and r["quality_decision"] not in allowed_q:
-            return "QUALITY DECISION is not active in Master Data"
-        if r["defect_intensity"] and allowed_i and r["defect_intensity"] not in allowed_i:
-            return "Defect Intensity is not active in Master Data"
-    except Exception:
-        pass
     return ""
 
 
@@ -1234,56 +1175,6 @@ def _ensure_admin_schema():
     except Exception:
         pass
 
-    # Administrator configuration tables: KPI target bands, controlled master lists, import history and audit trail.
-    if USE_POSTGRES:
-        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
-            id BIGSERIAL PRIMARY KEY, kpi_key TEXT UNIQUE NOT NULL, label TEXT UNIQUE NOT NULL,
-            target DOUBLE PRECISION, warning DOUBLE PRECISION, critical DOUBLE PRECISION,
-            direction TEXT NOT NULL DEFAULT 'lower', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS master_data (
-            id BIGSERIAL PRIMARY KEY, list_name TEXT NOT NULL, value TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(list_name,value)
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
-            id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, inserted INTEGER DEFAULT 0,
-            duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, imported_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            imported_by TEXT DEFAULT ''
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS audit_log (
-            id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT NOT NULL, entity TEXT DEFAULT '', details TEXT DEFAULT '',
-            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-    else:
-        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, kpi_key TEXT UNIQUE NOT NULL, label TEXT UNIQUE NOT NULL,
-            target REAL, warning REAL, critical REAL, direction TEXT NOT NULL DEFAULT 'lower', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS master_data (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, list_name TEXT NOT NULL, value TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(list_name,value)
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, inserted INTEGER DEFAULT 0,
-            duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, imported_by TEXT DEFAULT ''
-        )""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS audit_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, entity TEXT DEFAULT '', details TEXT DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )""")
-    # Seed controlled lists only when empty. Admin can extend them later.
-    for list_name, values in [("Quality Decision", DECISION_ORDER), ("Defect Intensity", ["LIGHT","MEDIUM","DEEP"])]:
-        for value in values:
-            try:
-                conn.execute("INSERT INTO master_data (list_name,value,active) VALUES (?,?,?)", (list_name,value,True))
-            except Exception:
-                pass
-    for label,(target,warning,critical,direction) in _kpi_default_targets().items():
-        try:
-            conn.execute("INSERT INTO kpi_targets (kpi_key,label,target,warning,critical,direction) VALUES (?,?,?,?,?,?)", (label,label,target,warning,critical,direction))
-        except Exception:
-            pass
-
     # Create/update the environment-backed admin account without overwriting its password on every restart.
     existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
     if not existing:
@@ -1377,11 +1268,97 @@ def _kpi_rows(kpis):
         rows.append([k.get("label",""), k.get("value",0), k.get("fmt",""), k.get("prev",""), k.get("change_value","")])
     return rows
 
+
+def _chart_png(kind, title, labels, values, second=None, second_label=None, percent=False):
+    """Create dashboard-style chart PNGs for Office/PDF exports. Returns bytes or None."""
+    if plt is None:
+        return None
+    import numpy as np
+    fig, ax = plt.subplots(figsize=(8.2, 3.65), dpi=150)
+    fig.patch.set_facecolor("white"); ax.set_facecolor("white")
+    navy="#0F2A4A"; blue="#118DFF"; red="#DC2626"; green="#16A34A"; orange="#D97706"; purple="#7C3AED"; grid="#DCE6EF"
+    labels=[str(x) for x in labels]
+    vals=[float(x or 0) for x in values]
+    if kind == "pie":
+        nz=[(l,v) for l,v in zip(labels,vals) if v>0]
+        if nz:
+            labs,vs=zip(*nz)
+            ax.pie(vs, labels=labs, autopct=lambda p: f"{p:.1f}%" if p>=3 else "", startangle=90,
+                   colors=[blue,green,orange,red,purple,"#64748B"][:len(vs)],
+                   wedgeprops={"linewidth":1.2,"edgecolor":"white"}, textprops={"fontsize":8})
+        ax.axis("equal")
+    elif kind == "bar":
+        x=np.arange(len(labels)); ax.bar(x,vals,width=.62,color=blue,edgecolor="none")
+        ax.set_xticks(x); ax.set_xticklabels(labels,rotation=35 if len(labels)>6 else 0,ha="right" if len(labels)>6 else "center",fontsize=7.5)
+        for i,v in enumerate(vals): ax.text(i,v + (max(vals)*.018 if max(vals) else .02), f"{v:.2f}" if percent else f"{v:,.2f}",ha="center",va="bottom",fontsize=7,fontweight="bold")
+    elif kind == "line":
+        x=np.arange(len(labels)); ax.plot(x,vals,marker="o",linewidth=2.4,markersize=4.5,color=blue,label="Value")
+        if second is not None:
+            ax.plot(x,[float(v or 0) for v in second],marker="o",linewidth=2.0,markersize=3.5,color=green,label=second_label or "Series 2")
+            ax.legend(frameon=False,fontsize=7,loc="best")
+        ax.set_xticks(x); ax.set_xticklabels(labels,rotation=35 if len(labels)>6 else 0,ha="right" if len(labels)>6 else "center",fontsize=7.5)
+        for i,v in enumerate(vals): ax.text(i,v,f"{v:.2f}" if percent else f"{v:,.2f}",ha="center",va="bottom",fontsize=6.5,fontweight="bold")
+    elif kind == "pareto":
+        x=np.arange(len(labels)); ax.bar(x,vals,color=red,width=.62,label="Defect Qty")
+        cum=[float(v or 0)*100 for v in (second or [])]
+        ax2=ax.twinx(); ax2.plot(x,cum,color=purple,marker="o",linewidth=2.2,markersize=4,label="Cumulative %"); ax2.set_ylim(0,105); ax2.set_ylabel("Cumulative %",fontsize=8)
+        ax2.axhline(80,color=orange,linestyle="--",linewidth=1.1)
+        ax.set_xticks(x); ax.set_xticklabels(labels,rotation=38,ha="right",fontsize=7); ax.set_ylabel("Qty (MT)",fontsize=8)
+    ax.set_title(title,loc="left",fontsize=13,fontweight="bold",color=navy,pad=10)
+    ax.grid(axis="y",color=grid,linewidth=.7,alpha=.85); ax.set_axisbelow(True)
+    for spine in ("top","right"): ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_color(grid); ax.spines["bottom"].set_color(grid)
+    ax.tick_params(axis="y",labelsize=7.5)
+    fig.tight_layout(pad=1.25)
+    out=io.BytesIO(); fig.savefig(out,format="png",bbox_inches="tight",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
+
+def _export_charts(payload):
+    d=payload["defects"]; wc=payload["wcg"]["by_work_center"]; gr=payload["wcg"]["by_grade"]
+    charts=[]
+    # Decision composition from KPI data is reconstructed from the filtered DB for exact values.
+    filters=payload["filters"]; conn=get_conn(); cur=conn.cursor(); where_sql,params=build_where(filters)
+    cur.execute(f"SELECT quality_decision, COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY quality_decision ORDER BY quality_decision",params)
+    decisions=cur.fetchall(); conn.close()
+    if decisions:
+        charts.append(("Decision Distribution",_chart_png("pie","Quality Decision Distribution",[r[0] for r in decisions],[r[1] for r in decisions]),"A1"))
+    if d.get("pareto"):
+        charts.append(("Defect Pareto",_chart_png("pareto","Top Defect Pareto — Output Qty",[r["defect"] for r in d["pareto"]],[r["qty"] for r in d["pareto"]],[r["cum_pct"] for r in d["pareto"]]),"J1"))
+    if wc:
+        charts.append(("Work Center",_chart_png("bar","Output Quantity by Work Center",[r["name"] for r in wc],[r["output_qty"] for r in wc]),"A22"))
+    if gr:
+        charts.append(("Grade",_chart_png("bar","Output Quantity by Grade",[r["name"] for r in gr],[r["output_qty"] for r in gr]),"J22"))
+    for title,key in [("Monthly Trend","monthly"),("Weekly Trend","period"),("Quarterly Trend","quarterly"),("Financial Year Trend","yearly")]:
+        rows=payload[key]["rows"]
+        if rows:
+            charts.append((title,_chart_png("line",title,[r["name"] for r in rows],[r["output_qty"] for r in rows]),None))
+    return [(n,b) for n,b,_ in charts if b]
+
 def _excel_report(payload):
     if Workbook is None:
         raise RuntimeError("Excel export requires openpyxl")
-    wb=Workbook(); ws=wb.active; ws.title="KPI Summary"
+    wb=Workbook(); ws=wb.active; ws.title="Dashboard"
     navy="0F2A4A"; accent="118DFF"; white="FFFFFF"; light="EEF4FF"
+    # Executive dashboard sheet: KPI cards + embedded charts, matching the web report structure.
+    ws.merge_cells("A1:P2"); ws["A1"]="QUALITY INTELLIGENCE — Dashboard Export"; ws["A1"].font=Font(size=20,bold=True,color=white); ws["A1"].fill=PatternFill("solid",fgColor=navy); ws["A1"].alignment=Alignment(vertical="center")
+    ws["A3"]="Generated"; ws["B3"]=datetime.now().strftime("%d-%b-%Y %H:%M:%S"); ws["D3"]="Filters"; ws["E3"]=", ".join(f"{k}: {v}" for k,v in _filter_summary(payload["filters"])) or "All"; ws.merge_cells("E3:P3")
+    for c in range(1,17): ws.column_dimensions[chr(64+c) if c<=26 else "A"].width=13
+    klist=payload["kpis"].get("kpis",[])
+    for i,k in enumerate(klist[:16]):
+        col=(i%4)*4+1; row=5+(i//4)*3
+        ws.merge_cells(start_row=row,start_column=col,end_row=row,end_column=col+3)
+        ws.merge_cells(start_row=row+1,start_column=col,end_row=row+1,end_column=col+3)
+        ws.cell(row,col,k.get("label","")).font=Font(size=9,bold=True,color=navy); ws.cell(row,col).fill=PatternFill("solid",fgColor="EAF2FB"); ws.cell(row,col).alignment=Alignment(horizontal="center")
+        ws.cell(row+1,col,str(k.get("value",0))).font=Font(size=18,bold=True,color=navy); ws.cell(row+1,col).alignment=Alignment(horizontal="center")
+    chart_row=18
+    chart_positions=["A18","I18","A39","I39","A60","I60","A81","I81"]
+    for (name,img),pos in zip(_export_charts(payload),chart_positions):
+        try:
+            xli=XLImage(io.BytesIO(img)); xli.width=560; xli.height=250; ws.add_image(xli,pos)
+        except Exception: pass
+    ws.freeze_panes="A5"
+    ws.sheet_view.showGridLines=False
+
+    ws=wb.create_sheet("KPI Summary")
     thin=Side(style="thin", color="DCE6EF")
     def title(ws, text, row=1, cols=5):
         ws.merge_cells(start_row=row,start_column=1,end_row=row,end_column=cols); c=ws.cell(row,1,text); c.font=Font(size=16,bold=True,color=white); c.fill=PatternFill("solid",fgColor=navy); c.alignment=Alignment(horizontal="left")
@@ -1428,18 +1405,28 @@ def _excel_report(payload):
 def _pdf_report(payload):
     if SimpleDocTemplate is None:
         raise RuntimeError("PDF export requires reportlab")
-    bio=io.BytesIO(); doc=SimpleDocTemplate(bio,pagesize=landscape(A4),rightMargin=24,leftMargin=24,topMargin=24,bottomMargin=24)
-    styles=getSampleStyleSheet(); styles.add(ParagraphStyle(name="Small",parent=styles["BodyText"],fontSize=7.5,leading=9)); styles.add(ParagraphStyle(name="Title2",parent=styles["Title"],fontSize=18,textColor=colors.HexColor("#0F2A4A"),alignment=TA_LEFT))
-    story=[Paragraph("QUALITY INTELLIGENCE",styles["Title2"]),Paragraph("Disposition & Defect Analytics — Dashboard Report",styles["Heading2"]),Paragraph("Generated: "+datetime.now().strftime("%d-%b-%Y %H:%M:%S"),styles["Small"]),Spacer(1,8)]
-    fs=_filter_summary(payload["filters"]); story.append(Paragraph("Filters: "+("; ".join(f"{k}: {v}" for k,v in fs) if fs else "All"),styles["Small"])); story.append(Spacer(1,10))
-    krows=[["KPI","Value","Previous","Change"]]+[[str(k.get("label","")),str(k.get("value","")),str(k.get("prev","")),str(k.get("change_value",""))] for k in payload["kpis"].get("kpis", [])]
-    t=Table(krows,colWidths=[230,100,100,100],repeatRows=1); t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)])); story += [t,PageBreak()]
+    bio=io.BytesIO(); doc=SimpleDocTemplate(bio,pagesize=landscape(A4),rightMargin=22,leftMargin=22,topMargin=20,bottomMargin=20)
+    styles=getSampleStyleSheet(); styles.add(ParagraphStyle(name="Small",parent=styles["BodyText"],fontSize=7.5,leading=9)); styles.add(ParagraphStyle(name="Title2",parent=styles["Title"],fontSize=20,textColor=colors.HexColor("#0F2A4A"),alignment=TA_LEFT))
+    story=[Paragraph("QUALITY INTELLIGENCE",styles["Title2"]),Paragraph("Disposition & Defect Analytics — Dashboard Export",styles["Heading2"]),Paragraph("Generated: "+datetime.now().strftime("%d-%b-%Y %H:%M:%S"),styles["Small"]),Spacer(1,5)]
+    fs=_filter_summary(payload["filters"]); story.append(Paragraph("Filters: "+("; ".join(f"{k}: {v}" for k,v in fs) if fs else "All"),styles["Small"])); story.append(Spacer(1,8))
+    # KPI cards as a compact dashboard table.
+    kl=payload["kpis"].get("kpis",[]); card_rows=[]
+    for base in range(0,min(len(kl),16),4):
+        card_rows.append([f'{k.get("label","")}\n{str(k.get("value",0))}' for k in kl[base:base+4]])
+    if card_rows:
+        kt=Table(card_rows,colWidths=[185,185,185,185],rowHeights=[42]*len(card_rows)); kt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#EAF2FB")),("TEXTCOLOR",(0,0),(-1,-1),colors.HexColor("#0F2A4A")),("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("BOX",(0,0),(-1,-1),.5,colors.HexColor("#DCE6EF")),("INNERGRID",(0,0),(-1,-1),.5,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),8)])); story += [kt,Spacer(1,10)]
+    charts=_export_charts(payload)
+    # Put two charts per page so labels remain readable and the PDF resembles the dashboard.
+    for idx,(name,img) in enumerate(charts):
+        story.append(Paragraph(name,styles["Heading3"]))
+        story.append(RLImage(io.BytesIO(img),width=350,height=155))
+        if idx%2==1 and idx != len(charts)-1: story.append(PageBreak())
+        else: story.append(Spacer(1,8))
+    story.append(PageBreak())
     d=payload["defects"]; rows=[["Rank","Defect","Records","Qty MT","% Records"]]+[[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in d["register"]]+[["","Total",d["register_total"]["records"],f'{d["register_total"]["qty"]:.3f}',f'{d["register_total"]["pct_records"]*100:.2f}%']]
-    story += [Paragraph("Defect Analysis",styles["Heading2"]),Table(rows,repeatRows=1,colWidths=[45,300,70,80,80],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7),("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,-1),(-1,-1),colors.white),("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold")])),PageBreak()]
-    for title_name,key in [("Work Center Analysis","by_work_center"),("Grade Analysis","by_grade")]:
-        arr=payload["wcg"][key]; rows=[["Name","Coils","Output MT","Defect Coils","Defect %","Reject MT","Reject %"]]+[[r.get("name"),r.get("coils"),f'{r.get("output_qty",0):.3f}',r.get("defect_coils"),f'{r.get("defect_pct",0)*100:.2f}%',f'{r.get("reject_qty",0):.3f}',f'{r.get("reject_pct_qty",0)*100:.2f}%'] for r in arr]
-        story += [Paragraph(title_name,styles["Heading2"]),Table(rows,repeatRows=1,colWidths=[190,65,85,75,70,80,75],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)])),Spacer(1,12)]
+    story += [Paragraph("Defect Analysis Detail",styles["Heading2"]),Table(rows,repeatRows=1,colWidths=[45,300,70,80,80],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)]))]
     doc.build(story); return bio.getvalue()
+
 
 HTML_PAGE = None  # loaded lazily from index_template
 
@@ -1605,36 +1592,6 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close(); self._send_json({"summary":{"total_users":total_users,"unique_ips":unique_ips,"active_today":active_today,"opens_today":opens_today,"opens_7d":opens_7,"exports_30d":exports_30},"users":[dict(r) for r in users],"recent":[dict(r) for r in recent],"trend":[dict(r) for r in trend]})
             except Exception as e:
                 self._send_json({"error":str(e)},status=500)
-        elif path == "/api/admin/users":
-            if not _is_admin(self): _auth_error(self)
-            else:
-                try:
-                    conn=get_conn(); rows=conn.execute("SELECT id,username,display_name,role,active,created_at FROM users ORDER BY role DESC,display_name").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
-                except Exception as e: self._send_json({"error":str(e)},status=500)
-        elif path == "/api/admin/kpi_targets":
-            if not _is_admin(self): _auth_error(self)
-            else:
-                try:
-                    conn=get_conn(); rows=_kpi_target_rows(conn); conn.close(); self._send_json({"rows":rows})
-                except Exception as e: self._send_json({"error":str(e)},status=500)
-        elif path == "/api/admin/master_data":
-            if not _is_admin(self): _auth_error(self)
-            else:
-                try:
-                    conn=get_conn(); rows=conn.execute("SELECT id,list_name,value,active,created_at FROM master_data ORDER BY list_name,value").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
-                except Exception as e: self._send_json({"error":str(e)},status=500)
-        elif path == "/api/admin/import_history":
-            if not _is_admin(self): _auth_error(self)
-            else:
-                try:
-                    conn=get_conn(); rows=conn.execute("SELECT id,filename,detected,inserted,duplicates,errors,imported_at,imported_by FROM import_history ORDER BY id DESC LIMIT 100").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
-                except Exception as e: self._send_json({"error":str(e)},status=500)
-        elif path == "/api/admin/audit_log":
-            if not _is_admin(self): _auth_error(self)
-            else:
-                try:
-                    conn=get_conn(); rows=conn.execute("SELECT id,actor,action,entity,details,created_at FROM audit_log ORDER BY id DESC LIMIT 200").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
-                except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/database_status":
             if not _is_admin(self):
                 _auth_error(self)
@@ -1782,49 +1739,6 @@ class Handler(BaseHTTPRequestHandler):
             _auth_error(self)
             return
 
-        if path == "/api/admin/kpi_target":
-            try:
-                body=_json_body(self); label=str(body.get("label","")).strip(); target=body.get("target"); warning=body.get("warning"); critical=body.get("critical"); direction=str(body.get("direction","lower")).lower().strip()
-                if not label: raise ValueError("KPI label is required")
-                if direction not in ("higher","lower","neutral"): raise ValueError("Direction must be Higher, Lower or Neutral")
-                def num(v): return None if v in (None,"") else float(v)
-                target,warning,critical=num(target),num(warning),num(critical)
-                if target is None and direction != "neutral": raise ValueError("Target is required")
-                if direction=="higher" and warning is not None and target is not None and warning>target: raise ValueError("Warning must be <= Target for Higher-is-Better")
-                if direction=="lower" and warning is not None and target is not None and warning<target: raise ValueError("Warning must be >= Target for Lower-is-Better")
-                if direction=="higher" and critical is not None and warning is not None and critical>warning: raise ValueError("Critical must be <= Warning for Higher-is-Better")
-                if direction=="lower" and critical is not None and warning is not None and critical<warning: raise ValueError("Critical must be >= Warning for Lower-is-Better")
-                conn=get_conn(); existing=conn.execute("SELECT id FROM kpi_targets WHERE label=?",(label,)).fetchone()
-                if existing: conn.execute("UPDATE kpi_targets SET target=?,warning=?,critical=?,direction=?,updated_at=CURRENT_TIMESTAMP WHERE label=?",(target,warning,critical,direction,label))
-                else: conn.execute("INSERT INTO kpi_targets (kpi_key,label,target,warning,critical,direction) VALUES (?,?,?,?,?,?)",(label,label,target,warning,critical,direction))
-                conn.commit(); conn.close(); _audit(_admin_actor(self),"kpi_target_update",label,json.dumps({"target":target,"warning":warning,"critical":critical,"direction":direction})); self._send_json({"ok":True})
-            except Exception as e: self._send_json({"error":str(e)},status=400)
-            return
-
-        if path == "/api/admin/master_data":
-            try:
-                body=_json_body(self); action=str(body.get("action","add")); list_name=str(body.get("list_name","")).strip(); value=str(body.get("value","")).strip().upper()
-                if not list_name or not value: raise ValueError("List name and value are required")
-                conn=get_conn()
-                if action=="toggle":
-                    mid=int(body.get("id")); active=bool(body.get("active")); conn.execute("UPDATE master_data SET active=? WHERE id=?",(active,mid))
-                else:
-                    conn.execute("INSERT INTO master_data (list_name,value,active) VALUES (?,?,?)",(list_name,value,True))
-                conn.commit(); conn.close(); _audit(_admin_actor(self),"master_data_"+action,list_name,value); self._send_json({"ok":True})
-            except Exception as e: self._send_json({"error":str(e)},status=400)
-            return
-
-        if path == "/api/admin/data_explorer":
-            try:
-                body=_json_body(self); heat=str(body.get("heat_no","")).strip(); wc=str(body.get("work_center","")).strip(); grade=str(body.get("grade","")).strip(); defect=str(body.get("defect","")).strip(); limit=min(max(int(body.get("limit",200)),1),500)
-                clauses=[]; params=[]
-                for col,val in (("heat_no",heat),("work_center",wc),("grade",grade),("main_defect",defect)):
-                    if val: clauses.append(f"UPPER(COALESCE({col},'')) LIKE UPPER(?)"); params.append("%"+val+"%")
-                where=" WHERE "+" AND ".join(clauses) if clauses else ""
-                conn=get_conn(); rows=conn.execute(f"SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition{where} ORDER BY id DESC LIMIT ?",params+[limit]).fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
-            except Exception as e: self._send_json({"error":str(e)},status=400)
-            return
-
         if path == "/api/admin/record":
             try:
                 body = _json_body(self)
@@ -1859,11 +1773,6 @@ class Handler(BaseHTTPRequestHandler):
                 if len(records) > 10000:
                     raise ValueError("Import limited to 10,000 records per upload")
                 result = _insert_records(records)
-                actor=_admin_actor(self)
-                try:
-                    conn=get_conn(); conn.execute("INSERT INTO import_history (filename,detected,inserted,duplicates,errors,imported_by) VALUES (?,?,?,?,?,?)",(uploaded[0],len(records),result.get("inserted",0),result.get("duplicates",0),len(result.get("errors",[])),actor)); conn.commit(); conn.close()
-                except Exception: pass
-                _audit(actor,"data_import",uploaded[0],json.dumps({"detected":len(records),"inserted":result.get("inserted",0),"duplicates":result.get("duplicates",0),"errors":len(result.get("errors",[]))}))
                 self._send_json({"ok": True, "detected": len(records), **result})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -1890,7 +1799,6 @@ class Handler(BaseHTTPRequestHandler):
                 cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
                 conn.commit()
                 conn.close()
-                _audit(_admin_actor(self),"record_delete",str(record_id),json.dumps({"deleted":cur.rowcount}))
                 self._send_json({"ok": True, "deleted": cur.rowcount})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
