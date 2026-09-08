@@ -169,6 +169,6 @@ The live dashboard now provides **Excel, PDF, and CSV** export buttons in the Da
 
 
 ### Viewer login & activity monitoring
-The dashboard now requires a named viewer login. Admin can create viewer accounts from **Admin → Viewer Accounts**. Dashboard activity is recorded in PostgreSQL/SQLite, including login, dashboard opens, tab opens and exports. Admin can review **Dashboard Activity** to see who opened the dashboard, how many times, last seen time and recent activity. Passwords are stored as one-way PBKDF2 hashes and are never written to the activity log.
+Viewer login is currently disabled. The main dashboard is open to all visitors without username/password. Every dashboard page visit and dashboard action is recorded with the visitor IP address, timestamp, event, tab and browser/user-agent. Admin can review **Dashboard Activity** to see unique IPs, opens, last seen time, browser/device information and recent activity. Named viewer login can be enabled in a future version if required. Admin/data-management APIs remain protected by Admin login.
 
 For the first deployment, the environment-backed `ADMIN_USERNAME` / `ADMIN_PASSWORD` account is automatically created as the administrator. Log in to `/admin`, create viewer accounts, then share those credentials with authorized viewers.

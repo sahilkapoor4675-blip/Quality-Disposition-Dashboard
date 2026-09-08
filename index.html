@@ -230,10 +230,7 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 </style>
 </head>
 <body>
-<style id="viewer-auth-style">
-.viewer-auth-overlay{position:fixed;inset:0;background:rgba(245,248,251,.97);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px}.viewer-auth-card{width:min(430px,100%);background:#fff;border:1px solid #DCE6EF;border-radius:16px;box-shadow:0 20px 60px rgba(24,58,88,.14);padding:30px}.viewer-auth-card h2{margin:0 0 6px;color:#183A58;font-size:23px}.viewer-auth-card p{margin:0 0 20px;color:#718096;font-size:12px;line-height:1.5}.viewer-auth-card label{display:block;font-size:11px;font-weight:800;color:#718096;text-transform:uppercase;margin:0 0 5px}.viewer-auth-card input{width:100%;box-sizing:border-box;padding:11px 12px;margin:0 0 12px;border:1px solid #D5E0EA;border-radius:9px;font-size:13px}.viewer-auth-card button{width:100%;padding:11px;border:0;border-radius:9px;background:#183A58;color:#fff;font-weight:800;cursor:pointer}.viewer-auth-msg{min-height:18px;margin-top:10px;font-size:12px;color:#B91C1C}.viewer-user-badge{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:800;color:#183A58;margin-right:8px}.viewer-logout{border:1px solid #D5E0EA;background:#fff;color:#183A58;border-radius:7px;padding:6px 9px;font-size:10px;font-weight:800;cursor:pointer}.activity-admin-link{font-size:10px;font-weight:800;color:#183A58;text-decoration:none;margin-right:8px}
-</style>
-<div class="viewer-auth-overlay" id="viewerAuthOverlay"><div class="viewer-auth-card"><h2>🔐 Dashboard Login</h2><p>Authorized viewer access only. Your dashboard usage is recorded for administrative activity monitoring.</p><label>Username / Employee ID</label><input id="viewerUsername" autocomplete="username"><label>Password</label><input id="viewerPassword" type="password" autocomplete="current-password"><button id="viewerLoginBtn">Login to Dashboard</button><div class="viewer-auth-msg" id="viewerAuthMsg"></div></div></div>
+</div></div>
 
 <header>
   <div class="executive-brand">
@@ -249,7 +246,7 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
     </div>
     <div class="header-actions">
       <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
-      <span id="viewerIdentity" class="viewer-user-badge hidden"></span><button id="viewerLogout" class="viewer-logout hidden" type="button">Logout</button><a class="admin-link" href="/admin">🔐 Admin</a>
+      <a class="admin-link" href="/admin">🔐 Admin</a>
     </div>
   </div>
 </header>
@@ -1197,20 +1194,14 @@ function setRefreshed(){
   document.getElementById("liveLabel").textContent = "LIVE DATA";
 }
 
-async function viewerAuthStatus(){try{return await (await fetch("/api/auth/status",{cache:"no-store"})).json()}catch{return {authenticated:false}}}
-function showViewerLoggedIn(s){document.getElementById("viewerAuthOverlay").classList.add("hidden");document.getElementById("viewerIdentity").textContent="👤 "+(s.display_name||s.username);document.getElementById("viewerIdentity").classList.remove("hidden");document.getElementById("viewerLogout").classList.remove("hidden");}
-function showViewerLogin(){document.getElementById("viewerAuthOverlay").classList.remove("hidden");document.getElementById("viewerIdentity").classList.add("hidden");document.getElementById("viewerLogout").classList.add("hidden");}
-async function viewerLogin(){const msg=document.getElementById("viewerAuthMsg");msg.textContent="Signing in…";try{const r=await fetch("/api/viewer/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:document.getElementById("viewerUsername").value,password:document.getElementById("viewerPassword").value})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Login failed");showViewerLoggedIn(d);sessionStorage.setItem("qdash_open_logged","1");await fetch("/api/activity/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event_type:"dashboard_open",tab:"dashboard",filters:currentFilters})});setRefreshed();await loadFilters();await loadKpis();msg.textContent="";}catch(e){msg.textContent=e.message}}
-document.getElementById("viewerLoginBtn").addEventListener("click",viewerLogin);document.getElementById("viewerPassword").addEventListener("keydown",e=>{if(e.key==="Enter")viewerLogin()});document.getElementById("viewerLogout").addEventListener("click",async()=>{await fetch("/api/viewer/logout",{method:"POST"});sessionStorage.removeItem("qdash_open_logged");location.reload()});
-(async function init(){
+async function init(){
   setRefreshed();
-  const s=await viewerAuthStatus();
-  if(!s.authenticated){showViewerLogin();return;}
-  showViewerLoggedIn(s);
-  if(!sessionStorage.getItem("qdash_open_logged")){sessionStorage.setItem("qdash_open_logged","1");fetch("/api/activity/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event_type:"dashboard_open",tab:"dashboard",filters:currentFilters})}).catch(()=>{});}
+  // Dashboard is intentionally public for now. No username/password is required.
+  // Every dashboard page load is logged server-side with the visitor IP address.
   await loadFilters();
   await loadKpis();
-})();
+}
+init();
 </script>
 </body>
 </html>

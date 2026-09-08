@@ -871,23 +871,37 @@ def _viewer_meta(handler):
     return meta
 
 def _is_viewer(handler):
-    return _viewer_meta(handler) is not None
+    # Viewer authentication is currently disabled by design. The dashboard is
+    # open to everyone; activity is tracked by IP address instead.
+    return True
+
+def _client_ip(handler):
+    """Return the best available client IP behind Render/reverse proxies."""
+    forwarded = handler.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:80]
+    real = handler.headers.get("X-Real-IP", "")
+    if real:
+        return real.strip()[:80]
+    return (handler.client_address[0] if handler.client_address else "")[:80]
 
 def _activity_event(handler, event_type, tab="", filters=None):
-    meta = _viewer_meta(handler)
-    if not meta:
-        return
+    # Activity is intentionally anonymous for now. The IP address is stored
+    # so Admin can see usage without requiring viewer username/password login.
     try:
         conn = get_conn()
-        conn.execute("INSERT INTO activity_log (user_id,event_type,tab,filters_json,user_agent) VALUES (?,?,?,?,?)",
-                     (meta.get("user_id"), event_type, tab or "", json.dumps(filters or {}, separators=(",",":")),
-                      (handler.headers.get("User-Agent", "")[:300])))
+        meta = _viewer_meta(handler)
+        user_id = meta.get("user_id") if meta else None
+        conn.execute("INSERT INTO activity_log (user_id,event_type,tab,filters_json,user_agent,ip_address) VALUES (?,?,?,?,?,?)",
+                     (user_id, event_type, tab or "", json.dumps(filters or {}, separators=(",",":")),
+                      (handler.headers.get("User-Agent", "")[:300]), _client_ip(handler)))
         conn.commit(); conn.close()
     except Exception:
         pass
 
 def _viewer_auth_error(handler):
-    handler._send_json({"error":"Viewer login required","authenticated":False}, status=401)
+    # Retained for compatibility with older clients; current dashboard does not use it.
+    handler._send_json({"error":"Viewer authentication is disabled","authenticated":True}, status=200)
 
 def _json_body(handler):
     length = int(handler.headers.get("Content-Length", "0") or 0)
@@ -1116,7 +1130,7 @@ def _ensure_admin_schema():
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS activity_log (
             id BIGSERIAL PRIMARY KEY, user_id BIGINT, event_type TEXT NOT NULL, tab TEXT DEFAULT '',
-            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     else:
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
@@ -1126,8 +1140,21 @@ def _ensure_admin_schema():
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS activity_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT NOT NULL, tab TEXT DEFAULT '',
-            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    # Backward-compatible activity schema migration for existing databases.
+    try:
+        if USE_POSTGRES:
+            conn.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS ip_address TEXT DEFAULT ''")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_ip_time ON activity_log (ip_address, created_at)")
+        else:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(activity_log)").fetchall()}
+            if "ip_address" not in cols:
+                conn.execute("ALTER TABLE activity_log ADD COLUMN ip_address TEXT DEFAULT ''")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_ip_time ON activity_log (ip_address, created_at)")
+    except Exception:
+        pass
+
     # Create/update the environment-backed admin account without overwriting its password on every restart.
     existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
     if not existing:
@@ -1315,6 +1342,7 @@ class Handler(BaseHTTPRequestHandler):
         qs = {k: v[0] for k, v in parse_qs(parsed.query).items()}
 
         if path == "/" or path == "/index.html":
+            _activity_event(self, "dashboard_open", tab="dashboard")
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
                        "r", encoding="utf-8") as f:
                 self._send_html(f.read())
@@ -1335,85 +1363,67 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send_json({"authenticated": False, "username":"", "display_name":"", "role":""})
         elif path == "/api/filters":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else: self._send_json(get_filter_options())
+            self._send_json(get_filter_options())
         elif path == "/api/kpis":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
-                try:
-                    data = compute_kpis(filters)
-                    self._send_json(data)
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_kpis(filters))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/work_center_grade":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
-                try:
-                    self._send_json(compute_work_center_grade(filters))
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_work_center_grade(filters))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/defect_analysis":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
-                try:
-                    self._send_json(compute_defect_analysis(filters))
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_defect_analysis(filters))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/monthly_trend":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
-                try:
-                    self._send_json(compute_monthly_trend(filters))
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                self._send_json(compute_monthly_trend(filters))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/period_trend":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
-                try:
-                    weekly_d = compute_period_trend(filters)
-                    quarterly_d = compute_quarterly_trend(filters)
-                    yearly_d = compute_yearly_trend(filters)
-                    self._send_json({
-                        "weekly": weekly_d["rows"], "weekly_total": weekly_d["total"],
-                        "quarterly": quarterly_d["rows"], "quarterly_total": quarterly_d["total"],
-                        "yearly": yearly_d["rows"], "yearly_total": yearly_d["total"],
-                    })
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                weekly_d = compute_period_trend(filters)
+                quarterly_d = compute_quarterly_trend(filters)
+                yearly_d = compute_yearly_trend(filters)
+                self._send_json({
+                    "weekly": weekly_d["rows"], "weekly_total": weekly_d["total"],
+                    "quarterly": quarterly_d["rows"], "quarterly_total": quarterly_d["total"],
+                    "yearly": yearly_d["rows"], "yearly_total": yearly_d["total"],
+                })
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/export/excel":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                try:
-                    payload = _export_data(_export_filters(qs))
-                    _activity_event(self, "export_excel", filters=payload["filters"])
-                    _send_bytes(self, _excel_report(payload), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _safe_filename(payload["filters"], ".xlsx"))
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            try:
+                payload = _export_data(_export_filters(qs))
+                _activity_event(self, "export_excel", filters=payload["filters"])
+                _send_bytes(self, _excel_report(payload), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _safe_filename(payload["filters"], ".xlsx"))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/export/pdf":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                try:
-                    payload = _export_data(_export_filters(qs))
-                    _activity_event(self, "export_pdf", filters=payload["filters"])
-                    _send_bytes(self, _pdf_report(payload), "application/pdf", _safe_filename(payload["filters"], ".pdf"))
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            try:
+                payload = _export_data(_export_filters(qs))
+                _activity_event(self, "export_pdf", filters=payload["filters"])
+                _send_bytes(self, _pdf_report(payload), "application/pdf", _safe_filename(payload["filters"], ".pdf"))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/export/csv":
-            if not _is_viewer(self): _viewer_auth_error(self)
-            else:
-                try:
-                    filters = _export_filters(qs); where_sql, params = build_where(filters)
-                    conn = get_conn(); cur = conn.cursor(); cur.execute(f"SELECT insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params); rows=cur.fetchall(); conn.close()
-                    out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow(list(r)) for r in rows]
-                    _activity_event(self, "export_csv", filters=filters)
-                    _send_bytes(self,out.getvalue().encode('utf-8-sig'),"text/csv; charset=utf-8",_safe_filename(filters,".csv"))
-                except Exception as e:
-                    self._send_json({"error": str(e)}, status=500)
+            try:
+                filters = _export_filters(qs); where_sql, params = build_where(filters)
+                conn = get_conn(); cur = conn.cursor(); cur.execute(f"SELECT insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params); rows=cur.fetchall(); conn.close()
+                out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow(list(r)) for r in rows]
+                _activity_event(self, "export_csv", filters=filters)
+                _send_bytes(self,out.getvalue().encode('utf-8-sig'),"text/csv; charset=utf-8",_safe_filename(filters,".csv"))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":
             self._send_json({"status": "ok", "database": database_status()})
         elif path == "/api/connection_status":
@@ -1441,31 +1451,31 @@ class Handler(BaseHTTPRequestHandler):
                 }, status=503)
         if path == "/api/activity":
             if not _is_admin(self): _auth_error(self); return
-            meta=_viewer_meta(self)
             _activity_event(self,"activity_view")
             try:
                 conn=get_conn()
                 total_users=conn.execute("SELECT COUNT(*) FROM users WHERE active=1").fetchone()[0]
                 if USE_POSTGRES:
-                    active_today=conn.execute("SELECT COUNT(DISTINCT user_id) FROM activity_log WHERE created_at >= CURRENT_DATE").fetchone()[0]
+                    active_today=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> '' AND created_at >= CURRENT_DATE").fetchone()[0]
                     opens_today=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open' AND created_at >= CURRENT_DATE").fetchone()[0]
                     opens_7=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'").fetchone()[0]
                     exports_30=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type LIKE 'export_%' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'").fetchone()[0]
-                    users=conn.execute("SELECT u.username,u.display_name,COUNT(CASE WHEN a.event_type='dashboard_open' THEN 1 END) opens,MAX(a.created_at) last_seen FROM users u LEFT JOIN activity_log a ON a.user_id=u.id WHERE u.active=TRUE GROUP BY u.id ORDER BY opens DESC, last_seen DESC").fetchall()
-                    recent=conn.execute("SELECT u.username,u.display_name,a.event_type,a.tab,a.created_at FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 100").fetchall()
+                    unique_ips=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> ''").fetchone()[0]
+                    users=conn.execute("SELECT ip_address,COUNT(CASE WHEN event_type='dashboard_open' THEN 1 END) opens,MAX(created_at) last_seen,MAX(user_agent) user_agent FROM activity_log WHERE ip_address <> '' GROUP BY ip_address ORDER BY opens DESC,last_seen DESC LIMIT 200").fetchall()
+                    recent=conn.execute("SELECT COALESCE(NULLIF(a.ip_address,''),'Unknown') ip_address,COALESCE(u.username,'Anonymous') username,COALESCE(u.display_name,'Anonymous Visitor') display_name,a.event_type,a.tab,a.created_at FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 200").fetchall()
                     trend=conn.execute("SELECT TO_CHAR(DATE(created_at),'YYYY-MM-DD') day,COUNT(*) opens FROM activity_log WHERE event_type='dashboard_open' AND created_at >= CURRENT_DATE - INTERVAL '29 days' GROUP BY DATE(created_at) ORDER BY day").fetchall()
                 else:
-                    active_today=conn.execute("SELECT COUNT(DISTINCT user_id) FROM activity_log WHERE date(created_at)=date('now')").fetchone()[0]
+                    active_today=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> '' AND date(created_at)=date('now')").fetchone()[0]
                     opens_today=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open' AND date(created_at)=date('now')").fetchone()[0]
                     opens_7=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open' AND datetime(created_at)>=datetime('now','-7 days')").fetchone()[0]
                     exports_30=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type LIKE 'export_%' AND datetime(created_at)>=datetime('now','-30 days')").fetchone()[0]
-                    users=conn.execute("SELECT u.username,u.display_name,SUM(CASE WHEN a.event_type='dashboard_open' THEN 1 ELSE 0 END) opens,MAX(a.created_at) last_seen FROM users u LEFT JOIN activity_log a ON a.user_id=u.id WHERE u.active=1 GROUP BY u.id ORDER BY opens DESC, last_seen DESC").fetchall()
-                    recent=conn.execute("SELECT u.username,u.display_name,a.event_type,a.tab,a.created_at FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 100").fetchall()
+                    unique_ips=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> ''").fetchone()[0]
+                    users=conn.execute("SELECT ip_address,SUM(CASE WHEN event_type='dashboard_open' THEN 1 ELSE 0 END) opens,MAX(created_at) last_seen,MAX(user_agent) user_agent FROM activity_log WHERE ip_address <> '' GROUP BY ip_address ORDER BY opens DESC,last_seen DESC LIMIT 200").fetchall()
+                    recent=conn.execute("SELECT COALESCE(NULLIF(a.ip_address,''),'Unknown') ip_address,COALESCE(u.username,'Anonymous') username,COALESCE(u.display_name,'Anonymous Visitor') display_name,a.event_type,a.tab,a.created_at FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 200").fetchall()
                     trend=conn.execute("SELECT date(created_at) day,COUNT(*) opens FROM activity_log WHERE event_type='dashboard_open' AND datetime(created_at)>=datetime('now','-29 days') GROUP BY date(created_at) ORDER BY day").fetchall()
-                conn.close(); self._send_json({"summary":{"total_users":total_users,"active_today":active_today,"opens_today":opens_today,"opens_7d":opens_7,"exports_30d":exports_30},"users":[dict(r) for r in users],"recent":[dict(r) for r in recent],"trend":[dict(r) for r in trend]})
-            except Exception as e: self._send_json({"error":str(e)},status=500)
-            return
-
+                conn.close(); self._send_json({"summary":{"total_users":total_users,"unique_ips":unique_ips,"active_today":active_today,"opens_today":opens_today,"opens_7d":opens_7,"exports_30d":exports_30},"users":[dict(r) for r in users],"recent":[dict(r) for r in recent],"trend":[dict(r) for r in trend]})
+            except Exception as e:
+                self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/database_status":
             if not _is_admin(self):
                 _auth_error(self)
