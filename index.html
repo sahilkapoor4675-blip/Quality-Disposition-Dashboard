@@ -152,9 +152,10 @@
   .header-actions{display:flex;align-items:center;gap:10px;}
   .original-look-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid rgba(255,255,255,.28);border-radius:8px;background:rgba(255,255,255,.10);color:#fff;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:.2px;backdrop-filter:blur(6px);}
   .original-look-btn:hover{background:rgba(255,255,255,.18);}
-  .filters{position:relative;display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:14px 14px 16px;border-radius:12px;box-shadow:0 5px 18px rgba(15,42,74,.07);}
+  /* FINAL: dashboard filters must remain fixed/sticky at the viewport top while scrolling. */
+  .filters{position:-webkit-sticky !important;position:sticky !important;top:0 !important;z-index:9999 !important;align-self:start;display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:14px 14px 16px;border-radius:12px;box-shadow:0 8px 24px rgba(15,42,74,.14);background:rgba(255,255,255,.98);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
   @media(max-width:1050px){.filters{grid-template-columns:repeat(2,minmax(180px,1fr));}}
-  @media(max-width:600px){.filters{grid-template-columns:1fr;top:0;padding:12px;gap:10px;}.filter-menu{max-height:55vh;}.filter-options{max-height:180px;}}
+  @media(max-width:600px){.filters{position:-webkit-sticky !important;position:sticky !important;top:0 !important;z-index:9999 !important;grid-template-columns:1fr;padding:12px;gap:10px;}.filter-menu{max-height:55vh;}.filter-options{max-height:180px;}}
   .filter-toolbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:2px;}
   .filter-toolbar-title{font-size:12px;font-weight:800;color:var(--navy);letter-spacing:.4px;text-transform:uppercase;}
   .filter-actions{display:flex;align-items:center;gap:8px;}
