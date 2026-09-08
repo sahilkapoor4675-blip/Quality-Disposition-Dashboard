@@ -207,7 +207,7 @@ KPI_META_BY_LABEL = {
     "Output Quantity (MT)":          {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
     "PPM Defective":                 {"color": "#DC2626", "direction": "down_good", "change": "pct"},
     "Reject Qty (MT)":               {"color": "#DC2626", "direction": "down_good", "change": "pct"},
-    "Intensity Tagging %":           {"color": "#D97706", "direction": "down_good", "change": "pct"},
+    "Intensity Tagging %":           {"color": "#D97706", "direction": "up_good",   "change": "pct"},
     "Salvage + Divert Qty (MT)":     {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
     "Defect Rate":                   {"color": "#DC2626", "direction": "down_good", "change": "pct"},
     "Reject % Qty":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
@@ -215,7 +215,7 @@ KPI_META_BY_LABEL = {
     "Hold For Decision Qty (MT)":    {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Salvage % Qty":                 {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
     "Rework % Qty":                  {"color": "#D97706", "direction": "down_good", "change": "pct"},
-    "Without Intensity %":           {"color": "#64748B", "direction": "up_good",   "change": "pct"},
+    "Without Intensity %":           {"color": "#64748B", "direction": "down_good", "change": "pct"},
 }
 
 
@@ -337,9 +337,9 @@ def kpi_threshold_color(label, value):
     if label == "PPM Defective":
         return green if value <= 10000 else amber if value <= 30000 else red
     if label == "Intensity Tagging %":
-        return green if value < 0.05 else amber if value <= 0.10 else red
+        return green if value >= 0.90 else amber if value >= 0.85 else red
     if label == "Without Intensity %":
-        return green if value > 0.90 else amber if value >= 0.85 else red
+        return green if value <= 0.05 else amber if value <= 0.15 else red
     return None
 
 
@@ -534,7 +534,7 @@ def compute_kpis(filters, _skip_prev=False):
             prev_values = [k["value"] for k in prev_data["kpis"]]
             result["period"]["previous"] = current_period_label(prev_filters)
         else:
-            prev_values = [0] * 16
+            prev_values = [None] * 16
             result["period"]["previous"] = None
 
         for i, k in enumerate(kpis):
@@ -543,15 +543,27 @@ def compute_kpis(filters, _skip_prev=False):
             cur_v = k["value"]
             threshold_color = kpi_threshold_color(k["label"], cur_v)
             k["color"] = threshold_color or meta["color"]
+            if prev_v is None:
+                # No comparison period selected: do not fabricate a 0 baseline
+                # or show a misleading 0% change. The card remains reference-only.
+                k["prev"] = None
+                k["change_value"] = None
+                k["change_type"] = "none"
+                k["arrow"] = None
+                k["trend_color"] = "equal"
+                continue
             k["prev"] = prev_v
             if meta["change"] == "pts":
                 diff = cur_v - prev_v
                 k["change_value"] = diff
                 k["change_type"] = "pts"
             else:
-                diff_pct = ((cur_v - prev_v) / abs(prev_v)) if prev_v else 0.0
-                k["change_value"] = diff_pct
-                k["change_type"] = "pct"
+                if abs(prev_v) < 1e-12:
+                    k["change_value"] = None
+                    k["change_type"] = "new" if abs(cur_v) >= 1e-12 else "none"
+                else:
+                    k["change_value"] = (cur_v - prev_v) / abs(prev_v)
+                    k["change_type"] = "pct"
             if cur_v > prev_v:
                 arrow = "up"
             elif cur_v < prev_v:

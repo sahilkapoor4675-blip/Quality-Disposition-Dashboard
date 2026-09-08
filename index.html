@@ -565,8 +565,8 @@ function kpiStatus(label,k){
   if(['Salvage % Qty','Reject % Qty','Rework % Qty','Hold for Decision % Qty'].includes(label)) return v<.01?'good':v<=.03?'amber':'bad';
   if(label==='Process Sigma Level (Approx.)') return v>3?'good':v>=2?'amber':'bad';
   if(label==='PPM Defective') return v<=10000?'good':v<=30000?'amber':'bad';
-  if(label==='Intensity Tagging %') return v<.05?'good':v<=.10?'amber':'bad';
-  if(label==='Without Intensity %') return v>.90?'good':v>=.85?'amber':'bad';
+  if(label==='Intensity Tagging %') return v>=.90?'good':v>=.85?'amber':'bad';
+  if(label==='Without Intensity %') return v<=.05?'good':v<=.15?'amber':'bad';
   return 'neutral';
 }
 function sparklineSvg(oldValue,currentValue,status){
@@ -580,7 +580,7 @@ function renderKpis(kpis){
   kpis.forEach(k=>{
     const card=document.createElement('div'); const oldValue=previousKpiValues.get(k.label); const cur=Number(k.value)||0; const changed=Number.isFinite(oldValue)&&Math.abs(oldValue-cur)>1e-12; const direction=changed?(cur>oldValue?'up':'down'):''; const status=kpiStatus(k.label,k);
     card.className=`kpi-card status-${status} kpi-pulse`; if(direction)card.classList.add(direction==='up'?'kpi-up':'kpi-down');
-    let trendHtml=''; if(k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; const changeText=k.change_type==='pts'?`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`:`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
+    let trendHtml=''; if(k.arrow!==null && k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; let changeText=''; if(k.change_type==='pts') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`; else if(k.change_type==='new') changeText='New'; else if(k.change_type==='pct') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; else changeText='No change'; trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
     const statusText=status==='good'?'On Target':status==='amber'?'Watch':status==='bad'?'Action':'Neutral';
     card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${k.color||'#0f2a4a'}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta"><div class="kpi-target">${kpiTarget(k.label)}</div><div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
     grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
