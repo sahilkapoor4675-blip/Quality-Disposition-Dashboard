@@ -1364,6 +1364,19 @@ def _kpi_rows(kpis):
     return rows
 
 
+def _export_display_value(value, fmt):
+    """Format exported KPI values exactly like the web dashboard."""
+    try: v=float(value or 0)
+    except (TypeError, ValueError): return str(value if value is not None else "")
+    if fmt == "pct": return f"{v*100:.3f}%"
+    if fmt == "int": return f"{round(v):,}"
+    if fmt == "num2": return f"{v:,.3f}"
+    if fmt == "num3": return f"{v:.3f}"
+    return str(value)
+
+def _excel_number_format(fmt):
+    return {"pct":"0.000%", "int":"#,##0", "num2":"#,##0.000", "num3":"0.000"}.get(fmt, "General")
+
 def _chart_png(kind, title, labels, values, second=None, second_label=None, percent=False):
     """Create dashboard-style chart PNGs for Office/PDF exports. Returns bytes or None."""
     if plt is None:
@@ -1443,7 +1456,9 @@ def _excel_report(payload):
         ws.merge_cells(start_row=row,start_column=col,end_row=row,end_column=col+3)
         ws.merge_cells(start_row=row+1,start_column=col,end_row=row+1,end_column=col+3)
         ws.cell(row,col,k.get("label","")).font=Font(size=9,bold=True,color=navy); ws.cell(row,col).fill=PatternFill("solid",fgColor="EAF2FB"); ws.cell(row,col).alignment=Alignment(horizontal="center")
-        ws.cell(row+1,col,str(k.get("value",0))).font=Font(size=18,bold=True,color=navy); ws.cell(row+1,col).alignment=Alignment(horizontal="center")
+        value_cell=ws.cell(row+1,col,k.get("value",0))
+        value_cell.font=Font(size=18,bold=True,color=navy); value_cell.alignment=Alignment(horizontal="center")
+        value_cell.number_format=_excel_number_format(k.get("fmt",""))
     chart_row=18
     chart_positions=["A18","I18","A39","I39","A60","I60","A81","I81"]
     for (name,img),pos in zip(_export_charts(payload),chart_positions):
@@ -1469,19 +1484,32 @@ def _excel_report(payload):
     ws["A2"]="Generated"; ws["B2"]=datetime.now().strftime("%d-%b-%Y %H:%M:%S")
     ws["A3"]="Filters"; ws["B3"]=", ".join(f"{k}: {v}" for k,v in _filter_summary(payload["filters"])) or "All"
     header(ws,5,["KPI","Value","Format","Previous","Change"])
-    for i,r in enumerate(_kpi_rows(payload["kpis"]),6): ws.append(r)
+    for i,r in enumerate(_kpi_rows(payload["kpis"]),6):
+        ws.append(r)
+        ws.cell(i,2).number_format=_excel_number_format(r[2])
+        if isinstance(r[3], (int,float)): ws.cell(i,4).number_format=_excel_number_format(r[2])
+        if isinstance(r[4], (int,float)): ws.cell(i,5).number_format="0.000%" if r[2]=="pct" else _excel_number_format(r[2])
     for c in ws["A5:E5"][0]: c.fill=PatternFill("solid",fgColor=accent)
     autofit(ws); ws.freeze_panes="A6"
 
     d=payload["defects"]; ws2=wb.create_sheet("Defect Analysis"); title(ws2,"Defect Analysis",1,5); header(ws2,3,["Rank","Defect","Records","Qty (MT)","% Records"])
     for r in d["register"]:
         ws2.append([r["rank"],r["defect"],r["records"],r["qty"],r["pct_records"]])
-    ws2.append(["","Total",d["register_total"]["records"],d["register_total"]["qty"],d["register_total"]["pct_records"]]); autofit(ws2)
+    ws2.append(["","Total",d["register_total"]["records"],d["register_total"]["qty"],d["register_total"]["pct_records"]])
+    for rr in range(4, ws2.max_row+1):
+        ws2.cell(rr,4).number_format="#,##0.000"
+        ws2.cell(rr,5).number_format="0.000%"
+    autofit(ws2)
 
     for sheet_name, rows, total in [("Work Center",payload["wcg"]["by_work_center"],payload["wcg"]["total_work_center"]),("Grade Analysis",payload["wcg"]["by_grade"],payload["wcg"]["total_grade"])]:
         w=wb.create_sheet(sheet_name); title(w,sheet_name,1,7); header(w,3,["Name","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty"])
         for r in rows: w.append([r.get("name"),r.get("coils"),r.get("output_qty"),r.get("defect_coils"),r.get("defect_pct"),r.get("reject_qty"),r.get("reject_pct_qty")])
         if total: w.append(["Total",total.get("coils"),total.get("output_qty"),total.get("defect_coils"),total.get("defect_pct"),total.get("reject_qty"),total.get("reject_pct_qty")])
+        for rr in range(4, w.max_row+1):
+            w.cell(rr,3).number_format="#,##0.000"
+            w.cell(rr,5).number_format="0.000%"
+            w.cell(rr,6).number_format="#,##0.000"
+            w.cell(rr,7).number_format="0.000%"
         autofit(w)
 
     for sheet_name, rows, total, labels in [("Monthly Trend",payload["monthly"]["rows"],payload["monthly"].get("total"),["Month","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Weekly Trend",payload["period"]["rows"],payload["period"].get("total"),["Week","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Quarterly Trend",payload["quarterly"]["rows"],payload["quarterly"].get("total"),["Quarter","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Financial Year",payload["yearly"]["rows"],payload["yearly"].get("total"),["Financial Year","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"])]:
@@ -1489,6 +1517,12 @@ def _excel_report(payload):
         for r in rows:
             w.append([r.get("name"),r.get("coils"),r.get("output_qty"),r.get("defect_coils"),r.get("defect_pct"),r.get("reject_qty"),r.get("reject_pct_qty"),r.get("fpy")])
         if total: w.append(["Total",total.get("coils"),total.get("output_qty"),total.get("defect_coils"),total.get("defect_pct"),total.get("reject_qty"),total.get("reject_pct_qty"),total.get("fpy")])
+        for rr in range(4, w.max_row+1):
+            w.cell(rr,3).number_format="#,##0.000"
+            w.cell(rr,5).number_format="0.000%"
+            w.cell(rr,6).number_format="#,##0.000"
+            w.cell(rr,7).number_format="0.000%"
+            w.cell(rr,8).number_format="0.000%"
         autofit(w)
     for w in wb.worksheets:
         for row in w.iter_rows():
@@ -1507,7 +1541,7 @@ def _pdf_report(payload):
     # KPI cards as a compact dashboard table.
     kl=payload["kpis"].get("kpis",[]); card_rows=[]
     for base in range(0,min(len(kl),16),4):
-        card_rows.append([f'{k.get("label","")}\n{str(k.get("value",0))}' for k in kl[base:base+4]])
+        card_rows.append([f'{k.get("label","")}\n{_export_display_value(k.get("value",0), k.get("fmt",""))}' for k in kl[base:base+4]])
     if card_rows:
         kt=Table(card_rows,colWidths=[185,185,185,185],rowHeights=[42]*len(card_rows)); kt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#EAF2FB")),("TEXTCOLOR",(0,0),(-1,-1),colors.HexColor("#0F2A4A")),("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("BOX",(0,0),(-1,-1),.5,colors.HexColor("#DCE6EF")),("INNERGRID",(0,0),(-1,-1),.5,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),8)])); story += [kt,Spacer(1,10)]
     charts=_export_charts(payload)
