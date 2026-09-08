@@ -1683,20 +1683,32 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
     return rows
 
 def compute_data_freshness(filters):
-    conn=get_conn(); cur=conn.cursor(); where_sql, params=build_where(filters)
+    # "Data Through" is based on the latest inspection/source date, not UD Date.
+    # UD Date is a disposition field and must not be treated as a data-ingestion timestamp.
+    conn=get_conn(); cur=conn.cursor()
+    where_sql, params=build_where(filters)
     try:
-        cur.execute(f"SELECT COUNT(*), MAX(NULLIF(TRIM(COALESCE(ud_date,'')),'')), MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition {where_sql}", params)
-        rec, max_ud, max_insp=cur.fetchone()
+        cur.execute(f"SELECT COUNT(*) FROM disposition {where_sql}", params)
+        filtered_records=cur.fetchone()[0] or 0
+        cur.execute("SELECT COUNT(*), MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition")
+        total_records, max_insp=cur.fetchone()
     except Exception:
-        cur.execute(f"SELECT COUNT(*), MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition {where_sql}", params)
-        rec, max_insp=cur.fetchone(); max_ud=''
-    latest=max_ud or max_insp or ''
+        cur.execute("SELECT COUNT(*), MAX(insp_lot_date) FROM disposition")
+        total_records, max_insp=cur.fetchone()
+    latest=max_insp or ''
     display=latest
     try:
         dt=_dt.datetime.strptime(str(latest)[:10], '%Y-%m-%d'); display=dt.strftime('%d-%b-%Y')
     except Exception: pass
     conn.close()
-    return {'records':int(rec or 0),'updated_display':display,'latest_date':latest}
+    return {
+        'filtered_records': int(filtered_records or 0),
+        'total_records': int(total_records or 0),
+        'data_through': latest,
+        'data_through_display': display,
+        'updated_display': display,
+        'latest_date': latest
+    }
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
