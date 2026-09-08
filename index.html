@@ -389,6 +389,18 @@ body > *{position:relative;z-index:1;}
   z-index:20;
 }
 </style>
+
+<style id="drilldown-pro-ui">
+  .kpi-card{cursor:pointer;}
+  .kpi-card:focus-visible,.drillable-chart:focus-visible{outline:3px solid rgba(35,136,201,.28);outline-offset:2px;}
+  .drillable-chart{cursor:pointer;}
+  .filter-summary-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;padding:9px 12px;border:1px solid #dce6ef;border-radius:9px;background:#fbfdff;color:#53697d;font:600 12px Manrope,sans-serif;}
+  .filter-summary-bar .summary-label{font-weight:800;color:#16324f;letter-spacing:.2px}.filter-summary-bar .summary-value{color:#2388c9}.filter-summary-bar .summary-sep{color:#a8b6c4}.filter-summary-bar .summary-actions{margin-left:auto;display:flex;gap:7px;align-items:center}.filter-summary-bar button{font:700 11px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:6px 9px;color:#31516b;cursor:pointer}.filter-summary-bar button:hover{background:#f2f7fb}.saved-view-select{max-width:190px;}
+  .insights-panel{margin:0 0 16px;padding:13px 15px;border:1px solid #dbe6ef;border-radius:11px;background:linear-gradient(180deg,#fff 0%,#f9fbfd 100%);box-shadow:0 4px 14px rgba(20,55,85,.055)}
+  .insights-title{font:800 13px Manrope,sans-serif;color:#16324f;margin-bottom:9px;letter-spacing:.2px}.insight-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.insight-item{padding:9px 11px;border-radius:8px;background:#f7fafc;border:1px solid #e4ebf1;font:600 12px/1.45 Manrope,sans-serif;color:#40576b}.insight-item b{color:#16324f}.insight-item.positive{border-left:3px solid #16a34a}.insight-item.attention{border-left:3px solid #d97706}.insight-item.info{border-left:3px solid #2388c9}
+  .drill-modal{position:fixed;inset:0;z-index:20000;background:rgba(15,35,55,.38);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:22px}.drill-modal.open{display:flex}.drill-dialog{width:min(1280px,96vw);height:min(780px,92vh);background:#fff;border-radius:15px;box-shadow:0 24px 70px rgba(12,34,55,.28);display:flex;flex-direction:column;overflow:hidden;border:1px solid #d7e2eb}.drill-head{display:flex;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid #e2eaf0;background:linear-gradient(135deg,#fff,#f5f9fc)}.drill-head h3{margin:0;font:800 16px Manrope,sans-serif;color:#16324f}.drill-sub{font:600 11px Manrope,sans-serif;color:#718496}.drill-head-actions{margin-left:auto;display:flex;gap:8px}.drill-head button,.drill-export{font:700 12px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:7px 10px;color:#31516b;cursor:pointer;text-decoration:none}.drill-export{background:#edf7ff;border-color:#abd0ea;color:#12669d}.drill-body{padding:12px 15px;overflow:auto;flex:1}.drill-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;font:600 12px Manrope,sans-serif;color:#5b7183}.drill-count{font-weight:800;color:#16324f}.drill-table{width:100%;border-collapse:collapse;font:600 11px Manrope,sans-serif}.drill-table th{position:sticky;top:0;background:#f3f7fa;color:#38536a;text-align:left;padding:8px;border-bottom:2px solid #d7e2eb;white-space:nowrap}.drill-table td{padding:7px 8px;border-bottom:1px solid #edf1f4;white-space:nowrap}.drill-table tr:nth-child(even){background:#fbfdff}.drill-empty{padding:50px;text-align:center;color:#7b8d9d;font:600 13px Manrope,sans-serif}
+  @media(max-width:700px){.insight-grid{grid-template-columns:1fr}.drill-modal{padding:8px}.drill-dialog{width:100%;height:95vh}.drill-head h3{font-size:14px}.filter-summary-bar .summary-actions{width:100%;margin-left:0}}
+</style>
 </head>
 <body>
 </div></div>
@@ -417,6 +429,9 @@ body > *{position:relative;z-index:1;}
 
 <div class="container">
   <div class="filters" id="filters"></div>
+<div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- records</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
+<div class="insights-panel" id="insightsPanel"><div class="insights-title">Management Insights</div><div class="insight-grid" id="insightGrid"><div class="insight-item info">Loading current quality insights…</div></div></div>
+<div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div></div></div>
 
   <div class="tabs" id="tabs">
     <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
@@ -631,7 +646,7 @@ async function loadFilters(){
       const q=term.trim().toLowerCase(); list.innerHTML="";
       const filtered=items.filter(x=>String(x.label).toLowerCase().includes(q));
       filtered.forEach((x,i)=>{
-        const opt=document.createElement("div"); opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
+        const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
         opt.textContent=x.label;
         opt.addEventListener("click",()=>{
           currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); updateActiveFilterBadge(); triggerFilterRefresh();
@@ -741,7 +756,7 @@ function renderKpis(kpis){
     const targetText=targetCfg ? fmtValue(targetCfg.target,k.fmt) : 'Not set';
     const prevText=(k.prev!==null && k.prev!==undefined) ? fmtValue(k.prev,k.fmt) : 'N/A';
     card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
-    grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
+    card.setAttribute('role','button'); card.setAttribute('tabindex','0'); card.setAttribute('aria-label',`Drill down into ${k.label}`); card.addEventListener('click',()=>openDrilldown(k.label,`${k.label} — Underlying Records`)); card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDrilldown(k.label,`${k.label} — Underlying Records`);}}); grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
   }); previousKpiValues=nextValues;
 }
 async function loadKpiTargets(){try{const d=await fetch('/api/kpi_targets',{cache:'no-store'}).then(r=>r.json());KPI_TARGETS=d.targets||{};}catch(e){KPI_TARGETS={};}}
@@ -855,6 +870,65 @@ function renderMetricsTable(tableId, rows, total){
   tbody.appendChild(tr);
 }
 
+
+function activeFilterSummary(){
+  const parts=[];
+  const labels={month:'Month',work_center:'Work Center',grade:'Grade',quality_decision:'Quality Decision',week:'Week',quarter:'Quarter',financial_year:'Financial Year',defect_intensity:'Defect Intensity'};
+  Object.keys(currentFilters).forEach(k=>{const v=currentFilters[k]; if(v && v!=='All') parts.push(`${labels[k]||k}: ${v}`);});
+  return parts.length?parts.join(' | '):'All Data';
+}
+function refreshFilterSummary(recordCount){
+  const el=document.getElementById('filterSummaryText'); if(el)el.textContent=activeFilterSummary();
+  const c=document.getElementById('filterRecordCount'); if(c)c.textContent=(recordCount===undefined?'--':Number(recordCount).toLocaleString())+' records';
+  renderSavedViews();
+}
+function savedViews(){try{return JSON.parse(localStorage.getItem('qdash_saved_views')||'{}')}catch(e){return {}}}
+function renderSavedViews(){const sel=document.getElementById('savedViewSelect'); if(!sel)return; const views=savedViews(); sel.innerHTML='<option value="">Saved Views</option>'+Object.keys(views).sort().map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');}
+function saveCurrentView(){const name=prompt('Enter a name for this filter view:'); if(!name||!name.trim())return; const views=savedViews(); views[name.trim()]=Object.assign({},currentFilters); localStorage.setItem('qdash_saved_views',JSON.stringify(views)); renderSavedViews(); document.getElementById('savedViewSelect').value=name.trim();}
+function manageSavedViews(){const views=savedViews(); const names=Object.keys(views); if(!names.length){alert('No saved views yet.');return;} const name=prompt('Enter the exact saved view name to delete:\n\n'+names.join('\n')); if(name&&views[name]){delete views[name];localStorage.setItem('qdash_saved_views',JSON.stringify(views));renderSavedViews();}}
+function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); document.querySelectorAll('.filter-field').forEach(field=>{const key=field.dataset.filterKey; const val=currentFilters[key]||'All'; const span=field.querySelector('.filter-trigger span'); if(span){const opts=[...field.querySelectorAll('.filter-option')]; const match=opts.find(o=>o.dataset.value===val); span.textContent=match?match.textContent:val;}}); updateActiveFilterBadge(); triggerFilterRefresh();}
+function drilldownFiltersQuery(extra={}){const p=new URLSearchParams(currentFilters); Object.keys(extra).forEach(k=>p.set(k,extra[k])); return p.toString();}
+function openDrilldown(metric, title, extra={}){
+  const modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
+  document.getElementById('drillTitle').textContent=title||'Underlying Records';
+  document.getElementById('drillSubtitle').textContent=activeFilterSummary();
+  content.innerHTML='<div class="drill-empty">Loading underlying records…</div>'; document.getElementById('drillCount').textContent='Loading…';
+  const qs=drilldownFiltersQuery(Object.assign({metric},extra));
+  document.getElementById('drillExportBtn').href='/api/drilldown/export?'+qs;
+  modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+  fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
+    if(data.error)throw new Error(data.error); document.getElementById('drillCount').textContent=Number(data.count||0).toLocaleString()+' records'; document.getElementById('drillScope').textContent=data.scope||'';
+    if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">No underlying records found for this KPI/selection.</div>';return;}
+    const heads=['Date','Heat No','Coil/Lot','Work Center','Grade','Main Defect','Defect Intensity','Decision','Weight (MT)'];
+    let html='<div class="table-scroll"><table class="drill-table"><thead><tr>'+heads.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
+    data.rows.forEach(r=>{html+=`<tr><td>${r.insp_lot_date||''}</td><td>${r.heat_no||''}</td><td>${r.coil_lot||''}</td><td>${r.work_center||''}</td><td>${r.grade||''}</td><td>${r.main_defect||''}</td><td>${r.defect_intensity||'—'}</td><td>${r.quality_decision||''}</td><td>${Number(r.output_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr>`});
+    html+='</tbody></table></div>'; content.innerHTML=html;
+  }).catch(e=>{content.innerHTML='<div class="drill-empty">Unable to load records. '+String(e.message||e)+'</div>';document.getElementById('drillCount').textContent='Error';});
+}
+function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');}}
+function wireDrilldown(){
+  document.getElementById('drillCloseBtn')?.addEventListener('click',closeDrilldown);
+  document.getElementById('drillModal')?.addEventListener('click',e=>{if(e.target.id==='drillModal')closeDrilldown();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrilldown();});
+  document.getElementById('saveViewBtn')?.addEventListener('click',saveCurrentView);
+  document.getElementById('clearViewsBtn')?.addEventListener('click',manageSavedViews);
+  document.getElementById('savedViewSelect')?.addEventListener('change',e=>applySavedView(e.target.value));
+  renderSavedViews();
+}
+function renderInsights(kpiPayload){
+  const grid=document.getElementById('insightGrid'); if(!grid||!kpiPayload)return;
+  const by={}; (kpiPayload.kpis||[]).forEach(k=>by[k.label]=k);
+  const targets=KPI_TARGETS||{}; const items=[];
+  const fp=by['First Pass Yield %']; const rej=by['Reject % Qty']; const ppm=by['PPM Defective']; const tag=by['Intensity Tagging %'];
+  function gap(k){const t=targets[k?.label]; if(!k||!t)return null; return Number(k.value)-Number(t.target);}
+  if(fp&&targets[fp.label]){const g=gap(fp);items.push({cls:g>=0?'positive':'attention',html:`<b>Quality Insight:</b> FPY is <b>${(Number(fp.value)*100).toFixed(2)}%</b>, ${g>=0?'above':'below'} target by <b>${Math.abs(g*100).toFixed(2)} pts</b>.`});}
+  if(ppm&&targets[ppm.label]){const t=targets[ppm.label];const cls=Number(ppm.value)<=t.target?'positive':Number(ppm.value)<=t.warning?'attention':'attention';items.push({cls,html:`<b>Defect Insight:</b> PPM Defective is <b>${Number(ppm.value).toLocaleString()}</b> vs target <b>${Number(t.target).toLocaleString()}</b>.`});}
+  if(tag&&targets[tag.label]){const g=gap(tag);items.push({cls:g>=0?'positive':'attention',html:`<b>Tagging Insight:</b> Intensity tagging is <b>${(Number(tag.value)*100).toFixed(2)}%</b>; ${g>=0?'target achieved':'target gap remains'}.`});}
+  if(rej&&targets[rej.label]){const g=gap(rej);items.push({cls:g<=0?'positive':'attention',html:`<b>Disposition Insight:</b> Reject % Qty is <b>${(Number(rej.value)*100).toFixed(2)}%</b>, ${g<=0?'within':'above'} target.`});}
+  if(!items.length)items.push({cls:'info',html:'<b>Management Insight:</b> Select a target-configured KPI to see automatic performance commentary.'});
+  grid.innerHTML=items.slice(0,4).map(x=>`<div class="insight-item ${x.cls}">${x.html}</div>`).join('');
+}
+
 async function loadKpis(signal){
   const params = new URLSearchParams(currentFilters).toString();
   // Dashboard KPI and monthly trend are independent; fetch them together.
@@ -863,6 +937,7 @@ async function loadKpis(signal){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   renderKpis(data.kpis);
+  const totalKpi = (data.kpis||[]).find(x=>x.label==='Total Coils'); refreshFilterSummary(totalKpi ? totalKpi.value : 0); renderInsights(data);
   renderPeriodBanner(data.period);
   renderDecisionTable(data.decision_table, data.decision_total);
   renderDefectTable(data.top_defects, data.top_defects_total);
@@ -882,6 +957,7 @@ async function loadKpis(signal){
     {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
   ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Defect Intensity"});
 
+  wireChartDrilldown('decisionPie','decision'); wireChartDrilldown('decisionBarChart','decision'); wireChartDrilldown('pareto5Chart','defect');
   await monthlyPromise;
 }
 
@@ -962,7 +1038,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
     const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${s.color}" stroke="#fff" stroke-width="2.5"><title>${s.d[labelKey]}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
+    slices += `<path data-drill-category="${s.d[labelKey]}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${s.color}" stroke="#fff" stroke-width="2.5"><title>${s.d[labelKey]}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
   });
 
   // Center label: grand total
@@ -1042,7 +1118,7 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
     const x = padL + i * gap + (gap - barW) / 2;
     const y = h - padB - barH;
     const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
+    bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${x + barW/2}" y="${y - 8}" font-size="14.5" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${x + barW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey], 12)}</text>`;
   });
@@ -1159,7 +1235,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const barH = (val / maxV) * (h - padT - padB);
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
-      bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
+      bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="decision" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${truncateLabel(d[labelKey], truncLen)}<title>${d[labelKey]}</title></text>`;
@@ -1248,7 +1324,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const x = padL + i * gap + (gap - barW) / 2;
     const y = h - padB - barH;
     const barColor = opts.colorful ? CHART_COLORS[i % CHART_COLORS.length] : "#118DFF";
-    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.barFmt ? opts.barFmt(val) : val}</title></rect>`;
+    bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.barFmt ? opts.barFmt(val) : val}</title></rect>`;
     bars += `<text x="${x+barW/2}" y="${y-8}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt ? opts.barFmt(val) : val}</text>`;
     labels += `<text x="${x+barW/2}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-35 ${x+barW/2} ${h-padB+20})">${truncateLabel(d[labelKey],16)}</text>`;
     const lineY = h - padB - (d[lineKey]) * (h - padT - padB);
@@ -1267,6 +1343,11 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     <div class="legend-item"><span class="legend-dot" style="background:#118DFF"></span>Qty (MT)</div>
     <div class="legend-item"><span class="legend-dot" style="background:#DC2626"></span>Cumulative %</div>
   </div>`;
+}
+
+function wireChartDrilldown(containerId, kind){
+  const c=document.getElementById(containerId); if(!c||c.dataset.drillWired)return; c.dataset.drillWired='1'; c.classList.add('drillable-chart');
+  c.addEventListener('click',e=>{const el=e.target.closest('[data-drill-category]'); if(!el)return; const cat=el.getAttribute('data-drill-category'); if(kind==='decision')openDrilldown('decision_category',`Quality Decision: ${cat} — Underlying Records`,{drill_value:cat}); else if(kind==='defect')openDrilldown('defect_category',`Defect: ${cat} — Underlying Records`,{drill_value:cat});});
 }
 
 // ---------- Tab: Work Center & Grade ----------
@@ -1394,6 +1475,7 @@ async function init(){
   // Dashboard is intentionally public for now. No username/password is required.
   // Every dashboard page load is logged server-side with the visitor IP address.
   await loadKpiTargets();
+  wireDrilldown();
   await loadFilters();
   await loadKpis();
 }

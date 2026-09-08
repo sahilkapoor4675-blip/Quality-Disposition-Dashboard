@@ -1599,6 +1599,46 @@ def _pdf_report(payload):
 HTML_PAGE = None  # loaded lazily from index_template
 
 
+
+def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
+    """Return viewer-safe source records for KPI/chart drill-down using the same filters as dashboard."""
+    where_sql, params = build_where(filters)
+    metric = (metric or '').strip()
+    clauses=[]; extra=[]
+    if metric in {'Defect Coils','PPM Defective','Defect Rate','Process Sigma Level (Approx.)'}:
+        clauses.append("main_defect <> '' AND main_defect <> 'NO DEFECT'")
+    elif metric in {'First Pass Yield %'}:
+        clauses.append("quality_decision = ?"); extra.append('PRIME')
+    elif metric in {'Hold for Decision % Qty','Hold For Decision Qty (MT)'}:
+        clauses.append("quality_decision = ?"); extra.append('HOLD FOR DECISION')
+    elif metric in {'Reject Qty (MT)','Reject % Qty'}:
+        clauses.append("quality_decision = ?"); extra.append('REJECT')
+    elif metric in {'Salvage % Qty'}:
+        clauses.append("quality_decision = ?"); extra.append('SALVAGE')
+    elif metric in {'Salvage + Divert Qty (MT)'}:
+        clauses.append("quality_decision IN (?,?)"); extra.extend(['SALVAGE','DIVERT'])
+    elif metric in {'Rework % Qty'}:
+        clauses.append("quality_decision = ?"); extra.append('RE-WORK')
+    elif metric in {'Intensity Tagging %'}:
+        clauses.append("TRIM(COALESCE(defect_intensity,'')) <> ''")
+    elif metric in {'Without Intensity %'}:
+        clauses.append("TRIM(COALESCE(defect_intensity,'')) = ''")
+    elif metric == 'decision_category':
+        clauses.append("quality_decision = ?"); extra.append(drill_value or '')
+    elif metric == 'defect_category':
+        clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(drill_value or '')
+    # Total Coils / Output Quantity / unknown => current filtered selection.
+    if clauses:
+        where_sql = where_sql + (' AND ' if where_sql else 'WHERE ') + ' AND '.join(clauses)
+        params = params + extra
+    conn=get_conn(); cur=conn.cursor()
+    sql=f"SELECT insp_lot_date, heat_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ?"
+    cur.execute(sql, params+[limit]); raw=cur.fetchall(); conn.close()
+    rows=[]
+    for r in raw:
+        rows.append({'insp_lot_date':r[0] or '', 'heat_no':r[1] or '', 'coil_lot':r[1] or '', 'work_center':r[2] or '', 'grade':r[3] or '', 'main_defect':r[4] or '', 'defect_intensity':r[5] or '', 'quality_decision':r[6] or '', 'output_weight':float(r[7] or 0)})
+    return rows
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # keep console quiet
@@ -1682,6 +1722,25 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"authenticated": False, "username":"", "display_name":"", "role":""})
         elif path == "/api/filters":
             self._send_json(get_filter_options())
+        elif path == "/api/drilldown":
+            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            try:
+                metric = qs.get('metric',''); drill_value = qs.get('drill_value')
+                rows = _drilldown_rows(filters, metric, drill_value, limit=5000)
+                self._send_json({'count':len(rows),'rows':rows,'scope':_filter_summary(filters)})
+            except Exception as e:
+                self._send_json({'error':str(e)}, status=500)
+        elif path == "/api/drilldown/export":
+            try:
+                filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+                rows = _drilldown_rows(filters, qs.get('metric',''), qs.get('drill_value'), limit=50000)
+                out=io.StringIO(newline=''); w=csv.writer(out)
+                w.writerow(['Insp Lot Date','HEAT NO','Coil/Lot','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)'])
+                for r in rows: w.writerow([r['insp_lot_date'],r['heat_no'],r['coil_lot'],r['work_center'],r['grade'],r['main_defect'],r['defect_intensity'],r['quality_decision'],r['output_weight']])
+                _activity_event(self, 'drilldown_export_csv', filters=filters)
+                _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
+            except Exception as e:
+                self._send_json({'error':str(e)}, status=500)
         elif path == "/api/kpis":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             try:
