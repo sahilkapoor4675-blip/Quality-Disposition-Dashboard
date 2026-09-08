@@ -807,7 +807,10 @@ def compute_defect_analysis(filters):
 
 def compute_monthly_trend(filters):
     """Trend across months (ignores the Month filter itself, applies the
-    other 7)."""
+    other filters). The table Grand Total is calculated directly from the
+    filtered source population: coils are DISTINCT HEAT NOs, while quantity
+    measures are summed from source rows. This prevents the Grand Total from
+    double-counting a heat that appears in more than one monthly group."""
     conn = get_conn()
     cur = conn.cursor()
     where_sql, params = build_where(filters, exclude={"month"})
@@ -816,7 +819,12 @@ def compute_monthly_trend(filters):
     months = sorted([r[0] for r in cur.fetchall()], key=_month_sort_key)
 
     rows = [_group_metrics(cur, where_sql, params, "month", m) for m in months]
-    total = _overall_metrics_total(cur, where_sql, params)
+
+    # IMPORTANT: do not sum monthly coil counts. A HEAT NO can occur in more
+    # than one month; the WebApp definition of a coil is one unique HEAT NO.
+    # Calculate the Grand Total from the exact filtered source population.
+    total = _overall_metrics_total(cur, where_sql, params, name="Grand Total")
+
     conn.close()
     return {"rows": rows, "total": total}
 

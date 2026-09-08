@@ -1191,8 +1191,12 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}<title>${d[labelKey]}</title></text>`;
   });
-  const legendColor = opts.color || CHART_COLORS[0];
-  const legend = `<div class="legend-item"><span class="legend-dot" style="background:${legendColor}"></span>${opts.legend || opts.xLabel || valueKey}</div>`;
+  // Each category gets the same color as its bar so the legend is a true
+  // key for the colorful Work Center / Grade chart (not a generic metric legend).
+  const legend = rows.map((d,i) => {
+    const c = opts.color || CHART_COLORS[i % CHART_COLORS.length];
+    return `<div class="legend-item"><span class="legend-dot" style="background:${c}"></span>${d[labelKey]}</div>`;
+  }).join("");
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
@@ -1405,10 +1409,10 @@ async function loadWcGrade(){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   makeHBarChart(document.getElementById("wcChart"), data.by_work_center, "reject_pct_qty", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", legend: "Reject % Qty", color: "#118DFF", xLabel: "Reject % Qty", yLabel: "Work Center"});
+    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Work Center"});
   renderMetricsTable("wcTable", data.by_work_center, data.total_work_center);
   makeHBarChart(document.getElementById("gradeChart"), data.by_grade, "reject_pct_qty", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", legend: "Reject % Qty", color: "#118DFF", xLabel: "Reject % Qty", yLabel: "Grade"});
+    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Grade"});
   renderMetricsTable("gradeTable", data.by_grade, data.total_grade); markChartsReady();
 }
 
