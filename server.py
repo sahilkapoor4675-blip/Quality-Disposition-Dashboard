@@ -207,6 +207,50 @@ def current_period_label(filters):
 # Colors match the original workbook exactly (extracted from its font colors).
 # Keyed by label so metadata always travels with its metric, even if the
 # metric's position in the kpis list is later swapped for display purposes.
+DEFAULT_KPI_TARGETS = {
+    "First Pass Yield %": {"target": 0.97, "warning": 0.90, "critical": 0.80, "direction": "higher"},
+    "Hold for Decision % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
+    "PPM Defective": {"target": 10000, "warning": 30000, "critical": 50000, "direction": "lower"},
+    "Intensity Tagging %": {"target": 0.90, "warning": 0.85, "critical": 0.75, "direction": "higher"},
+    "Defect Rate": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
+    "Reject % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
+    "Process Sigma Level (Approx.)": {"target": 3.0, "warning": 2.0, "critical": 1.0, "direction": "higher"},
+    "Salvage % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
+    "Rework % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
+    "Without Intensity %": {"target": 0.05, "warning": 0.15, "critical": 0.25, "direction": "lower"},
+}
+
+def _target_rows():
+    conn=get_conn(); rows=conn.execute("SELECT label,target,warning,critical,direction FROM kpi_targets ORDER BY label").fetchall(); conn.close()
+    return [dict(r) for r in rows]
+
+def get_kpi_targets():
+    rows={r["label"]:r for r in _target_rows()}
+    out={}
+    for label,cfg in DEFAULT_KPI_TARGETS.items():
+        r=rows.get(label)
+        out[label]=r or {"label":label,**cfg}
+    for label,r in rows.items():
+        out.setdefault(label,r)
+    return out
+
+def _kpi_target_status(label,value):
+    cfg=get_kpi_targets().get(label)
+    if not cfg or cfg.get("target") is None: return None
+    try:
+        v=float(value); t=float(cfg.get("target")); w=float(cfg.get("warning")); c=float(cfg.get("critical"))
+    except Exception: return None
+    d=(cfg.get("direction") or "higher").lower()
+    if d=="lower":
+        if v <= t: return "good"
+        if v <= w: return "amber"
+        return "bad"
+    if d=="higher":
+        if v >= t: return "good"
+        if v >= w: return "amber"
+        return "bad"
+    return "neutral"
+
 KPI_META_BY_LABEL = {
     "Total Coils":                   {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
     "Defect Coils":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
@@ -334,22 +378,8 @@ def build_where(filters, exclude=None):
 
 
 def kpi_threshold_color(label, value):
-    """Return KPI value color according to the requested operating bands."""
-    green, amber, red = "#16A34A", "#D97706", "#DC2626"
-    if label in ("First Pass Yield %", "For Next Process %"):
-        return green if value > 0.97 else amber if value >= 0.90 else red
-    if label in ("Salvage % Qty", "Reject % Qty", "Rework % Qty", "Hold for Decision % Qty", "Hold For Decision % Qty"):
-        return green if value < 0.01 else amber if value <= 0.03 else red
-    if label == "Process Sigma Level (Approx.)":
-        return green if value > 3 else amber if value >= 2 else red
-    if label == "PPM Defective":
-        return green if value <= 10000 else amber if value <= 30000 else red
-    if label == "Intensity Tagging %":
-        return green if value >= 0.90 else amber if value >= 0.85 else red
-    if label == "Without Intensity %":
-        return green if value <= 0.05 else amber if value <= 0.15 else red
-    return None
-
+    status=_kpi_target_status(label,value)
+    return {"good":"#16A34A","amber":"#D97706","bad":"#DC2626","neutral":"#118DFF"}.get(status)
 
 def compute_kpis(filters, _skip_prev=False):
     conn = get_conn()
@@ -1162,6 +1192,19 @@ def _ensure_admin_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, event_type TEXT NOT NULL, tab TEXT DEFAULT '',
             filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    if USE_POSTGRES:
+        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
+            id BIGSERIAL PRIMARY KEY, label TEXT UNIQUE NOT NULL, target DOUBLE PRECISION, warning DOUBLE PRECISION, critical DOUBLE PRECISION, direction TEXT NOT NULL DEFAULT 'higher', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    else:
+        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT UNIQUE NOT NULL, target REAL, warning REAL, critical REAL, direction TEXT NOT NULL DEFAULT 'higher', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    for label,cfg in DEFAULT_KPI_TARGETS.items():
+        try:
+            conn.execute("INSERT INTO kpi_targets (label,target,warning,critical,direction) VALUES (?,?,?,?,?)",(label,cfg["target"],cfg["warning"],cfg["critical"],cfg["direction"]))
+        except Exception:
+            pass
     # Backward-compatible activity schema migration for existing databases.
     try:
         if USE_POSTGRES:
@@ -1618,6 +1661,16 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close(); self._send_json({"summary":{"total_users":total_users,"unique_ips":unique_ips,"active_today":active_today,"opens_today":opens_today,"opens_7d":opens_7,"exports_30d":exports_30},"users":[dict(r) for r in users],"recent":[dict(r) for r in recent],"trend":[dict(r) for r in trend]})
             except Exception as e:
                 self._send_json({"error":str(e)},status=500)
+        elif path == "/api/kpi_targets":
+            try:
+                self._send_json({"targets": get_kpi_targets()})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/kpi_targets":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try: self._send_json({"targets": get_kpi_targets()})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/database_status":
             if not _is_admin(self):
                 _auth_error(self)
@@ -1763,6 +1816,22 @@ class Handler(BaseHTTPRequestHandler):
 
         if not _is_admin(self):
             _auth_error(self)
+            return
+
+        if path == "/api/admin/kpi_target":
+            if not _is_admin(self): _auth_error(self); return
+            try:
+                body=_json_body(self); label=str(body.get("label","")).strip(); direction=str(body.get("direction","higher")).strip().lower()
+                if not label: raise ValueError("KPI label is required")
+                if direction not in ("higher","lower","neutral"): raise ValueError("Direction must be higher, lower or neutral")
+                def num(v):
+                    if v in (None,""): return None
+                    return float(v)
+                target,warning,critical=num(body.get("target")),num(body.get("warning")),num(body.get("critical"))
+                if target is None or warning is None or critical is None: raise ValueError("Target, Warning and Critical are required")
+                conn=get_conn(); conn.execute("""INSERT INTO kpi_targets(label,target,warning,critical,direction) VALUES(?,?,?,?,?) ON CONFLICT(label) DO UPDATE SET target=excluded.target,warning=excluded.warning,critical=excluded.critical,direction=excluded.direction,updated_at=CURRENT_TIMESTAMP""",(label,target,warning,critical,direction)); conn.commit(); conn.close(); _activity_event(self,"kpi_target_update",tab="Admin")
+                self._send_json({"ok":True,"targets":get_kpi_targets()})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/admin/record":
