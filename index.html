@@ -153,6 +153,9 @@
   .chart-svg{display:block;width:100%;height:auto;}
   .legend{display:flex;gap:16px;font-size:12px;color:var(--text);margin:0 0 12px;flex-wrap:wrap;padding:0 16px;font-weight:600;align-items:center;}
   .legend-item{display:flex;align-items:center;gap:6px;}
+
+  /* Global chart contract: legends always sit above the plot, never below it. */
+  .chart-scroll > .legend{order:0;position:relative;margin:0 0 12px;padding:0 16px;justify-content:center!important;}
   .legend-dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
   .no-data{color:var(--muted);font-size:13px;padding:16px;}
   .subhead{font-size:12px;color:var(--muted);padding:0 16px;margin:-6px 0 10px 0;}500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
@@ -324,6 +327,13 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
   .drill-body #drillContent .table-scroll{height:100%;max-height:none;overflow:auto!important;position:relative;}
   .drill-body #drillContent .drill-table{border-collapse:separate!important;border-spacing:0!important;}
   .drill-body #drillContent .drill-table thead th{position:sticky!important;top:0!important;z-index:50!important;background:#f3f7fa!important;box-shadow:0 1px 0 #cbd9e5,0 3px 8px rgba(31,61,90,.08)!important;}
+
+  /* Drill-down: the records area scrolls independently so the table header stays frozen. */
+  .drill-body{display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+  .drill-body #drillContent{flex:1;min-height:0;overflow:hidden;}
+  .drill-body #drillContent .table-scroll{height:100%;max-height:none;overflow:auto!important;position:relative;}
+  .drill-body #drillContent .drill-table{border-collapse:separate!important;border-spacing:0!important;}
+  .drill-body #drillContent .drill-table thead th{position:sticky!important;top:0!important;z-index:50!important;background:#f3f7fb!important;box-shadow:0 1px 0 #cbd9e5,0 3px 8px rgba(31,61,90,.08)!important;}
 </style>
 <style id="jsl-watermark-style">
 /* Exact JSL Jindal Stainless logo watermark — background only; all app UI stays above it. */
@@ -498,7 +508,7 @@ body > *{position:relative;z-index:1;}
     </div>
 
     <div class="panel">
-      <h3>📈 Monthly Quality Trend — Defect % &amp; First Pass Yield %</h3>
+      <h3>📈 Monthly Quality Trend — Defect % &amp; Prime %</h3>
       <div class="chart-scroll" id="monthlyLineChart"></div>
     </div>
     <div class="panel">
@@ -509,7 +519,7 @@ body > *{position:relative;z-index:1;}
       <h3>📋 Monthly Trend Data</h3>
       <div class="panel-body">
         <div class="table-scroll"><table id="monthlyTable">
-          <thead><tr><th>Month</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
+          <thead><tr><th>Month</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -523,7 +533,7 @@ body > *{position:relative;z-index:1;}
       <div class="chart-scroll" id="wcChart"></div>
       <div class="panel-body">
         <div class="table-scroll"><table id="wcTable">
-          <thead><tr><th>Work Center</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
+          <thead><tr><th>Work Center</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -533,7 +543,7 @@ body > *{position:relative;z-index:1;}
       <div class="chart-scroll" id="gradeChart"></div>
       <div class="panel-body">
         <div class="table-scroll"><table id="gradeTable">
-          <thead><tr><th>Grade</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
+          <thead><tr><th>Grade</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -566,34 +576,34 @@ body > *{position:relative;z-index:1;}
     <div class="panel">
       <div class="panel-body">
         <div class="table-scroll"><table id="weeklyTable">
-          <thead><tr><th>Week</th><th>Records</th><th>Output MT</th><th>Defect Records</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
+          <thead><tr><th>Week</th><th>Records</th><th>Output MT</th><th>Defect Records</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
     </div>
 
     <div class="panel">
-      <h3>📆 Quarterly Defect % vs First Pass Yield % vs Reject % Trend</h3>
+      <h3>📆 Quarterly Defect % vs Prime % vs Reject % Trend</h3>
       <div class="chart-scroll" id="quarterlyChart"></div>
     </div>
     <div class="panel">
       <div class="panel-body">
         <div class="table-scroll"><table id="quarterlyTable">
-          <thead><tr><th>Quarter</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
+          <thead><tr><th>Quarter</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
     </div>
 
     <div class="panel">
-      <h3>🗓️ Yearly (FY) First Pass Yield % &amp; Reject % Trend</h3>
+      <h3>🗓️ Yearly (FY) Prime % &amp; Reject % Trend</h3>
       <div class="chart-scroll" id="yearlyChart"></div>
       <div class="subhead">Only one Financial Year is present in the current dataset — this chart will show a fuller trend line as more years of data are added.</div>
     </div>
     <div class="panel">
       <div class="panel-body">
         <div class="table-scroll"><table id="yearlyTable">
-          <thead><tr><th>Financial Year</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>First Pass Yield %</th></tr></thead>
+          <thead><tr><th>Financial Year</th><th>Coils</th><th>Output MT</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty MT</th><th>Reject % Qty</th><th>Prime %</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -702,7 +712,7 @@ async function triggerFilterRefresh(){
 const KPI_ICONS = {
   "Total Coils": "📦",
   "Defect Coils": "⚠️",
-  "First Pass Yield %": "✅",
+  "Prime %": "✅",
   "Hold for Decision % Qty": "⏳",
   "Output Quantity (MT)": "🏭",
   "Salvage % Qty": "♻️",
@@ -925,7 +935,7 @@ function renderInsights(kpiPayload){
   const grid=document.getElementById('insightGrid'); if(!grid||!kpiPayload)return;
   const by={}; (kpiPayload.kpis||[]).forEach(k=>by[k.label]=k);
   const targets=KPI_TARGETS||{}; const items=[];
-  const fp=by['First Pass Yield %']; const rej=by['Reject % Qty']; const defect=by['Defect Rate'];
+  const fp=by['Prime %']; const rej=by['Reject % Qty']; const defect=by['Defect Rate'];
   const pct=v=>((Number(v)||0)*100).toFixed(2)+'%';
   const relativeGap=(v,t)=>t ? Math.abs((Number(v)-Number(t))/Number(t))*100 : 0;
   if(fp&&targets[fp.label]){
@@ -1151,10 +1161,17 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
    Work Centers, Intensity levels) so labels never get cut off. */
 function makeHBarChart(container, items, valueKey, labelKey, opts={}){
   if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  // Always order horizontal bars from highest to lowest value. This prevents a
+  // low-value bar from appearing above a higher-value bar and makes the chart
+  // read like a proper ranked analysis. Keep a stable secondary sort by name.
+  const rows = [...items].sort((a,b) => {
+    const dv = (Number(b[valueKey]) || 0) - (Number(a[valueKey]) || 0);
+    return dv || String(a[labelKey] || '').localeCompare(String(b[labelKey] || ''));
+  });
   const w = DESIGN_W;
   const rowH = 40, padL = 200, padR = 70, padT = 20, padB = 55;
-  const h = items.length * rowH + padT + padB;
-  const maxV = niceMax(Math.max(...items.map(d => d[valueKey]), 0));
+  const h = rows.length * rowH + padT + padB;
+  const maxV = niceMax(Math.max(...rows.map(d => Number(d[valueKey]) || 0), 0));
   const plotW = w - padL - padR;
   let bars = "", labels = "", gridlines = "";
 
@@ -1164,17 +1181,18 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="#6b7c93">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
   }
 
-  items.forEach((d, i) => {
-    const val = d[valueKey];
+  rows.forEach((d, i) => {
+    const val = Number(d[valueKey]) || 0;
     const barW = (val / maxV) * plotW;
     const y = padT + i * rowH + rowH*0.2;
     const barH = rowH * 0.6;
-    const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
+    const barColor = opts.color || "#118DFF";
     bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}<title>${d[labelKey]}</title></text>`;
   });
-  const legend = `<div class="legend-item"><span class="legend-dot" style="background:#118DFF"></span>${opts.legend || opts.xLabel || valueKey}</div>`;
+  const legendColor = opts.color || "#118DFF";
+  const legend = `<div class="legend-item"><span class="legend-dot" style="background:${legendColor}"></span>${opts.legend || opts.xLabel || valueKey}</div>`;
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
@@ -1194,9 +1212,18 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   const nSeries = seriesDefs.length;
   const barH = (rowH * 0.7) / nSeries;
 
-  const maxes = seriesDefs.map(s => niceMax(Math.max(...items.map(d => d[s.key]), 0)));
+  // Use ONE common value scale across all grouped series. Separate per-series
+  // maxima make a smaller value appear visually taller than a larger value.
+  const commonMax = niceMax(Math.max(...seriesDefs.flatMap(s => items.map(d => Number(d[s.key]) || 0)), 0));
+  const maxes = seriesDefs.map(() => commonMax);
 
-  let bars = "", labels = "", legend = "";
+  let bars = "", labels = "", legend = "", gridlines = "";
+  for(let g=0; g<=4; g++){
+    const gx = padL + plotW * g/4;
+    const gv = commonMax * g/4;
+    gridlines += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${h-padB}" stroke="#eef1f6" stroke-width="1"/>`;
+    gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="#6b7c93">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(0)}</text>`;
+  }
   seriesDefs.forEach(s => {
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${s.label}</div>`;
   });
@@ -1204,9 +1231,9 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   items.forEach((d, i) => {
     const groupY = padT + i * rowH + rowH*0.15;
     seriesDefs.forEach((s, si) => {
-      const val = d[s.key];
+      const val = Math.max(0, Number(d[s.key]) || 0);
       const maxV = maxes[si];
-      const barW = (val / maxV) * plotW;
+      const barW = Math.max(0, (val / maxV) * plotW);
       const y = groupY + si * (barH + 5);
       bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${s.color}" rx="3"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
@@ -1215,6 +1242,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   });
 
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${gridlines}
     ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleH(opts.xLabel, w, h, padL, padR) : ""}
     <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
@@ -1233,7 +1261,10 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   const barW = groupW / nSeries - 6;
   const truncLen = opts.labelTruncate || 12;
 
-  const maxes = seriesDefs.map(s => niceMax(Math.max(...items.map(d => d[s.key]), 0)));
+  // Use ONE common value scale across all grouped series. Separate per-series
+  // maxima make a smaller value appear visually taller than a larger value.
+  const commonMax = niceMax(Math.max(...seriesDefs.flatMap(s => items.map(d => Number(d[s.key]) || 0)), 0));
+  const maxes = seriesDefs.map(() => commonMax);
 
   let bars = "", labels = "", legend = "", gridlines = "";
   for(let g=0; g<=4; g++){
@@ -1249,9 +1280,9 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   items.forEach((d, i) => {
     const groupX = padL + i * gap + (gap - groupW) / 2;
     seriesDefs.forEach((s, si) => {
-      const val = d[s.key];
+      const val = Math.max(0, Number(d[s.key]) || 0);
       const maxV = maxes[si];
-      const barH = (val / maxV) * (h - padT - padB);
+      const barH = Math.max(0, (val / maxV) * (h - padT - padB));
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
       bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="decision" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
@@ -1341,7 +1372,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
   items.forEach((d,i)=>{
     const val=Number(d[barKey])||0, barH=(val/maxBar)*plotH;
     const x=padL+i*gap+(gap-barW)/2, y=h-padB-barH;
-    const barColor=opts.colorful?CHART_COLORS[i%CHART_COLORS.length]:"#118DFF";
+    const barColor=opts.barColor || "#118DFF";
     bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.barFmt?opts.barFmt(val):val}</title></rect>`;
     bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt?opts.barFmt(val):val}</text>`;
     const lineVal=Math.max(0,Math.min(maxLine,Number(d[lineKey])||0));
@@ -1374,10 +1405,10 @@ async function loadWcGrade(){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   makeHBarChart(document.getElementById("wcChart"), data.by_work_center, "reject_pct_qty", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Work Center"});
+    {fmt: v => (v*100).toFixed(2)+"%", legend: "Reject % Qty", color: "#118DFF", xLabel: "Reject % Qty", yLabel: "Work Center"});
   renderMetricsTable("wcTable", data.by_work_center, data.total_work_center);
   makeHBarChart(document.getElementById("gradeChart"), data.by_grade, "reject_pct_qty", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Grade"});
+    {fmt: v => (v*100).toFixed(2)+"%", legend: "Reject % Qty", color: "#118DFF", xLabel: "Reject % Qty", yLabel: "Grade"});
   renderMetricsTable("gradeTable", data.by_grade, data.total_grade); markChartsReady();
 }
 
@@ -1417,7 +1448,7 @@ async function loadMonthlyTrend(signal){
   if(data.error){ console.error(data.error); return; }
   makeLineChart(document.getElementById("monthlyLineChart"), data.rows, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
-    {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"first_pass_yield_pct", label:"Prime %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Month"});
   makeGroupedBarChart(document.getElementById("monthlyBarChart"), data.rows, "name", [
@@ -1442,13 +1473,13 @@ async function loadPeriodTrend(){
 
   makeLineChart(document.getElementById("quarterlyChart"), data.quarterly, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
-    {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"first_pass_yield_pct", label:"Prime %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Quarter"});
   renderMetricsTable("quarterlyTable", data.quarterly, data.quarterly_total);
 
   makeLineChart(document.getElementById("yearlyChart"), data.yearly, "name", [
-    {key:"first_pass_yield_pct", label:"First Pass Yield %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"first_pass_yield_pct", label:"Prime %", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Financial Year"});
   renderMetricsTable("yearlyTable", data.yearly, data.yearly_total); markChartsReady();

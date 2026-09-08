@@ -207,10 +207,10 @@ def current_period_label(filters):
 # Colors match the original workbook exactly (extracted from its font colors).
 # Keyed by label so metadata always travels with its metric, even if the
 # metric's position in the kpis list is later swapped for display purposes.
-REMOVED_KPIS = {"PPM Defective", "Intensity Tagging %", "Process Sigma Level (Approx.)", "Without Intensity %"}
+REMOVED_KPIS = {"PPM Defective", "Intensity Tagging %", "Process Sigma Level (Approx.)", "Without Intensity %", "First Pass Yield %"}
 
 DEFAULT_KPI_TARGETS = {
-    "First Pass Yield %": {"target": 0.97, "warning": 0.90, "critical": 0.80, "direction": "higher"},
+    "Prime %": {"target": 0.97, "warning": 0.90, "critical": 0.80, "direction": "higher"},
     "Hold for Decision % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Defect Rate": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Reject % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
@@ -223,14 +223,14 @@ def _target_rows():
     return [dict(r) for r in rows]
 
 def get_kpi_targets():
-    rows={r["label"]:r for r in _target_rows()}
+    # Hide all retired KPI targets from both public and admin APIs.
+    rows={r["label"]:r for r in _target_rows() if r["label"] not in REMOVED_KPIS}
     out={}
     for label,cfg in DEFAULT_KPI_TARGETS.items():
         r=rows.get(label)
         out[label]=r or {"label":label,**cfg}
     for label,r in rows.items():
-        if label not in REMOVED_KPIS:
-            out.setdefault(label,r)
+        out.setdefault(label,r)
     return out
 
 def _kpi_target_status(label,value):
@@ -253,7 +253,7 @@ def _kpi_target_status(label,value):
 KPI_META_BY_LABEL = {
     "Total Coils":                   {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
     "Defect Coils":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
-    "First Pass Yield %":            {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
+    "Prime %":            {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
     "Hold for Decision % Qty":       {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Output Quantity (MT)":          {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
     "Reject Qty (MT)":               {"color": "#DC2626", "direction": "down_good", "change": "pct"},
@@ -433,7 +433,7 @@ def compute_kpis(filters, _skip_prev=False):
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
         {"label": "Defect Coils", "value": defect_coils, "fmt": "int"},
-        {"label": "First Pass Yield %", "value": first_pass_yield, "fmt": "pct"},
+        {"label": "Prime %", "value": first_pass_yield, "fmt": "pct"},
         {"label": "Hold for Decision % Qty", "value": hold_pct_qty, "fmt": "pct"},
         {"label": "Output Quantity (MT)", "value": output_qty, "fmt": "num2"},
         {"label": "Reject Qty (MT)", "value": reject_qty, "fmt": "num2"},
@@ -1310,6 +1310,13 @@ def _ensure_admin_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0,
             imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    # Remove the legacy KPI target name so the public/admin target APIs are
+    # fully consistent with the renamed Prime % KPI. This is idempotent and
+    # also cleans existing deployed databases during startup.
+    try:
+        conn.execute("DELETE FROM kpi_targets WHERE label = ?", ("First Pass Yield %",))
+    except Exception:
+        pass
     for label,cfg in DEFAULT_KPI_TARGETS.items():
         try:
             conn.execute("INSERT INTO kpi_targets (label,target,warning,critical,direction) VALUES (?,?,?,?,?)",(label,cfg["target"],cfg["warning"],cfg["critical"],cfg["direction"]))
@@ -1631,7 +1638,7 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
     clauses=[]; extra=[]
     if metric in {'Defect Coils','Defect Rate'}:
         clauses.append("main_defect <> '' AND main_defect <> 'NO DEFECT'")
-    elif metric in {'First Pass Yield %'}:
+    elif metric in {'Prime %'}:
         clauses.append("quality_decision = ?"); extra.append('PRIME')
     elif metric in {'Hold for Decision % Qty','Hold For Decision Qty (MT)'}:
         clauses.append("quality_decision = ?"); extra.append('HOLD FOR DECISION')
