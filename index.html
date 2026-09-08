@@ -414,6 +414,18 @@ body > *{position:relative;z-index:1;}
   .filter-summary-bar .summary-label{font-weight:800;color:#16324f;letter-spacing:.2px}.filter-summary-bar .summary-value{color:#2388c9}.filter-summary-bar .summary-sep{color:#a8b6c4}.filter-summary-bar .summary-actions{margin-left:auto;display:flex;gap:7px;align-items:center}.filter-summary-bar button{font:700 11px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:6px 9px;color:#31516b;cursor:pointer}.filter-summary-bar button:hover{background:#f2f7fb}.saved-view-select{max-width:190px;}
   .insights-panel{margin:0 0 16px;padding:13px 15px;border:1px solid #dbe6ef;border-radius:11px;background:linear-gradient(180deg,#fff 0%,#f9fbfd 100%);box-shadow:0 4px 14px rgba(20,55,85,.055)}
   .insights-title{font:800 13px Calibri,sans-serif;color:#16324f;margin-bottom:9px;letter-spacing:.2px}.insight-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.insight-item{padding:9px 11px;border-radius:8px;background:#f7fafc;border:1px solid #e4ebf1;font:600 12px/1.45 Calibri,sans-serif;color:#40576b}.insight-item b{color:#16324f}.insight-item.positive{border-left:3px solid #16a34a}.insight-item.attention{border-left:3px solid #d97706}.insight-item.info{border-left:3px solid #2388c9}
+  /* Quality Control Room */
+  .qcr-hero{background:linear-gradient(135deg,#f7fbff 0%,#eef6fb 52%,#f8fbfd 100%);border:1px solid #d9e6ef;border-left:5px solid #118DFF;border-radius:12px;padding:16px 18px;margin-bottom:18px;box-shadow:0 3px 12px rgba(15,42,74,.05)}
+  .qcr-hero h2{margin:0;color:#16324f;font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:800;letter-spacing:.1px}.qcr-hero p{margin:5px 0 0;color:#617487;font:600 12px 'Manrope',sans-serif}
+  .qcr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:18px}.qcr-card{background:#fff;border:1px solid #dfe6ef;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(15,42,74,.045)}
+  .qcr-card h3{margin:0;padding:13px 16px;border-bottom:1px solid #e5edf3;color:#183A58;font:800 15px 'Plus Jakarta Sans',sans-serif}.qcr-body{padding:14px 16px}
+  .qcr-kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.qcr-kpi{border:1px solid #e3eaf0;border-radius:9px;padding:10px 11px;background:#fbfdff}.qcr-kpi .qcr-kpi-name{font:700 11px Manrope,sans-serif;color:#526b7d;line-height:1.25}.qcr-kpi .qcr-kpi-value{font:800 20px 'Space Grotesk',sans-serif;color:#16324f;margin-top:4px}.qcr-kpi .qcr-status{display:inline-block;margin-top:5px;border-radius:999px;padding:3px 7px;font:800 9px Manrope,sans-serif}.qcr-status.good{background:#dcfce7;color:#15803d}.qcr-status.amber{background:#fef3c7;color:#a16207}.qcr-status.bad{background:#fee2e2;color:#b91c1c}.qcr-status.neutral{background:#e0f2fe;color:#0369a1}
+  .qcr-list{display:flex;flex-direction:column;gap:8px}.qcr-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:9px;align-items:center;border-bottom:1px solid #edf2f6;padding:7px 0}.qcr-row:last-child{border-bottom:0}.qcr-rank{font:800 11px Manrope,sans-serif;color:#718496;text-align:center}.qcr-name{font:750 12px Manrope,sans-serif;color:#263f54;overflow-wrap:anywhere}.qcr-metric{font:800 12px 'Space Grotesk',sans-serif;color:#b91c1c;white-space:nowrap}.qcr-empty{padding:14px;text-align:center;color:#7b8d9d;font:600 12px Manrope,sans-serif}
+  .qcr-compare{width:100%;border-collapse:collapse;table-layout:fixed}.qcr-compare th{background:#f3f7fa;color:#38536a;font:800 10px Manrope,sans-serif;text-transform:uppercase;padding:8px;border:1px solid #dfe7ee}.qcr-compare td{padding:8px;border:1px solid #e5edf3;font:700 11px Manrope,sans-serif;color:#334e63}.qcr-compare td:not(:first-child){text-align:center}.qcr-delta.good{color:#15803d}.qcr-delta.bad{color:#b91c1c}.qcr-delta.equal{color:#64748b}
+  .qcr-breach{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid #f1d3d3;background:#fffafa;border-radius:8px}.qcr-breach-name{font:800 12px Manrope,sans-serif;color:#263f54}.qcr-breach-meta{font:600 10px Manrope,sans-serif;color:#75899a;margin-top:3px}.qcr-breach-val{font:800 13px 'Space Grotesk',sans-serif;color:#b91c1c;white-space:nowrap}
+  .qcr-opportunity{display:flex;gap:10px;padding:9px 10px;border:1px solid #e1e9ef;background:#fbfdff;border-radius:8px}.qcr-opportunity-icon{font-size:15px}.qcr-opportunity-text{font:700 11px Manrope,sans-serif;color:#38536a;line-height:1.4}.qcr-opportunity-text b{color:#183A58}
+  .qcr-pending{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.qcr-pending-box{padding:11px;border-radius:9px;background:#fff8ec;border:1px solid #f3dfbd}.qcr-pending-box b{display:block;font:800 22px 'Space Grotesk',sans-serif;color:#a16207}.qcr-pending-box span{font:700 10px Manrope,sans-serif;color:#7b6746}
+  @media(max-width:900px){.qcr-grid{grid-template-columns:1fr}.qcr-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}} @media(max-width:600px){.qcr-kpi-grid{grid-template-columns:1fr}.qcr-pending{grid-template-columns:1fr}}
   .drill-modal{position:fixed;inset:0;z-index:20000;background:rgba(15,35,55,.38);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:22px}.drill-modal.open{display:flex}.drill-dialog{width:min(1280px,96vw);height:min(780px,92vh);background:#fff;border-radius:15px;box-shadow:0 24px 70px rgba(12,34,55,.28);display:flex;flex-direction:column;overflow:hidden;border:1px solid #d7e2eb}.drill-head{display:flex;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid #e2eaf0;background:linear-gradient(135deg,#fff,#f5f9fc)}.drill-head h3{margin:0;font:800 16px Manrope,sans-serif;color:#16324f}.drill-sub{font:600 11px Manrope,sans-serif;color:#718496}.drill-head-actions{margin-left:auto;display:flex;gap:8px}.drill-head button,.drill-export{font:700 12px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:7px 10px;color:#31516b;cursor:pointer;text-decoration:none}.drill-export{background:#edf7ff;border-color:#abd0ea;color:#12669d}.drill-body{padding:12px 15px;overflow:auto;flex:1}.drill-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;font:600 12px Manrope,sans-serif;color:#5b7183}.drill-count{font-weight:800;color:#16324f}.drill-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font:600 11px Manrope,sans-serif}.drill-table th{position:sticky;top:0;background:#f3f7fa;color:#38536a;text-align:left;padding:8px;border-bottom:2px solid #d7e2eb;white-space:normal;overflow-wrap:anywhere;word-break:break-word;z-index:50}.drill-table td{padding:7px 8px;border-bottom:1px solid #edf1f4;white-space:normal;overflow-wrap:anywhere;word-break:break-word;vertical-align:top;line-height:1.35}.drill-table th:nth-child(1),.drill-table td:nth-child(1){width:10%}.drill-table th:nth-child(2),.drill-table td:nth-child(2){width:10%}.drill-table th:nth-child(3),.drill-table td:nth-child(3){width:11%}.drill-table th:nth-child(4),.drill-table td:nth-child(4){width:11%}.drill-table th:nth-child(5),.drill-table td:nth-child(5){width:14%}.drill-table th:nth-child(6),.drill-table td:nth-child(6){width:16%}.drill-table th:nth-child(7),.drill-table td:nth-child(7){width:10%}.drill-table th:nth-child(8),.drill-table td:nth-child(8){width:11%}.drill-table th:nth-child(9),.drill-table td:nth-child(9){width:7%;text-align:right}.drill-table tr:nth-child(even){background:#fbfdff}.drill-table .grand-total-row td{background:#f3f7fa;color:#38536a;font-weight:800;border-top:2px solid #d7e2eb;border-bottom:0}.drill-table .grand-total-row td:first-child{font-weight:900}.drill-empty{padding:50px;text-align:center;color:#7b8d9d;font:600 13px Manrope,sans-serif}
   @media(max-width:700px){.insight-grid{grid-template-columns:1fr}.drill-modal{padding:8px}.drill-dialog{width:100%;height:95vh}.drill-head h3{font-size:14px}.filter-summary-bar .summary-actions{width:100%;margin-left:0}}
 </style>
@@ -455,12 +467,28 @@ body > *{position:relative;z-index:1;}
 
   <div class="tabs" id="tabs">
     <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="controlroom">🚨 Quality Control Room</button>
     <button class="tab-btn" data-tab="wcgrade">🏭 Work Center &amp; Grade</button>
     <button class="tab-btn" data-tab="defects">🎯 Defect Analysis</button>
     <button class="tab-btn" data-tab="weekly">📅 Period Trend</button>
   </div>
 
-  <!-- TAB 1: DASHBOARD -->
+  <!-- TAB 1: QUALITY CONTROL ROOM -->
+  <div class="tab-panel hidden" id="tab-controlroom">
+    <div class="qcr-hero"><h2>🚨 Quality Control Room</h2><p>Daily production / quality meeting view • Uses the current dashboard filter context and latest available monthly data.</p></div>
+    <div class="qcr-grid">
+      <div class="qcr-card"><h3>🔴 Critical KPIs</h3><div class="qcr-body"><div class="qcr-kpi-grid" id="qcrCriticalKpis"></div></div></div>
+      <div class="qcr-card"><h3>🎯 Target Breaches</h3><div class="qcr-body"><div class="qcr-list" id="qcrBreaches"></div></div></div>
+      <div class="qcr-card"><h3>🏆 Top 5 Defects</h3><div class="qcr-body"><div class="qcr-list" id="qcrDefects"></div></div></div>
+      <div class="qcr-card"><h3>🏭 Worst Work Centers</h3><div class="qcr-body"><div class="qcr-list" id="qcrWorkCenters"></div></div></div>
+      <div class="qcr-card"><h3>🧪 Worst Grades</h3><div class="qcr-body"><div class="qcr-list" id="qcrGrades"></div></div></div>
+      <div class="qcr-card"><h3>📈 Current Month vs Previous Month</h3><div class="qcr-body"><div id="qcrComparison"></div></div></div>
+      <div class="qcr-card"><h3>⏳ Pending Investigation</h3><div class="qcr-body"><div class="qcr-pending" id="qcrPending"></div><div id="qcrPendingNote" style="margin-top:10px"></div></div></div>
+      <div class="qcr-card"><h3>💡 Improvement Opportunities</h3><div class="qcr-body"><div class="qcr-list" id="qcrOpportunities"></div></div></div>
+    </div>
+  </div>
+
+  <!-- TAB 2: DASHBOARD -->
   <div class="tab-panel" id="tab-dashboard">
     <div class="period-banner" id="periodBanner"></div>
     <div class="kpi-grid" id="kpiGrid"></div>
@@ -526,7 +554,7 @@ body > *{position:relative;z-index:1;}
     </div>
   </div>
 
-  <!-- TAB 2: WORK CENTER & GRADE -->
+  <!-- TAB 3: WORK CENTER & GRADE -->
   <div class="tab-panel hidden" id="tab-wcgrade">
     <div class="panel">
       <h3>🏭 Reject % Qty by Work Center</h3>
@@ -550,7 +578,7 @@ body > *{position:relative;z-index:1;}
     </div>
   </div>
 
-  <!-- TAB 3: DEFECT ANALYSIS -->
+  <!-- TAB 4: DEFECT ANALYSIS -->
   <div class="tab-panel hidden" id="tab-defects">
     <div class="panel">
       <h3>🎯 Top 10 Defect Pareto (Qty MT &amp; Cumulative %)</h3>
@@ -567,7 +595,7 @@ body > *{position:relative;z-index:1;}
     </div>
   </div>
 
-  <!-- TAB 4: PERIOD TREND -->
+  <!-- TAB 5: PERIOD TREND -->
   <div class="tab-panel hidden" id="tab-weekly">
     <div class="panel">
       <h3>📅 Weekly Defect Rate % &amp; Reject % Trend</h3>
@@ -1491,9 +1519,69 @@ async function loadPeriodTrend(){
   renderMetricsTable("yearlyTable", data.yearly, data.yearly_total); markChartsReady();
 }
 
+// ---------- Tab: Quality Control Room ----------
+function qcrStatus(label, value){
+  const c=KPI_TARGETS[label]; if(!c || c.target===null || c.target===undefined) return 'neutral';
+  const v=Number(value)||0,t=Number(c.target),w=Number(c.warning),d=(c.direction||'higher').toLowerCase();
+  if(d==='lower') return v<=t?'good':v<=w?'amber':'bad';
+  return v>=t?'good':v>=w?'amber':'bad';
+}
+function qcrFmtKpi(k){ return k.fmt==='pct' ? (Number(k.value||0)*100).toFixed(2)+'%' : k.fmt==='int' ? Math.round(Number(k.value||0)).toLocaleString() : Number(k.value||0).toFixed(2); }
+function qcrTargetText(label){ const c=KPI_TARGETS[label]; if(!c)return 'Target not set'; return `${c.direction==='lower'?'≤':'≥'} ${fmtTarget(c.target,'pct')}`; }
+function qcrRenderList(id, rows, nameKey, metricKey, metricFmt){
+  const el=document.getElementById(id); if(!el)return; if(!rows.length){el.innerHTML='<div class="qcr-empty">No data available for current selection.</div>';return;}
+  el.innerHTML=rows.map((r,i)=>`<div class="qcr-row"><div class="qcr-rank">${i+1}</div><div class="qcr-name">${String(r[nameKey]??'—')}</div><div class="qcr-metric">${metricFmt(Number(r[metricKey]||0))}</div></div>`).join('');
+}
+function qcrRenderBreaches(kpis){
+  const el=document.getElementById('qcrBreaches'); const bad=kpis.filter(k=>qcrStatus(k.label,k.value)==='bad'); const amber=kpis.filter(k=>qcrStatus(k.label,k.value)==='amber'); const rows=[...bad,...amber];
+  if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No KPI target breaches. All configured KPIs are on target.</div>';return;}
+  el.innerHTML=rows.map(k=>`<div class="qcr-breach"><div><div class="qcr-breach-name">${k.label}</div><div class="qcr-breach-meta">${qcrStatus(k.label,k.value)==='bad'?'Critical breach':'Watch level'} • Target ${qcrTargetText(k.label)}</div></div><div class="qcr-breach-val">${qcrFmtKpi(k)}</div></div>`).join('');
+}
+function qcrRenderComparison(rows){
+  const el=document.getElementById('qcrComparison'); if(!rows.length){el.innerHTML='<div class="qcr-empty">Monthly comparison is not available.</div>';return;}
+  const cur=rows[rows.length-1], prev=rows.length>1?rows[rows.length-2]:null;
+  const metrics=[['Defect %','defect_pct',true],['First Pass Yield % (Prime%)','first_pass_yield_pct',false],['Reject % Qty','reject_pct_qty',true],['Output Qty (MT)','output_qty',false],['Coils','coils',false]];
+  const cell=(m)=>m[2] ? (Number(m[1]||0)*100).toFixed(2)+'%' : Number(m[1]||0).toLocaleString(undefined,{maximumFractionDigits:2});
+  const delta=(m)=>{if(!prev)return '—'; const a=Number(prev[m[1]]||0),b=Number(cur[m[1]]||0); if(!a)return b===0?'0.00%':'New'; const pct=(b-a)/Math.abs(a); const good=(m[1]==='first_pass_yield_pct')?pct>0:pct<0; return `<span class="qcr-delta ${Math.abs(pct)<0.000001?'equal':good?'good':'bad'}">${pct>=0?'+':''}${(pct*100).toFixed(1)}%</span>`;};
+  el.innerHTML=`<table class="qcr-compare"><thead><tr><th>Metric</th><th>${prev?prev.name:'Previous'}</th><th>${cur.name}</th><th>Change</th></tr></thead><tbody>${metrics.map(m=>`<tr><td>${m[0]}</td><td>${prev?cell(prev,m):'—'}</td><td>${cell(cur,m)}</td><td>${delta(m)}</td></tr>`).join('')}</tbody></table>`;
+}
+async function loadControlRoom(signal){
+  const params=new URLSearchParams(currentFilters).toString();
+  try{
+    const [kRes,dRes,wRes,mRes]=await Promise.all([
+      fetch('/api/kpis?'+params,{signal}), fetch('/api/defect_analysis?'+params,{signal}), fetch('/api/work_center_grade?'+params,{signal}), fetch('/api/monthly_trend?'+params,{signal})
+    ]);
+    const [k,d,w,m]=await Promise.all([kRes.json(),dRes.json(),wRes.json(),mRes.json()]);
+    if(k.error||d.error||w.error||m.error) throw new Error(k.error||d.error||w.error||m.error||'Control Room data error');
+    const criticalLabels=['First Pass Yield % (Prime%)','Defect Rate','Reject % Qty','Hold for Decision % Qty','Salvage % Qty','Rework % Qty'];
+    const critical=(k.kpis||[]).filter(x=>criticalLabels.includes(x.label));
+    document.getElementById('qcrCriticalKpis').innerHTML=critical.map(x=>{const st=qcrStatus(x.label,x.value);return `<div class="qcr-kpi"><div class="qcr-kpi-name">${x.label}</div><div class="qcr-kpi-value">${qcrFmtKpi(x)}</div><span class="qcr-status ${st}">${st==='good'?'ON TARGET':st==='amber'?'WATCH':st==='bad'?'CRITICAL':'REFERENCE'}</span></div>`}).join('');
+    qcrRenderBreaches(critical);
+    qcrRenderList('qcrDefects',(d.register||[]).slice(0,5),'defect','qty',v=>v.toFixed(2)+' MT');
+    const worstWc=[...(w.by_work_center||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
+    const worstGr=[...(w.by_grade||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
+    qcrRenderList('qcrWorkCenters',worstWc,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
+    qcrRenderList('qcrGrades',worstGr,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
+    qcrRenderComparison(m.rows||[]);
+    const pending=(k.kpis||[]).find(x=>x.label==='Hold For Decision Qty (MT)');
+    const holdRow=(k.decision_table||[]).find(x=>x.decision==='HOLD FOR DECISION');
+    const pendingCoils=holdRow?Number(holdRow.coils||0):0, pendingQty=pending?Number(pending.value||0):0;
+    document.getElementById('qcrPending').innerHTML=`<div class="qcr-pending-box"><b>${pendingCoils.toLocaleString()}</b><span>Hold Coils</span></div><div class="qcr-pending-box"><b>${pendingQty.toFixed(2)}</b><span>Hold Qty (MT)</span></div><div class="qcr-pending-box"><b>${(Number(holdRow?.pct_qty||0)*100).toFixed(2)}%</b><span>Hold % Qty</span></div>`;
+    document.getElementById('qcrPendingNote').innerHTML=pendingCoils?'<div class="qcr-opportunity"><span class="qcr-opportunity-icon">⚠️</span><div class="qcr-opportunity-text"><b>Investigation queue active.</b> Review HOLD FOR DECISION coils first and close disposition decisions before the next production meeting.</div></div>':'<div class="qcr-empty">No HOLD FOR DECISION quantity in the current selection.</div>';
+    const opp=[];
+    critical.forEach(x=>{const st=qcrStatus(x.label,x.value);if(st!=='good')opp.push({icon:st==='bad'?'🚨':'👀',text:`<b>${x.label}</b> is ${st==='bad'?'above the critical threshold':'in the watch zone'} — prioritize corrective action.`});});
+    if(worstWc[0])opp.push({icon:'🏭',text:`<b>${worstWc[0].name}</b> has the highest Reject % Qty (${(Number(worstWc[0].reject_pct_qty||0)*100).toFixed(2)}%) among work centers.`});
+    if(worstGr[0])opp.push({icon:'🧪',text:`<b>${worstGr[0].name}</b> has the highest Reject % Qty (${(Number(worstGr[0].reject_pct_qty||0)*100).toFixed(2)}%) among grades.`});
+    if(d.register?.[0])opp.push({icon:'🎯',text:`<b>${d.register[0].defect}</b> is the leading defect by recorded quantity (${Number(d.register[0].qty||0).toFixed(2)} MT).`});
+    const oe=document.getElementById('qcrOpportunities'); oe.innerHTML=opp.length?opp.slice(0,6).map(o=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text">${o.text}</div></div>`).join(''):'<div class="qcr-empty">No immediate improvement opportunity detected.</div>';
+    markChartsReady();
+  }catch(e){if(e.name!=='AbortError'){console.error(e);document.getElementById('qcrCriticalKpis').innerHTML='<div class="qcr-empty">Unable to load Control Room data.</div>';}}
+}
+
 // ---------- Tab switching ----------
 const TAB_LOADERS = {
   dashboard: loadKpis,
+  controlroom: loadControlRoom,
   wcgrade: loadWcGrade,
   defects: loadDefectAnalysis,
   weekly: loadPeriodTrend,
