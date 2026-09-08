@@ -172,3 +172,15 @@ The live dashboard now provides **Excel, PDF, and CSV** export buttons in the Da
 Viewer login is currently disabled. The main dashboard is open to all visitors without username/password. Every dashboard page visit and dashboard action is recorded with the visitor IP address, timestamp, event, tab and browser/user-agent. Admin can review **Dashboard Activity** to see unique IPs, opens, last seen time, browser/device information and recent activity. Named viewer login can be enabled in a future version if required. Admin/data-management APIs remain protected by Admin login.
 
 For the first deployment, the environment-backed `ADMIN_USERNAME` / `ADMIN_PASSWORD` account is automatically created as the administrator. Log in to `/admin`, create viewer accounts, then share those credentials with authorized viewers.
+
+## Admin Control Center (Upgraded)
+
+The Admin Panel now includes:
+- Admin Home KPIs: total records, last data update, database size, active admins, dashboard views, last login and failed login attempts.
+- Monthly Data Import Wizard for XLSX/XLSM, CSV and TSV/TAB with detect → validate → duplicate check → preview → confirm → summary flow.
+- Import preview prevents direct writes to the live database until Confirm Import is clicked.
+- Data Quality Monitor with completeness, invalid value, duplicate and missing-intensity checks plus a Data Quality Score.
+- Import History for traceability of every confirmed bulk import.
+- Exportable Admin Audit Log (up to the latest 5,000 activity entries).
+- KPI Target History with old/new target values, effective date, changed-by and timestamp.
+- Role-aware administration: Super Admin, Data Admin, Quality Manager and Viewer. Backend permissions restrict sensitive actions by role.

@@ -1,6 +1,5 @@
 __pycache__/
-*.py[cod]
+*.pyc
 *.log
 .env
-quality.db-journal
 .DS_Store

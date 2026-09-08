@@ -221,7 +221,7 @@ DEFAULT_KPI_TARGETS = {
 }
 
 def _target_rows():
-    conn=get_conn(); rows=conn.execute("SELECT label,target,warning,critical,direction FROM kpi_targets ORDER BY label").fetchall(); conn.close()
+    conn=get_conn(); rows=conn.execute("SELECT label,target,warning,critical,direction,updated_at FROM kpi_targets ORDER BY label").fetchall(); conn.close()
     return [dict(r) for r in rows]
 
 def get_kpi_targets():
@@ -902,6 +902,8 @@ ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin").strip() or "admin"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
 SESSION_TTL = 8 * 60 * 60
 SESSIONS = {}
+IMPORT_PREVIEWS = {}
+IMPORT_PREVIEW_TTL = 30 * 60
 VIEWER_SESSION_TTL = 12 * 60 * 60
 LOGIN_WINDOW = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
@@ -985,19 +987,37 @@ def _cookie_value(cookie_header, name):
     return ""
 
 
-def _is_admin(handler):
+def _admin_meta(handler):
     _cleanup_sessions()
     token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_admin")
     meta = SESSIONS.get(token)
     if not meta:
-        return False
+        return None
     now = _dt.datetime.now().timestamp()
     if meta.get("expires", 0) < now:
         SESSIONS.pop(token, None)
-        return False
-    # Sliding session window while the admin is actively using the console.
+        return None
     meta["expires"] = now + SESSION_TTL
-    return meta.get("role") == "admin" and bool(meta.get("active", True)) and hmac.compare_digest(meta.get("username", ""), ADMIN_USERNAME)
+    if meta.get("role") not in ("admin", "data_admin", "quality_manager") or not bool(meta.get("active", True)):
+        return None
+    return meta
+
+def _is_admin(handler):
+    return _admin_meta(handler) is not None
+
+def _role(handler):
+    meta = _admin_meta(handler)
+    return meta.get("role", "") if meta else ""
+
+def _can(handler, *roles):
+    return _role(handler) in roles
+
+def _require_role(handler, *roles):
+    if not _is_admin(handler):
+        _auth_error(handler); return False
+    if roles and _role(handler) not in roles:
+        _auth_error(handler, "You do not have permission for this action.", status=403); return False
+    return True
 
 
 def _viewer_meta(handler):
@@ -1050,8 +1070,8 @@ def _json_body(handler):
     return json.loads(raw.decode("utf-8")) if raw else {}
 
 
-def _auth_error(handler, message="Admin login required"):
-    handler._send_json({"error": message, "authenticated": False}, status=401)
+def _auth_error(handler, message="Admin login required", status=401):
+    handler._send_json({"error": message, "authenticated": False}, status=status)
 
 
 def _norm_header(v):
@@ -1290,6 +1310,25 @@ def _ensure_admin_schema():
     else:
         conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
             id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT UNIQUE NOT NULL, target REAL, warning REAL, critical REAL, direction TEXT NOT NULL DEFAULT 'higher', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    if USE_POSTGRES:
+        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_target_history (
+            id BIGSERIAL PRIMARY KEY, label TEXT NOT NULL, old_target DOUBLE PRECISION, new_target DOUBLE PRECISION,
+            old_warning DOUBLE PRECISION, new_warning DOUBLE PRECISION, old_critical DOUBLE PRECISION, new_critical DOUBLE PRECISION,
+            old_direction TEXT, new_direction TEXT, effective_date TEXT DEFAULT '', changed_by TEXT DEFAULT '', changed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
+            id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0,
+            imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    else:
+        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_target_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL, old_target REAL, new_target REAL, old_warning REAL, new_warning REAL, old_critical REAL, new_critical REAL,
+            old_direction TEXT, new_direction TEXT, effective_date TEXT DEFAULT '', changed_by TEXT DEFAULT '', changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0,
+            imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     for label,cfg in DEFAULT_KPI_TARGETS.items():
         try:
@@ -1858,10 +1897,65 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"targets": get_kpi_targets()})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/home":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn()
+                    total=conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                    last=conn.execute("SELECT MAX(created_at) FROM import_history").fetchone()[0] or conn.execute("SELECT MAX(insp_lot_date) FROM disposition WHERE insp_lot_date <> ''").fetchone()[0]
+                    admins=conn.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='admin'").fetchone()[0]
+                    last_login=conn.execute("SELECT MAX(created_at) FROM activity_log WHERE event_type='admin_login'").fetchone()[0]
+                    failed=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='admin_login_failed'").fetchone()[0]
+                    views=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open'").fetchone()[0]
+                    imports=conn.execute("SELECT COUNT(*) FROM import_history").fetchone()[0]
+                    conn.close()
+                    ds=database_status()
+                    self._send_json({"total_records":total,"last_data_update":last or "—","database_size_mb":ds.get("used_mb",0),"active_admins":admins,"dashboard_views":views,"last_login":last_login or "—","failed_login_attempts":failed,"imports":imports})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/data_quality":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); total=conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                    missing_grade=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(grade,''))='' ").fetchone()[0]
+                    missing_wc=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(work_center,''))='' ").fetchone()[0]
+                    missing_intensity=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(defect_intensity,''))='' ").fetchone()[0]
+                    invalid_weight=conn.execute("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight<0").fetchone()[0]
+                    invalid_decision=conn.execute("SELECT COUNT(*) FROM disposition WHERE quality_decision NOT IN ('PRIME','FOR NEXT PROCESS','SALVAGE','HOLD FOR DECISION','REJECT','RE-WORK','DIVERT') OR TRIM(COALESCE(quality_decision,''))='' ").fetchone()[0]
+                    rows=conn.execute("SELECT heat_no, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(heat_no,''))<>'' GROUP BY heat_no HAVING COUNT(*)>1 ORDER BY c DESC LIMIT 20").fetchall()
+                    duplicate_records=sum(max(0,int(r[1])-1) for r in rows)
+                    import_errors=conn.execute("SELECT COALESCE(SUM(errors),0) FROM import_history").fetchone()[0]
+                    invalid_dates=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))<>'' AND (length(insp_lot_date)<8 OR date(substr(insp_lot_date,1,10)) IS NULL)").fetchone()[0] if not USE_POSTGRES else conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))<>'' AND to_date(substr(insp_lot_date,1,10),'YYYY-MM-DD') IS NULL").fetchone()[0]
+                    conn.close()
+                    issues=missing_grade+missing_wc+invalid_weight+invalid_decision+duplicate_records+invalid_dates
+                    score=round(max(0,100*(1-(issues/max(total,1)))),1)
+                    self._send_json({"total":total,"score":score,"issues":{"missing_grade":missing_grade,"invalid_dates":int(invalid_dates),"duplicates":duplicate_records,"invalid_weights":invalid_weight,"invalid_decisions":invalid_decision,"unknown_work_centers":0,"unknown_grades":0,"missing_intensity":missing_intensity,"import_errors":int(import_errors)},"duplicate_heat": [dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/import_history":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=conn.execute("SELECT id,filename,detected,valid,duplicates,errors,imported,imported_by,created_at FROM import_history ORDER BY id DESC LIMIT 100").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/kpi_target_history":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=conn.execute("SELECT label,old_target,new_target,changed_by,effective_date,changed_at FROM kpi_target_history ORDER BY id DESC LIMIT 100").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/kpi_targets":
             if not _is_admin(self): _auth_error(self)
             else:
                 try: self._send_json({"targets": get_kpi_targets()})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/export_audit":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=conn.execute("SELECT COALESCE(NULLIF(a.ip_address,''),'Unknown') ip_address,COALESCE(u.username,'Anonymous') username,a.event_type,a.tab,a.created_at,a.user_agent FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 5000").fetchall(); conn.close()
+                    out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Time","User","IP Address","Action","Tab","User Agent"]); [w.writerow([r[4],r[1],r[0],r[2],r[3],r[5]]) for r in rows]
+                    data=out.getvalue().encode('utf-8-sig'); self.send_response(200); self.send_header('Content-Type','text/csv; charset=utf-8'); self.send_header('Content-Disposition','attachment; filename="admin_audit_log.csv"'); self.send_header('Content-Length',str(len(data))); self.send_header('Cache-Control','no-store'); self.end_headers(); self.wfile.write(data)
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/database_status":
             if not _is_admin(self):
@@ -1931,6 +2025,7 @@ class Handler(BaseHTTPRequestHandler):
             SESSIONS.pop(token,None); self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Set-Cookie","qdash_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); self.end_headers(); self.wfile.write(b'{"authenticated":false}'); return
 
         if path == "/api/admin/change_password":
+            if not _is_admin(self): _auth_error(self); return
             try:
                 body = _json_body(self)
                 current = str(body.get("current_password", ""))
@@ -1965,7 +2060,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/user":
-            if not _is_admin(self): _auth_error(self); return
+            if not _require_role(self, "admin"): return
             try:
                 body=_json_body(self); username=str(body.get("username","")).strip(); display_name=str(body.get("display_name","")).strip() or username; password=str(body.get("password","")); role=str(body.get("role","viewer"))
                 if not username or not password: raise ValueError("Username and password are required")
@@ -1976,7 +2071,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/user_toggle":
-            if not _is_admin(self): _auth_error(self); return
+            if not _require_role(self, "admin"): return
             try:
                 body=_json_body(self); uid=int(body.get("id")); active=bool(body.get("active")); conn=get_conn()
                 row=conn.execute("SELECT id,username,role,active FROM users WHERE id=?",(uid,)).fetchone()
@@ -2004,7 +2099,7 @@ class Handler(BaseHTTPRequestHandler):
                 conn = get_conn()
                 row = conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?", (username,)).fetchone()
                 conn.close()
-                valid = bool(row and bool(row[5]) and row[4] == "admin" and _verify_password(password, row[3]))
+                valid = bool(row and bool(row[5]) and row[4] in ("admin", "data_admin", "quality_manager") and _verify_password(password, row[3]))
                 if not valid and ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and (not row or bool(row[5])):
                     valid = True
                 if valid:
@@ -2027,6 +2122,7 @@ class Handler(BaseHTTPRequestHandler):
                     _activity_event(self, "admin_login")
                 else:
                     _record_login_failure(ip)
+                    _activity_event(self, "admin_login_failed", tab="Admin")
                     self._send_json({"error": "Invalid administrator credentials"}, status=401)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -2056,7 +2152,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/kpi_target":
-            if not _is_admin(self): _auth_error(self); return
+            if not _require_role(self, "admin", "quality_manager"): return
             try:
                 body=_json_body(self); label=str(body.get("label","")).strip(); direction=str(body.get("direction","higher")).strip().lower()
                 if not label: raise ValueError("KPI label is required")
@@ -2066,12 +2162,18 @@ class Handler(BaseHTTPRequestHandler):
                     return float(v)
                 target,warning,critical=num(body.get("target")),num(body.get("warning")),num(body.get("critical"))
                 if target is None or warning is None or critical is None: raise ValueError("Target, Warning and Critical are required")
-                conn=get_conn(); conn.execute("""INSERT INTO kpi_targets(label,target,warning,critical,direction) VALUES(?,?,?,?,?) ON CONFLICT(label) DO UPDATE SET target=excluded.target,warning=excluded.warning,critical=excluded.critical,direction=excluded.direction,updated_at=CURRENT_TIMESTAMP""",(label,target,warning,critical,direction)); conn.commit(); conn.close(); _activity_event(self,"kpi_target_update",tab="Admin")
+                conn=get_conn(); oldrow=conn.execute("SELECT target,warning,critical,direction FROM kpi_targets WHERE label=?",(label,)).fetchone()
+                conn.execute("""INSERT INTO kpi_targets(label,target,warning,critical,direction) VALUES(?,?,?,?,?) ON CONFLICT(label) DO UPDATE SET target=excluded.target,warning=excluded.warning,critical=excluded.critical,direction=excluded.direction,updated_at=CURRENT_TIMESTAMP""",(label,target,warning,critical,direction))
+                meta=_admin_meta(self) or {}; changed_by=meta.get("username", "Admin")
+                if oldrow:
+                    conn.execute("""INSERT INTO kpi_target_history(label,old_target,new_target,old_warning,new_warning,old_critical,new_critical,old_direction,new_direction,effective_date,changed_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(label,oldrow[0],target,oldrow[1],warning,oldrow[2],critical,oldrow[3],direction,str(body.get("effective_date", "")).strip(),changed_by))
+                conn.commit(); conn.close(); _activity_event(self,"kpi_target_update",tab="Admin")
                 self._send_json({"ok":True,"targets":get_kpi_targets()})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/admin/record":
+            if not _require_role(self, "admin", "data_admin"): return
             try:
                 body = _json_body(self)
                 r = _record_from_values([body.get(k, "") for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]], {k:i for i,k in enumerate(["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"])})
@@ -2086,7 +2188,51 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=400)
             return
 
+        if path == "/api/admin/import_preview":
+            if not _require_role(self, "admin", "data_admin"): return
+            try:
+                ctype=self.headers.get("Content-Type",""); length=int(self.headers.get("Content-Length","0") or 0); raw=self.rfile.read(length)
+                msg=BytesParser(policy=default).parsebytes((f"Content-Type: {ctype}\r\nMIME-Version: 1.0\r\n\r\n").encode()+raw); uploaded=None
+                if msg.is_multipart():
+                    for part in msg.iter_parts():
+                        if "filename=" in part.get("Content-Disposition",""): uploaded=(part.get_filename() or "upload",part.get_payload(decode=True) or b""); break
+                if not uploaded: raise ValueError("No file was uploaded")
+                records=_parse_uploaded_file(uploaded[0],uploaded[1])
+                if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
+                conn=get_conn(); existing=set(_record_signature(dict(r)) for r in conn.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,month,week,quarter,financial_year FROM disposition").fetchall());
+                wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()
+                valid=[]; errors=[]; duplicates=0; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
+                for idx,r in enumerate(records,start=2):
+                    err=_validate_record(r); d=str(r.get("insp_lot_date","")).strip()
+                    if d:
+                        try: _dt.datetime.fromisoformat(d[:10])
+                        except Exception: err=err or "Invalid date"; invalid_dates+=1
+                    else: err=err or "Missing inspection date"; invalid_dates+=1
+                    if not str(r.get("defect_intensity","")).strip(): missing_intensity+=1
+                    if wcs and str(r.get("work_center","")).strip() and str(r.get("work_center")).strip() not in wcs: unknown_wc+=1
+                    if grades and str(r.get("grade","")).strip() and str(r.get("grade")).strip() not in grades: unknown_grade+=1
+                    sig=_record_signature(r)
+                    if sig in existing or sig in seen: duplicates+=1
+                    elif err: errors.append({"row":idx,"error":err})
+                    else: seen.add(sig); valid.append(r)
+                token=secrets.token_urlsafe(24); IMPORT_PREVIEWS[token]={"created":time.time(),"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
+                self._send_json({"ok":True,"preview_id":token,"filename":uploaded[0],**IMPORT_PREVIEWS[token]["summary"],"sample":[{k:r.get(k,"") for k in ["insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision"]} for r in valid[:25]]})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
+        if path == "/api/admin/import_confirm":
+            if not _require_role(self, "admin", "data_admin"): return
+            try:
+                body=_json_body(self); pid=str(body.get("preview_id","")); item=IMPORT_PREVIEWS.get(pid)
+                if not item or time.time()-item.get("created",0)>IMPORT_PREVIEW_TTL: IMPORT_PREVIEWS.pop(pid,None); raise ValueError("Import preview expired. Please upload the file again.")
+                result=_insert_records(item["records"]); meta=_admin_meta(self) or {};
+                conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,imported,imported_by) VALUES(?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]})
+                self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"]})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
         if path == "/api/admin/import":
+            if not _require_role(self, "admin", "data_admin"): return
             try:
                 ctype = self.headers.get("Content-Type", "")
                 length = int(self.headers.get("Content-Length", "0") or 0)
@@ -2124,6 +2270,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/delete":
+            if not _require_role(self, "admin", "data_admin"): return
             try:
                 body = _json_body(self)
                 record_id = int(body.get("id"))
