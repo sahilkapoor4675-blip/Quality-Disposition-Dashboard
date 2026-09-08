@@ -241,6 +241,8 @@ header{background:linear-gradient(135deg,#FFFFFF 0%,#F4F8FC 100%);color:#16324F;
 header h1{color:#16324F;letter-spacing:1.4px;}
 header .sub{color:#5E7185;opacity:1;}
 .executive-kicker{color:#2388C9;}
+header .sub{font-weight:800!important;letter-spacing:.2px;}
+
 .updated-label{color:#718096;opacity:1;}
 .updated-time{color:#40566B;}
 .live-status{color:#1B7F58;border-color:#CFE8DB;background:#F2FBF6;}
@@ -294,6 +296,36 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 @media(max-width:900px){.header-logo{height:38px;max-width:170px;margin-right:10px;}.executive-header-inner{gap:0;}}
 @media(max-width:600px){.header-logo{height:32px;max-width:125px;margin-right:8px;}.executive-header-inner .plant-name,.executive-header-inner .sub{display:none;}}
 @media(max-width:600px){.header-actions{gap:5px}.admin-link{padding:6px 8px;font-size:10px}.live-status{font-size:9px!important;}}
+
+/* Final KPI card professional 3D treatment + hover information popup */
+.kpi-card{
+  border:1px solid #c9d6e2!important;
+  border-bottom:3px solid #b8c8d8!important;
+  border-radius:14px!important;
+  box-shadow:0 2px 4px rgba(15,42,74,.08), 0 8px 18px rgba(15,42,74,.10), inset 0 1px 0 rgba(255,255,255,.95)!important;
+  transform:translateY(0);
+  transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease!important;
+}
+.kpi-card:hover{
+  transform:translateY(-5px)!important;
+  box-shadow:0 3px 6px rgba(15,42,74,.10), 0 16px 30px rgba(15,42,74,.18), inset 0 1px 0 rgba(255,255,255,1)!important;
+  z-index:20;
+}
+.kpi-card .kpi-hover-popup{
+  position:absolute;left:14px;right:14px;bottom:14px;
+  padding:11px 12px;border-radius:10px;
+  background:rgba(255,255,255,.98);border:1px solid #d7e2ec;
+  box-shadow:0 12px 30px rgba(15,42,74,.18);
+  opacity:0;visibility:hidden;transform:translateY(8px) scale(.985);
+  transition:opacity .18s ease,transform .18s ease,visibility .18s ease;
+  pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.kpi-card:hover .kpi-hover-popup{opacity:1;visibility:visible;transform:translateY(0) scale(1)}
+.kpi-hover-popup .hp-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:800;color:#16324F;margin-bottom:5px}
+.kpi-hover-popup .hp-row{display:flex;justify-content:space-between;gap:10px;font-family:'Manrope',sans-serif;font-size:10px;line-height:1.45;color:#52677b}
+.kpi-hover-popup .hp-row b{color:#24364B;font-weight:800}
+@media(max-width:700px){.kpi-card .kpi-hover-popup{left:8px;right:8px;bottom:8px}.kpi-card:hover{transform:translateY(-2px)!important}}
+
 </style>
 <style id="jsl-watermark-style">
 /* Exact JSL Jindal Stainless logo watermark — background only; all app UI stays above it. */
@@ -666,7 +698,11 @@ function renderKpis(kpis){
     let trendHtml=''; if(k.arrow!==null && k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; let changeText=''; if(k.change_type==='pts') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`; else if(k.change_type==='new') changeText='New'; else if(k.change_type==='pct') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; else changeText='No change'; trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
     const statusText=status==='good'?'ON TARGET':status==='amber'?'WATCH':status==='bad'?'ACTION':'REFERENCE';
     const valueColor=(k.label==='Total Coils'||k.label==='Output Quantity (MT)')?'#2388C9':(k.color||'#16324F');
-    card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
+    const targetCfg=KPI_TARGETS[k.label]||null;
+    const directionText=targetCfg ? ((targetCfg.direction||'higher').toLowerCase()==='lower'?'Lower is better':'Higher is better') : 'Reference KPI';
+    const targetText=targetCfg ? fmtValue(targetCfg.target,k.fmt) : 'Not set';
+    const prevText=(k.prev!==null && k.prev!==undefined) ? fmtValue(k.prev,k.fmt) : 'N/A';
+    card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${k.label}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div><div class="kpi-hover-popup"><div class="hp-title">${k.label}</div><div class="hp-row"><span>Current</span><b>${fmtValue(cur,k.fmt)}</b></div><div class="hp-row"><span>Target</span><b>${targetText}</b></div><div class="hp-row"><span>Previous</span><b>${prevText}</b></div><div class="hp-row"><span>Status</span><b>${statusText} · ${directionText}</b></div></div>`;
     grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
   }); previousKpiValues=nextValues;
 }
@@ -725,11 +761,12 @@ function renderDefectTable(rows, total){
     tbody.appendChild(tr);
   });
   if(total){
-    const tr = document.createElement("tr");
-    tr.className = "grand-total-row";
-    tr.innerHTML = `<td>Total</td><td>${fmtNum2(total.qty)}</td>
-      <td>${fmtPct(total.pct)}</td><td>${fmtPct(total.cum_pct)}</td>`;
-    tbody.appendChild(tr);
+    const topQty=rows.reduce((s,r)=>s+Number(r.qty||0),0);
+    const topPct=total.qty?topQty/Number(total.qty):0;
+    const tr=document.createElement("tr"); tr.className="grand-total-row";
+    tr.innerHTML=`<td>Top 5 Total</td><td>${fmtNum2(topQty)}</td><td>${fmtPct(topPct)}</td><td>${fmtPct(topPct)}</td>`; tbody.appendChild(tr);
+    const gt=document.createElement("tr"); gt.className="grand-total-row";
+    gt.innerHTML=`<td>Grand Total</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(1)}</td><td>${fmtPct(1)}</td>`; tbody.appendChild(gt);
   }
 }
 
@@ -756,21 +793,28 @@ function renderMetricsTable(tableId, rows, total){
   tbody.innerHTML = "";
   rows.forEach(r => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.name}</td><td>${r.coils.toLocaleString()}</td>
-      <td>${fmtNum2(r.output_qty)}</td><td>${r.defect_coils.toLocaleString()}</td>
-      <td>${fmtPct(r.defect_pct)}</td><td>${fmtNum2(r.reject_qty)}</td>
-      <td>${fmtPct(r.reject_pct_qty)}</td><td>${fmtPct(r.first_pass_yield_pct)}</td>`;
+    tr.innerHTML = `<td>${r.name}</td><td>${Number(r.coils||0).toLocaleString()}</td>
+      <td>${fmtNum2(Number(r.output_qty||0))}</td><td>${Number(r.defect_coils||0).toLocaleString()}</td>
+      <td>${fmtPct(Number(r.defect_pct||0))}</td><td>${fmtNum2(Number(r.reject_qty||0))}</td>
+      <td>${fmtPct(Number(r.reject_pct_qty||0))}</td><td>${fmtPct(Number(r.first_pass_yield_pct||0))}</td>`;
     tbody.appendChild(tr);
   });
-  if(total){
-    const tr = document.createElement("tr");
-    tr.className = "grand-total-row";
-    tr.innerHTML = `<td>Total</td><td>${total.coils.toLocaleString()}</td>
-      <td>${fmtNum2(total.output_qty)}</td><td>${total.defect_coils.toLocaleString()}</td>
-      <td>${fmtPct(total.defect_pct)}</td><td>${fmtNum2(total.reject_qty)}</td>
-      <td>${fmtPct(total.reject_pct_qty)}</td><td>${fmtPct(total.first_pass_yield_pct)}</td>`;
-    tbody.appendChild(tr);
-  }
+  /* Grand Total is recalculated from the actual displayed groups. Percentages
+     are recomputed from aggregate counts/quantities, never averaged. */
+  const agg = rows.reduce((a,r)=>{
+    a.coils += Number(r.coils||0); a.output_qty += Number(r.output_qty||0);
+    a.defect_coils += Number(r.defect_coils||0); a.reject_qty += Number(r.reject_qty||0);
+    a.prime_qty += Number(r.prime_qty||0); return a;
+  },{coils:0,output_qty:0,defect_coils:0,reject_qty:0,prime_qty:0});
+  const gt = total || agg;
+  const tr = document.createElement("tr");
+  tr.className = "grand-total-row";
+  tr.innerHTML = `<td>Grand Total</td><td>${Number(gt.coils||0).toLocaleString()}</td>
+    <td>${fmtNum2(Number(gt.output_qty||0))}</td><td>${Number(gt.defect_coils||0).toLocaleString()}</td>
+    <td>${fmtPct(Number(gt.coils)?Number(gt.defect_coils||0)/Number(gt.coils):0)}</td><td>${fmtNum2(Number(gt.reject_qty||0))}</td>
+    <td>${fmtPct(Number(gt.output_qty)?Number(gt.reject_qty||0)/Number(gt.output_qty):0)}</td>
+    <td>${fmtPct(Number(gt.output_qty)?Number(gt.prime_qty||0)/Number(gt.output_qty):0)}</td>`;
+  tbody.appendChild(tr);
 }
 
 async function loadKpis(signal){
