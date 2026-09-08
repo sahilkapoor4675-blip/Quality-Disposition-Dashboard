@@ -283,6 +283,10 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 .admin-link{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #D5E0EA;border-radius:8px;background:#fff;color:#183A58;text-decoration:none;font-size:11px;font-weight:800;box-shadow:0 2px 6px rgba(30,65,95,.05);}
 .admin-link:hover{background:#F2F7FB;border-color:#AFC9DC;}
 .header-actions{display:flex;align-items:center;gap:9px;}
+.header-logo{height:46px;width:auto;max-width:220px;object-fit:contain;display:block;margin-right:16px;filter:drop-shadow(0 3px 7px rgba(15,42,74,.10));}
+.executive-header-inner{display:flex;align-items:center;min-width:0;gap:4px;}
+@media(max-width:900px){.header-logo{height:38px;max-width:170px;margin-right:10px;}.executive-header-inner{gap:0;}}
+@media(max-width:600px){.header-logo{height:32px;max-width:125px;margin-right:8px;}.executive-header-inner .plant-name,.executive-header-inner .sub{display:none;}}
 @media(max-width:600px){.header-actions{gap:5px}.admin-link{padding:6px 8px;font-size:10px}.live-status{font-size:9px!important;}}
 </style>
 <style id="jsl-watermark-style">
@@ -314,11 +318,14 @@ body > *{position:relative;z-index:1;}
 </div></div>
 
 <header>
+  <div class="executive-header-inner">
+    <img class="header-logo" src="jsl-header-logo.png" alt="Jindal Stainless">
   <div class="executive-brand">
     <h1>QUALITY INTELLIGENCE</h1>
     <div class="executive-kicker">Disposition &amp; Defect Analytics</div>
     <div class="plant-name">Cupronickel (Non-Ferrous) Division</div>
     <div class="sub">Plant Quality Performance Monitoring</div>
+  </div>
   </div>
   <div class="executive-meta">
     <div class="updated-block">

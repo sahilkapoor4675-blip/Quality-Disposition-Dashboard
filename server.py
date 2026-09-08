@@ -859,16 +859,29 @@ def compute_yearly_trend(filters):
 # ---------------------------------------------------------------------------
 # Admin authentication / data-management layer
 # ---------------------------------------------------------------------------
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "ChangeMe@123")
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin").strip() or "admin"
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
 SESSION_TTL = 8 * 60 * 60
 SESSIONS = {}
 VIEWER_SESSION_TTL = 12 * 60 * 60
+LOGIN_WINDOW = 15 * 60
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_ATTEMPTS = {}
+CSRF_COOKIE = "qdash_csrf"
+
+# Security note: ADMIN_PASSWORD is optional only when an existing database user
+# record is present. The insecure hard-coded bootstrap password is intentionally
+# not accepted anymore. For new deployments set ADMIN_USERNAME + ADMIN_PASSWORD.
+
 
 def _hash_password(password, salt=None):
     salt = salt or secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 180000)
     return salt.hex() + ":" + digest.hex()
+
+def _strong_password(password):
+    password = str(password or "")
+    return (len(password) >= 12 and any(c.isupper() for c in password) and any(c.islower() for c in password) and any(c.isdigit() for c in password) and any(not c.isalnum() for c in password))
 
 def _verify_password(password, stored):
     try:
@@ -885,6 +898,42 @@ def _cleanup_sessions():
     for token, meta in list(SESSIONS.items()):
         if meta.get("expires", 0) < now:
             SESSIONS.pop(token, None)
+
+def _login_allowed(ip):
+    now = time.time()
+    rec = LOGIN_ATTEMPTS.get(ip, {"count": 0, "window": now})
+    if now - rec.get("window", now) >= LOGIN_WINDOW:
+        rec = {"count": 0, "window": now}
+    if rec.get("count", 0) >= LOGIN_MAX_ATTEMPTS:
+        LOGIN_ATTEMPTS[ip] = rec
+        return False, int(max(1, LOGIN_WINDOW - (now - rec.get("window", now))))
+    LOGIN_ATTEMPTS[ip] = rec
+    return True, 0
+
+def _record_login_failure(ip):
+    now = time.time()
+    rec = LOGIN_ATTEMPTS.get(ip, {"count": 0, "window": now})
+    if now - rec.get("window", now) >= LOGIN_WINDOW:
+        rec = {"count": 0, "window": now}
+    rec["count"] = rec.get("count", 0) + 1
+    LOGIN_ATTEMPTS[ip] = rec
+
+def _clear_login_failures(ip):
+    LOGIN_ATTEMPTS.pop(ip, None)
+
+def _csrf_value(handler):
+    return _cookie_value(handler.headers.get("Cookie", ""), CSRF_COOKIE)
+
+def _admin_post_allowed(handler):
+    if not _is_admin(handler):
+        _auth_error(handler)
+        return False
+    expected = _csrf_value(handler)
+    supplied = handler.headers.get("X-CSRF-Token", "")
+    if not expected or not supplied or not hmac.compare_digest(expected, supplied):
+        _auth_error(handler, "Security token missing or expired. Please sign in again.")
+        return False
+    return True
 
 
 def _cookie_value(cookie_header, name):
@@ -903,10 +952,13 @@ def _is_admin(handler):
     meta = SESSIONS.get(token)
     if not meta:
         return False
-    if meta.get("expires", 0) < _dt.datetime.now().timestamp():
+    now = _dt.datetime.now().timestamp()
+    if meta.get("expires", 0) < now:
         SESSIONS.pop(token, None)
         return False
-    return hmac.compare_digest(meta.get("username", ""), ADMIN_USERNAME)
+    # Sliding session window while the admin is actively using the console.
+    meta["expires"] = now + SESSION_TTL
+    return meta.get("role") == "admin" and bool(meta.get("active", True)) and hmac.compare_digest(meta.get("username", ""), ADMIN_USERNAME)
 
 
 def _viewer_meta(handler):
@@ -1220,7 +1272,7 @@ def _ensure_admin_schema():
 
     # Create/update the environment-backed admin account without overwriting its password on every restart.
     existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
-    if not existing:
+    if not existing and ADMIN_PASSWORD:
         conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",
                      (ADMIN_USERNAME, "Administrator", _hash_password(ADMIN_PASSWORD), "admin", True))
     conn.commit()
@@ -1483,6 +1535,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -1491,6 +1547,10 @@ class Handler(BaseHTTPRequestHandler):
         body = html.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -1506,7 +1566,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in {"/favicon.ico", "/favicon-16.png", "/favicon-32.png", "/favicon-48.png",
                     "/favicon-64.png", "/favicon-128.png", "/favicon-180.png",
                     "/favicon-192.png", "/favicon-256.png", "/favicon-512.png",
-                    "/site.webmanifest"}:
+                    "/site.webmanifest", "/jsl-header-logo.png", "/jsl-watermark.png"}:
             asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
             if os.path.isfile(asset):
                 mime = "application/octet-stream"
@@ -1710,31 +1770,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/admin/") and path not in ("/api/admin/login",):
+            if not _admin_post_allowed(self):
+                return
+
         if path == "/api/viewer/login":
             try:
                 body = _json_body(self); username = str(body.get("username","")).strip(); password = str(body.get("password",""))
-                # The environment-backed administrator must also be able to enter the main dashboard.
-                # This avoids the common first-deployment problem where the dashboard viewer table contains
-                # an older admin hash while Render's ADMIN_PASSWORD has been changed.
-                # Bootstrap compatibility: allow the documented first-time credentials even if
-                # a Render/Supabase deployment contains a stale admin hash or mismatched env values.
-                # Once the Admin changes the password, normal environment/user authentication remains available.
-                bootstrap_user = "admin"
-                bootstrap_password = "ChangeMe@123"
-                admin_login = (hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD)) or (hmac.compare_digest(username, bootstrap_user) and hmac.compare_digest(password, bootstrap_password))
                 conn=get_conn(); row=conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?",(username,)).fetchone()
-                if admin_login and username == bootstrap_user and (not row or not bool(row[5])):
-                    try:
-                        conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",(bootstrap_user,"Administrator",_hash_password(bootstrap_password),"admin",True)); conn.commit()
-                        row=conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?",(username,)).fetchone()
-                    except Exception:
-                        pass
                 conn.close()
-                valid = admin_login or (row and bool(row[5]) and _verify_password(password,row[3]))
+                env_login = bool(ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and (not row or bool(row[5])))
+                valid = env_login or bool(row and bool(row[5]) and row[4] in ("viewer", "admin") and _verify_password(password,row[3]))
                 if valid:
-                    role = "admin" if admin_login else row[4]
+                    role = "admin" if env_login else row[4]
                     uid = row[0] if row else None
-                    display = "Administrator" if admin_login else row[2]
+                    display = "Administrator" if env_login else row[2]
                     token=secrets.token_urlsafe(32); SESSIONS[token]={"username":username,"display_name":display,"role":role,"user_id":uid,"expires":_dt.datetime.now().timestamp()+VIEWER_SESSION_TTL}
                     self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store")
                     secure=self.headers.get("X-Forwarded-Proto","").lower()=="https"; cookie=f"qdash_user={token}; Path=/; HttpOnly; SameSite=Lax"; cookie += "; Secure" if secure else ""; self.send_header("Set-Cookie",cookie); self.end_headers(); self.wfile.write(json.dumps({"authenticated":True,"username":username,"display_name":display,"role":role}).encode())
@@ -1747,6 +1797,33 @@ class Handler(BaseHTTPRequestHandler):
             token=_cookie_value(self.headers.get("Cookie",""),"qdash_user"); meta=SESSIONS.get(token);
             if meta: _activity_event(self,"logout")
             SESSIONS.pop(token,None); self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Set-Cookie","qdash_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); self.end_headers(); self.wfile.write(b'{"authenticated":false}'); return
+
+        if path == "/api/admin/change_password":
+            try:
+                body = _json_body(self)
+                current = str(body.get("current_password", ""))
+                new_password = str(body.get("new_password", ""))
+                if not _strong_password(new_password):
+                    raise ValueError("New password must be at least 12 characters and include uppercase, lowercase, number and special character")
+                token = _cookie_value(self.headers.get("Cookie", ""), "qdash_admin")
+                meta = SESSIONS.get(token, {})
+                conn = get_conn(); row = conn.execute("SELECT id,password_hash FROM users WHERE username=?", (meta.get("username", ADMIN_USERNAME),)).fetchone()
+                current_ok = bool(row and _verify_password(current, row[1]))
+                if not current_ok and ADMIN_PASSWORD and hmac.compare_digest(current, ADMIN_PASSWORD) and meta.get("username") == ADMIN_USERNAME:
+                    current_ok = True
+                if not current_ok:
+                    conn.close(); self._send_json({"error":"Current password is incorrect"}, status=401); return
+                conn.execute("UPDATE users SET password_hash=? WHERE id=?", (_hash_password(new_password), row[0])); conn.commit(); conn.close()
+                current_token = _cookie_value(self.headers.get("Cookie", ""), "qdash_admin")
+                for tok, smeta in list(SESSIONS.items()):
+                    if tok != current_token and smeta.get("username") == meta.get("username"):
+                        SESSIONS.pop(tok, None)
+                meta["expires"] = _dt.datetime.now().timestamp() + SESSION_TTL
+                _activity_event(self, "admin_password_changed")
+                self._send_json({"ok":True,"message":"Password changed. Please sign in again on other devices."})
+            except Exception as e:
+                self._send_json({"error":str(e)}, status=400)
+            return
 
         if path == "/api/admin/users":
             if not _is_admin(self): _auth_error(self); return
@@ -1761,7 +1838,7 @@ class Handler(BaseHTTPRequestHandler):
                 body=_json_body(self); username=str(body.get("username","")).strip(); display_name=str(body.get("display_name","")).strip() or username; password=str(body.get("password","")); role=str(body.get("role","viewer"))
                 if not username or not password: raise ValueError("Username and password are required")
                 if role not in ("viewer","admin"): raise ValueError("Invalid role")
-                if len(password)<8: raise ValueError("Password must be at least 8 characters")
+                if not _strong_password(password): raise ValueError("Password must be at least 12 characters and include uppercase, lowercase, number and special character")
                 conn=get_conn(); conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",(username,display_name,_hash_password(password),role,True)); conn.commit(); conn.close(); self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
@@ -1769,30 +1846,56 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/admin/user_toggle":
             if not _is_admin(self): _auth_error(self); return
             try:
-                body=_json_body(self); uid=int(body.get("id")); active=bool(body.get("active")); conn=get_conn(); conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); self._send_json({"ok":True})
+                body=_json_body(self); uid=int(body.get("id")); active=bool(body.get("active")); conn=get_conn()
+                row=conn.execute("SELECT id,username,role,active FROM users WHERE id=?",(uid,)).fetchone()
+                if not row: conn.close(); self._send_json({"error":"User not found"},status=404); return
+                if not active and row[2] == "admin":
+                    admins=conn.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1").fetchone()[0]
+                    if admins <= 1: conn.close(); self._send_json({"error":"At least one active administrator must remain."},status=400); return
+                current_token=_cookie_value(self.headers.get("Cookie",""),"qdash_admin"); current_meta=SESSIONS.get(current_token,{})
+                if not active and row[1] == current_meta.get("username"):
+                    conn.close(); self._send_json({"error":"You cannot disable your own active administrator account."},status=400); return
+                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/login":
             try:
+                ip = _client_ip(self)
+                allowed, retry_after = _login_allowed(ip)
+                if not allowed:
+                    self._send_json({"error": f"Too many failed login attempts. Try again in about {retry_after} seconds."}, status=429)
+                    return
                 body = _json_body(self)
-                username = str(body.get("username", ""))
+                username = str(body.get("username", "")).strip()
                 password = str(body.get("password", ""))
-                if (hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD)) or (hmac.compare_digest(username, "admin") and hmac.compare_digest(password, "ChangeMe@123")):
+                conn = get_conn()
+                row = conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?", (username,)).fetchone()
+                conn.close()
+                valid = bool(row and bool(row[5]) and row[4] == "admin" and _verify_password(password, row[3]))
+                if not valid and ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and (not row or bool(row[5])):
+                    valid = True
+                if valid:
+                    _clear_login_failures(ip)
                     token = secrets.token_urlsafe(32)
-                    SESSIONS[token] = {"username": ADMIN_USERNAME, "expires": _dt.datetime.now().timestamp() + SESSION_TTL}
+                    csrf = secrets.token_urlsafe(32)
+                    now = _dt.datetime.now().timestamp()
+                    display = row[2] if row else "Administrator"
+                    SESSIONS[token] = {"username": username or ADMIN_USERNAME, "display_name": display, "role": "admin", "active": True, "expires": now + SESSION_TTL, "csrf": csrf}
+                    secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.send_header("Cache-Control", "no-store")
-                    secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
-                    cookie = f"qdash_admin={token}; Path=/; HttpOnly; SameSite=Lax"
-                    if secure:
-                        cookie += "; Secure"
-                    self.send_header("Set-Cookie", cookie)
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"authenticated": True, "username": ADMIN_USERNAME}).encode("utf-8"))
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.send_header("Set-Cookie", f"qdash_admin={token}; Path=/; HttpOnly; SameSite=Strict" + ("; Secure" if secure else ""))
+                    self.send_header("Set-Cookie", f"{CSRF_COOKIE}={csrf}; Path=/; SameSite=Strict" + ("; Secure" if secure else ""))
+                    data = json.dumps({"authenticated": True, "username": username or ADMIN_USERNAME, "display_name": display, "role": "admin"}).encode("utf-8")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers(); self.wfile.write(data)
+                    _activity_event(self, "admin_login")
                 else:
-                    self._send_json({"error": "Invalid username or password"}, status=401)
+                    _record_login_failure(ip)
+                    self._send_json({"error": "Invalid administrator credentials"}, status=401)
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -1802,7 +1905,9 @@ class Handler(BaseHTTPRequestHandler):
             SESSIONS.pop(token, None)
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Set-Cookie", "qdash_admin=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Set-Cookie", "qdash_admin=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict")
+            self.send_header("Set-Cookie", f"{CSRF_COOKIE}=; Path=/; Max-Age=0; SameSite=Strict")
             self.end_headers()
             self.wfile.write(b'{"authenticated":false}')
             return
@@ -1912,8 +2017,8 @@ def main():
     _seed_postgres_if_empty()
     ensure_fast_indexes()
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    if ADMIN_PASSWORD == "ChangeMe@123":
-        print("WARNING: using the default admin password. Set ADMIN_PASSWORD before sharing this app publicly.")
+    if not ADMIN_PASSWORD:
+        print("INFO: ADMIN_PASSWORD is not set; administrator authentication will use the existing users table. Set ADMIN_PASSWORD for first-time provisioning or recovery.")
     print(f"Quality Disposition Dashboard running on port {port}")
     server.serve_forever()
 
