@@ -579,10 +579,10 @@ function renderDecisionTable(rows, total){
       <td>${fmtPct(r.pct_coils)}</td><td>${fmtNum2(r.qty)}</td><td>${fmtPct(r.pct_qty)}</td>`;
     tbody.appendChild(tr);
   });
-  if(false && total){
+  if(total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
-    tr.innerHTML = `<td>${total.decision}</td><td>${total.coils.toLocaleString()}</td>
+    tr.innerHTML = `<td>Total</td><td>${total.coils.toLocaleString()}</td>
       <td>${fmtPct(total.pct_coils)}</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_qty)}</td>`;
     tbody.appendChild(tr);
   }
@@ -597,10 +597,10 @@ function renderDefectTable(rows, total){
       <td>${fmtPct(r.pct)}</td><td>${fmtPct(r.cum_pct)}</td>`;
     tbody.appendChild(tr);
   });
-  if(false && total){
+  if(total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
-    tr.innerHTML = `<td>${total.defect}</td><td>${fmtNum2(total.qty)}</td>
+    tr.innerHTML = `<td>Total</td><td>${fmtNum2(total.qty)}</td>
       <td>${fmtPct(total.pct)}</td><td>${fmtPct(total.cum_pct)}</td>`;
     tbody.appendChild(tr);
   }
@@ -615,10 +615,10 @@ function renderIntensityTable(rows, total){
       <td>${fmtPct(r.pct_coils)}</td><td>${fmtNum2(r.qty)}</td><td>${fmtPct(r.pct_qty)}</td>`;
     tbody.appendChild(tr);
   });
-  if(false && total){
+  if(total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
-    tr.innerHTML = `<td>${total.intensity}</td><td>${total.coils.toLocaleString()}</td>
+    tr.innerHTML = `<td>Total</td><td>${total.coils.toLocaleString()}</td>
       <td>${fmtPct(total.pct_coils)}</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_qty)}</td>`;
     tbody.appendChild(tr);
   }
@@ -635,10 +635,10 @@ function renderMetricsTable(tableId, rows, total){
       <td>${fmtPct(r.reject_pct_qty)}</td><td>${fmtPct(r.first_pass_yield_pct)}</td>`;
     tbody.appendChild(tr);
   });
-  if(false && total){
+  if(total){
     const tr = document.createElement("tr");
     tr.className = "grand-total-row";
-    tr.innerHTML = `<td>${total.name}</td><td>${total.coils.toLocaleString()}</td>
+    tr.innerHTML = `<td>Total</td><td>${total.coils.toLocaleString()}</td>
       <td>${fmtNum2(total.output_qty)}</td><td>${total.defect_coils.toLocaleString()}</td>
       <td>${fmtPct(total.defect_pct)}</td><td>${fmtNum2(total.reject_qty)}</td>
       <td>${fmtPct(total.reject_pct_qty)}</td><td>${fmtPct(total.first_pass_yield_pct)}</td>`;
@@ -1090,6 +1090,14 @@ async function loadDefectAnalysis(){
       <td>${fmtNum2(r.qty)}</td><td>${fmtPct(r.pct_records)}</td>`;
     tbody.appendChild(tr);
   });
+  if(data.register_total){
+    const total = data.register_total;
+    const tr = document.createElement("tr");
+    tr.className = "grand-total-row";
+    tr.innerHTML = `<td></td><td>Total</td><td>${total.records.toLocaleString()}</td>
+      <td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_records)}</td>`;
+    tbody.appendChild(tr);
+  }
 
   markChartsReady();
 }
