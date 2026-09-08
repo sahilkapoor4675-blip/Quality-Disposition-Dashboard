@@ -132,9 +132,9 @@
   .tables{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
   @media (max-width:900px){.tables{grid-template-columns:1fr;}}
 
-  .table-scroll{overflow-x:auto;}
-  table{width:100%;border-collapse:collapse;font-size:14px;}
-  th,td{padding:9px 12px;text-align:center;border:1px solid var(--border);white-space:nowrap;}
+  .table-scroll{overflow:visible;width:100%;}
+  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+  th,td{padding:8px 8px;text-align:center;border:1px solid var(--border);white-space:normal;overflow-wrap:anywhere;word-break:normal;}
   th:first-child,td:first-child{text-align:left;}
   th{color:#fff;background:var(--accent);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.3px;border:1px solid var(--accent);}
   tbody tr:nth-child(even){background:#f8f8f8;}
@@ -508,7 +508,7 @@ body > *{position:relative;z-index:1;}
     </div>
 
     <div class="panel">
-      <h3>📈 Monthly Quality Trend — Defect % &amp; First Pass Yield % (Prime%)</h3>
+      <h3>📈 Monthly Quality Trend — Defect % &amp; First Pass Yield % (Prime%) &amp; Reject % Qty</h3>
       <div class="chart-scroll" id="monthlyLineChart"></div>
     </div>
     <div class="panel">
