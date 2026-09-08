@@ -23,6 +23,8 @@ import hmac
 import csv
 import io
 import shutil
+import time
+from datetime import datetime
 from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1182,12 +1184,59 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":
             self._send_json({"status": "ok", "database": database_status()})
+        elif path == "/api/connection_status":
+            # Safe, read-only connection test; never expose credentials or connection strings.
+            started = time.perf_counter()
+            try:
+                conn = get_conn()
+                conn.execute("SELECT 1").fetchone()
+                conn.close()
+                latency_ms = round((time.perf_counter() - started) * 1000, 1)
+                self._send_json({
+                    "connected": True,
+                    "provider": "PostgreSQL" if USE_POSTGRES else "SQLite",
+                    "persistent": bool(USE_POSTGRES or os.path.abspath(DB_PATH) != os.path.join(APP_DIR, "quality.db")),
+                    "latency_ms": latency_ms,
+                    "checked_at": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+                })
+            except Exception as e:
+                self._send_json({
+                    "connected": False,
+                    "provider": "PostgreSQL" if USE_POSTGRES else "SQLite",
+                    "persistent": bool(USE_POSTGRES or os.path.abspath(DB_PATH) != os.path.join(APP_DIR, "quality.db")),
+                    "error": str(e)[:180],
+                    "checked_at": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+                }, status=503)
         elif path == "/api/admin/database_status":
             if not _is_admin(self):
                 _auth_error(self)
             else:
                 try:
                     self._send_json(database_status())
+                except Exception as e:
+                    self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/export_csv":
+            if not _is_admin(self):
+                _auth_error(self)
+            else:
+                try:
+                    conn = get_conn()
+                    rows = conn.execute("SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id").fetchall()
+                    conn.close()
+                    out = io.StringIO(newline='')
+                    writer = csv.writer(out)
+                    writer.writerow(["ID","Insp Lot Date","HEAT NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"])
+                    for r in rows:
+                        d = dict(r)
+                        writer.writerow([d.get(k, "") for k in ["id","insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","month","week","quarter","financial_year"]])
+                    data = out.getvalue().encode('utf-8-sig')
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/csv; charset=utf-8")
+                    self.send_header("Content-Disposition", 'attachment; filename="quality_disposition_backup.csv"')
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(data)
                 except Exception as e:
                     self._send_json({"error": str(e)}, status=500)
         else:

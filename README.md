@@ -154,3 +154,6 @@ On the first PostgreSQL deployment, if the PostgreSQL `disposition` table is emp
 Admin -> Database Status shows provider, record count, used MB, configured capacity and health threshold. `DB_LIMIT_MB` defaults to 500 MB and can be changed if your provider's actual limit differs.
 
 Important: keep `DATABASE_URL`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` in Render Environment Variables, not in GitHub.
+
+## FREE production data setup
+For Render Free, use an external PostgreSQL database such as Supabase Free. Set `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `DB_LIMIT_MB=500` in Render Environment Variables. See `SUPABASE_RENDER_FREE_SETUP.md` for the exact setup and migration flow.
