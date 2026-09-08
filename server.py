@@ -1762,7 +1762,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 metric = qs.get('metric',''); drill_value = qs.get('drill_value')
                 rows = _drilldown_rows(filters, metric, drill_value, limit=5000)
-                self._send_json({'count':len(rows),'rows':rows,'scope':_filter_summary(filters)})
+                unique_heats={str(r.get('heat_no','')).strip().upper() for r in rows if str(r.get('heat_no','')).strip()}
+                total_weight=sum(float(r.get('output_weight') or 0) for r in rows)
+                self._send_json({'count':len(unique_heats),'row_count':len(rows),'total_weight':total_weight,'rows':rows,'scope':_filter_summary(filters)})
             except Exception as e:
                 self._send_json({'error':str(e)}, status=500)
         elif path == "/api/drilldown/export":
