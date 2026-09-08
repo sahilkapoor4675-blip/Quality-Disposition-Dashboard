@@ -166,3 +166,9 @@ The live dashboard now provides **Excel, PDF, and CSV** export buttons in the Da
 - **PDF**: print-ready KPI summary, defect analysis, work-center and grade tables, with active filters and generation time.
 - **CSV**: filtered record-level data for operational use.
 - Viewer export endpoints are read-only; Admin-only database backup remains separate.
+
+
+### Viewer login & activity monitoring
+The dashboard now requires a named viewer login. Admin can create viewer accounts from **Admin → Viewer Accounts**. Dashboard activity is recorded in PostgreSQL/SQLite, including login, dashboard opens, tab opens and exports. Admin can review **Dashboard Activity** to see who opened the dashboard, how many times, last seen time and recent activity. Passwords are stored as one-way PBKDF2 hashes and are never written to the activity log.
+
+For the first deployment, the environment-backed `ADMIN_USERNAME` / `ADMIN_PASSWORD` account is automatically created as the administrator. Log in to `/admin`, create viewer accounts, then share those credentials with authorized viewers.
