@@ -346,15 +346,15 @@ body > *{position:relative;z-index:1;}
 <style id="final-ui-boundary-filters-fix">
 /* FINAL UI FIX: all dashboard filter labels use one consistent size */
 .filter-field label, .filters .field label{
-  font-size:12px !important;
+  font-size:13px !important;
   font-weight:700 !important;
   line-height:1.25 !important;
   letter-spacing:.45px !important;
 }
 .filter-field label .filter-icon, .filter-field label .kpi-icon, .filters .field label .filter-icon, .filters .field label .kpi-icon{
-  font-size:13px !important;
+  font-size:14px !important;
 }
-.filter-trigger{font-size:12px !important;font-weight:600 !important;}
+.filter-trigger{font-size:13px !important;font-weight:600 !important;}
 .filter-trigger .chevron{font-size:10px !important;}
 
 /* FINAL UI FIX: distinct status-colored KPI boundaries + existing 3D/depth */
@@ -901,7 +901,7 @@ function openDrilldown(metric, title, extra={}){
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
     if(data.error)throw new Error(data.error); document.getElementById('drillCount').textContent=Number(data.count||0).toLocaleString()+' records'; document.getElementById('drillScope').textContent=data.scope||'';
     if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">No underlying records found for this KPI/selection.</div>';return;}
-    const heads=['Date','Heat No','Coil/Lot','Work Center','Grade','Main Defect','Defect Intensity','Decision','Weight (MT)'];
+    const heads=['Date','Heat No','Batch No','Work Center','Grade','Main Defect','Defect Intensity','Decision','Weight (MT)'];
     let html='<div class="table-scroll"><table class="drill-table"><thead><tr>'+heads.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
     data.rows.forEach(r=>{html+=`<tr><td>${r.insp_lot_date||''}</td><td>${r.heat_no||''}</td><td>${r.coil_lot||''}</td><td>${r.work_center||''}</td><td>${r.grade||''}</td><td>${r.main_defect||''}</td><td>${r.defect_intensity||'—'}</td><td>${r.quality_decision||''}</td><td>${Number(r.output_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr>`});
     html+='</tbody></table></div>'; content.innerHTML=html;

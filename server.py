@@ -1080,6 +1080,7 @@ def _norm_header(v):
 
 HEADER_ALIASES = {
     "heat_no": ["heat no", "heat number", "heat"],
+    "batch_no": ["batch no", "batch number", "batch", "lot no", "lot number"],
     "work_center": ["work center", "workcentre", "work center name"],
     "grade": ["grade"],
     "output_weight": ["output weight", "output weight (mt)", "output qty", "quantity", "qty"],
@@ -1156,6 +1157,7 @@ def _record_from_values(values, mapping):
 
     return {
         "heat_no": str(get("heat_no") or "").strip(),
+        "batch_no": str(get("batch_no") or "").strip(),
         "work_center": str(get("work_center") or "").strip(),
         "grade": str(get("grade") or "").strip(),
         "output_weight": weight,
@@ -1173,6 +1175,8 @@ def _record_from_values(values, mapping):
 def _validate_record(r):
     if not r["heat_no"]:
         return "HEAT NO is required"
+    if not r.get("batch_no"):
+        return "BATCH NO is required"
     if not r["quality_decision"]:
         return "QUALITY DECISION is required"
     if r["output_weight"] < 0:
@@ -1183,7 +1187,7 @@ def _validate_record(r):
 
 
 def _record_signature(r):
-    keys = ["heat_no", "work_center", "grade", "output_weight", "main_defect", "defect_intensity",
+    keys = ["heat_no", "batch_no", "work_center", "grade", "output_weight", "main_defect", "defect_intensity",
             "quality_decision", "insp_lot_date", "month", "week", "quarter", "financial_year"]
     raw = "|".join(str(r.get(k, "")) for k in keys)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -1239,9 +1243,9 @@ def _insert_records(records):
     cur = conn.cursor()
     # Build signatures only for the imported rows and the current database.
     existing = set()
-    cur.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,month,week,quarter,financial_year FROM disposition")
+    cur.execute("SELECT heat_no,batch_no FROM disposition")
     for row in cur.fetchall():
-        existing.add(_record_signature(dict(row)))
+        existing.add((str(row[0] or "").strip().upper(), str(row[1] or "").strip().upper()))
     inserted = 0
     duplicates = 0
     errors = []
@@ -1249,21 +1253,21 @@ def _insert_records(records):
     good = []
     for idx, r in enumerate(records, start=2):
         err = _validate_record(r)
-        sig = _record_signature(r)
+        pair = (str(r.get("heat_no","")).strip().upper(), str(r.get("batch_no","")).strip().upper())
         if err:
             errors.append({"row": idx, "error": err})
-        elif sig in existing or sig in seen:
+        elif pair in existing or pair in seen:
             duplicates += 1
         else:
-            seen.add(sig)
+            seen.add(pair)
             good.append(r)
     if good:
         cur.executemany("""
             INSERT INTO disposition
-            (heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,
+            (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,
              insp_lot_date,month,week,quarter,financial_year)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-        """, [tuple(r[k] for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]) for r in good])
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, [tuple(r[k] for k in ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]) for r in good])
         inserted = len(good)
     conn.commit()
     conn.close()
@@ -1274,7 +1278,7 @@ def _ensure_admin_schema():
     conn = get_conn()
     if USE_POSTGRES:
         conn.execute("""CREATE TABLE IF NOT EXISTS disposition (
-            id BIGSERIAL PRIMARY KEY, heat_no TEXT, work_center TEXT, grade TEXT,
+            id BIGSERIAL PRIMARY KEY, heat_no TEXT, batch_no TEXT DEFAULT '', work_center TEXT, grade TEXT,
             output_weight DOUBLE PRECISION, main_defect TEXT, defect_intensity TEXT,
             quality_decision TEXT, insp_lot_date TEXT DEFAULT '', month TEXT, week TEXT,
             quarter TEXT, financial_year TEXT
@@ -1283,7 +1287,10 @@ def _ensure_admin_schema():
         cols = {r[1] for r in conn.execute("PRAGMA table_info(disposition)").fetchall()}
         if "insp_lot_date" not in cols:
             conn.execute("ALTER TABLE disposition ADD COLUMN insp_lot_date TEXT DEFAULT ''")
+        if "batch_no" not in cols:
+            conn.execute("ALTER TABLE disposition ADD COLUMN batch_no TEXT DEFAULT ''")
     if USE_POSTGRES:
+        conn.execute("ALTER TABLE disposition ADD COLUMN IF NOT EXISTS batch_no TEXT DEFAULT ''")
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL,
             password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'viewer', active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -1368,12 +1375,17 @@ def _seed_postgres_if_empty():
     if count == 0:
         src = sqlite3.connect(seed)
         src.row_factory = sqlite3.Row
-        rows = src.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition").fetchall()
+        
+        try:
+            rows = src.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition").fetchall()
+        except Exception:
+            rows = src.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition").fetchall()
+            rows = [dict(r, batch_no="") for r in rows]
         src.close()
         if rows:
             conn.cursor().executemany("""INSERT INTO disposition
-                (heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r) for r in rows])
+                (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r) for r in rows])
             conn.commit()
     conn.close()
 
@@ -1671,11 +1683,11 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
         where_sql = where_sql + (' AND ' if where_sql else 'WHERE ') + ' AND '.join(clauses)
         params = params + extra
     conn=get_conn(); cur=conn.cursor()
-    sql=f"SELECT insp_lot_date, heat_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ?"
+    sql=f"SELECT insp_lot_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ?"
     cur.execute(sql, params+[limit]); raw=cur.fetchall(); conn.close()
     rows=[]
     for r in raw:
-        rows.append({'insp_lot_date':r[0] or '', 'heat_no':r[1] or '', 'coil_lot':r[1] or '', 'work_center':r[2] or '', 'grade':r[3] or '', 'main_defect':r[4] or '', 'defect_intensity':r[5] or '', 'quality_decision':r[6] or '', 'output_weight':float(r[7] or 0)})
+        rows.append({'insp_lot_date':r[0] or '', 'heat_no':r[1] or '', 'batch_no':r[2] or '', 'coil_lot':r[2] or '', 'work_center':r[3] or '', 'grade':r[4] or '', 'main_defect':r[5] or '', 'defect_intensity':r[6] or '', 'quality_decision':r[7] or '', 'output_weight':float(r[8] or 0)})
     return rows
 
 class Handler(BaseHTTPRequestHandler):
@@ -1774,8 +1786,8 @@ class Handler(BaseHTTPRequestHandler):
                 filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
                 rows = _drilldown_rows(filters, qs.get('metric',''), qs.get('drill_value'), limit=50000)
                 out=io.StringIO(newline=''); w=csv.writer(out)
-                w.writerow(['Insp Lot Date','HEAT NO','Coil/Lot','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)'])
-                for r in rows: w.writerow([r['insp_lot_date'],r['heat_no'],r['coil_lot'],r['work_center'],r['grade'],r['main_defect'],r['defect_intensity'],r['quality_decision'],r['output_weight']])
+                w.writerow(['Insp Lot Date','HEAT NO','BATCH NO','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)'])
+                for r in rows: w.writerow([r['insp_lot_date'],r['heat_no'],r['batch_no'],r['work_center'],r['grade'],r['main_defect'],r['defect_intensity'],r['quality_decision'],r['output_weight']])
                 _activity_event(self, 'drilldown_export_csv', filters=filters)
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
             except Exception as e:
@@ -1834,8 +1846,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/export/csv":
             try:
                 filters = _export_filters(qs); where_sql, params = build_where(filters)
-                conn = get_conn(); cur = conn.cursor(); cur.execute(f"SELECT insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params); rows=cur.fetchall(); conn.close()
-                out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow(list(r)) for r in rows]
+                conn = get_conn(); cur = conn.cursor(); cur.execute(f"SELECT insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params); rows=cur.fetchall(); conn.close()
+                out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","BATCH NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow(list(r)) for r in rows]
                 _activity_event(self, "export_csv", filters=filters)
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),"text/csv; charset=utf-8",_safe_filename(filters,".csv"))
             except Exception as e:
@@ -1923,8 +1935,8 @@ class Handler(BaseHTTPRequestHandler):
                     missing_intensity=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(defect_intensity,''))='' ").fetchone()[0]
                     invalid_weight=conn.execute("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight<0").fetchone()[0]
                     invalid_decision=conn.execute("SELECT COUNT(*) FROM disposition WHERE quality_decision NOT IN ('PRIME','FOR NEXT PROCESS','SALVAGE','HOLD FOR DECISION','REJECT','RE-WORK','DIVERT') OR TRIM(COALESCE(quality_decision,''))='' ").fetchone()[0]
-                    rows=conn.execute("SELECT heat_no, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(heat_no,''))<>'' GROUP BY heat_no HAVING COUNT(*)>1 ORDER BY c DESC LIMIT 20").fetchall()
-                    duplicate_records=sum(max(0,int(r[1])-1) for r in rows)
+                    rows=conn.execute("SELECT heat_no,batch_no, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(heat_no,''))<>'' AND TRIM(COALESCE(batch_no,''))<>'' GROUP BY heat_no,batch_no HAVING COUNT(*)>1 ORDER BY c DESC LIMIT 20").fetchall()
+                    duplicate_records=sum(max(0,int(r[2])-1) for r in rows)
                     import_errors=conn.execute("SELECT COALESCE(SUM(errors),0) FROM import_history").fetchone()[0]
                     invalid_dates=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))<>'' AND (length(insp_lot_date)<8 OR date(substr(insp_lot_date,1,10)) IS NULL)").fetchone()[0] if not USE_POSTGRES else conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))<>'' AND to_date(substr(insp_lot_date,1,10),'YYYY-MM-DD') IS NULL").fetchone()[0]
                     conn.close()
@@ -1971,14 +1983,14 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 try:
                     conn = get_conn()
-                    rows = conn.execute("SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id").fetchall()
+                    rows = conn.execute("SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id").fetchall()
                     conn.close()
                     out = io.StringIO(newline='')
                     writer = csv.writer(out)
-                    writer.writerow(["ID","Insp Lot Date","HEAT NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"])
+                    writer.writerow(["ID","Insp Lot Date","HEAT NO","BATCH NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"])
                     for r in rows:
                         d = dict(r)
-                        writer.writerow([d.get(k, "") for k in ["id","insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","month","week","quarter","financial_year"]])
+                        writer.writerow([d.get(k, "") for k in ["id","insp_lot_date","heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","month","week","quarter","financial_year"]])
                     data = out.getvalue().encode('utf-8-sig')
                     self.send_response(200)
                     self.send_header("Content-Type", "text/csv; charset=utf-8")
@@ -2199,7 +2211,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not uploaded: raise ValueError("No file was uploaded")
                 records=_parse_uploaded_file(uploaded[0],uploaded[1])
                 if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
-                conn=get_conn(); existing=set(_record_signature(dict(r)) for r in conn.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,month,week,quarter,financial_year FROM disposition").fetchall());
+                conn=get_conn(); existing_pairs=set((str(r[0] or "").strip().upper(), str(r[1] or "").strip().upper()) for r in conn.execute("SELECT heat_no,batch_no FROM disposition").fetchall());
                 wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()
                 valid=[]; errors=[]; duplicates=0; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
                 for idx,r in enumerate(records,start=2):
@@ -2211,10 +2223,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not str(r.get("defect_intensity","")).strip(): missing_intensity+=1
                     if wcs and str(r.get("work_center","")).strip() and str(r.get("work_center")).strip() not in wcs: unknown_wc+=1
                     if grades and str(r.get("grade","")).strip() and str(r.get("grade")).strip() not in grades: unknown_grade+=1
-                    sig=_record_signature(r)
-                    if sig in existing or sig in seen: duplicates+=1
+                    pair=(str(r.get("heat_no","")).strip().upper(), str(r.get("batch_no","")).strip().upper())
+                    if pair in existing_pairs or pair in seen: duplicates+=1
                     elif err: errors.append({"row":idx,"error":err})
-                    else: seen.add(sig); valid.append(r)
+                    else: seen.add(pair); valid.append(r)
                 token=secrets.token_urlsafe(24); IMPORT_PREVIEWS[token]={"created":time.time(),"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
                 self._send_json({"ok":True,"preview_id":token,"filename":uploaded[0],**IMPORT_PREVIEWS[token]["summary"],"sample":[{k:r.get(k,"") for k in ["insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision"]} for r in valid[:25]]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
@@ -2261,7 +2273,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = _json_body(self)
                 limit = min(max(int(body.get("limit", 100)), 1), 500)
                 conn = get_conn()
-                rows = [dict(r) for r in conn.execute("SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+                rows = [dict(r) for r in conn.execute("SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
                 total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
                 conn.close()
                 self._send_json({"rows": rows, "total": total})
