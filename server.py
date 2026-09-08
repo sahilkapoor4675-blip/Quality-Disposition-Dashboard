@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Quality Disposition Control Dashboard
-Pure Python built-in HTTP server + SQLite. No Flask. No external CDN.
+Pure Python built-in HTTP server + SQLite/PostgreSQL. No Flask. No external CDN.
 Run:  python3 server.py [port]
 Then open http://localhost:8000/  (default port 8000)
 """
@@ -10,17 +10,46 @@ import json
 import math
 import os
 import sqlite3
+
+try:
+    import psycopg2
+    from psycopg2.extras import DictCursor
+except ImportError:
+    psycopg2 = None
+    DictCursor = None
 import secrets
 import hashlib
 import hmac
 import csv
 import io
+import shutil
 from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "quality.db")
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# Recommended for Render Free: set DATABASE_URL to an external PostgreSQL
+# database (Supabase/Neon/etc.). If DATABASE_URL is absent, the app falls
+# back to SQLite for local use and development.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+DB_PATH = os.environ.get("DB_PATH", os.path.join(APP_DIR, "quality.db"))
+USE_POSTGRES = bool(DATABASE_URL)
+
+def _ensure_database():
+    """Create the local SQLite DB from the bundled seed DB when needed."""
+    if USE_POSTGRES:
+        return
+    if os.path.abspath(DB_PATH) == os.path.join(APP_DIR, "quality.db"):
+        return
+    parent = os.path.dirname(DB_PATH)
+    os.makedirs(parent, exist_ok=True)
+    if not os.path.exists(DB_PATH):
+        seed = os.path.join(APP_DIR, "quality.db")
+        if os.path.exists(seed):
+            shutil.copy2(seed, DB_PATH)
+
+_ensure_database()
 
 FILTER_KEYS = [
     "month", "work_center", "grade", "quality_decision",
@@ -174,10 +203,35 @@ KPI_META_BY_LABEL = {
 }
 
 
+class _PGCursor:
+    def __init__(self, cur):
+        self.cur = cur
+    def execute(self, sql, params=None):
+        sql = sql.replace("?", "%s")
+        return self.cur.execute(sql, params or ())
+    def executemany(self, sql, seq):
+        sql = sql.replace("?", "%s")
+        return self.cur.executemany(sql, seq)
+    def fetchone(self): return self.cur.fetchone()
+    def fetchall(self): return self.cur.fetchall()
+    @property
+    def rowcount(self): return self.cur.rowcount
+
+class _PGConn:
+    def __init__(self, conn): self.conn = conn
+    def cursor(self): return _PGCursor(self.conn.cursor(cursor_factory=DictCursor))
+    def execute(self, sql, params=None):
+        c=self.cursor(); c.execute(sql, params); return c
+    def commit(self): self.conn.commit()
+    def close(self): self.conn.close()
+
 def get_conn():
+    if USE_POSTGRES:
+        if psycopg2 is None:
+            raise RuntimeError("PostgreSQL support requires psycopg2-binary. Add DATABASE_URL only after dependencies are installed.")
+        return _PGConn(psycopg2.connect(DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require")))
     conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    # Fast read-oriented dashboard connections.
     conn.execute("PRAGMA busy_timeout=3000")
     conn.execute("PRAGMA temp_store=MEMORY")
     conn.execute("PRAGMA cache_size=-16000")
@@ -186,7 +240,7 @@ def get_conn():
 
 def ensure_fast_indexes():
     """Create lightweight indexes used by dashboard filter/group queries."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     indexes = [
         ("idx_disp_month", "month"), ("idx_disp_work_center", "work_center"),
         ("idx_disp_grade", "grade"), ("idx_disp_quality_decision", "quality_decision"),
@@ -981,12 +1035,66 @@ def _insert_records(records):
 
 
 def _ensure_admin_schema():
-    conn = sqlite3.connect(DB_PATH)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(disposition)").fetchall()}
-    if "insp_lot_date" not in cols:
-        conn.execute("ALTER TABLE disposition ADD COLUMN insp_lot_date TEXT DEFAULT ''")
+    conn = get_conn()
+    if USE_POSTGRES:
+        conn.execute("""CREATE TABLE IF NOT EXISTS disposition (
+            id BIGSERIAL PRIMARY KEY, heat_no TEXT, work_center TEXT, grade TEXT,
+            output_weight DOUBLE PRECISION, main_defect TEXT, defect_intensity TEXT,
+            quality_decision TEXT, insp_lot_date TEXT DEFAULT '', month TEXT, week TEXT,
+            quarter TEXT, financial_year TEXT
+        )""")
+    else:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(disposition)").fetchall()}
+        if "insp_lot_date" not in cols:
+            conn.execute("ALTER TABLE disposition ADD COLUMN insp_lot_date TEXT DEFAULT ''")
     conn.commit()
     conn.close()
+
+def _seed_postgres_if_empty():
+    """On first PostgreSQL deployment, copy bundled SQLite seed rows once. Never overwrite existing PG data."""
+    if not USE_POSTGRES:
+        return
+    seed = os.path.join(APP_DIR, "quality.db")
+    if not os.path.exists(seed):
+        return
+    conn = get_conn()
+    count = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+    if count == 0:
+        src = sqlite3.connect(seed)
+        src.row_factory = sqlite3.Row
+        rows = src.execute("SELECT heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition").fetchall()
+        src.close()
+        if rows:
+            conn.cursor().executemany("""INSERT INTO disposition
+                (heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r) for r in rows])
+            conn.commit()
+    conn.close()
+
+def database_status():
+    conn = get_conn()
+    total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+    if USE_POSTGRES:
+        size = conn.execute("SELECT pg_database_size(current_database())").fetchone()[0]
+        # Supabase/Neon free database target is commonly 500 MB; make it configurable.
+        limit_mb = float(os.environ.get("DB_LIMIT_MB", "500"))
+        used_mb = size / (1024*1024)
+        pct = (used_mb / limit_mb * 100) if limit_mb else 0
+        provider = "PostgreSQL"
+        persistent = True
+    else:
+        size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+        used_mb = size / (1024*1024)
+        limit_mb = float(os.environ.get("DB_LIMIT_MB", "500"))
+        pct = (used_mb / limit_mb * 100) if limit_mb else 0
+        provider = "SQLite"
+        persistent = bool(os.path.abspath(DB_PATH) != os.path.join(APP_DIR, "quality.db"))
+    if pct >= 95: status = "critical"
+    elif pct >= 85: status = "action"
+    elif pct >= 70: status = "warning"
+    else: status = "healthy"
+    conn.close()
+    return {"provider": provider, "persistent": persistent, "records": total, "used_mb": round(used_mb,2), "limit_mb": round(limit_mb,2), "usage_pct": round(pct,2), "status": status}
 
 
 HTML_PAGE = None  # loaded lazily from index_template
@@ -1073,7 +1181,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":
-            self._send_json({"status": "ok"})
+            self._send_json({"status": "ok", "database": database_status()})
+        elif path == "/api/admin/database_status":
+            if not _is_admin(self):
+                _auth_error(self)
+            else:
+                try:
+                    self._send_json(database_status())
+                except Exception as e:
+                    self._send_json({"error": str(e)}, status=500)
         else:
             self._send_json({"error": "not found"}, status=404)
 
@@ -1194,6 +1310,7 @@ def main():
     # for local use.
     port = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8000))
     _ensure_admin_schema()
+    _seed_postgres_if_empty()
     ensure_fast_indexes()
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     if ADMIN_PASSWORD == "ChangeMe@123":

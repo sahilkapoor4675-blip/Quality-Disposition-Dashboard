@@ -130,3 +130,27 @@ dashboard, a paid tier (~$7/month) removes the sleep delay.
 ### Data update included
 - Sep-2026 data from the workbook's **Disposition Data** sheet has been imported (116 records), bringing the database to 4,936 records.
 - All existing filters are database-driven, so Sep-2026 values automatically appear in Month, Week, Quarter, Financial Year, Work Center, Grade, Quality Decision and Defect Intensity filters and in all dashboard/trend views.
+
+
+## Render production storage
+
+This app supports a Render Persistent Disk for the SQLite database. The included `render.yaml` mounts a 1 GB disk at `/var/data` and sets `DB_PATH=/var/data/quality.db`. The bundled `quality.db` is copied to that persistent location only if the persistent database does not exist, so normal redeploys do not overwrite admin-imported data.
+
+### Deployment flow
+1. Connect the GitHub repository to Render and deploy the Web Service.
+2. Use the Blueprint configuration in `render.yaml`, or add the disk manually at `/var/data`.
+3. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` as Render environment variables; do not commit them to GitHub.
+4. After the first deploy, all Admin imports are written to `/var/data/quality.db`.
+5. Future GitHub code pushes trigger Render redeploys, but the persistent database remains intact.
+
+Because SQLite is stored on a persistent disk, keep the service at one instance.
+
+## Free Render + External PostgreSQL
+
+For Render Free, do not use a Render Persistent Disk. Set `DATABASE_URL` in Render Environment Variables to your external PostgreSQL connection string (for example from a free Supabase/Neon project). The app uses PostgreSQL whenever `DATABASE_URL` is present and falls back to SQLite locally when it is absent.
+
+On the first PostgreSQL deployment, if the PostgreSQL `disposition` table is empty, the bundled `quality.db` seed records are copied once. Existing PostgreSQL data is never overwritten by a redeploy. After that, Admin imports are written directly to PostgreSQL, so GitHub/Render code redeploys do not erase the data.
+
+Admin -> Database Status shows provider, record count, used MB, configured capacity and health threshold. `DB_LIMIT_MB` defaults to 500 MB and can be changed if your provider's actual limit differs.
+
+Important: keep `DATABASE_URL`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` in Render Environment Variables, not in GitHub.

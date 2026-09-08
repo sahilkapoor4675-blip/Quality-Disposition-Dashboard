@@ -47,10 +47,21 @@
       <div class="filebox"><input id="fileInput" type="file" accept=".xlsx,.xlsm,.tsv,.csv"></div>
       <div class="submit-row"><button class="btn primary" id="importBtn">Import File</button></div><div class="msg" id="importMsg"></div><div id="importResult"></div>
     </div>
-    <div class="panel"><h2>📊 Database Status</h2><p class="desc">Current database size and latest records.</p><div class="stats"><div class="stat">Total Records<b id="totalRecords">—</b></div><div class="stat">Access<b>Admin only</b></div></div><button class="btn" id="refreshBtn">Refresh Records</button></div>
+    <div class="panel"><h2>📊 Database Status</h2><p class="desc">Current database size and latest records.</p><div class="stats">
+<div class="stat">Total Records<b id="totalRecords">—</b></div>
+<div class="stat">Database<b id="dbProvider">—</b></div>
+<div class="stat">Storage Used<b id="dbUsage">—</b></div>
+<div class="stat">Capacity<b id="dbLimit">—</b></div>
+</div>
+<div class="db-meter"><div class="db-meter-fill" id="dbMeter"></div></div>
+<div class="db-status" id="dbStatus">Checking database…</div>
+<button class="btn" id="refreshBtn">Refresh Records</button></div>
     <div class="panel full"><h2>🗃️ Latest Records</h2><p class="desc">Newest 100 records. Delete is permanently applied to the live database.</p><div class="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>HEAT NO</th><th>Work Center</th><th>Grade</th><th>Weight MT</th><th>Main Defect</th><th>Intensity</th><th>Decision</th><th>Month</th><th>Week</th><th>Quarter</th><th>FY</th><th>Action</th></tr></thead><tbody id="recordsBody"></tbody></table></div></div>
   </section>
 </div>
+<style>
+.db-meter{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden;margin:14px 0 8px}.db-meter-fill{height:100%;width:0;background:#2563eb;transition:width .35s ease}.db-status{font-size:13px;font-weight:700;margin-bottom:12px}.db-status.warning{color:#b45309}.db-status.action{color:#c2410c}.db-status.critical{color:#dc2626}.db-status.healthy{color:#15803d}
+</style>
 <script>
 const $=id=>document.getElementById(id);
 async function api(url,opts={}){const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{};if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
@@ -65,9 +76,10 @@ $('logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'});locati
 function formData(){return {insp_lot_date:$('f_insp_lot_date').value,heat_no:$('f_heat_no').value,work_center:$('f_work_center').value,grade:$('f_grade').value,output_weight:$('f_output_weight').value,main_defect:$('f_main_defect').value,defect_intensity:$('f_defect_intensity').value,quality_decision:$('f_quality_decision').value,month:$('f_month').value,week:$('f_week').value,quarter:$('f_quarter').value,financial_year:$('f_financial_year').value}}
 $('addBtn').onclick=async()=>{setMsg('addMsg','Saving…');try{const d=await api('/api/admin/record',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(formData())});setMsg('addMsg',`Saved successfully. ${d.inserted} record added.`,'ok');document.querySelectorAll('#adminApp input').forEach(e=>{if(e.id.startsWith('f_')&&e.id!=='f_insp_lot_date')e.value=''});$('f_defect_intensity').value='';$('f_quality_decision').value='';loadRecords()}catch(e){setMsg('addMsg',e.message,'err')}};
 $('importBtn').onclick=async()=>{const file=$('fileInput').files[0];if(!file){setMsg('importMsg','Please select a file.','err');return}setMsg('importMsg','Uploading and validating…');$('importResult').innerHTML='';try{const fd=new FormData();fd.append('file',file);const d=await api('/api/admin/import',{method:'POST',body:fd});setMsg('importMsg','Import completed.','ok');$('importResult').innerHTML=`<div class="result"><strong>Detected:</strong> ${d.detected.toLocaleString()} &nbsp; | &nbsp; <strong>Inserted:</strong> ${d.inserted.toLocaleString()} &nbsp; | &nbsp; <strong>Duplicates skipped:</strong> ${d.duplicates.toLocaleString()} &nbsp; | &nbsp; <strong>Validation errors:</strong> ${d.errors.length.toLocaleString()}${d.errors.length?'<br><br>'+d.errors.slice(0,15).map(x=>`Row ${x.row}: ${x.error}`).join('<br>'):''}</div>`;loadRecords()}catch(e){setMsg('importMsg',e.message,'err')}};
-async function loadRecords(){try{const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:100})});$('totalRecords').textContent=d.total.toLocaleString();$('recordsBody').innerHTML=d.rows.map(r=>`<tr><td>${r.id}</td><td>${r.insp_lot_date||''}</td><td>${esc(r.heat_no)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${Number(r.output_weight||0).toFixed(3)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity)}</td><td>${esc(r.quality_decision)}</td><td>${esc(r.month)}</td><td>${esc(r.week)}</td><td>${esc(r.quarter)}</td><td>${esc(r.financial_year)}</td><td><button class="delete" onclick="del(${r.id})">Delete</button></td></tr>`).join('')}catch(e){setMsg('loginMsg',e.message,'err')}}
+async function loadDbStatus(){try{const d=await api('/api/admin/database_status');$('dbProvider').textContent=d.provider+ (d.persistent?' • persistent':' • local');$('dbUsage').textContent=`${d.used_mb.toFixed(2)} MB (${d.usage_pct.toFixed(1)}%)`;$('dbLimit').textContent=`${d.limit_mb.toFixed(0)} MB`;$('dbMeter').style.width=Math.min(d.usage_pct,100)+'%';const labels={healthy:'● Healthy',warning:'● Warning',action:'● Action required',critical:'● Critical'};$('dbStatus').textContent=(labels[d.status]||d.status)+` — ${d.records.toLocaleString()} records`;$('dbStatus').className='db-status '+d.status}catch(e){$('dbStatus').textContent='Database status unavailable'}}
+async function loadRecords(){try{const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({limit:100})});$('totalRecords').textContent=d.total.toLocaleString();loadDbStatus();$('recordsBody').innerHTML=d.rows.map(r=>`<tr><td>${r.id}</td><td>${r.insp_lot_date||''}</td><td>${esc(r.heat_no)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${Number(r.output_weight||0).toFixed(3)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity)}</td><td>${esc(r.quality_decision)}</td><td>${esc(r.month)}</td><td>${esc(r.week)}</td><td>${esc(r.quarter)}</td><td>${esc(r.financial_year)}</td><td><button class="delete" onclick="del(${r.id})">Delete</button></td></tr>`).join('')}catch(e){setMsg('loginMsg',e.message,'err')}}
 function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function del(id){if(!confirm('Delete record ID '+id+' permanently?'))return;try{await api('/api/admin/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});loadRecords()}catch(e){alert(e.message)}}
-$('refreshBtn').onclick=loadRecords;boot();
+$('refreshBtn').onclick=()=>{loadRecords();loadDbStatus()};boot();
 </script>
 </body></html>

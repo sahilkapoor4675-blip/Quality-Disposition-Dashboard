@@ -4,3 +4,12 @@ services:
     env: python
     plan: free
     startCommand: python3 server.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DB_LIMIT_MB
+        value: "500"
