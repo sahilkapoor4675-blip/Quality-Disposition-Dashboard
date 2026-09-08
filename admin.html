@@ -20,6 +20,23 @@
 .connection-box{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--border);background:#F7FAFC;border-radius:9px;padding:10px 11px;margin:4px 0 12px}.connection-box>div{min-width:0}.connection-box strong{display:block;font-size:11px;color:var(--navy)}.connection-box small{display:block;font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.connection-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#94A3B8}.connection-dot.connected{background:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.12)}.connection-dot.failed{background:#DC2626;box-shadow:0 0 0 3px rgba(220,38,38,.10)}.connection-dot.checking{background:#F59E0B;box-shadow:0 0 0 3px rgba(245,158,11,.10)}
 .hidden{display:none!important}@media(max-width:900px){.grid{grid-template-columns:1fr}.form-grid{grid-template-columns:repeat(2,minmax(150px,1fr))}.wide{grid-column:span 2}}@media(max-width:600px){.top{padding:16px;align-items:flex-start}.wrap{padding:0 12px}.form-grid{grid-template-columns:1fr}.wide{grid-column:span 1}.actions{flex-wrap:wrap}.brand h1{font-size:18px}}
 </style>
+<style id="jsl-watermark-style">
+/* JSL Quality Assurance watermark — subtle, fixed and non-interactive across the entire web app. */
+html{background:#F8FAFC;}
+body{
+  background-image:url("jsl-watermark.png"),linear-gradient(180deg,#F8FAFC 0%,#F3F7FB 100%) !important;
+  background-repeat:no-repeat,no-repeat !important;
+  background-position:center center,center top !important;
+  background-size:min(58vw,760px) auto,100% 100% !important;
+  background-attachment:fixed,fixed !important;
+}
+@media (max-width:900px){
+  body{background-size:min(82vw,560px) auto,100% 100% !important;}
+}
+@media (max-width:600px){
+  body{background-size:min(92vw,460px) auto,100% 100% !important;}
+}
+</style>
 </head>
 <body>
 <div class="top"><div class="brand"><h1>QUALITY INTELLIGENCE — ADMIN</h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div><div class="actions"><span class="secure">● SECURE ADMIN</span><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
