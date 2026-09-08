@@ -319,29 +319,6 @@ document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.
   document.getElementById('savedViewSelect')?.addEventListener('change',e=>applySavedView(e.target.value));
   renderSavedViews();
 }
-function renderInsights(kpiPayload){
-  const grid=document.getElementById('insightGrid'); if(!grid||!kpiPayload)return;
-  const by={}; (kpiPayload.kpis||[]).forEach(k=>by[k.label]=k);
-  const targets=KPI_TARGETS||{}; const items=[];
-  const fp=by['First Pass Yield % (Prime%)']; const rej=by['Reject % Qty']; const defect=by['Defect Rate'];
-  const pct=v=>((Number(v)||0)*100).toFixed(2)+'%';
-  const relativeGap=(v,t)=>t ? Math.abs((Number(v)-Number(t))/Number(t))*100 : 0;
-  if(fp&&targets[fp.label]){
-    const t=Number(targets[fp.label].target), v=Number(fp.value)||0, g=relativeGap(v,t);
-    items.push({cls:v>=t?'positive':'attention',html:`<b>Quality Insight:</b> FPY is <b>${pct(v)}</b>, ${v>=t?'above':'below'} target by <b>${g.toFixed(2)}%</b>.`});
-  }
-  if(defect&&targets[defect.label]){
-    const t=Number(targets[defect.label].target), v=Number(defect.value)||0;
-    items.push({cls:v<=t?'positive':'attention',html:`<b>Defect Insight:</b> Defect Rate is <b>${pct(v)}</b> vs target <b>${pct(t)}</b>.`});
-  }
-  if(rej&&targets[rej.label]){
-    const t=Number(targets[rej.label].target), v=Number(rej.value)||0;
-    items.push({cls:v<=t?'positive':'attention',html:`<b>Disposition Insight:</b> Reject % Qty is <b>${pct(v)}</b>, ${v<=t?'within':'above'} target.`});
-  }
-  if(!items.length)items.push({cls:'info',html:'<b>Management Insight:</b> Select a target-configured KPI to see automatic performance commentary.'});
-  grid.innerHTML=items.slice(0,4).map(x=>`<div class="insight-item ${x.cls}">${x.html}</div>`).join('');
-}
-
 async function loadKpis(signal){
   const params = new URLSearchParams(currentFilters).toString();
   // Dashboard KPI and monthly trend are independent; fetch them together.
@@ -350,7 +327,7 @@ async function loadKpis(signal){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   renderKpis(data.kpis);
-  const totalKpi = (data.kpis||[]).find(x=>x.label==='Total Coils'); refreshFilterSummary(totalKpi ? totalKpi.value : 0); renderInsights(data);
+  const totalKpi = (data.kpis||[]).find(x=>x.label==='Total Coils'); refreshFilterSummary(totalKpi ? totalKpi.value : 0);
   renderPeriodBanner(data.period);
   renderDecisionTable(data.decision_table, data.decision_total);
   renderDefectTable(data.top_defects, data.top_defects_total);
