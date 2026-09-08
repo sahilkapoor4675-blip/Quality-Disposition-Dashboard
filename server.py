@@ -1223,39 +1223,29 @@ def _parse_uploaded_file(filename, data):
 
 
 def _insert_records(records):
-    conn = get_conn()
-    cur = conn.cursor()
-    # Build signatures only for the imported rows and the current database.
-    existing = set()
-    cur.execute("SELECT heat_no,batch_no FROM disposition")
+    conn = get_conn(); cur = conn.cursor()
+    existing = {}
+    cur.execute("SELECT id,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition")
+    cols=["id","heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
     for row in cur.fetchall():
-        existing.add((str(row[0] or "").strip().upper(), str(row[1] or "").strip().upper()))
-    inserted = 0
-    duplicates = 0
-    errors = []
-    seen = set()
-    good = []
-    for idx, r in enumerate(records, start=2):
-        err = _validate_record(r)
-        pair = (str(r.get("heat_no","")).strip().upper(), str(r.get("batch_no","")).strip().upper())
-        if err:
-            errors.append({"row": idx, "error": err})
-        elif pair in existing or pair in seen:
-            duplicates += 1
-        else:
-            seen.add(pair)
-            good.append(r)
+        d=dict(zip(cols,row)); existing[(str(d.get("heat_no") or "").strip().upper(),str(d.get("batch_no") or "").strip().upper())]=d
+    inserted=0; updated=0; duplicates=0; errors=[]; seen=set(); good=[]; updates=[]
+    fields=["work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
+    for idx,r in enumerate(records,start=2):
+        err=_validate_record(r); pair=(str(r.get("heat_no","")).strip().upper(),str(r.get("batch_no","")).strip().upper())
+        if err: errors.append({"row":idx,"error":err}); continue
+        if pair in seen: duplicates+=1; continue
+        seen.add(pair); old=existing.get(pair)
+        if old:
+            changed=any(str(old.get(k) if old.get(k) is not None else "") != str(r.get(k) if r.get(k) is not None else "") for k in fields)
+            if changed: updates.append((r,old["id"])); updated+=1
+            else: duplicates+=1
+        else: good.append(r)
     if good:
-        cur.executemany("""
-            INSERT INTO disposition
-            (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,
-             insp_lot_date,ud_date,month,week,quarter,financial_year)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, [tuple(r[k] for k in ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]) for r in good])
-        inserted = len(good)
-    conn.commit()
-    conn.close()
-    return {"inserted": inserted, "duplicates": duplicates, "errors": errors}
+        cur.executemany("""INSERT INTO disposition (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r[k] for k in ["heat_no","batch_no"]+fields) for r in good]); inserted=len(good)
+    for r,rid in updates:
+        cur.execute("""UPDATE disposition SET work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
+    conn.commit(); conn.close(); return {"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
 
 
 def _ensure_admin_schema():
@@ -1298,6 +1288,12 @@ def _ensure_admin_schema():
             filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     if USE_POSTGRES:
+        conn.execute("ALTER TABLE import_history ADD COLUMN IF NOT EXISTS updated INTEGER DEFAULT 0")
+    else:
+        cols_ih={r[1] for r in conn.execute("PRAGMA table_info(import_history)").fetchall()}
+        if "updated" not in cols_ih:
+            conn.execute("ALTER TABLE import_history ADD COLUMN updated INTEGER DEFAULT 0")
+    if USE_POSTGRES:
         conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
             id BIGSERIAL PRIMARY KEY, label TEXT UNIQUE NOT NULL, target DOUBLE PRECISION, warning DOUBLE PRECISION, critical DOUBLE PRECISION, direction TEXT NOT NULL DEFAULT 'higher', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
@@ -1312,7 +1308,7 @@ def _ensure_admin_schema():
             old_direction TEXT, new_direction TEXT, effective_date TEXT DEFAULT '', changed_by TEXT DEFAULT '', changed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
-            id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0,
+            id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, updated INTEGER DEFAULT 0,
             imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     else:
@@ -1321,7 +1317,7 @@ def _ensure_admin_schema():
             old_direction TEXT, new_direction TEXT, effective_date TEXT DEFAULT '', changed_by TEXT DEFAULT '', changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0,
+            id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, updated INTEGER DEFAULT 0,
             imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     # Remove the legacy KPI target name so the public/admin target APIs are
@@ -1974,7 +1970,7 @@ class Handler(BaseHTTPRequestHandler):
             if not _is_admin(self): _auth_error(self)
             else:
                 try:
-                    conn=get_conn(); rows=conn.execute("SELECT id,filename,detected,valid,duplicates,errors,imported,imported_by,created_at FROM import_history ORDER BY id DESC LIMIT 100").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                    conn=get_conn(); rows=conn.execute("SELECT id,filename,detected,valid,duplicates,errors,updated,imported,imported_by,created_at FROM import_history ORDER BY id DESC LIMIT 100").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/kpi_target_history":
             if not _is_admin(self): _auth_error(self)
@@ -2237,9 +2233,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not uploaded: raise ValueError("No file was uploaded")
                 records=_parse_uploaded_file(uploaded[0],uploaded[1])
                 if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
-                conn=get_conn(); existing_pairs=set((str(r[0] or "").strip().upper(), str(r[1] or "").strip().upper()) for r in conn.execute("SELECT heat_no,batch_no FROM disposition").fetchall());
+                conn=get_conn(); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={(str(r[0] or "").strip().upper(),str(r[1] or "").strip().upper()):r for r in existing_rows}; existing_pairs=set(existing_map);
                 wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()
-                valid=[]; errors=[]; duplicates=0; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
+                valid=[]; errors=[]; duplicates=0; updated=0; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
                 for idx,r in enumerate(records,start=2):
                     err=_validate_record(r); d=str(r.get("insp_lot_date","")).strip()
                     if d:
@@ -2250,10 +2246,18 @@ class Handler(BaseHTTPRequestHandler):
                     if wcs and str(r.get("work_center","")).strip() and str(r.get("work_center")).strip() not in wcs: unknown_wc+=1
                     if grades and str(r.get("grade","")).strip() and str(r.get("grade")).strip() not in grades: unknown_grade+=1
                     pair=(str(r.get("heat_no","")).strip().upper(), str(r.get("batch_no","")).strip().upper())
-                    if pair in existing_pairs or pair in seen: duplicates+=1
+                    if pair in seen: duplicates+=1
                     elif err: errors.append({"row":idx,"error":err})
-                    else: seen.add(pair); valid.append(r)
-                token=secrets.token_urlsafe(24); IMPORT_PREVIEWS[token]={"created":time.time(),"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
+                    else:
+                        seen.add(pair)
+                        if pair in existing_map:
+                            oldrow=existing_map[pair]; newvals=[r.get(k,"") for k in ["work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]]
+                            oldvals=list(oldrow[2:])
+                            if any(str(a if a is not None else "") != str(b if b is not None else "") for a,b in zip(oldvals,newvals)):
+                                updated+=1; valid.append(r)
+                            else: duplicates+=1
+                        else: valid.append(r)
+                token=secrets.token_urlsafe(24); IMPORT_PREVIEWS[token]={"created":time.time(),"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"updated":updated,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
                 self._send_json({"ok":True,"preview_id":token,"filename":uploaded[0],**IMPORT_PREVIEWS[token]["summary"],"sample":[{k:r.get(k,"") for k in ["insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision"]} for r in valid[:25]]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
@@ -2264,8 +2268,8 @@ class Handler(BaseHTTPRequestHandler):
                 body=_json_body(self); pid=str(body.get("preview_id","")); item=IMPORT_PREVIEWS.get(pid)
                 if not item or time.time()-item.get("created",0)>IMPORT_PREVIEW_TTL: IMPORT_PREVIEWS.pop(pid,None); raise ValueError("Import preview expired. Please upload the file again.")
                 result=_insert_records(item["records"]); meta=_admin_meta(self) or {};
-                conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,imported,imported_by) VALUES(?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]})
-                self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"]})
+                conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]})
+                self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"updated":result.get("updated",item["summary"].get("updated",0)),"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
