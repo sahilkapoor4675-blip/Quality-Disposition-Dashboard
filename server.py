@@ -325,21 +325,56 @@ def build_where(filters, exclude=None):
     return (f"WHERE {where}" if where else "", params)
 
 
-def kpi_threshold_color(label, value):
-    """Return KPI value color according to the requested operating bands."""
+def _kpi_default_targets():
+    return {
+        "First Pass Yield %": (.97, .90, .80, "higher"),
+        "Hold for Decision % Qty": (.01, .03, .05, "lower"),
+        "PPM Defective": (10000, 30000, 50000, "lower"),
+        "Intensity Tagging %": (.90, .85, .70, "higher"),
+        "Defect Rate": (.01, .03, .05, "lower"),
+        "Reject % Qty": (.01, .03, .05, "lower"),
+        "Process Sigma Level (Approx.)": (3.0, 2.0, 1.0, "higher"),
+        "Salvage % Qty": (.01, .03, .05, "lower"),
+        "Rework % Qty": (.01, .03, .05, "lower"),
+        "Without Intensity %": (.05, .15, .30, "lower"),
+    }
+
+def _kpi_target_rows(conn):
+    rows = conn.execute("SELECT id,kpi_key,label,target,warning,critical,direction,updated_at FROM kpi_targets ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
+
+def _target_status(target, value):
+    if not target or target.get("target") is None or target.get("direction") == "neutral": return "neutral"
+    direction=target.get("direction","lower"); t=float(target["target"]); w=target.get("warning"); w=float(w) if w is not None else None; v=float(value)
+    if direction=="higher": return "good" if v>=t else ("amber" if w is not None and v>=w else "bad")
+    return "good" if v<=t else ("amber" if w is not None and v<=w else "bad")
+
+def _format_target_text(label, target):
+    if not target or target.get("target") is None: return "Target: Not set"
+    pct="%" in label
+    def f(x):
+        if x is None: return "—"
+        if pct: return f"{float(x)*100:.1f}%"
+        if label=="PPM Defective": return f"{float(x):,.0f}"
+        if "Sigma" in label: return f"{float(x):.1f}"
+        return f"{float(x):,.2f}"
+    symbol="≥" if target.get("direction")=="higher" else "≤"
+    return f"Target {symbol} {f(target.get('target'))} • Warn {symbol} {f(target.get('warning'))} • Critical {symbol} {f(target.get('critical'))}"
+
+def kpi_threshold_color(label, value, target=None):
+    status = _target_status(target, value)
+    if status == "good": return "#16A34A"
+    if status == "amber": return "#D97706"
+    if status == "bad": return "#DC2626"
     green, amber, red = "#16A34A", "#D97706", "#DC2626"
     if label in ("First Pass Yield %", "For Next Process %"):
         return green if value > 0.97 else amber if value >= 0.90 else red
     if label in ("Salvage % Qty", "Reject % Qty", "Rework % Qty", "Hold for Decision % Qty", "Hold For Decision % Qty"):
         return green if value < 0.01 else amber if value <= 0.03 else red
-    if label == "Process Sigma Level (Approx.)":
-        return green if value > 3 else amber if value >= 2 else red
-    if label == "PPM Defective":
-        return green if value <= 10000 else amber if value <= 30000 else red
-    if label == "Intensity Tagging %":
-        return green if value >= 0.90 else amber if value >= 0.85 else red
-    if label == "Without Intensity %":
-        return green if value <= 0.05 else amber if value <= 0.15 else red
+    if label == "Process Sigma Level (Approx.)": return green if value > 3 else amber if value >= 2 else red
+    if label == "PPM Defective": return green if value <= 10000 else amber if value <= 30000 else red
+    if label == "Intensity Tagging %": return green if value >= 0.90 else amber if value >= 0.85 else red
+    if label == "Without Intensity %": return green if value <= 0.05 else amber if value <= 0.15 else red
     return None
 
 
@@ -415,6 +450,14 @@ def compute_kpis(filters, _skip_prev=False):
     intensity_tagging_pct = (tagged_intensity_count / intensity_total_count) if intensity_total_count else 0.0
     without_intensity_pct = (blank_intensity_count / intensity_total_count) if intensity_total_count else 0.0
 
+    # Load administrator-defined KPI targets so card status/color always follows the live target table.
+    targets = {}
+    try:
+        for tr in conn.execute("SELECT label,target,warning,critical,direction FROM kpi_targets").fetchall():
+            targets[tr[0]] = dict(tr)
+    except Exception:
+        targets = {}
+
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
         {"label": "Defect Coils", "value": defect_coils, "fmt": "int"},
@@ -435,9 +478,13 @@ def compute_kpis(filters, _skip_prev=False):
     ]
     assert len(kpis) == 16, "KPI count must be exactly 16"
 
-    # Apply threshold-based KPI value colors independently of period comparison.
+    # Apply administrator-defined target bands. If no target is configured, keep legacy fallback.
     for k in kpis:
-        threshold_color = kpi_threshold_color(k["label"], k["value"])
+        t = targets.get(k["label"])
+        k["target"] = t
+        k["target_status"] = _target_status(t, k["value"])
+        k["target_text"] = _format_target_text(k["label"], t)
+        threshold_color = kpi_threshold_color(k["label"], k["value"], t)
         if threshold_color:
             k["color"] = threshold_color
 
@@ -541,7 +588,7 @@ def compute_kpis(filters, _skip_prev=False):
             meta = KPI_META_BY_LABEL[k["label"]]
             prev_v = prev_values[i]
             cur_v = k["value"]
-            threshold_color = kpi_threshold_color(k["label"], cur_v)
+            threshold_color = kpi_threshold_color(k["label"], cur_v, k.get("target"))
             k["color"] = threshold_color or meta["color"]
             if prev_v is None:
                 # No comparison period selected: do not fabricate a 0 baseline
@@ -915,6 +962,15 @@ def _viewer_auth_error(handler):
     # Retained for compatibility with older clients; current dashboard does not use it.
     handler._send_json({"error":"Viewer authentication is disabled","authenticated":True}, status=200)
 
+def _audit(actor, action, entity="", details=""):
+    try:
+        conn=get_conn(); conn.execute("INSERT INTO audit_log (actor,action,entity,details) VALUES (?,?,?,?)", (actor or "admin", action, entity, details[:2000])); conn.commit(); conn.close()
+    except Exception:
+        pass
+
+def _admin_actor(handler):
+    token=_cookie_value(handler.headers.get("Cookie", ""), "qdash_admin"); meta=SESSIONS.get(token) or {}; return meta.get("username", ADMIN_USERNAME)
+
 def _json_body(handler):
     length = int(handler.headers.get("Content-Length", "0") or 0)
     raw = handler.rfile.read(length)
@@ -1030,6 +1086,17 @@ def _validate_record(r):
         return "Output Weight cannot be negative"
     if r["quality_decision"] not in DECISION_ORDER:
         return "Unknown QUALITY DECISION: " + r["quality_decision"]
+    try:
+        conn = get_conn()
+        allowed_q = {str(x[0]).upper() for x in conn.execute("SELECT value FROM master_data WHERE list_name=? AND active=1", ("Quality Decision",)).fetchall()}
+        allowed_i = {str(x[0]).upper() for x in conn.execute("SELECT value FROM master_data WHERE list_name=? AND active=1", ("Defect Intensity",)).fetchall()}
+        conn.close()
+        if allowed_q and r["quality_decision"] not in allowed_q:
+            return "QUALITY DECISION is not active in Master Data"
+        if r["defect_intensity"] and allowed_i and r["defect_intensity"] not in allowed_i:
+            return "Defect Intensity is not active in Master Data"
+    except Exception:
+        pass
     return ""
 
 
@@ -1166,6 +1233,56 @@ def _ensure_admin_schema():
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_ip_time ON activity_log (ip_address, created_at)")
     except Exception:
         pass
+
+    # Administrator configuration tables: KPI target bands, controlled master lists, import history and audit trail.
+    if USE_POSTGRES:
+        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
+            id BIGSERIAL PRIMARY KEY, kpi_key TEXT UNIQUE NOT NULL, label TEXT UNIQUE NOT NULL,
+            target DOUBLE PRECISION, warning DOUBLE PRECISION, critical DOUBLE PRECISION,
+            direction TEXT NOT NULL DEFAULT 'lower', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS master_data (
+            id BIGSERIAL PRIMARY KEY, list_name TEXT NOT NULL, value TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(list_name,value)
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
+            id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, inserted INTEGER DEFAULT 0,
+            duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, imported_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            imported_by TEXT DEFAULT ''
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS audit_log (
+            id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT NOT NULL, entity TEXT DEFAULT '', details TEXT DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    else:
+        conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, kpi_key TEXT UNIQUE NOT NULL, label TEXT UNIQUE NOT NULL,
+            target REAL, warning REAL, critical REAL, direction TEXT NOT NULL DEFAULT 'lower', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS master_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, list_name TEXT NOT NULL, value TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(list_name,value)
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS import_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, inserted INTEGER DEFAULT 0,
+            duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, imported_by TEXT DEFAULT ''
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT, action TEXT NOT NULL, entity TEXT DEFAULT '', details TEXT DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    # Seed controlled lists only when empty. Admin can extend them later.
+    for list_name, values in [("Quality Decision", DECISION_ORDER), ("Defect Intensity", ["LIGHT","MEDIUM","DEEP"])]:
+        for value in values:
+            try:
+                conn.execute("INSERT INTO master_data (list_name,value,active) VALUES (?,?,?)", (list_name,value,True))
+            except Exception:
+                pass
+    for label,(target,warning,critical,direction) in _kpi_default_targets().items():
+        try:
+            conn.execute("INSERT INTO kpi_targets (kpi_key,label,target,warning,critical,direction) VALUES (?,?,?,?,?,?)", (label,label,target,warning,critical,direction))
+        except Exception:
+            pass
 
     # Create/update the environment-backed admin account without overwriting its password on every restart.
     existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
@@ -1488,6 +1605,36 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close(); self._send_json({"summary":{"total_users":total_users,"unique_ips":unique_ips,"active_today":active_today,"opens_today":opens_today,"opens_7d":opens_7,"exports_30d":exports_30},"users":[dict(r) for r in users],"recent":[dict(r) for r in recent],"trend":[dict(r) for r in trend]})
             except Exception as e:
                 self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/users":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=conn.execute("SELECT id,username,display_name,role,active,created_at FROM users ORDER BY role DESC,display_name").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/kpi_targets":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=_kpi_target_rows(conn); conn.close(); self._send_json({"rows":rows})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/master_data":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=conn.execute("SELECT id,list_name,value,active,created_at FROM master_data ORDER BY list_name,value").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/import_history":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=conn.execute("SELECT id,filename,detected,inserted,duplicates,errors,imported_at,imported_by FROM import_history ORDER BY id DESC LIMIT 100").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/audit_log":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn(); rows=conn.execute("SELECT id,actor,action,entity,details,created_at FROM audit_log ORDER BY id DESC LIMIT 200").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/database_status":
             if not _is_admin(self):
                 _auth_error(self)
@@ -1635,6 +1782,49 @@ class Handler(BaseHTTPRequestHandler):
             _auth_error(self)
             return
 
+        if path == "/api/admin/kpi_target":
+            try:
+                body=_json_body(self); label=str(body.get("label","")).strip(); target=body.get("target"); warning=body.get("warning"); critical=body.get("critical"); direction=str(body.get("direction","lower")).lower().strip()
+                if not label: raise ValueError("KPI label is required")
+                if direction not in ("higher","lower","neutral"): raise ValueError("Direction must be Higher, Lower or Neutral")
+                def num(v): return None if v in (None,"") else float(v)
+                target,warning,critical=num(target),num(warning),num(critical)
+                if target is None and direction != "neutral": raise ValueError("Target is required")
+                if direction=="higher" and warning is not None and target is not None and warning>target: raise ValueError("Warning must be <= Target for Higher-is-Better")
+                if direction=="lower" and warning is not None and target is not None and warning<target: raise ValueError("Warning must be >= Target for Lower-is-Better")
+                if direction=="higher" and critical is not None and warning is not None and critical>warning: raise ValueError("Critical must be <= Warning for Higher-is-Better")
+                if direction=="lower" and critical is not None and warning is not None and critical<warning: raise ValueError("Critical must be >= Warning for Lower-is-Better")
+                conn=get_conn(); existing=conn.execute("SELECT id FROM kpi_targets WHERE label=?",(label,)).fetchone()
+                if existing: conn.execute("UPDATE kpi_targets SET target=?,warning=?,critical=?,direction=?,updated_at=CURRENT_TIMESTAMP WHERE label=?",(target,warning,critical,direction,label))
+                else: conn.execute("INSERT INTO kpi_targets (kpi_key,label,target,warning,critical,direction) VALUES (?,?,?,?,?,?)",(label,label,target,warning,critical,direction))
+                conn.commit(); conn.close(); _audit(_admin_actor(self),"kpi_target_update",label,json.dumps({"target":target,"warning":warning,"critical":critical,"direction":direction})); self._send_json({"ok":True})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
+        if path == "/api/admin/master_data":
+            try:
+                body=_json_body(self); action=str(body.get("action","add")); list_name=str(body.get("list_name","")).strip(); value=str(body.get("value","")).strip().upper()
+                if not list_name or not value: raise ValueError("List name and value are required")
+                conn=get_conn()
+                if action=="toggle":
+                    mid=int(body.get("id")); active=bool(body.get("active")); conn.execute("UPDATE master_data SET active=? WHERE id=?",(active,mid))
+                else:
+                    conn.execute("INSERT INTO master_data (list_name,value,active) VALUES (?,?,?)",(list_name,value,True))
+                conn.commit(); conn.close(); _audit(_admin_actor(self),"master_data_"+action,list_name,value); self._send_json({"ok":True})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
+        if path == "/api/admin/data_explorer":
+            try:
+                body=_json_body(self); heat=str(body.get("heat_no","")).strip(); wc=str(body.get("work_center","")).strip(); grade=str(body.get("grade","")).strip(); defect=str(body.get("defect","")).strip(); limit=min(max(int(body.get("limit",200)),1),500)
+                clauses=[]; params=[]
+                for col,val in (("heat_no",heat),("work_center",wc),("grade",grade),("main_defect",defect)):
+                    if val: clauses.append(f"UPPER(COALESCE({col},'')) LIKE UPPER(?)"); params.append("%"+val+"%")
+                where=" WHERE "+" AND ".join(clauses) if clauses else ""
+                conn=get_conn(); rows=conn.execute(f"SELECT id,insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition{where} ORDER BY id DESC LIMIT ?",params+[limit]).fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
         if path == "/api/admin/record":
             try:
                 body = _json_body(self)
@@ -1669,6 +1859,11 @@ class Handler(BaseHTTPRequestHandler):
                 if len(records) > 10000:
                     raise ValueError("Import limited to 10,000 records per upload")
                 result = _insert_records(records)
+                actor=_admin_actor(self)
+                try:
+                    conn=get_conn(); conn.execute("INSERT INTO import_history (filename,detected,inserted,duplicates,errors,imported_by) VALUES (?,?,?,?,?,?)",(uploaded[0],len(records),result.get("inserted",0),result.get("duplicates",0),len(result.get("errors",[])),actor)); conn.commit(); conn.close()
+                except Exception: pass
+                _audit(actor,"data_import",uploaded[0],json.dumps({"detected":len(records),"inserted":result.get("inserted",0),"duplicates":result.get("duplicates",0),"errors":len(result.get("errors",[]))}))
                 self._send_json({"ok": True, "detected": len(records), **result})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -1695,6 +1890,7 @@ class Handler(BaseHTTPRequestHandler):
                 cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
                 conn.commit()
                 conn.close()
+                _audit(_admin_actor(self),"record_delete",str(record_id),json.dumps({"deleted":cur.rowcount}))
                 self._send_json({"ok": True, "deleted": cur.rowcount})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
