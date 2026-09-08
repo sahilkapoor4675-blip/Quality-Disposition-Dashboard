@@ -27,6 +27,7 @@ import csv
 import io
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from email.parser import BytesParser
 from email.policy import default
@@ -1878,7 +1879,13 @@ class Handler(BaseHTTPRequestHandler):
             if hit and now-hit[0] < RESPONSE_CACHE_TTL:
                 self._send_json(hit[1]); return
             try:
-                payload = {"k": compute_kpis(filters), "d": compute_defect_analysis(filters), "w": compute_work_center_grade(filters), "m": compute_monthly_trend(filters), "fr": compute_data_freshness(filters)}
+                # These computations are independent. Run them concurrently so a filter change
+                # does not wait for five database workloads serially. Each worker obtains its own
+                # pooled/database connection through the existing get_conn() path.
+                funcs = (compute_kpis, compute_defect_analysis, compute_work_center_grade, compute_monthly_trend, compute_data_freshness)
+                with ThreadPoolExecutor(max_workers=5) as ex:
+                    results = list(ex.map(lambda fn: fn(filters), funcs))
+                payload = {"k": results[0], "d": results[1], "w": results[2], "m": results[3], "fr": results[4]}
                 RESPONSE_CACHE[cache_key] = (now, payload)
                 if len(RESPONSE_CACHE) > 100:
                     oldest = sorted(RESPONSE_CACHE.items(), key=lambda x:x[1][0])[:20]

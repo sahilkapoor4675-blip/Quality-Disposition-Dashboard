@@ -1007,6 +1007,8 @@ async function loadControlRoom(signal){
     const worstGr=[...(w.by_grade||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
     qcrRenderList('qcrWorkCenters',worstWc,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
     qcrRenderList('qcrGrades',worstGr,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
+    // Keep the original, useful month-vs-previous table visible on every QCR load.
+    qcrRenderComparison(m.rows||[]);
     qcrRenderTrendPrediction(m.rows||[],d,w); qcrRenderKpiRanking(critical);
 
     // Secondary intelligence is deliberately deferred so the main QCR paints immediately.
