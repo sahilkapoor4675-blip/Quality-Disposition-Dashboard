@@ -316,6 +316,14 @@ tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 .filters .field label .filter-icon,.filters .field label .kpi-icon{font-size:14px!important;}
 .filter-trigger{font-size:13px!important;}
 .filter-trigger .chevron{font-size:11px!important;}
+
+  /* KPI drill-down: the record list scrolls inside its own viewport so the
+     table header remains frozen while all underlying records are scrolled. */
+  .drill-body{display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+  .drill-body #drillContent{flex:1;min-height:0;overflow:hidden;}
+  .drill-body #drillContent .table-scroll{height:100%;max-height:none;overflow:auto!important;position:relative;}
+  .drill-body #drillContent .drill-table{border-collapse:separate!important;border-spacing:0!important;}
+  .drill-body #drillContent .drill-table thead th{position:sticky!important;top:0!important;z-index:50!important;background:#f3f7fa!important;box-shadow:0 1px 0 #cbd9e5,0 3px 8px rgba(31,61,90,.08)!important;}
 </style>
 <style id="jsl-watermark-style">
 /* Exact JSL Jindal Stainless logo watermark — background only; all app UI stays above it. */
@@ -403,87 +411,6 @@ body > *{position:relative;z-index:1;}
 /* Calibri is intentionally limited to Management Insights only. */
 .insights-panel,.insights-panel .insights-title,.insights-panel .insight-grid,.insights-panel .insight-item,.insights-panel .insight-item b{font-family:Calibri,Arial,sans-serif!important;}
 </style>
-
-<style id="management-insights-font-size-final">
-/* Management Insights — readability upgrade only */
-.management-insights,
-.management-insights * {
-  font-size: inherit;
-}
-.management-insights .insight-item,
-.management-insights .insight-card,
-.management-insights .insight-text,
-.management-insights p,
-.management-insights li {
-  font-size: 15px !important;
-  line-height: 1.55 !important;
-}
-.management-insights .insight-title,
-.management-insights h3,
-.management-insights h4 {
-  font-size: 15px !important;
-  line-height: 1.45 !important;
-  font-weight: 700 !important;
-}
-.management-insights strong {
-  font-size: 15px !important;
-}
-</style>
-
-
-<style id="management-insights-font-size-fallback">
-.insights-panel .insight,
-.insights-panel .insight-item,
-.management-insights-panel .insight,
-.management-insights-panel .insight-item {
-  font-size: 15px !important;
-  line-height: 1.55 !important;
-}
-</style>
-
-
-<style id="drilldown-sticky-header-final">
-/* KPI / chart drill-down record table: keep the table header visible while scrolling */
-.drilldown-modal,
-.drilldown-modal .modal-body,
-.drilldown-modal .drilldown-body,
-.drilldown-records,
-.drilldown-table-wrap {
-  min-height: 0;
-}
-.drilldown-table-wrap {
-  max-height: min(68vh, 720px);
-  overflow: auto;
-  position: relative;
-}
-.drilldown-table-wrap table {
-  border-collapse: separate !important;
-  border-spacing: 0 !important;
-  width: 100%;
-}
-.drilldown-table-wrap thead th {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 30 !important;
-  background: #f3f7fb !important;
-  box-shadow: 0 1px 0 #cbd9e5, 0 3px 8px rgba(31,61,90,.08) !important;
-}
-</style>
-
-
-<style id="drilldown-sticky-header-fallback">
-.kpi-drilldown table thead th,
-.drilldown-modal table thead th,
-.record-drilldown table thead th,
-.drilldown-panel table thead th {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 30 !important;
-  background: #f3f7fb !important;
-  box-shadow: 0 1px 0 #cbd9e5, 0 3px 8px rgba(31,61,90,.08) !important;
-}
-</style>
-
 </head>
 <body>
 </div></div>
@@ -512,7 +439,7 @@ body > *{position:relative;z-index:1;}
 
 <div class="container">
   <div class="filters" id="filters"></div>
-<div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- records</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
+<div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
 <div class="insights-panel" id="insightsPanel"><div class="insights-title">Management Insights</div><div class="insight-grid" id="insightGrid"><div class="insight-item info">Loading current quality insights…</div></div></div>
 <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div></div></div>
 
@@ -778,17 +705,13 @@ const KPI_ICONS = {
   "First Pass Yield %": "✅",
   "Hold for Decision % Qty": "⏳",
   "Output Quantity (MT)": "🏭",
-  "PPM Defective": "📉",
   "Salvage % Qty": "♻️",
-  "Intensity Tagging %": "🏷️",
   "Salvage + Divert Qty (MT)": "🔀",
   "Defect Rate": "🔻",
   "Reject % Qty": "🚫",
-  "Process Sigma Level (Approx.)": "🎯",
   "Hold For Decision Qty (MT)": "🕒",
   "Reject Qty (MT)": "❌",
   "Rework % Qty": "🔧",
-  "Without Intensity %": "❔",
 };
 
 let KPI_TARGETS={};
@@ -962,7 +885,7 @@ function activeFilterSummary(){
 }
 function refreshFilterSummary(recordCount){
   const el=document.getElementById('filterSummaryText'); if(el)el.textContent=activeFilterSummary();
-  const c=document.getElementById('filterRecordCount'); if(c)c.textContent=(recordCount===undefined?'--':Number(recordCount).toLocaleString())+' records';
+  const c=document.getElementById('filterRecordCount'); if(c)c.textContent=(recordCount===undefined?'--':Number(recordCount).toLocaleString())+' coils';
   renderSavedViews();
 }
 function savedViews(){try{return JSON.parse(localStorage.getItem('qdash_saved_views')||'{}')}catch(e){return {}}}
@@ -980,7 +903,7 @@ function openDrilldown(metric, title, extra={}){
   document.getElementById('drillExportBtn').href='/api/drilldown/export?'+qs;
   modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
-    if(data.error)throw new Error(data.error); document.getElementById('drillCount').textContent=Number(data.count||0).toLocaleString()+' records'; document.getElementById('drillScope').textContent=data.scope||'';
+    if(data.error)throw new Error(data.error); document.getElementById('drillCount').textContent=Number(data.count||0).toLocaleString()+' coils'; document.getElementById('drillScope').textContent=data.scope||'';
     if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">No underlying records found for this KPI/selection.</div>';return;}
     const heads=['Date','Heat No','Batch No','Work Center','Grade','Main Defect','Defect Intensity','Decision','Weight (MT)'];
     let html='<div class="table-scroll"><table class="drill-table"><thead><tr>'+heads.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
@@ -1002,7 +925,7 @@ function renderInsights(kpiPayload){
   const grid=document.getElementById('insightGrid'); if(!grid||!kpiPayload)return;
   const by={}; (kpiPayload.kpis||[]).forEach(k=>by[k.label]=k);
   const targets=KPI_TARGETS||{}; const items=[];
-  const fp=by['First Pass Yield %']; const rej=by['Reject % Qty']; const defect=by['Defect Rate']; const tag=by['Intensity Tagging %'];
+  const fp=by['First Pass Yield %']; const rej=by['Reject % Qty']; const defect=by['Defect Rate'];
   const pct=v=>((Number(v)||0)*100).toFixed(2)+'%';
   const relativeGap=(v,t)=>t ? Math.abs((Number(v)-Number(t))/Number(t))*100 : 0;
   if(fp&&targets[fp.label]){
@@ -1012,10 +935,6 @@ function renderInsights(kpiPayload){
   if(defect&&targets[defect.label]){
     const t=Number(targets[defect.label].target), v=Number(defect.value)||0;
     items.push({cls:v<=t?'positive':'attention',html:`<b>Defect Insight:</b> Defect Rate is <b>${pct(v)}</b> vs target <b>${pct(t)}</b>.`});
-  }
-  if(tag&&targets[tag.label]){
-    const t=Number(targets[tag.label].target), v=Number(tag.value)||0, g=relativeGap(v,t);
-    items.push({cls:v>=t?'positive':'attention',html:`<b>Tagging Insight:</b> Intensity tagging is <b>${pct(v)}</b>; ${v>=t?'target achieved':'target gap is '+g.toFixed(2)+'%'}.`});
   }
   if(rej&&targets[rej.label]){
     const t=Number(targets[rej.label].target), v=Number(rej.value)||0;

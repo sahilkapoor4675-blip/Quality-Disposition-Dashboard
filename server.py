@@ -207,17 +207,15 @@ def current_period_label(filters):
 # Colors match the original workbook exactly (extracted from its font colors).
 # Keyed by label so metadata always travels with its metric, even if the
 # metric's position in the kpis list is later swapped for display purposes.
+REMOVED_KPIS = {"PPM Defective", "Intensity Tagging %", "Process Sigma Level (Approx.)", "Without Intensity %"}
+
 DEFAULT_KPI_TARGETS = {
     "First Pass Yield %": {"target": 0.97, "warning": 0.90, "critical": 0.80, "direction": "higher"},
     "Hold for Decision % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
-    "PPM Defective": {"target": 10000, "warning": 30000, "critical": 50000, "direction": "lower"},
-    "Intensity Tagging %": {"target": 0.90, "warning": 0.85, "critical": 0.75, "direction": "higher"},
     "Defect Rate": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Reject % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
-    "Process Sigma Level (Approx.)": {"target": 3.0, "warning": 2.0, "critical": 1.0, "direction": "higher"},
     "Salvage % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Rework % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
-    "Without Intensity %": {"target": 0.05, "warning": 0.15, "critical": 0.25, "direction": "lower"},
 }
 
 def _target_rows():
@@ -231,7 +229,8 @@ def get_kpi_targets():
         r=rows.get(label)
         out[label]=r or {"label":label,**cfg}
     for label,r in rows.items():
-        out.setdefault(label,r)
+        if label not in REMOVED_KPIS:
+            out.setdefault(label,r)
     return out
 
 def _kpi_target_status(label,value):
@@ -257,17 +256,13 @@ KPI_META_BY_LABEL = {
     "First Pass Yield %":            {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
     "Hold for Decision % Qty":       {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Output Quantity (MT)":          {"color": "#0f2a4a", "direction": "neutral",   "change": "pct"},
-    "PPM Defective":                 {"color": "#DC2626", "direction": "down_good", "change": "pct"},
     "Reject Qty (MT)":               {"color": "#DC2626", "direction": "down_good", "change": "pct"},
-    "Intensity Tagging %":           {"color": "#D97706", "direction": "up_good",   "change": "pct"},
     "Salvage + Divert Qty (MT)":     {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
     "Defect Rate":                   {"color": "#DC2626", "direction": "down_good", "change": "pct"},
     "Reject % Qty":                  {"color": "#DC2626", "direction": "down_good", "change": "pct"},
-    "Process Sigma Level (Approx.)": {"color": "#16A34A", "direction": "up_good",   "change": "pct"},
     "Hold For Decision Qty (MT)":    {"color": "#D97706", "direction": "down_good", "change": "pct"},
     "Salvage % Qty":                 {"color": "#7C3AED", "direction": "down_good", "change": "pct"},
     "Rework % Qty":                  {"color": "#D97706", "direction": "down_good", "change": "pct"},
-    "Without Intensity %":           {"color": "#64748B", "direction": "down_good", "change": "pct"},
 }
 
 
@@ -377,6 +372,14 @@ def build_where(filters, exclude=None):
     return (f"WHERE {where}" if where else "", params)
 
 
+HEAT_KEY_SQL = "NULLIF(UPPER(TRIM(COALESCE(heat_no,''))), '')"
+
+def _coil_count_sql(where_sql, params):
+    """Count coils by unique HEAT NO within the current filter scope.
+    Duplicate HEAT NO values are intentionally counted once, regardless of
+    how many source rows/batches exist for that heat."""
+    return f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {where_sql}", params
+
 def kpi_threshold_color(label, value):
     status=_kpi_target_status(label,value)
     return {"good":"#16A34A","amber":"#D97706","bad":"#DC2626","neutral":"#118DFF"}.get(status)
@@ -387,13 +390,13 @@ def compute_kpis(filters, _skip_prev=False):
     where_sql, params = build_where(filters)
 
     # Total Coils
-    cur.execute(f"SELECT COUNT(*) FROM disposition {where_sql}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {where_sql}", params)
     total_coils = cur.fetchone()[0]
 
     # Defect Coils: main_defect present and not 'NO DEFECT'
     dc_where = where_sql + (" AND " if where_sql else "WHERE ") + \
         "main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(*) FROM disposition {dc_where}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {dc_where}", params)
     defect_coils = cur.fetchone()[0]
 
     # Output Quantity (MT) = sum of output_weight for filtered rows
@@ -406,7 +409,7 @@ def compute_kpis(filters, _skip_prev=False):
     for d in DECISION_ORDER:
         w2 = where_sql + (" AND " if where_sql else "WHERE ") + "quality_decision = ?"
         p2 = params + [d]
-        cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
+        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
         cnt, qty = cur.fetchone()
         decision_coils[d] = cnt
         decision_qty[d] = qty
@@ -427,51 +430,21 @@ def compute_kpis(filters, _skip_prev=False):
     salvage_pct_qty = (salvage_qty / output_qty) if output_qty else 0.0
     rework_pct_qty = (rework_qty / output_qty) if output_qty else 0.0
 
-    try:
-        process_sigma = norm_sinv(1 - defect_rate) + 1.5
-    except (ValueError, ZeroDivisionError):
-        process_sigma = 0.0
-
-    # Intensity Tagging % / Without Intensity %
-    # Rule: classify EVERY record in the current filter context by the
-    # Defect Intensity field itself. A value is tagged when intensity is
-    # actually entered; a blank/NULL value is without intensity.
-    # This intentionally does NOT depend on Main Defect / Defect Coils,
-    # because the KPI is measuring completeness of intensity tagging across
-    # the selected disposition data. Therefore: Tagged % + Without Intensity % = 100%.
-    tagged_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "TRIM(COALESCE(defect_intensity,'')) <> ''"
-    blank_where = where_sql + (" AND " if where_sql else "WHERE ") + \
-        "TRIM(COALESCE(defect_intensity,'')) = ''"
-
-    cur.execute(f"SELECT COUNT(*) FROM disposition {tagged_where}", params)
-    tagged_intensity_count = cur.fetchone()[0]
-    cur.execute(f"SELECT COUNT(*) FROM disposition {blank_where}", params)
-    blank_intensity_count = cur.fetchone()[0]
-
-    intensity_total_count = tagged_intensity_count + blank_intensity_count
-    intensity_tagging_pct = (tagged_intensity_count / intensity_total_count) if intensity_total_count else 0.0
-    without_intensity_pct = (blank_intensity_count / intensity_total_count) if intensity_total_count else 0.0
-
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
         {"label": "Defect Coils", "value": defect_coils, "fmt": "int"},
         {"label": "First Pass Yield %", "value": first_pass_yield, "fmt": "pct"},
         {"label": "Hold for Decision % Qty", "value": hold_pct_qty, "fmt": "pct"},
         {"label": "Output Quantity (MT)", "value": output_qty, "fmt": "num2"},
-        {"label": "PPM Defective", "value": ppm_defective, "fmt": "int"},
         {"label": "Reject Qty (MT)", "value": reject_qty, "fmt": "num2"},
-        {"label": "Intensity Tagging %", "value": intensity_tagging_pct, "fmt": "pct"},
         {"label": "Salvage + Divert Qty (MT)", "value": salvage_divert_qty, "fmt": "num2"},
         {"label": "Defect Rate", "value": defect_rate, "fmt": "pct"},
         {"label": "Reject % Qty", "value": reject_pct_qty, "fmt": "pct"},
-        {"label": "Process Sigma Level (Approx.)", "value": process_sigma, "fmt": "num3"},
         {"label": "Hold For Decision Qty (MT)", "value": hold_qty, "fmt": "num2"},
         {"label": "Salvage % Qty", "value": salvage_pct_qty, "fmt": "pct"},
         {"label": "Rework % Qty", "value": rework_pct_qty, "fmt": "pct"},
-        {"label": "Without Intensity %", "value": without_intensity_pct, "fmt": "pct"},
     ]
-    assert len(kpis) == 16, "KPI count must be exactly 16"
+    assert len(kpis) == 12, "KPI count must be exactly 12"
 
     # Apply threshold-based KPI value colors independently of period comparison.
     for k in kpis:
@@ -479,11 +452,11 @@ def compute_kpis(filters, _skip_prev=False):
         if threshold_color:
             k["color"] = threshold_color
 
-    # Swap display positions of "Reject Qty (MT)" (was index 6) and
-    # "Salvage % Qty" (was index 13) per requested card layout — metadata
+    # Keep the requested symmetric display order by placing "Salvage % Qty"
+    # before "Salvage + Divert Qty (MT)"; metadata is keyed by label.
     # (color/direction) is looked up by label later, so it travels correctly
     # with whichever metric now sits in that position.
-    kpis[6], kpis[13] = kpis[13], kpis[6]
+    kpis[5], kpis[10] = kpis[10], kpis[5]
 
     # Quality decision table
     decision_table = []
@@ -517,13 +490,13 @@ def compute_kpis(filters, _skip_prev=False):
     for level in ["LIGHT", "MEDIUM", "DEEP"]:
         iw = where_sql + (" AND " if where_sql else "WHERE ") + "defect_intensity = ?"
         ip = params + [level]
-        cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {iw}", ip)
+        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {iw}", ip)
         cnt, qty = cur.fetchone()
         intensity_table.append({"intensity": level, "coils": cnt, "qty": qty})
     # WITHOUT INTENSITY row = ALL selected records with blank intensity
     wi_where = where_sql + (" AND " if where_sql else "WHERE ") + \
         "TRIM(COALESCE(defect_intensity,'')) = ''"
-    cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {wi_where}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {wi_where}", params)
     cnt, qty = cur.fetchone()
     intensity_table.append({"intensity": "WITHOUT INTENSITY", "coils": cnt, "qty": qty})
 
@@ -572,7 +545,7 @@ def compute_kpis(filters, _skip_prev=False):
             prev_values = [k["value"] for k in prev_data["kpis"]]
             result["period"]["previous"] = current_period_label(prev_filters)
         else:
-            prev_values = [None] * 16
+            prev_values = [None] * 12
             result["period"]["previous"] = None
 
         for i, k in enumerate(kpis):
@@ -661,11 +634,11 @@ def _group_metrics(cur, where_sql, params, group_col, group_val):
     w2 = where_sql + (" AND " if where_sql else "WHERE ") + extra
     p2 = params + [group_val]
 
-    cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
     coils, qty = cur.fetchone()
 
     dw = w2 + " AND main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(*) FROM disposition {dw}", p2)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {dw}", p2)
     defect_coils = cur.fetchone()[0]
 
     rw = w2 + " AND quality_decision = ?"
@@ -716,11 +689,11 @@ def _overall_metrics_total(cur, where_sql, params, name="Grand Total"):
     This intentionally does not sum displayed groups, because grouped tables
     may omit blank dimension values; direct aggregation keeps totals tied to
     the exact filter scope."""
-    cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
     coils, qty = cur.fetchone()
 
     dw = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(*) FROM disposition {dw}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {dw}", params)
     defect_coils = cur.fetchone()[0]
 
     rw = where_sql + (" AND " if where_sql else "WHERE ") + "quality_decision = ?"
@@ -780,7 +753,7 @@ def compute_defect_analysis(filters):
 
     dw = where_sql + (" AND " if where_sql else "WHERE ") + \
         "main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {dw}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {dw}", params)
     total_defect_records, total_defect_qty = cur.fetchone()
 
     # Include canonical defect names plus any new defect names present in the
@@ -793,7 +766,7 @@ def compute_defect_analysis(filters):
     register = []
     for defect in all_defects:
         w2 = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect = ?"
-        cur.execute(f"SELECT COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {w2}",
+        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}",
                     params + [defect])
         cnt, qty = cur.fetchone()
         register.append({
@@ -1515,7 +1488,7 @@ def _export_charts(payload):
     charts=[]
     # Decision composition from KPI data is reconstructed from the filtered DB for exact values.
     filters=payload["filters"]; conn=get_conn(); cur=conn.cursor(); where_sql,params=build_where(filters)
-    cur.execute(f"SELECT quality_decision, COUNT(*), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY quality_decision ORDER BY quality_decision",params)
+    cur.execute(f"SELECT quality_decision, COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY quality_decision ORDER BY quality_decision",params)
     decisions=cur.fetchall(); conn.close()
     if decisions:
         charts.append(("Decision Distribution",_chart_png("pie","Quality Decision Distribution",[r[0] for r in decisions],[r[1] for r in decisions]),"A1"))
@@ -1656,7 +1629,7 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
     where_sql, params = build_where(filters)
     metric = (metric or '').strip()
     clauses=[]; extra=[]
-    if metric in {'Defect Coils','PPM Defective','Defect Rate','Process Sigma Level (Approx.)'}:
+    if metric in {'Defect Coils','Defect Rate'}:
         clauses.append("main_defect <> '' AND main_defect <> 'NO DEFECT'")
     elif metric in {'First Pass Yield %'}:
         clauses.append("quality_decision = ?"); extra.append('PRIME')
@@ -1670,10 +1643,6 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000):
         clauses.append("quality_decision IN (?,?)"); extra.extend(['SALVAGE','DIVERT'])
     elif metric in {'Rework % Qty'}:
         clauses.append("quality_decision = ?"); extra.append('RE-WORK')
-    elif metric in {'Intensity Tagging %'}:
-        clauses.append("TRIM(COALESCE(defect_intensity,'')) <> ''")
-    elif metric in {'Without Intensity %'}:
-        clauses.append("TRIM(COALESCE(defect_intensity,'')) = ''")
     elif metric == 'decision_category':
         clauses.append("quality_decision = ?"); extra.append(drill_value or '')
     elif metric == 'defect_category':
