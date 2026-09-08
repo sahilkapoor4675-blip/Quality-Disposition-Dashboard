@@ -343,9 +343,51 @@ body > *{position:relative;z-index:1;}
 @media(max-width:900px){body::before{background-size:min(82vw,650px) auto;opacity:.09;}}
 @media(max-width:600px){body::before{background-size:min(94vw,520px) auto;opacity:.075;}}
 
-/* Disposition filter label — subtle emphasis */
-.filter-field[data-filter-key="quality_decision"] label,
-.filter-field[data-filter-key="disposition"] label{font-size:14px!important;font-weight:800!important;}
+</style>
+
+<style id="final-ui-boundary-filters-fix">
+/* FINAL UI FIX: all dashboard filter labels use one consistent size */
+.filter-field label, .filters .field label{
+  font-size:12px !important;
+  font-weight:700 !important;
+  line-height:1.25 !important;
+  letter-spacing:.45px !important;
+}
+.filter-field label .filter-icon, .filter-field label .kpi-icon, .filters .field label .filter-icon, .filters .field label .kpi-icon{
+  font-size:13px !important;
+}
+.filter-trigger{font-size:12px !important;font-weight:600 !important;}
+.filter-trigger .chevron{font-size:10px !important;}
+
+/* FINAL UI FIX: distinct status-colored KPI boundaries + existing 3D/depth */
+.kpi-card{
+  border:1.5px solid #9bb0c3 !important;
+  border-bottom-width:3px !important;
+  border-radius:14px !important;
+  box-shadow:0 2px 5px rgba(15,42,74,.08), 0 9px 20px rgba(15,42,74,.10), inset 0 1px 0 rgba(255,255,255,.96) !important;
+  transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease !important;
+}
+.kpi-card.status-good{
+  border-color:#72c89a !important; border-bottom-color:#16a34a !important;
+  box-shadow:0 2px 5px rgba(15,42,74,.07),0 9px 20px rgba(22,163,74,.12),0 0 0 1px rgba(22,163,74,.08),inset 0 1px 0 rgba(255,255,255,.96) !important;
+}
+.kpi-card.status-amber{
+  border-color:#e3b85f !important; border-bottom-color:#d97706 !important;
+  box-shadow:0 2px 5px rgba(15,42,74,.07),0 9px 20px rgba(217,119,6,.12),0 0 0 1px rgba(217,119,6,.08),inset 0 1px 0 rgba(255,255,255,.96) !important;
+}
+.kpi-card.status-bad{
+  border-color:#e78b8b !important; border-bottom-color:#dc2626 !important;
+  box-shadow:0 2px 5px rgba(15,42,74,.07),0 9px 20px rgba(220,38,38,.12),0 0 0 1px rgba(220,38,38,.08),inset 0 1px 0 rgba(255,255,255,.96) !important;
+}
+.kpi-card.status-neutral{
+  border-color:#78b9df !important; border-bottom-color:#2388c9 !important;
+  box-shadow:0 2px 5px rgba(15,42,74,.07),0 9px 20px rgba(35,136,201,.12),0 0 0 1px rgba(35,136,201,.08),inset 0 1px 0 rgba(255,255,255,.96) !important;
+}
+.kpi-card:hover{
+  transform:translateY(-4px) !important;
+  box-shadow:0 4px 8px rgba(15,42,74,.10),0 17px 32px rgba(15,42,74,.17),inset 0 1px 0 rgba(255,255,255,1) !important;
+  z-index:20;
+}
 </style>
 </head>
 <body>
