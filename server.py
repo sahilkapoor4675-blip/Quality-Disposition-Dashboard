@@ -30,6 +30,20 @@ from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+except ImportError:
+    Workbook = None
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+except ImportError:
+    SimpleDocTemplate = None
+
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 # Recommended for Render Free: set DATABASE_URL to an external PostgreSQL
 # database (Supabase/Neon/etc.). If DATABASE_URL is absent, the app falls
@@ -1099,6 +1113,108 @@ def database_status():
     return {"provider": provider, "persistent": persistent, "records": total, "used_mb": round(used_mb,2), "limit_mb": round(limit_mb,2), "usage_pct": round(pct,2), "status": status}
 
 
+
+def _export_filters(qs):
+    return {k: qs.get(k, "All") for k in FILTER_KEYS}
+
+def _filter_summary(filters):
+    return [(k.replace("_", " ").title(), v) for k, v in filters.items() if v and v != "All"]
+
+def _export_data(filters):
+    """Build a viewer-safe report payload from the same live filtered database used by the dashboard."""
+    kpis = compute_kpis(filters)
+    defects = compute_defect_analysis(filters)
+    wcg = compute_work_center_grade(filters)
+    monthly = compute_monthly_trend(filters)
+    period = compute_period_trend(filters)
+    quarterly = compute_quarterly_trend(filters)
+    yearly = compute_yearly_trend(filters)
+    return {"filters": filters, "kpis": kpis, "defects": defects, "wcg": wcg, "monthly": monthly, "period": period, "quarterly": quarterly, "yearly": yearly}
+
+def _safe_filename(filters, ext):
+    active = [str(v).replace("/", "-").replace(" ", "_") for v in filters.values() if v and v != "All"]
+    suffix = ("_" + "_".join(active[:3])) if active else "_All_Data"
+    return "Quality_Disposition_Report" + suffix + ext
+
+def _send_bytes(self, data, content_type, filename):
+    self.send_response(200)
+    self.send_header("Content-Type", content_type)
+    self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+    self.send_header("Content-Length", str(len(data)))
+    self.send_header("Cache-Control", "no-store")
+    self.end_headers()
+    self.wfile.write(data)
+
+def _kpi_rows(kpis):
+    rows=[]
+    for k in (kpis.get("kpis", []) if isinstance(kpis, dict) else kpis):
+        rows.append([k.get("label",""), k.get("value",0), k.get("fmt",""), k.get("prev",""), k.get("change_value","")])
+    return rows
+
+def _excel_report(payload):
+    if Workbook is None:
+        raise RuntimeError("Excel export requires openpyxl")
+    wb=Workbook(); ws=wb.active; ws.title="KPI Summary"
+    navy="0F2A4A"; accent="118DFF"; white="FFFFFF"; light="EEF4FF"
+    thin=Side(style="thin", color="DCE6EF")
+    def title(ws, text, row=1, cols=5):
+        ws.merge_cells(start_row=row,start_column=1,end_row=row,end_column=cols); c=ws.cell(row,1,text); c.font=Font(size=16,bold=True,color=white); c.fill=PatternFill("solid",fgColor=navy); c.alignment=Alignment(horizontal="left")
+    def header(ws,row,labels):
+        for j,x in enumerate(labels,1):
+            c=ws.cell(row,j,x); c.font=Font(bold=True,color=white); c.fill=PatternFill("solid",fgColor=accent); c.alignment=Alignment(horizontal="center"); c.border=Border(bottom=thin)
+    def autofit(ws):
+        for col in ws.columns:
+            letter=col[0].column_letter if hasattr(col[0], "column_letter") else None;
+            if not letter: continue
+            ws.column_dimensions[letter].width=min(max(max(len(str(c.value or "")) for c in col)+2,12),32)
+    title(ws,"QUALITY INTELLIGENCE — Dashboard Export",1,5)
+    ws["A2"]="Generated"; ws["B2"]=datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+    ws["A3"]="Filters"; ws["B3"]=", ".join(f"{k}: {v}" for k,v in _filter_summary(payload["filters"])) or "All"
+    header(ws,5,["KPI","Value","Format","Previous","Change"])
+    for i,r in enumerate(_kpi_rows(payload["kpis"]),6): ws.append(r)
+    for c in ws["A5:E5"][0]: c.fill=PatternFill("solid",fgColor=accent)
+    autofit(ws); ws.freeze_panes="A6"
+
+    d=payload["defects"]; ws2=wb.create_sheet("Defect Analysis"); title(ws2,"Defect Analysis",1,5); header(ws2,3,["Rank","Defect","Records","Qty (MT)","% Records"])
+    for r in d["register"]:
+        ws2.append([r["rank"],r["defect"],r["records"],r["qty"],r["pct_records"]])
+    ws2.append(["","Total",d["register_total"]["records"],d["register_total"]["qty"],d["register_total"]["pct_records"]]); autofit(ws2)
+
+    for sheet_name, rows, total in [("Work Center",payload["wcg"]["by_work_center"],payload["wcg"]["total_work_center"]),("Grade Analysis",payload["wcg"]["by_grade"],payload["wcg"]["total_grade"])]:
+        w=wb.create_sheet(sheet_name); title(w,sheet_name,1,7); header(w,3,["Name","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty"])
+        for r in rows: w.append([r.get("name"),r.get("coils"),r.get("output_qty"),r.get("defect_coils"),r.get("defect_pct"),r.get("reject_qty"),r.get("reject_pct_qty")])
+        if total: w.append(["Total",total.get("coils"),total.get("output_qty"),total.get("defect_coils"),total.get("defect_pct"),total.get("reject_qty"),total.get("reject_pct_qty")])
+        autofit(w)
+
+    for sheet_name, rows, total, labels in [("Monthly Trend",payload["monthly"]["rows"],payload["monthly"].get("total"),["Month","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Weekly Trend",payload["period"]["rows"],payload["period"].get("total"),["Week","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Quarterly Trend",payload["quarterly"]["rows"],payload["quarterly"].get("total"),["Quarter","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"]),("Financial Year",payload["yearly"]["rows"],payload["yearly"].get("total"),["Financial Year","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty","FPY %"])]:
+        w=wb.create_sheet(sheet_name); title(w,sheet_name,1,len(labels)); header(w,3,labels)
+        for r in rows:
+            w.append([r.get("name"),r.get("coils"),r.get("output_qty"),r.get("defect_coils"),r.get("defect_pct"),r.get("reject_qty"),r.get("reject_pct_qty"),r.get("fpy")])
+        if total: w.append(["Total",total.get("coils"),total.get("output_qty"),total.get("defect_coils"),total.get("defect_pct"),total.get("reject_qty"),total.get("reject_pct_qty"),total.get("fpy")])
+        autofit(w)
+    for w in wb.worksheets:
+        for row in w.iter_rows():
+            for c in row:
+                c.alignment=Alignment(vertical="center")
+        w.sheet_view.showGridLines=False
+    bio=io.BytesIO(); wb.save(bio); return bio.getvalue()
+
+def _pdf_report(payload):
+    if SimpleDocTemplate is None:
+        raise RuntimeError("PDF export requires reportlab")
+    bio=io.BytesIO(); doc=SimpleDocTemplate(bio,pagesize=landscape(A4),rightMargin=24,leftMargin=24,topMargin=24,bottomMargin=24)
+    styles=getSampleStyleSheet(); styles.add(ParagraphStyle(name="Small",parent=styles["BodyText"],fontSize=7.5,leading=9)); styles.add(ParagraphStyle(name="Title2",parent=styles["Title"],fontSize=18,textColor=colors.HexColor("#0F2A4A"),alignment=TA_LEFT))
+    story=[Paragraph("QUALITY INTELLIGENCE",styles["Title2"]),Paragraph("Disposition & Defect Analytics — Dashboard Report",styles["Heading2"]),Paragraph("Generated: "+datetime.now().strftime("%d-%b-%Y %H:%M:%S"),styles["Small"]),Spacer(1,8)]
+    fs=_filter_summary(payload["filters"]); story.append(Paragraph("Filters: "+("; ".join(f"{k}: {v}" for k,v in fs) if fs else "All"),styles["Small"])); story.append(Spacer(1,10))
+    krows=[["KPI","Value","Previous","Change"]]+[[str(k.get("label","")),str(k.get("value","")),str(k.get("prev","")),str(k.get("change_value",""))] for k in payload["kpis"].get("kpis", [])]
+    t=Table(krows,colWidths=[230,100,100,100],repeatRows=1); t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.35,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)])); story += [t,PageBreak()]
+    d=payload["defects"]; rows=[["Rank","Defect","Records","Qty MT","% Records"]]+[[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in d["register"]]+[["","Total",d["register_total"]["records"],f'{d["register_total"]["qty"]:.3f}',f'{d["register_total"]["pct_records"]*100:.2f}%']]
+    story += [Paragraph("Defect Analysis",styles["Heading2"]),Table(rows,repeatRows=1,colWidths=[45,300,70,80,80],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7),("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,-1),(-1,-1),colors.white),("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold")])),PageBreak()]
+    for title_name,key in [("Work Center Analysis","by_work_center"),("Grade Analysis","by_grade")]:
+        arr=payload["wcg"][key]; rows=[["Name","Coils","Output MT","Defect Coils","Defect %","Reject MT","Reject %"]]+[[r.get("name"),r.get("coils"),f'{r.get("output_qty",0):.3f}',r.get("defect_coils"),f'{r.get("defect_pct",0)*100:.2f}%',f'{r.get("reject_qty",0):.3f}',f'{r.get("reject_pct_qty",0)*100:.2f}%'] for r in arr]
+        story += [Paragraph(title_name,styles["Heading2"]),Table(rows,repeatRows=1,colWidths=[190,65,85,75,70,80,75],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)])),Spacer(1,12)]
+    doc.build(story); return bio.getvalue()
+
 HTML_PAGE = None  # loaded lazily from index_template
 
 
@@ -1180,6 +1296,26 @@ class Handler(BaseHTTPRequestHandler):
                     "quarterly": quarterly_d["rows"], "quarterly_total": quarterly_d["total"],
                     "yearly": yearly_d["rows"], "yearly_total": yearly_d["total"],
                 })
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/export/excel":
+            try:
+                payload = _export_data(_export_filters(qs))
+                _send_bytes(self, _excel_report(payload), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _safe_filename(payload["filters"], ".xlsx"))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/export/pdf":
+            try:
+                payload = _export_data(_export_filters(qs))
+                _send_bytes(self, _pdf_report(payload), "application/pdf", _safe_filename(payload["filters"], ".pdf"))
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/export/csv":
+            try:
+                filters = _export_filters(qs); where_sql, params = build_where(filters)
+                conn = get_conn(); cur = conn.cursor(); cur.execute(f"SELECT insp_lot_date,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params); rows=cur.fetchall(); conn.close()
+                out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow(list(r)) for r in rows]
+                _send_bytes(self,out.getvalue().encode('utf-8-sig'),"text/csv; charset=utf-8",_safe_filename(filters,".csv"))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":

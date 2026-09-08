@@ -157,3 +157,12 @@ Important: keep `DATABASE_URL`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` in Render
 
 ## FREE production data setup
 For Render Free, use an external PostgreSQL database such as Supabase Free. Set `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `DB_LIMIT_MB=500` in Render Environment Variables. See `SUPABASE_RENDER_FREE_SETUP.md` for the exact setup and migration flow.
+
+## Dashboard Export
+
+The live dashboard now provides **Excel, PDF, and CSV** export buttons in the Dashboard Filters toolbar. Exports use the current dashboard filters, so the report matches the selected Month, Work Center, Grade, Decision, Week, Quarter, Financial Year, and Defect Intensity.
+
+- **Excel**: KPI Summary, Defect Analysis, Work Center, Grade Analysis, Monthly/Weekly/Quarterly/FY trend sheets, with totals.
+- **PDF**: print-ready KPI summary, defect analysis, work-center and grade tables, with active filters and generation time.
+- **CSV**: filtered record-level data for operational use.
+- Viewer export endpoints are read-only; Admin-only database backup remains separate.

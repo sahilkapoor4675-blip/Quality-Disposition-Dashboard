@@ -129,7 +129,7 @@
   .filter-actions{display:flex;align-items:center;gap:8px;}
   .active-filter-badge{display:none;padding:5px 9px;border-radius:999px;background:#e8f3ff;color:#0369a1;font-size:11px;font-weight:800;}
   .active-filter-badge.show{display:inline-flex;}
-  .reset-all{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;}
+  .export-btn{border:1px solid #cfe0fb;background:#fff;color:#0f2a4a;border-radius:7px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer}.export-btn:hover{background:#eef4ff}.reset-all{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;}
   .reset-all:hover{box-shadow:0 5px 14px rgba(15,42,74,.10);border-color:#94a3b8;}
   .filter-field{position:relative;}
   .filter-field label{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
@@ -199,7 +199,7 @@ header .sub{color:#5E7185;opacity:1;}
 .filter-option:hover{background:#F2F7FB;}
 .filter-option.selected{background:#EAF5FC;color:#176A9D;}
 .active-filter-badge{background:#E9F5FC;color:#176A9D;}
-.reset-all{border-color:#D3DEE8;background:#fff;color:#40566B;}
+.export-btn{border:1px solid #cfe0fb;background:#fff;color:#0f2a4a;border-radius:7px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer}.export-btn:hover{background:#eef4ff}.reset-all{border-color:#D3DEE8;background:#fff;color:#40566B;}
 .kpi-grid{gap:14px;}
 .kpi-card{background:linear-gradient(180deg,#FFFFFF 0%,#FBFDFF 100%);border-color:#DCE6EF;border-radius:12px;box-shadow:0 5px 16px rgba(28,62,91,.065);}
 .kpi-card:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(28,62,91,.11);}
@@ -446,7 +446,7 @@ async function loadFilters(){
   const res = await fetch("/api/filters");
   const options = await res.json();
   const container = document.getElementById("filters");
-  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 PDF</button><button id="exportCsvBtn" class="export-btn" type="button">📋 CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field";
     const label = document.createElement("label"); label.textContent = f.label;
@@ -478,6 +478,10 @@ async function loadFilters(){
     renderOptions();
   });
   document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); updateActiveFilterBadge(); triggerFilterRefresh();});
+  function exportDashboard(format){ const params=new URLSearchParams(currentFilters).toString(); window.location.href=`/api/export/${format}?${params}`; }
+  document.getElementById("exportExcelBtn").addEventListener("click",()=>exportDashboard("excel"));
+  document.getElementById("exportPdfBtn").addEventListener("click",()=>exportDashboard("pdf"));
+  document.getElementById("exportCsvBtn").addEventListener("click",()=>exportDashboard("csv"));
   document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));},{once:true});
   updateActiveFilterBadge();
 }
