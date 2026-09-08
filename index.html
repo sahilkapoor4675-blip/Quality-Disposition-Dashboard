@@ -403,6 +403,87 @@ body > *{position:relative;z-index:1;}
 /* Calibri is intentionally limited to Management Insights only. */
 .insights-panel,.insights-panel .insights-title,.insights-panel .insight-grid,.insights-panel .insight-item,.insights-panel .insight-item b{font-family:Calibri,Arial,sans-serif!important;}
 </style>
+
+<style id="management-insights-font-size-final">
+/* Management Insights — readability upgrade only */
+.management-insights,
+.management-insights * {
+  font-size: inherit;
+}
+.management-insights .insight-item,
+.management-insights .insight-card,
+.management-insights .insight-text,
+.management-insights p,
+.management-insights li {
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+}
+.management-insights .insight-title,
+.management-insights h3,
+.management-insights h4 {
+  font-size: 15px !important;
+  line-height: 1.45 !important;
+  font-weight: 700 !important;
+}
+.management-insights strong {
+  font-size: 15px !important;
+}
+</style>
+
+
+<style id="management-insights-font-size-fallback">
+.insights-panel .insight,
+.insights-panel .insight-item,
+.management-insights-panel .insight,
+.management-insights-panel .insight-item {
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+}
+</style>
+
+
+<style id="drilldown-sticky-header-final">
+/* KPI / chart drill-down record table: keep the table header visible while scrolling */
+.drilldown-modal,
+.drilldown-modal .modal-body,
+.drilldown-modal .drilldown-body,
+.drilldown-records,
+.drilldown-table-wrap {
+  min-height: 0;
+}
+.drilldown-table-wrap {
+  max-height: min(68vh, 720px);
+  overflow: auto;
+  position: relative;
+}
+.drilldown-table-wrap table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100%;
+}
+.drilldown-table-wrap thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  background: #f3f7fb !important;
+  box-shadow: 0 1px 0 #cbd9e5, 0 3px 8px rgba(31,61,90,.08) !important;
+}
+</style>
+
+
+<style id="drilldown-sticky-header-fallback">
+.kpi-drilldown table thead th,
+.drilldown-modal table thead th,
+.record-drilldown table thead th,
+.drilldown-panel table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 30 !important;
+  background: #f3f7fb !important;
+  box-shadow: 0 1px 0 #cbd9e5, 0 3px 8px rgba(31,61,90,.08) !important;
+}
+</style>
+
 </head>
 <body>
 </div></div>
