@@ -519,3 +519,260 @@ body > *{position:relative;z-index:1;}
 /* QCR positioning: keep Pareto Root Cause Investigation beside Top 5 Defects. */
 @media(min-width:901px){.qcr-grid > .qcr-root-card{grid-column:2!important;grid-row:2!important}.qcr-grid > .qcr-root-card.qcr-wide{grid-column:2!important}}
 @media(max-width:900px){.qcr-grid > .qcr-root-card{grid-column:1!important}}
+
+
+/* ================================================================
+   FINAL QCR DESKTOP VISIBILITY / TYPOGRAPHY / LAYOUT PATCH
+   ================================================================ */
+:root{
+  --font-body:'DM Sans','Segoe UI',Arial,sans-serif;
+  --font-display:'Sora','Segoe UI',Arial,sans-serif;
+  --font-metric:'Outfit','Segoe UI',Arial,sans-serif;
+}
+html,body{font-family:var(--font-body)!important;font-size:15px;}
+header h1,.quality-intelligence-title,.section-title,.section-header,.panel h3,.tab-btn,
+.qcr-hero h2,.qcr-card h3{font-family:var(--font-display)!important;}
+button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
+.kpi-card .value,.qcr-kpi .qcr-kpi-value,.qcr-metric,.qcr-breach-val,.qcr-intel-main,
+.qcr-root-title,.qcr-why-grid b,.qcr-grade-item em{font-family:var(--font-metric)!important;}
+
+/* Keep the main filter bar attached to the scrolling dashboard content.
+   The filter was previously inside a short container, which made sticky
+   positioning stop immediately after the summary row. */
+.container{max-width:1480px;padding:22px 24px 30px;}
+.filters{
+  position:-webkit-sticky!important;
+  position:sticky!important;
+  top:0!important;
+  z-index:99999!important;
+  isolation:isolate;
+  min-height:86px;
+  padding:15px 16px 17px!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.985)!important;
+  backdrop-filter:blur(12px)!important;
+  -webkit-backdrop-filter:blur(12px)!important;
+  box-shadow:0 8px 26px rgba(15,42,74,.15)!important;
+}
+.filter-field label,.filters .field label{font-size:14px!important;font-weight:700!important;line-height:1.2;}
+.filter-trigger{font-size:14px!important;font-weight:600!important;min-height:42px!important;padding:10px 12px!important;}
+.filter-search{font-size:13px!important;}
+.filter-option{font-size:13px!important;padding:9px 10px!important;}
+.filter-empty{font-size:13px!important;}
+.filter-toolbar-title{font-size:13px!important;}
+
+/* QCR: remove artificial fixed heights that produced large blank areas.
+   Cards now grow only as much as their content requires. */
+.qcr-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:16px!important;
+  align-items:start!important;
+  grid-auto-rows:auto!important;
+}
+.qcr-grid>.qcr-card,
+.qcr-grid>.qcr-card:nth-child(1),.qcr-grid>.qcr-card:nth-child(2),
+.qcr-grid>.qcr-card:nth-child(3),.qcr-grid>.qcr-card:nth-child(4),
+.qcr-grid>.qcr-card:nth-child(5),.qcr-grid>.qcr-card:nth-child(6),
+.qcr-grid>.qcr-card.qcr-intelligence-card,
+.qcr-grid>.qcr-card.qcr-root-card{
+  height:auto!important;
+  min-height:0!important;
+  box-sizing:border-box!important;
+}
+.qcr-grid>.qcr-card:not(.qcr-wide) .qcr-body,
+.qcr-grid>.qcr-card.qcr-intelligence-card .qcr-body{
+  overflow:visible!important;
+}
+.qcr-card h3{font-size:17px!important;min-height:52px!important;padding:14px 17px!important;}
+.qcr-body{padding:16px 17px!important;}
+.qcr-hero{padding:18px 20px!important;margin-bottom:16px!important;}
+.qcr-hero h2{font-size:26px!important;line-height:1.15!important;}
+.qcr-freshness{font-size:13px!important;margin-top:7px!important;}
+.qcr-quality-status{min-width:205px!important;padding:11px 14px!important;}
+.qcr-quality-status b{font-size:10px!important;}
+.qcr-quality-status strong{font-size:15px!important;}
+.qcr-kpi-grid{gap:11px!important;}
+.qcr-kpi{padding:12px 13px!important;border-radius:10px!important;}
+.qcr-kpi .qcr-kpi-name{font-size:13px!important;font-weight:700!important;line-height:1.3!important;}
+.qcr-kpi .qcr-kpi-value{font-size:27px!important;line-height:1.05!important;margin-top:6px!important;}
+.qcr-kpi .qcr-status{font-size:10px!important;padding:4px 8px!important;margin-top:6px!important;}
+.qcr-row{grid-template-columns:38px minmax(0,1fr) auto!important;gap:11px!important;padding:9px 0!important;}
+.qcr-rank{font-size:12px!important;}
+.qcr-name{font-size:13px!important;line-height:1.3!important;}
+.qcr-metric{font-size:13px!important;line-height:1.35!important;}
+.qcr-metric .qcr-pct{font-size:11px!important;}
+.qcr-empty{font-size:13px!important;padding:16px!important;line-height:1.45!important;}
+.qcr-compare th{font-size:11px!important;padding:9px!important;}
+.qcr-compare td{font-size:12px!important;padding:9px!important;}
+.qcr-breach{padding:11px 12px!important;}
+.qcr-breach-name{font-size:13px!important;}
+.qcr-breach-meta{font-size:11px!important;}
+.qcr-breach-val{font-size:14px!important;}
+.qcr-opportunity{min-height:58px!important;padding:10px 12px!important;}
+.qcr-opportunity-text{font-size:12px!important;line-height:1.45!important;}
+.qcr-opportunity-action{font-size:11px!important;}
+.qcr-intel-status{font-size:11px!important;padding:6px 10px!important;}
+.qcr-intel-main{font-size:28px!important;}
+.qcr-intel-main span{font-size:12px!important;}
+.qcr-intel-meta{font-size:11px!important;line-height:1.45!important;}
+.qcr-kpi-rank b{font-size:12px!important;}
+.qcr-kpi-rank span{font-size:10.5px!important;}
+.qcr-kpi-rank em{font-size:10px!important;}
+.qcr-root-title{font-size:17px!important;}
+.qcr-root-path b{font-size:12px!important;}
+.qcr-root-path span{font-size:10px!important;}
+.qcr-grade-item b{font-size:12px!important;}
+.qcr-grade-item span,.qcr-grade-item em{font-size:10.5px!important;}
+.qcr-why-title{font-size:12px!important;}
+.qcr-why-grid b{font-size:12px!important;}
+.qcr-why-grid span{font-size:11px!important;}
+
+@media(max-width:900px){
+  .qcr-grid{grid-template-columns:1fr!important;}
+  .qcr-card h3{font-size:16px!important;}
+}
+@media(max-width:600px){
+  html,body{font-size:14px;}
+  .qcr-hero h2{font-size:22px!important;}
+  .qcr-quality-status{min-width:0!important;width:100%;}
+  .qcr-hero-row{align-items:flex-start!important;flex-direction:column!important;}
+  .qcr-kpi-grid{grid-template-columns:1fr!important;}
+}
+
+/* ================================================================
+   FINAL QCR READABILITY + TYPOGRAPHY + STICKY FILTER PATCH v12
+   ================================================================ */
+:root{
+  --font-body:'Inter','Segoe UI',Arial,sans-serif;
+  --font-display:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;
+  --font-metric:'Space Grotesk','Segoe UI',Arial,sans-serif;
+}
+html,body{font-family:var(--font-body)!important;font-size:16px!important;}
+header h1,.quality-intelligence-title,.section-title,.section-header,.panel h3,.tab-btn,
+.qcr-hero h2,.qcr-card h3{font-family:var(--font-display)!important;}
+button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
+.kpi-card .value,.qcr-kpi .qcr-kpi-value,.qcr-metric,.qcr-breach-val,.qcr-intel-main,
+.qcr-root-title,.qcr-why-grid b,.qcr-grade-item em,.qcr-health-score{font-family:var(--font-metric)!important;}
+
+/* Keep the primary dashboard filter bar pinned while the page scrolls. */
+.container{overflow:visible!important;}
+.filters{
+  position:-webkit-sticky!important;
+  position:sticky!important;
+  top:0!important;
+  z-index:100000!important;
+  min-height:92px!important;
+  padding:16px 18px 18px!important;
+  margin-bottom:14px!important;
+  background:rgba(255,255,255,.985)!important;
+  box-shadow:0 8px 28px rgba(15,42,74,.16)!important;
+}
+.filter-field label,.filters .field label{font-size:14px!important;font-weight:700!important;line-height:1.25!important;}
+.filter-trigger{font-size:15px!important;font-weight:600!important;min-height:44px!important;padding:10px 13px!important;}
+.filter-search{font-size:14px!important;}
+.filter-option{font-size:14px!important;padding:10px 11px!important;}
+.filter-empty{font-size:14px!important;}
+.filter-toolbar-title{font-size:14px!important;}
+
+/* QCR cards: content-fit heights, no artificial empty vertical space. */
+.qcr-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:16px!important;
+  align-items:start!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:max-content!important;
+}
+.qcr-grid>.qcr-card,
+.qcr-grid>.qcr-card:nth-child(n),
+.qcr-grid>.qcr-card.qcr-wide,
+.qcr-grid>.qcr-card.qcr-root-card,
+.qcr-grid>.qcr-card.qcr-intelligence-card{
+  height:auto!important;min-height:0!important;max-height:none!important;
+  align-self:start!important;box-sizing:border-box!important;
+}
+.qcr-grid>.qcr-card .qcr-body,
+.qcr-grid>.qcr-card .qcr-list,
+.qcr-grid>.qcr-card .qcr-kpi-grid,
+.qcr-grid>.qcr-card #qcrComparison,
+.qcr-grid>.qcr-card #qcrTrendPrediction,
+.qcr-grid>.qcr-card #qcrKpiRanking,
+.qcr-grid>.qcr-card #qcrRootCause{
+  height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+}
+/* Let normal grid flow determine the root-cause card; prevents reserved blank cells. */
+@media(min-width:901px){.qcr-grid>.qcr-root-card{grid-column:1 / -1!important;grid-row:auto!important;}}
+
+.qcr-hero{padding:20px 22px!important;margin-bottom:16px!important;}
+.qcr-hero h2{font-size:28px!important;line-height:1.15!important;}
+.qcr-freshness{font-size:14px!important;margin-top:8px!important;}
+.qcr-quality-status{min-width:220px!important;padding:12px 15px!important;}
+.qcr-quality-status b{font-size:11px!important;}
+.qcr-quality-status strong{font-size:16px!important;}
+.qcr-card h3{font-size:18px!important;min-height:54px!important;padding:15px 18px!important;line-height:1.2!important;}
+.qcr-body{padding:17px 18px!important;}
+.qcr-kpi-grid{gap:12px!important;}
+.qcr-kpi{padding:13px 14px!important;}
+.qcr-kpi .qcr-kpi-name{font-size:14px!important;line-height:1.3!important;}
+.qcr-kpi .qcr-kpi-value{font-size:30px!important;line-height:1.05!important;margin-top:7px!important;}
+.qcr-kpi .qcr-status{font-size:11px!important;padding:5px 9px!important;margin-top:7px!important;}
+.qcr-row{grid-template-columns:40px minmax(0,1fr) auto!important;gap:12px!important;padding:10px 0!important;}
+.qcr-rank{font-size:13px!important;}
+.qcr-name{font-size:14px!important;line-height:1.35!important;}
+.qcr-metric{font-size:14px!important;line-height:1.35!important;}
+.qcr-metric .qcr-pct{font-size:12px!important;}
+.qcr-empty{font-size:14px!important;padding:18px!important;line-height:1.5!important;}
+.qcr-breach{padding:12px 13px!important;}
+.qcr-breach-name{font-size:14px!important;}
+.qcr-breach-meta{font-size:12px!important;}
+.qcr-breach-val{font-size:15px!important;}
+.qcr-opportunity{min-height:0!important;padding:11px 13px!important;}
+.qcr-opportunity-text{font-size:13px!important;line-height:1.5!important;}
+.qcr-opportunity-action{font-size:12px!important;}
+.qcr-intel-status{font-size:12px!important;padding:7px 11px!important;}
+.qcr-intel-main{font-size:30px!important;}
+.qcr-intel-main span{font-size:13px!important;}
+.qcr-intel-meta{font-size:12px!important;line-height:1.5!important;}
+.qcr-kpi-rank b{font-size:13px!important;}
+.qcr-kpi-rank span{font-size:11.5px!important;}
+.qcr-kpi-rank em{font-size:11px!important;}
+.qcr-root-title{font-size:18px!important;}
+.qcr-root-path b{font-size:13px!important;}
+.qcr-root-path span{font-size:11px!important;}
+.qcr-grade-item b{font-size:13px!important;}
+.qcr-grade-item span,.qcr-grade-item em{font-size:11.5px!important;}
+.qcr-why-title{font-size:13px!important;}
+.qcr-why-grid b{font-size:13px!important;}
+.qcr-why-grid span{font-size:12px!important;}
+.qcr-alert b{font-size:13px!important;}
+.qcr-alert small,.qcr-alert em{font-size:11.5px!important;}
+.qcr-health-score{font-size:42px!important;}
+.qcr-health-label{font-size:12px!important;}
+.qcr-health-reasons span{font-size:11.5px!important;}
+.qcr-risk-row span{font-size:12px!important;}
+.qcr-risk-row small,.qcr-risk-row em{font-size:10.5px!important;}
+.qcr-repeat b{font-size:12px!important;}
+.qcr-repeat span,.qcr-repeat>em{font-size:11px!important;}
+
+@media(max-width:900px){
+  .qcr-grid{grid-template-columns:1fr!important;}
+  .qcr-card h3{font-size:17px!important;}
+}
+@media(max-width:600px){
+  html,body{font-size:15px!important;}
+  .filters{top:0!important;min-height:0!important;padding:13px!important;}
+  .filter-trigger{font-size:14px!important;}
+  .qcr-hero h2{font-size:24px!important;}
+  .qcr-kpi-grid{grid-template-columns:1fr!important;}
+}
+
+/* QCR-ONLY TYPOGRAPHY FINAL v13 */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap");
+.qcr-hero,.qcr-hero *, .qcr-grid,.qcr-grid *{font-family:'DM Sans','Segoe UI',Arial,sans-serif;}
+.qcr-hero h2,.qcr-card h3,.qcr-root-title,.qcr-why-title,.qcr-subtitle,.qcr-card .qcr-intelligence-title,.qcr-card .qcr-section-title{font-family:'Sora','Segoe UI',Arial,sans-serif!important;}
+.qcr-kpi .qcr-kpi-value,.qcr-metric,.qcr-breach-val,.qcr-intel-main,.qcr-root-title,.qcr-why-grid b,.qcr-grade-item em,.qcr-health-score{font-family:'Outfit','Segoe UI',Arial,sans-serif!important;}
+.qcr-hero p,.qcr-freshness,.qcr-quality-status,.qcr-quality-status *, .qcr-card h3 + *, .qcr-body,.qcr-body *,.qcr-row,.qcr-row *,.qcr-empty,.qcr-breach,.qcr-breach *,.qcr-opportunity,.qcr-opportunity *,.qcr-intel-status,.qcr-intel-meta,.qcr-contributor,.qcr-kpi-rank,.qcr-kpi-rank *,.qcr-root-path,.qcr-root-path *,.qcr-root-meta,.qcr-root-list,.qcr-root-list *,.qcr-alert,.qcr-alert *,.qcr-health-label,.qcr-health-reasons,.qcr-risk-row,.qcr-repeat{font-family:'DM Sans','Segoe UI',Arial,sans-serif!important;}
+.qcr-kpi .qcr-kpi-name,.qcr-kpi .qcr-status,.qcr-kpi .qcr-kpi-value,.qcr-kpi .qcr-kpi-value *{font-family:'DM Sans','Segoe UI',Arial,sans-serif!important;}
+.qcr-kpi .qcr-kpi-value,.qcr-metric,.qcr-breach-val,.qcr-intel-main,.qcr-why-grid b,.qcr-grade-item em,.qcr-health-score{font-family:'Outfit','Segoe UI',Arial,sans-serif!important;}
+.qcr-hero h2,.qcr-card h3,.qcr-root-title,.qcr-why-title,.qcr-subtitle{font-family:'Sora','Segoe UI',Arial,sans-serif!important;}
