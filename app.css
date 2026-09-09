@@ -868,3 +868,113 @@ body.drill-modal-open .filters{
 .qcr-improvements-card{grid-column:1 / -1!important}.qcr-improvements{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.qcr-improvement{padding:11px 12px;border:1px solid #dbe8df;border-radius:9px;background:#f8fcf9}.qcr-improvement b{display:block;font-size:12px;color:#166534}.qcr-improvement span{display:block;margin-top:4px;font-size:10.5px;color:#64748b;line-height:1.4}@media(max-width:700px){.qcr-improvements{grid-template-columns:1fr}}
 
 .qcr-risk-matrix{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:9px}.qcr-risk-col{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px}.qcr-risk-col>strong{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#475569;margin-bottom:6px}.qcr-risk-col>em{font-size:11px;color:#94a3b8}.qcr-risk-item{display:block;width:100%;text-align:left;border:1px solid #e2e8f0;background:#fff;border-radius:7px;padding:7px;margin-top:5px;cursor:pointer}.qcr-risk-item:hover{border-color:#93c5fd;background:#f8fbff}.qcr-risk-item span{display:block;font-size:10.5px;font-weight:800;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qcr-risk-item small{display:block;margin-top:2px;font-size:9.5px;color:#64748b}@media(max-width:700px){.qcr-risk-matrix{grid-template-columns:1fr}}
+
+/* ================================================================
+   QCR CARD SYMMETRY + TAB SCROLL PATCH
+   Keeps the QCR layout aligned while allowing long content to grow.
+   The whole Control Room tab becomes independently scrollable when
+   its content exceeds the available viewport height.
+   ================================================================ */
+#tab-controlroom:not(.hidden){
+  max-height:calc(100vh - 185px)!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain!important;
+  scrollbar-gutter:stable!important;
+  padding-right:6px!important;
+  box-sizing:border-box!important;
+  scroll-behavior:smooth!important;
+}
+#tab-controlroom:not(.hidden)::-webkit-scrollbar{width:9px}
+#tab-controlroom:not(.hidden)::-webkit-scrollbar-track{background:transparent}
+#tab-controlroom:not(.hidden)::-webkit-scrollbar-thumb{background:#cbd7e2;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+#tab-controlroom:not(.hidden){scrollbar-width:thin;scrollbar-color:#cbd7e2 transparent}
+
+/* One predictable grid system: equal-height cards within each row,
+   consistent minimum card size, and no manual row/column placement. */
+#tab-controlroom .qcr-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:minmax(255px,auto)!important;
+  align-items:stretch!important;
+  gap:16px!important;
+  width:100%!important;
+  margin:0 0 20px!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card{
+  grid-column:auto!important;
+  grid-row:auto!important;
+  align-self:stretch!important;
+  height:100%!important;
+  min-height:255px!important;
+  max-height:none!important;
+  min-width:0!important;
+  display:flex!important;
+  flex-direction:column!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+  margin:0!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,
+#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{
+  grid-column:1 / -1!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card>h3{
+  flex:0 0 auto!important;
+  min-height:54px!important;
+  box-sizing:border-box!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card>.qcr-body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  box-sizing:border-box!important;
+}
+
+/* Long lists/tables never push the neighboring card out of alignment.
+   The card row remains symmetric; only exceptionally long inner content
+   gets its own compact scroll area. */
+#tab-controlroom .qcr-grid>.qcr-card .qcr-list,
+#tab-controlroom .qcr-grid>.qcr-card .qcr-kpi-grid{
+  min-height:0!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card.qcr-comparison-card .qcr-body,
+#tab-controlroom .qcr-grid>.qcr-card.qcr-intelligence-card .qcr-body{
+  min-height:0!important;
+}
+
+/* Wide intelligence cards remain full-width and symmetric. */
+#tab-controlroom .qcr-problem-card,
+#tab-controlroom .qcr-story-card,
+#tab-controlroom .qcr-improvements-card{
+  width:100%!important;
+  box-sizing:border-box!important;
+}
+
+@media(max-width:900px){
+  #tab-controlroom:not(.hidden){
+    max-height:calc(100vh - 165px)!important;
+    padding-right:3px!important;
+  }
+  #tab-controlroom .qcr-grid{
+    grid-template-columns:1fr!important;
+    grid-auto-rows:minmax(230px,auto)!important;
+    gap:14px!important;
+  }
+  #tab-controlroom .qcr-grid>.qcr-card,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-wide,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{
+    grid-column:1!important;
+    min-height:230px!important;
+  }
+}
+@media(max-width:600px){
+  #tab-controlroom:not(.hidden){max-height:calc(100vh - 150px)!important}
+  #tab-controlroom .qcr-grid{grid-auto-rows:minmax(210px,auto)!important}
+  #tab-controlroom .qcr-grid>.qcr-card,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-wide,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{min-height:210px!important}
+}
