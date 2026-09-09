@@ -852,3 +852,12 @@ button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
 /* Keep the QCR card packing engine from clipping rendered content. */
 #tab-controlroom .qcr-grid{overflow:visible!important;}
 #tab-controlroom .qcr-card{overflow:hidden!important;}
+
+
+/* QCR V19 — prevent content overlap while preserving compact masonry */
+#tab-controlroom .qcr-grid{position:relative!important;display:block!important;overflow:visible!important;width:100%!important;}
+#tab-controlroom .qcr-card{box-sizing:border-box!important;min-height:0!important;max-height:none!important;overflow:hidden!important;}
+#tab-controlroom .qcr-body{min-height:0!important;max-height:none!important;overflow:visible!important;}
+#tab-controlroom .qcr-card table{width:100%!important;table-layout:auto!important;}
+#tab-controlroom .qcr-card td,#tab-controlroom .qcr-card th{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;}
+@media(max-width:900px){#tab-controlroom .qcr-card{position:relative!important;left:auto!important;top:auto!important;width:100%!important;margin:0 0 16px!important;}}

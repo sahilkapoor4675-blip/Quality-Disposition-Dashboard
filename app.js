@@ -1037,7 +1037,7 @@ async function loadControlRoom(signal){
     // sections never depend on a chain of secondary browser requests.
     qcrRenderComparison((m&&m.rows)||[]);
     qcrRenderTrendPrediction((m&&m.rows)||[],d,w); qcrRenderKpiRanking(critical);
-    fetch('/api/qcr_target_history?'+params,{signal}).then(r=>r.json()).then(th=>{if(!th.error)qcrRenderTargetHistory(th.rows||[],th.target);}).catch(()=>{});
+    fetch('/api/qcr_target_history?'+params,{signal}).then(r=>r.json()).then(th=>{if(!th.error){qcrRenderTargetHistory(th.rows||[],th.target); scheduleQcrLayout();}}).catch(()=>{});
     const intel=data?.intel||{};
     qcrRenderAdvancedIntel(intel);
     const gc=document.getElementById('qcrGradeConcentration');
@@ -1045,7 +1045,7 @@ async function loadControlRoom(signal){
     const why=document.getElementById('qcrWhyChanged');
     if(why){const z=intel.why_changed;if(z&&z.current&&z.previous){const fc=z.defect_contributor,fw=z.wc_contributor;why.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b><span>${fc?.name?`Main contributor: <b>${fc.name}</b> ${Number(fc.change_pp||0)>=0?'+':''}${Number(fc.change_pp||0).toFixed(2)} pp defect share`:'No dominant defect contributor identified.'}</span></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b><span>${fw?.name?`Major contributor: <b>${fw.name}</b> ${Number(fw.change_pp||0)>=0?'+':''}${Number(fw.change_pp||0).toFixed(2)} pp Reject`:'No dominant work-center contributor identified.'}</span></div></div>`;}else{why.innerHTML='<div class="qcr-why-title">Why changed?</div><div class="qcr-empty">Previous month comparison is not available for this selection.</div>';}}
     const loadToken=++window.qcrLoadToken;
-    if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect);
+    if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect).finally(scheduleQcrLayout);
 
     // Improvement Opportunities: ranked, action-oriented and de-duplicated.
     const opp=[];
@@ -1060,39 +1060,38 @@ async function loadControlRoom(signal){
   }catch(e){if(e.name!=='AbortError'){console.error(e);document.getElementById('qcrCriticalKpis').innerHTML='<div class="qcr-empty">Unable to load Control Room data.</div>';}}
 }
 
-// ---------- QCR zero-gap masonry layout ----------
+// ---------- QCR robust two-column masonry layout ----------
 function layoutQcrCards(){
   const grid=document.getElementById('tab-controlroom')?.querySelector('.qcr-grid');
   if(!grid || window.getComputedStyle(grid).display==='none') return;
   const cards=[...grid.querySelectorAll(':scope > .qcr-card')];
   if(!cards.length) return;
   if(window.innerWidth<=900){
-    grid.style.height='auto';
     cards.forEach(c=>{c.style.position='relative';c.style.left='';c.style.top='';c.style.width='100%';});
+    grid.style.height='auto';
     return;
   }
-  const gap=16;
-  const width=grid.clientWidth;
-  const colW=Math.max(0,(width-gap)/2);
-  let y=[0,0];
+  const gap=16, width=grid.clientWidth, colW=Math.max(0,(width-gap)/2);
+  // First pass: give every card its final width but temporarily keep it in normal flow
+  // so offsetHeight always measures the complete rendered content.
   cards.forEach(card=>{
     const wide=card.classList.contains('qcr-wide') || card.classList.contains('qcr-root-card');
-    card.style.position='absolute';
-    card.style.width=wide?'100%':colW+'px';
-    card.style.left='0px';
-    card.style.top='0px';
-    // Force a fresh natural height before positioning.
-    const h=card.offsetHeight;
+    card.style.position='relative'; card.style.left=''; card.style.top='';
+    card.style.width=wide?'100%':colW+'px'; card.style.margin='0 0 '+gap+'px 0';
+  });
+  // Force layout after widths have settled, then place cards absolutely using measured heights.
+  const heights=cards.map(card=>card.offsetHeight);
+  let y=[0,0];
+  cards.forEach((card,i)=>{
+    const wide=card.classList.contains('qcr-wide') || card.classList.contains('qcr-root-card');
+    const h=heights[i];
     if(wide){
       const top=Math.max(y[0],y[1]);
-      card.style.top=top+'px';
-      card.style.left='0px';
+      card.style.position='absolute'; card.style.width='100%'; card.style.left='0px'; card.style.top=top+'px'; card.style.margin='0';
       y=[top+h+gap,top+h+gap];
     }else{
-      const col=y[0]<=y[1]?0:1;
-      const top=y[col];
-      card.style.left=(col?colW+gap:0)+'px';
-      card.style.top=top+'px';
+      const col=y[0]<=y[1]?0:1, top=y[col];
+      card.style.position='absolute'; card.style.width=colW+'px'; card.style.left=(col?colW+gap:0)+'px'; card.style.top=top+'px'; card.style.margin='0';
       y[col]=top+h+gap;
     }
   });
@@ -1101,9 +1100,26 @@ function layoutQcrCards(){
 let qcrLayoutTimer=null;
 function scheduleQcrLayout(){
   clearTimeout(qcrLayoutTimer);
-  qcrLayoutTimer=setTimeout(layoutQcrCards,40);
+  qcrLayoutTimer=setTimeout(()=>requestAnimationFrame(layoutQcrCards),80);
 }
 window.addEventListener('resize',scheduleQcrLayout);
+window.addEventListener('load',scheduleQcrLayout);
+let qcrResizeObserver=null;
+function initQcrLayoutObserver(){
+  const grid=document.getElementById('tab-controlroom')?.querySelector('.qcr-grid');
+  if(!grid || qcrResizeObserver) return;
+  if('ResizeObserver' in window){
+    qcrResizeObserver=new ResizeObserver(()=>scheduleQcrLayout());
+    [...grid.children].forEach(c=>qcrResizeObserver.observe(c));
+    qcrResizeObserver.observe(grid);
+  }
+  if('MutationObserver' in window){
+    const mo=new MutationObserver(()=>scheduleQcrLayout());
+    mo.observe(grid,{subtree:true,childList:true,characterData:true});
+  }
+  scheduleQcrLayout();
+}
+setTimeout(initQcrLayoutObserver,100);
 
 // ---------- Tab switching ----------
 const TAB_LOADERS = {

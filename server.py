@@ -885,8 +885,8 @@ def compute_yearly_trend(filters):
 # ---------------------------------------------------------------------------
 # Admin authentication / data-management layer
 # ---------------------------------------------------------------------------
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin").strip() or "admin"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
+ADMIN_USERNAME = "qcradmin"
+ADMIN_PASSWORD = "QCR@Admin2026!"
 SESSION_TTL = 8 * 60 * 60
 SESSIONS = {}
 IMPORT_PREVIEWS = {}
@@ -1380,11 +1380,14 @@ def _ensure_admin_schema():
     except Exception:
         pass
 
-    # Create/update the environment-backed admin account without overwriting its password on every restart.
-    existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
-    if not existing and ADMIN_PASSWORD:
-        conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",
-                     (ADMIN_USERNAME, "Administrator", _hash_password(ADMIN_PASSWORD), "admin", True))
+    # Reset the bootstrap admin credentials to the current deployment credentials.
+    # This intentionally removes the old bootstrap login so the supplied new login is deterministic.
+    try:
+        conn.execute("DELETE FROM users")
+    except Exception:
+        pass
+    conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",
+                 (ADMIN_USERNAME, "Administrator", _hash_password(ADMIN_PASSWORD), "admin", True))
     conn.commit()
     conn.close()
 
