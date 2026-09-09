@@ -9,12 +9,12 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="V27.2">
+<meta name="app-version" content="V28.0">
 <title>Quality Disposition Control Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=27.3.1">
+<link rel="stylesheet" href="/app.css?v=28.0.0">
 <style id="main-header-font-v18">.quality-intelligence-title{font-family:'Lucida Calligraphy','Lucida Handwriting',cursive!important;}</style>
 </head>
 <body>
@@ -57,6 +57,16 @@
   <!-- TAB 1: QUALITY CONTROL ROOM -->
   <div class="tab-panel hidden" id="tab-controlroom">
     <div class="qcr-hero"><div class="qcr-hero-row"><div><h2>🚨 Quality Control Room</h2><div class="qcr-freshness" id="qcrFreshness">Data Through: — • Filtered Records: —</div></div><div class="qcr-quality-status" id="qcrQualityStatus"><span class="qcr-status-dot">●</span><span><b>QUALITY STATUS</b><strong>—</strong></span></div></div></div>
+    <div class="qcr-problem-card qcr-card qcr-wide">
+      <div class="qcr-problem-head"><div><h3>🔎 Automatic Problem Finder</h3><p>QCR has analysed the current selection for target breaches, deterioration, spikes, recurrence, new issues and high-impact contributors.</p></div><div class="qcr-problem-count" id="qcrProblemCount">0 issues</div></div>
+      <div class="qcr-body"><div id="qcrProblemFinder" class="qcr-problem-list"><div class="qcr-empty">Analysing quality signals…</div></div></div>
+    </div>
+    <div class="qcr-card qcr-wide qcr-story-card">
+      <div class="qcr-body"><div id="qcrQualityStory" class="qcr-quality-story"><div class="qcr-story-label">📋 Quality Story</div><div class="qcr-empty">Building the current quality story…</div></div></div>
+    </div>
+    <div class="qcr-card qcr-wide qcr-improvements-card">
+      <div class="qcr-body"><div class="qcr-story-label">🟢 Quality Improvements</div><div id="qcrQualityImprovements" class="qcr-improvements"><div class="qcr-empty">Checking for positive quality movement…</div></div></div>
+    </div>
     <div class="qcr-grid">
       <div class="qcr-card"><h3>🔴 Critical KPIs</h3><div class="qcr-body"><div class="qcr-kpi-grid" id="qcrCriticalKpis"></div></div></div>
       <div class="qcr-card"><h3>🎯 Target Breaches</h3><div class="qcr-body"><div class="qcr-list" id="qcrBreaches"></div></div></div>
@@ -229,6 +239,6 @@
   <div class="footer-note">Data source: Disposition Data (live database) &nbsp;•&nbsp; Runs locally via Python HTTP server + SQLite</div>
 </div>
 
-<script src="/app.js?v=27.3.1" defer></script>
+<script src="/app.js?v=28.0.0" defer></script>
 </body>
 </html>
