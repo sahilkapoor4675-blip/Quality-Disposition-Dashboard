@@ -978,3 +978,256 @@ body.drill-modal-open .filters{
   #tab-controlroom .qcr-grid>.qcr-card.qcr-wide,
   #tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{min-height:210px!important}
 }
+
+/* ================================================================
+   QCR V28.1 — PRIORITY ORDER + SYMMETRIC CARD GRID
+   Cards are ordered by quality-investigation priority. Rows stretch
+   symmetrically; long content expands the page rather than breaking
+   neighboring card alignment. Mobile collapses to one column.
+   ================================================================ */
+#tab-controlroom{
+  min-width:0!important;
+  overflow:visible!important;
+}
+#tab-controlroom .qcr-grid{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:auto!important;
+  gap:16px!important;
+  align-items:stretch!important;
+  width:100%!important;
+}
+#tab-controlroom .qcr-grid > .qcr-card{
+  width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  min-height:100%!important;
+  max-height:none!important;
+  align-self:stretch!important;
+  display:flex!important;
+  flex-direction:column!important;
+  box-sizing:border-box!important;
+  overflow:visible!important;
+}
+#tab-controlroom .qcr-grid > .qcr-card > .qcr-body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  box-sizing:border-box!important;
+}
+
+/* Priority layout on desktop:
+   1  Critical KPIs       | 2  Target Breaches
+   3  Top Defects         | 5  Worst Work Centers
+   4  Root Cause (full)
+   6  Worst Grades        | 7  Current vs Previous
+   8  Opportunities (full)
+   9  Trend Intelligence  | 10 KPI Target Intelligence
+   11 Target History      | 12 Early Warnings
+   13 Health Score        | 14 Risk Matrix
+   15 Recurring Problems (full)
+*/
+@media(min-width:901px){
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(1){grid-column:1;grid-row:1;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(2){grid-column:2;grid-row:1;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(3){grid-column:1;grid-row:2;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(5){grid-column:2;grid-row:2;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(4){grid-column:1 / -1;grid-row:3;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(6){grid-column:1;grid-row:4;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(7){grid-column:2;grid-row:4;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(8){grid-column:1 / -1;grid-row:5;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(9){grid-column:1;grid-row:6;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(10){grid-column:2;grid-row:6;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(11){grid-column:1;grid-row:7;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(12){grid-column:2;grid-row:7;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(13){grid-column:1;grid-row:8;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(14){grid-column:2;grid-row:8;}
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(15){grid-column:1 / -1;grid-row:9;}
+}
+
+/* Header symmetry: every card gets the same title band. */
+#tab-controlroom .qcr-grid > .qcr-card > h3{
+  flex:0 0 auto!important;
+  min-height:56px!important;
+  height:56px!important;
+  display:flex!important;
+  align-items:center!important;
+  box-sizing:border-box!important;
+  margin:0!important;
+}
+
+/* Long lists stay inside the normal document flow. The QCR tab/page
+   scrolls vertically, so content is never clipped or trapped in a
+   tiny internal viewport. */
+#tab-controlroom .qcr-list,
+#tab-controlroom .qcr-kpi-grid,
+#tab-controlroom .qcr-root-cause,
+#tab-controlroom #qcrComparison,
+#tab-controlroom #qcrTrendPrediction,
+#tab-controlroom #qcrKpiRanking,
+#tab-controlroom #qcrTargetHistory,
+#tab-controlroom #qcrEarlyWarnings,
+#tab-controlroom #qcrHealthScore,
+#tab-controlroom #qcrRiskMatrix,
+#tab-controlroom #qcrRecurring,
+#tab-controlroom #qcrGradeConcentration,
+#tab-controlroom #qcrWhyChanged,
+#tab-controlroom #qcrOpportunities{
+  max-height:none!important;
+  overflow:visible!important;
+  min-height:0!important;
+}
+
+@media(max-width:900px){
+  #tab-controlroom .qcr-grid{
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-auto-rows:auto!important;
+  }
+  #tab-controlroom .qcr-grid > .qcr-card,
+  #tab-controlroom .qcr-grid > .qcr-card:nth-child(n){
+    grid-column:1!important;
+    grid-row:auto!important;
+  }
+  #tab-controlroom .qcr-grid > .qcr-card > h3{
+    height:auto!important;
+    min-height:52px!important;
+  }
+}
+
+/* ================================================================
+   QCR V28.1 — FIXED CARD SYSTEM + PRIORITY ORDER
+   Final override: fixed dimensions, symmetric grid, no auto-growing
+   cards. Long content scrolls inside the card; the QCR tab itself can
+   also scroll vertically through the complete priority-ordered layout.
+   ================================================================ */
+#tab-controlroom:not(.hidden){
+  display:block!important;
+  height:calc(100vh - 185px)!important;
+  max-height:calc(100vh - 185px)!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  box-sizing:border-box!important;
+  padding-right:8px!important;
+  scrollbar-gutter:stable!important;
+  scroll-behavior:auto!important;
+}
+
+/* Every QCR card has one fixed footprint. Content is never allowed to
+   change the card's outer dimensions. */
+#tab-controlroom .qcr-card{
+  box-sizing:border-box!important;
+  width:100%!important;
+  height:320px!important;
+  min-height:320px!important;
+  max-height:320px!important;
+  margin:0!important;
+  padding:0!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-self:stretch!important;
+  overflow:hidden!important;
+  position:relative!important;
+}
+#tab-controlroom .qcr-card>h3{
+  flex:0 0 54px!important;
+  height:54px!important;
+  min-height:54px!important;
+  max-height:54px!important;
+  overflow:hidden!important;
+  display:flex!important;
+  align-items:center!important;
+  box-sizing:border-box!important;
+}
+#tab-controlroom .qcr-card>.qcr-body{
+  flex:1 1 auto!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  box-sizing:border-box!important;
+  scrollbar-gutter:stable!important;
+}
+
+/* Symmetric two-column rows. Every non-wide card occupies exactly one
+   grid cell; wide cards always occupy both cells. */
+#tab-controlroom .qcr-grid{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:320px!important;
+  align-items:stretch!important;
+  gap:16px!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0 0 20px!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card{grid-column:auto!important;grid-row:auto!important;}
+#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,
+#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1 / -1!important;}
+
+/* Problem Finder is also fixed-height. Its list scrolls instead of
+   pushing every card below it. */
+#tab-controlroom>.qcr-problem-card{
+  height:340px!important;
+  min-height:340px!important;
+  max-height:340px!important;
+  margin-bottom:16px!important;
+  overflow:hidden!important;
+}
+#tab-controlroom>.qcr-problem-card .qcr-body{
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  min-height:0!important;
+}
+
+/* Priority is encoded in DOM order as well as these explicit classes;
+   these rules protect the intended order if cards are later edited. */
+#tab-controlroom .qcr-priority-01{order:1}.qcr-priority-02{order:2}.qcr-priority-03{order:3}
+
+#tab-controlroom .qcr-list,
+#tab-controlroom .qcr-kpi-grid,
+#tab-controlroom .qcr-root-cause,
+#tab-controlroom .qcr-risk-matrix,
+#tab-controlroom .qcr-target-table,
+#tab-controlroom .qcr-quality-story,
+#tab-controlroom .qcr-improvements{
+  max-width:100%!important;
+  min-height:0!important;
+}
+
+#tab-controlroom .qcr-card .qcr-body::-webkit-scrollbar,
+#tab-controlroom:not(.hidden)::-webkit-scrollbar{width:8px}
+#tab-controlroom .qcr-card .qcr-body::-webkit-scrollbar-track,
+#tab-controlroom:not(.hidden)::-webkit-scrollbar-track{background:transparent}
+#tab-controlroom .qcr-card .qcr-body::-webkit-scrollbar-thumb,
+#tab-controlroom:not(.hidden)::-webkit-scrollbar-thumb{background:#cbd7e2;border-radius:999px}
+#tab-controlroom .qcr-card .qcr-body,
+#tab-controlroom:not(.hidden){scrollbar-width:thin;scrollbar-color:#cbd7e2 transparent}
+
+@media(max-width:900px){
+  #tab-controlroom:not(.hidden){height:calc(100vh - 165px)!important;max-height:calc(100vh - 165px)!important;padding-right:4px!important}
+  #tab-controlroom .qcr-grid{grid-template-columns:minmax(0,1fr)!important;grid-auto-rows:300px!important;gap:14px!important}
+  #tab-controlroom .qcr-card,
+  #tab-controlroom .qcr-grid>.qcr-card,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-wide,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1!important;height:300px!important;min-height:300px!important;max-height:300px!important}
+}
+@media(max-width:600px){
+  #tab-controlroom:not(.hidden){height:calc(100vh - 150px)!important;max-height:calc(100vh - 150px)!important}
+  #tab-controlroom>.qcr-problem-card{height:320px!important;min-height:320px!important;max-height:320px!important}
+  #tab-controlroom .qcr-grid{grid-auto-rows:280px!important}
+  #tab-controlroom .qcr-card,
+  #tab-controlroom .qcr-grid>.qcr-card,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-wide,
+  #tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{height:280px!important;min-height:280px!important;max-height:280px!important}
+  #tab-controlroom .qcr-card>h3{flex-basis:52px!important;height:52px!important;min-height:52px!important;max-height:52px!important}
+}
