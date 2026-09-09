@@ -2011,6 +2011,7 @@ class Handler(BaseHTTPRequestHandler):
     def _send_json(self, payload, status=200):
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
+        self.send_header("X-Request-ID", secrets.token_hex(8))
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -2022,6 +2023,7 @@ class Handler(BaseHTTPRequestHandler):
     def _send_html(self, html, status=200):
         body = html.encode("utf-8")
         self.send_response(status)
+        self.send_header("X-Request-ID", secrets.token_hex(8))
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")

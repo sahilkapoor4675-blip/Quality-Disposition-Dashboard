@@ -1,0 +1,7 @@
+V27.2 CODE HEALTH
+  server.py: 2812 lines
+  app.js: 1178 lines
+  app.css: 852 lines
+  duplicate CSS selector groups: 159
+  WARN: CSS duplicate selector groups: 159 (report only; cascade preserved)
+  PASS
