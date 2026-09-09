@@ -1652,85 +1652,170 @@ def _pdf_report(payload):
 
 
 
-def compute_qcr_intelligence(filters, monthly, defects, wcg):
-    """Build all secondary QCR intelligence in one server response.
-    Keeps the browser from making a chain of secondary API calls and guarantees
-    the QCR sections have data on first paint."""
+def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
+    """Single-pass-ish QCR intelligence package.
+    Adds statistical trend/forecast, early warnings, health score, risk matrices
+    and recurring Grade+Defect+Work Center patterns. All calculations respect
+    the active non-time filters and use DISTINCT HEAT NO for coil counts.
+    """
     rows = list((monthly or {}).get("rows") or [])
     selected = str(filters.get("month") or "All")
     idx = len(rows) - 1
     if selected and selected != "All":
         for i, r in enumerate(rows):
             if str(r.get("name")) == selected:
-                idx = i
-                break
+                idx = i; break
     cur = rows[idx] if 0 <= idx < len(rows) else None
     prev = rows[idx-1] if cur is not None and idx > 0 else None
 
-    # KPI ranking is deterministic and uses the same configured targets as the dashboard.
-    critical_labels = ["First Pass Yield % (Prime%)", "Defect Rate", "Reject % Qty",
-                       "Hold for Decision % Qty", "Salvage % Qty", "Rework % Qty"]
-    kpis = [x for x in ((monthly or {}).get("_kpis") or []) if x.get("label") in critical_labels]
-    # Caller supplies KPI list separately; leave this field for compatibility.
-    ranking = []
+    # Statistical linear regression over the latest 4 available periods.
+    def slope(vals):
+        n=len(vals)
+        if n<2:return 0.0
+        xm=(n-1)/2; ym=sum(vals)/n; den=sum((i-xm)**2 for i in range(n))
+        return sum((i-xm)*(y-ym) for i,y in enumerate(vals))/den if den else 0.0
+    recent=rows[-4:]
+    fpy_vals=[float(r.get("first_pass_yield_pct") or 0) for r in recent]
+    rej_vals=[float(r.get("reject_pct_qty") or 0) for r in recent]
+    defect_vals=[float(r.get("defect_pct") or 0) for r in recent]
+    sf=slope(fpy_vals); sr=slope(rej_vals); sd=slope(defect_vals)
+    forecast={
+        "period": "Next period",
+        "fpy": max(0.0,min(1.0,(fpy_vals[-1]+sf) if fpy_vals else 0.0)),
+        "reject_pct": max(0.0,min(1.0,(rej_vals[-1]+sr) if rej_vals else 0.0)),
+        "defect_pct": max(0.0,min(1.0,(defect_vals[-1]+sd) if defect_vals else 0.0)),
+        "periods_used": len(recent), "slope_fpy": sf, "slope_reject": sr, "slope_defect": sd
+    }
+    forecast["risk"]={
+        "fpy": "high" if forecast["fpy"]<0.90 else ("medium" if forecast["fpy"]<0.97 else "low"),
+        "reject_pct": "high" if forecast["reject_pct"]>0.05 else ("medium" if forecast["reject_pct"]>0.03 else "low"),
+        "defect_pct": "high" if forecast["defect_pct"]>0.05 else ("medium" if forecast["defect_pct"]>0.03 else "low")
+    }
 
-    # Why changed: compute the two strongest contributors for the selected month.
-    why = None
-    if cur and prev:
-        try:
-            # Compare defect share by month in a single grouped query pair.
-            def month_contributors(month_name):
-                conn = get_conn(); c = conn.cursor()
-                where, params = build_where(filters, exclude={"month"})
-                where = where + (" AND " if where else "WHERE ") + "month = ?"
-                pp = list(params) + [month_name]
-                c.execute(f"SELECT main_defect, COALESCE(SUM(output_weight),0) qty FROM disposition {where} AND main_defect <> '' AND main_defect <> 'NO DEFECT' GROUP BY main_defect ORDER BY qty DESC LIMIT 10", pp)
-                defs = [(r[0] or "—", float(r[1] or 0)) for r in c.fetchall()]
-                c.execute(f"SELECT COALESCE(SUM(output_weight),0) FROM disposition {where}", pp)
-                total = float(c.fetchone()[0] or 0)
-                c.execute(f"SELECT work_center, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {where} GROUP BY work_center ORDER BY reject_qty DESC LIMIT 10", pp)
-                wcs = [(r[0] or "—", int(r[1] or 0), float(r[2] or 0), float(r[3] or 0)) for r in c.fetchall()]
-                c.close(); conn.close()
-                return defs, total, wcs
-            dc, tc, wc = month_contributors(cur["name"])
-            dp, tp, wp = month_contributors(prev["name"])
-            olddef={n:q for n,q in dp}; newdef={n:q for n,q in dc}
-            candidates=[(n, ((newdef.get(n,0)/tc if tc else 0)-(olddef.get(n,0)/tp if tp else 0))*100) for n in set(newdef)|set(olddef)]
-            candidates.sort(key=lambda x:abs(x[1]), reverse=True)
-            oldwc={n:q for n,_,q,_ in wp}; newwc={n:q for n,_,q,_ in wc}
-            oldrej={n:(r/tp if tp else 0) for n,_,_,r in wp}; newrej={n:(r/tc if tc else 0) for n,_,_,r in wc}
-            wcc=[(n,(newrej.get(n,0)-oldrej.get(n,0))*100) for n in set(newrej)|set(oldrej)]
-            wcc.sort(key=lambda x:abs(x[1]), reverse=True)
-            fpyd=(float(cur.get("first_pass_yield_pct") or 0)-float(prev.get("first_pass_yield_pct") or 0))*100
-            rejd=(float(cur.get("reject_pct_qty") or 0)-float(prev.get("reject_pct_qty") or 0))*100
-            why={"current":cur,"previous":prev,"fpy_change_pp":fpyd,"reject_change_pp":rejd,
-                 "defect_contributor":{"name":candidates[0][0],"change_pp":candidates[0][1]} if candidates else None,
-                 "wc_contributor":{"name":wcc[0][0],"change_pp":wcc[0][1]} if wcc else None}
-        except Exception:
-            why={"current":cur,"previous":prev,"fpy_change_pp":(float(cur.get("first_pass_yield_pct") or 0)-float(prev.get("first_pass_yield_pct") or 0))*100,
-                 "reject_change_pp":(float(cur.get("reject_pct_qty") or 0)-float(prev.get("reject_pct_qty") or 0))*100}
+    # Early warning signals.
+    warnings=[]
+    if len(fpy_vals)>=3 and all(fpy_vals[i] < fpy_vals[i-1]-1e-9 for i in range(1,len(fpy_vals))):
+        warnings.append({"severity":"high","title":"FPY declined consecutively","detail":f"FPY fell across the last {len(fpy_vals)} periods.","action":"Immediate investigation"})
+    if len(rej_vals)>=3 and all(rej_vals[i] > rej_vals[i-1]+1e-9 for i in range(1,len(rej_vals))):
+        warnings.append({"severity":"high","title":"Reject % is increasing consecutively","detail":f"Reject % increased across the last {len(rej_vals)} periods.","action":"Immediate investigation"})
+    if len(defect_vals)>=3 and all(defect_vals[i] > defect_vals[i-1]+1e-9 for i in range(1,len(defect_vals))):
+        warnings.append({"severity":"high","title":"Defect Rate is increasing consecutively","detail":f"Defect Rate increased across the last {len(defect_vals)} periods.","action":"Immediate investigation"})
 
-    # Grade concentration: one grouped query instead of N grade API requests.
-    grade_concentration=[]
+    # Current top contributors.
+    def top_name(arr, key, metric):
+        vals=[x for x in (arr or []) if str(x.get(key) or '').strip() and float(x.get(metric) or 0)>0]
+        return max(vals,key=lambda x:float(x.get(metric) or 0)) if vals else None
+    top_def=top_name((defects or {}).get("register"),"defect","qty")
+    top_wc=top_name((wcg or {}).get("by_work_center"),"name","reject_pct_qty")
+    top_gr=top_name((wcg or {}).get("by_grade"),"name","reject_pct_qty")
+    if top_def and float(top_def.get("qty") or 0)>0:
+        warnings.append({"severity":"medium","title":"Major defect concentration","detail":f"{top_def.get('defect')} is the largest defect by quantity.","action":"Review Pareto and root cause"})
+    if top_wc and float(top_wc.get("reject_pct_qty") or 0)>0.03:
+        warnings.append({"severity":"medium","title":"Work center risk","detail":f"{top_wc.get('name')} has {(float(top_wc.get('reject_pct_qty') or 0)*100):.2f}% Reject %.","action":"Review work center"})
+    if top_gr and float(top_gr.get("reject_pct_qty") or 0)>0.03:
+        warnings.append({"severity":"medium","title":"Grade risk","detail":f"{top_gr.get('name')} has {(float(top_gr.get('reject_pct_qty') or 0)*100):.2f}% Reject %.","action":"Review grade"})
+    warnings=sorted(warnings,key=lambda x:0 if x["severity"]=="high" else 1)[:8]
+
+    # KPI target intelligence + dynamic quality health.
+    klist=list(kpis or [])
+    targets=get_kpi_targets()
+    ranking=[]
+    for k in klist:
+        label=k.get("label"); cfg=targets.get(label)
+        if not cfg or cfg.get("target") is None: continue
+        v=float(k.get("value") or 0); t=float(cfg.get("target") or 0); status=_kpi_target_status(label,v)
+        gap=(v-t)*100
+        severity=3 if status=="bad" else 2 if status=="amber" else 1
+        ranking.append({"label":label,"actual":v,"target":t,"gap_pp":gap,"status":status,"severity":severity})
+    ranking.sort(key=lambda x:(-x["severity"], -abs(x["gap_pp"])))
+
+    by={x["label"]:float(x["actual"]) for x in ranking}
+    def quality_component(label, weight, higher_good):
+        if label not in by:return 0.0,weight,0.0
+        v=by[label]; t=float(targets.get(label,{}).get("target") or 0)
+        if higher_good: ratio=(v/t if t else 1.0)
+        else: ratio=(t/v if v>0 else 1.0)
+        return max(0.0,min(1.0,ratio))*weight,weight,v
+    parts=[]
+    for label,w,h in [("First Pass Yield % (Prime%)",30,True),("Defect Rate",20,False),("Reject % Qty",20,False),("Salvage % Qty",10,False)]:
+        sc,wt,v=quality_component(label,w,h); parts.append((label,sc,wt,v))
+    trend_penalty=0
+    if sf<0: trend_penalty=min(10,abs(sf)*1000)
+    if sr>0: trend_penalty=min(10,trend_penalty+sr*1000)
+    trend_score=max(0,10-trend_penalty); parts.append(("Trend",trend_score,10,trend_score/10))
+    compliant=sum(1 for x in ranking if x["status"]=="good"); target_score=(10*compliant/max(1,len(ranking)))
+    parts.append(("Target compliance",target_score,10,target_score/10))
+    health=round(sum(x[1] for x in parts),1)
+    health_status="good" if health>=85 else ("amber" if health>=70 else "bad")
+    reasons=sorted([(label,round(wt-sc,1)) for label,sc,wt,v in parts if wt-sc>0],key=lambda x:x[1],reverse=True)[:3]
+
+    # Risk matrix based on frequency + severity + trend. Dimension trends are
+    # calculated from the same filtered population, excluding the dimension filter.
+    risk={"work_centers":[],"grades":[]}
+    conn=get_conn(); c=conn.cursor()
     try:
-        conn=get_conn(); c=conn.cursor(); where,params=build_where(filters)
-        sql=f"""SELECT grade, main_defect, work_center, COALESCE(SUM(output_weight),0) qty,
-                       COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty
-                FROM disposition {where}
-                GROUP BY grade, main_defect, work_center
-                ORDER BY reject_qty DESC, qty DESC"""
-        c.execute(sql,params); grouped={}
-        for r in c.fetchall():
-            g=r[0] or "—"; q=float(r[3] or 0); rq=float(r[4] or 0)
-            if g not in grouped: grouped[g]={"grade":g,"defect":r[1] or "—","wc":r[2] or "—","qty":0.0,"reject_qty":0.0}
-            grouped[g]["qty"] += q; grouped[g]["reject_qty"] += rq
-            if len(grouped)>=5: pass
-        for x in grouped.values(): x["reject_pct"]=(x["reject_qty"]/x["qty"] if x["qty"] else 0)
-        grade_concentration=sorted(grouped.values(),key=lambda x:x["reject_pct"],reverse=True)[:3]
+        for dim,key,out in [("work_center","work_center","work_centers"),("grade","grade","grades")]:
+            wh,pp=build_where(filters,exclude={dim})
+            c.execute(f"SELECT {key}, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{" AND " if wh else "WHERE "}{key}<>'' GROUP BY {key} ORDER BY reject_qty DESC, qty DESC LIMIT 12",pp)
+            base=c.fetchall(); names=[r[0] for r in base]
+            # trend over month for the same dimension
+            trends={n:[] for n in names}
+            wh2,pp2=build_where(filters,exclude={dim,"month"})
+            c.execute(f"SELECT {key}, month, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh2}{" AND " if wh2 else "WHERE "}{key}<>'' AND month<>'' GROUP BY {key}, month ORDER BY month",pp2)
+            for r in c.fetchall():
+                n=r[0]; qty=float(r[2] or 0); rej=float(r[3] or 0); trends.setdefault(n,[]).append(rej/qty if qty else 0)
+            for r in base[:8]:
+                n=r[0] or '—'; coils=int(r[1] or 0); qty=float(r[2] or 0); rej=float(r[3] or 0); rp=rej/qty if qty else 0
+                tr=slope(trends.get(n,[]) [-4:]) if trends.get(n) else 0
+                freq=min(1.0,coils/max(1,int((wcg or {}).get('total_work_center',{}).get('coils',0) if dim=='work_center' else (wcg or {}).get('total_grade',{}).get('coils',0))*0.25))
+                sev=min(1.0,rp/0.05); ts=min(1.0,max(0,tr)*1000)
+                score=round((freq*0.35+sev*0.45+ts*0.20)*100,1)
+                risk_level='High' if score>=65 else ('Medium' if score>=35 else 'Low')
+                risk[out].append({"name":n,"coils":coils,"reject_pct":rp,"trend":tr,"score":score,"risk":risk_level})
+            risk[out].sort(key=lambda x:x["score"],reverse=True)
+    finally:
         c.close();conn.close()
-    except Exception:
-        grade_concentration=[]
-    return {"comparison":{"current":cur,"previous":prev,"rows":rows},"why_changed":why,"grade_concentration":grade_concentration}
+
+    # Recurring problem: same Grade + Defect + Work Center across >=2 months.
+    recurring=[]
+    conn=get_conn(); c=conn.cursor()
+    try:
+        wh,pp=build_where(filters,exclude={"month"})
+        sql=f"""SELECT grade, main_defect, work_center, month, COUNT(DISTINCT {HEAT_KEY_SQL}) coils,
+                       COALESCE(SUM(output_weight),0) qty
+                FROM disposition {wh}{" AND " if wh else "WHERE "}grade<>'' AND main_defect<>'' AND main_defect<>'NO DEFECT' AND work_center<>'' AND month<>''
+                GROUP BY grade, main_defect, work_center, month ORDER BY grade, main_defect, work_center, month"""
+        c.execute(sql,pp); groups={}
+        for r in c.fetchall():
+            key=(r[0],r[1],r[2]); g=groups.setdefault(key,[]); g.append({"month":r[3],"coils":int(r[4] or 0),"qty":float(r[5] or 0)})
+        for key,months in groups.items():
+            if len(months)>=2:
+                total_coils=sum(x["coils"] for x in months); total_qty=sum(x["qty"] for x in months)
+                recurring.append({"grade":key[0] or '—',"defect":key[1] or '—',"work_center":key[2] or '—',"months":months,"period_count":len(months),"coils":total_coils,"qty":total_qty})
+        recurring.sort(key=lambda x:(x["period_count"],x["qty"]),reverse=True); recurring=recurring[:8]
+    finally:
+        c.close();conn.close()
+    if recurring:
+        warnings.append({"severity":"high","title":"Recurring quality pattern detected","detail":f"{recurring[0]['defect']} + {recurring[0]['grade']} + {recurring[0]['work_center']} repeats across {recurring[0]['period_count']} periods.","action":"Review recurring pattern"})
+        warnings=warnings[:8]
+
+    # Why changed: retained legacy behavior.
+    why=None
+    if cur and prev:
+        fpyd=(float(cur.get("first_pass_yield_pct") or 0)-float(prev.get("first_pass_yield_pct") or 0))*100
+        rejd=(float(cur.get("reject_pct_qty") or 0)-float(prev.get("reject_pct_qty") or 0))*100
+        why={"current":cur,"previous":prev,"fpy_change_pp":fpyd,"reject_change_pp":rejd}
+
+    return {
+        "comparison":{"current":cur,"previous":prev,"rows":rows},
+        "why_changed":why,
+        "forecast":forecast,
+        "early_warnings":warnings,
+        "kpi_ranking":ranking,
+        "health_score":{"score":health,"status":health_status,"reasons":reasons,"components":parts},
+        "risk_matrix":risk,
+        "recurring_patterns":recurring,
+    }
 
 HTML_PAGE = None  # loaded lazily from index_template
 
@@ -1970,7 +2055,7 @@ class Handler(BaseHTTPRequestHandler):
                     fm=ex.submit(compute_monthly_trend, filters)
                     ff=ex.submit(compute_data_freshness, filters)
                     k,d,w,m,fr=fk.result(),fd.result(),fw.result(),fm.result(),ff.result()
-                intel=compute_qcr_intelligence(filters, m, d, w)
+                intel=compute_qcr_intelligence(filters, m, d, w, k.get("kpis", []))
                 payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel}
                 RESPONSE_CACHE[cache_key] = (now, payload)
                 if len(RESPONSE_CACHE) > 100:
