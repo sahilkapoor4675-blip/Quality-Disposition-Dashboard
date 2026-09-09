@@ -985,6 +985,15 @@ function qcrRenderAdvancedIntel(intel){
   const rp=document.getElementById('qcrRecurring');
   if(rp){const rows=intel?.recurring_patterns||[]; rp.innerHTML=rows.length?rows.slice(0,6).map((x,i)=>`<div class="qcr-repeat"><div><b>🔴 #${i+1} ${escQcr(x.defect)}</b><span>${escQcr(x.grade)} • ${escQcr(x.work_center)}</span></div><div class="qcr-repeat-months">${(x.months||[]).map(m=>`<span>${escQcr(m.month)}: <b>${Number(m.coils||0).toLocaleString()}</b> coils</span>`).join('')}</div><em>Recurring • ${x.period_count} periods • ${Number(x.qty||0).toFixed(2)} MT</em></div>`).join(''):'<div class="qcr-empty">✓ No recurring Grade + Defect + Work Center pattern found across multiple periods.</div>';}
 }
+function qcrRenderTargetHistory(rows,target){
+  const el=document.getElementById('qcrTargetHistory'); if(!el)return;
+  if(!rows.length){el.innerHTML='<div class="qcr-empty">No historical monthly data available.</div>';return;}
+  el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • Attainment = Actual ÷ Target</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>Attainment</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
+}
+function qcrReportUrl(ext){const p=new URLSearchParams(currentFilters); return '/api/export/'+ext+'?'+p.toString();}
+document.getElementById('qcrPdfReport')?.addEventListener('click',()=>{window.open(qcrReportUrl('pdf'),'_blank');});
+document.getElementById('qcrExcelReport')?.addEventListener('click',()=>{window.open(qcrReportUrl('excel'),'_blank');});
+
 async function loadControlRoom(signal){
   const filterSnapshot={...currentFilters};
   const params=new URLSearchParams(filterSnapshot).toString();
@@ -1031,6 +1040,7 @@ async function loadControlRoom(signal){
     // sections never depend on a chain of secondary browser requests.
     qcrRenderComparison((m&&m.rows)||[]);
     qcrRenderTrendPrediction((m&&m.rows)||[],d,w); qcrRenderKpiRanking(critical);
+    fetch('/api/qcr_target_history?'+params,{signal}).then(r=>r.json()).then(th=>{if(!th.error)qcrRenderTargetHistory(th.rows||[],th.target);}).catch(()=>{});
     const intel=data?.intel||{};
     qcrRenderAdvancedIntel(intel);
     const gc=document.getElementById('qcrGradeConcentration');

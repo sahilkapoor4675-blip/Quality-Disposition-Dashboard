@@ -987,12 +987,23 @@ def _admin_meta(handler):
         SESSIONS.pop(token, None)
         return None
     meta["expires"] = now + SESSION_TTL
-    if meta.get("role") not in ("admin", "data_admin", "quality_manager") or not bool(meta.get("active", True)):
+    if meta.get("role") not in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") or not bool(meta.get("active", True)):
         return None
     return meta
 
 def _is_admin(handler):
     return _admin_meta(handler) is not None
+
+def _audit(handler, action, record_id=None, details=None):
+    """Immutable-style sensitive-action audit record with user, time, IP and optional record."""
+    try:
+        meta=_admin_meta(handler) or {}
+        conn=get_conn()
+        conn.execute("INSERT INTO audit_trail (user_id,username,role,action,record_id,details,ip_address,user_agent) VALUES (?,?,?,?,?,?,?,?)",
+                     (meta.get("user_id"),meta.get("username","Anonymous"),meta.get("role",""),str(action),record_id,json.dumps(details or {},ensure_ascii=False),_client_ip(handler),handler.headers.get("User-Agent","")[:500]))
+        conn.commit(); conn.close()
+    except Exception:
+        pass
 
 def _role(handler):
     meta = _admin_meta(handler)
@@ -1013,7 +1024,7 @@ def _viewer_meta(handler):
     _cleanup_sessions()
     token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_user")
     meta = SESSIONS.get(token)
-    if not meta or meta.get("role") not in ("viewer", "admin"):
+    if not meta or meta.get("role") not in ("viewer", "admin", "qa_manager", "qa_engineer", "importer", "auditor"):
         return None
     if meta.get("expires", 0) < _dt.datetime.now().timestamp():
         SESSIONS.pop(token, None)
@@ -1296,6 +1307,18 @@ def _ensure_admin_schema():
             filters_json TEXT DEFAULT '{}', user_agent TEXT DEFAULT '', ip_address TEXT DEFAULT '', visitor_id TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     if USE_POSTGRES:
+        conn.execute("""CREATE TABLE IF NOT EXISTS audit_trail (
+            id BIGSERIAL PRIMARY KEY, user_id BIGINT, username TEXT, role TEXT, action TEXT NOT NULL,
+            record_id BIGINT, details TEXT DEFAULT '{}', ip_address TEXT DEFAULT '', user_agent TEXT DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    else:
+        conn.execute("""CREATE TABLE IF NOT EXISTS audit_trail (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, role TEXT, action TEXT NOT NULL,
+            record_id INTEGER, details TEXT DEFAULT '{}', ip_address TEXT DEFAULT '', user_agent TEXT DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    if USE_POSTGRES:
         conn.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS visitor_id TEXT DEFAULT ''")
     else:
         cols_al={r[1] for r in conn.execute("PRAGMA table_info(activity_log)").fetchall()}
@@ -1426,6 +1449,13 @@ def _export_filters(qs):
 def _filter_summary(filters):
     return [(k.replace("_", " ").title(), v) for k, v in filters.items() if v and v != "All"]
 
+def _report_root_cause(filters, defect):
+    if not defect: return []
+    where_sql,params=build_where(filters); params=list(params)+[defect]
+    conn=get_conn();
+    rows=conn.execute(f"SELECT grade,work_center,heat_no,batch_no,output_weight FROM disposition {where_sql + (' AND ' if where_sql else 'WHERE ')}main_defect = ? ORDER BY output_weight DESC LIMIT 30",params).fetchall(); conn.close()
+    return [dict(r) for r in rows]
+
 def _export_data(filters):
     """Build a viewer-safe report payload from the same live filtered database used by the dashboard."""
     kpis = compute_kpis(filters)
@@ -1435,7 +1465,12 @@ def _export_data(filters):
     period = compute_period_trend(filters)
     quarterly = compute_quarterly_trend(filters)
     yearly = compute_yearly_trend(filters)
-    return {"filters": filters, "kpis": kpis, "defects": defects, "wcg": wcg, "monthly": monthly, "period": period, "quarterly": quarterly, "yearly": yearly}
+    intel = compute_qcr_intelligence(filters, monthly, defects, wcg, kpis)
+    top_defect=(defects.get("register") or [{}])[0].get("defect","") if defects.get("register") else ""
+    root_cause=_report_root_cause(filters,top_defect)
+    target=float(get_kpi_targets().get("First Pass Yield % (Prime%)",{}).get("target") or 0.97)
+    target_history=[{"period":r.get("name"),"target":target,"actual":float(r.get("first_pass_yield_pct") or 0),"attainment":(float(r.get("first_pass_yield_pct") or 0)/target if target else 0),"gap_pp":(float(r.get("first_pass_yield_pct") or 0)-target)*100} for r in monthly.get("rows",[])]
+    return {"filters": filters, "kpis": kpis, "defects": defects, "wcg": wcg, "monthly": monthly, "period": period, "quarterly": quarterly, "yearly": yearly, "intel": intel, "root_cause": {"defect":top_defect,"rows":root_cause}, "target_history": {"target":target,"rows":target_history}}
 
 def _safe_filename(filters, ext):
     active = [str(v).replace("/", "-").replace(" ", "_") for v in filters.values() if v and v != "All"]
@@ -1618,6 +1653,20 @@ def _excel_report(payload):
             w.cell(rr,7).number_format="0.000%"
             w.cell(rr,8).number_format="0.000%"
         autofit(w)
+    th=payload.get("target_history",{}); w=wb.create_sheet("Target vs Actual History"); title(w,"Target vs Actual History",1,5); header(w,3,["Period","Target","Actual","Attainment","Gap (pp)"])
+    for r in th.get("rows",[]): w.append([r.get("period"),r.get("target"),r.get("actual"),r.get("attainment"),r.get("gap_pp")])
+    for rr in range(4,w.max_row+1):
+        for cc in (2,3,4): w.cell(rr,cc).number_format="0.00%"
+        w.cell(rr,5).number_format="0.00"
+    autofit(w)
+    intel=payload.get("intel",{}); w=wb.create_sheet("Management Intelligence"); title(w,"Management Meeting Intelligence",1,6); header(w,3,["Section","Item","Detail","Action","Severity","Value"])
+    for x in intel.get("early_warnings",[]): w.append(["Early Warning",x.get("title"),x.get("detail"),x.get("action"),x.get("severity"),""])
+    for x in intel.get("recurring_patterns",[])[:20]: w.append(["Recurring Problem",f'{x.get("defect")} / {x.get("grade")} / {x.get("work_center")}',f'{x.get("period_count")} periods • {x.get("qty",0):.2f} MT',"Investigate","high",x.get("qty",0)])
+    for x in intel.get("health_score",{}).get("reasons",[]): w.append(["Health Score",x[0],"Score deduction","Review","info",x[1]])
+    for x in intel.get("why_changed",{}).get("defect_contributor",{}),:
+        pass
+    autofit(w)
+
     for w in wb.worksheets:
         for row in w.iter_rows():
             for c in row:
@@ -1645,6 +1694,18 @@ def _pdf_report(payload):
         story.append(RLImage(io.BytesIO(img),width=350,height=155))
         if idx%2==1 and idx != len(charts)-1: story.append(PageBreak())
         else: story.append(Spacer(1,8))
+    story.append(PageBreak())
+    th=payload.get("target_history",{}); tr=[['Period','Target','Actual','Attainment','Gap pp']]+[[r.get('period'),f"{r.get('target',0)*100:.2f}%",f"{r.get('actual',0)*100:.2f}%",f"{r.get('attainment',0)*100:.1f}%",f"{r.get('gap_pp',0):+.2f}"] for r in th.get('rows',[])]
+    story += [Paragraph("Target vs Actual History",styles["Heading2"]),Table(tr,repeatRows=1,colWidths=[100,90,90,100,80],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),8)])),Spacer(1,10)]
+    rc=payload.get("root_cause",{}); rcrows=rc.get("rows",[])
+    if rcrows:
+        rr=[["Defect","Grade","Work Center","Heat No","Batch No","Qty MT"]]+[[rc.get("defect",""),x.get("grade",""),x.get("work_center",""),x.get("heat_no",""),x.get("batch_no",""),f'{float(x.get("output_weight") or 0):.3f}'] for x in rcrows]
+        story += [Paragraph("Root Cause Investigation — Top Defect",styles["Heading2"]),Table(rr,repeatRows=1,colWidths=[130,110,120,110,110,70],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)])),Spacer(1,10)]
+    intel=payload.get("intel",{}); opp=[]
+    for x in intel.get("early_warnings",[]): opp.append([x.get("title",""),x.get("detail",""),x.get("action","")])
+    for x in intel.get("recurring_patterns",[])[:8]: opp.append([f'Recurring: {x.get("defect")}',f'{x.get("grade")} • {x.get("work_center")} • {x.get("period_count")} periods',"Investigate"])
+    if opp:
+        story += [Paragraph("Root Cause / Improvement Opportunities",styles["Heading2"]),Table([["Issue","Evidence","Recommended Action"]]+opp,repeatRows=1,colWidths=[180,380,150],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)]))]
     story.append(PageBreak())
     d=payload["defects"]; rows=[["Rank","Defect","Records","Qty MT","% Records"]]+[[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in d["register"]]+[["","Total",d["register_total"]["records"],f'{d["register_total"]["qty"]:.3f}',f'{d["register_total"]["pct_records"]*100:.2f}%']]
     story += [Paragraph("Defect Analysis Detail",styles["Heading2"]),Table(rows,repeatRows=1,colWidths=[45,300,70,80,80],style=TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#118DFF")),("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("GRID",(0,0),(-1,-1),.3,colors.HexColor("#DCE6EF")),("FONTSIZE",(0,0),(-1,-1),7)]))]
@@ -1717,7 +1778,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     warnings=sorted(warnings,key=lambda x:0 if x["severity"]=="high" else 1)[:8]
 
     # KPI target intelligence + dynamic quality health.
-    klist=list(kpis or [])
+    klist=(kpis.get("kpis",[]) if isinstance(kpis,dict) else list(kpis or []))
     targets=get_kpi_targets()
     ranking=[]
     for k in klist:
@@ -2192,6 +2253,17 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close(); self._send_json({"summary":{"total_users":total_users,"unique_ips":unique_ips,"active_today":active_today,"opens_today":opens_today,"opens_7d":opens_7,"exports_30d":exports_30},"users":[dict(r) for r in users],"recent":[dict(r) for r in recent],"trend":[dict(r) for r in trend]})
             except Exception as e:
                 self._send_json({"error":str(e)},status=500)
+        elif path == "/api/qcr_target_history":
+            try:
+                filters={k: qs.get(k,"All") for k in FILTER_KEYS}
+                monthly=compute_monthly_trend(filters)
+                target=float(get_kpi_targets().get("First Pass Yield % (Prime%)",{}).get("target") or 0.97)
+                history=[]
+                for r in monthly.get("rows",[]):
+                    actual=float(r.get("first_pass_yield_pct") or 0)
+                    history.append({"period":r.get("name"),"target":target,"actual":actual,"attainment":(actual/target if target else 0),"gap_pp":(actual-target)*100})
+                self._send_json({"target":target,"rows":history})
+            except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/kpi_targets":
             try:
                 self._send_json({"targets": get_kpi_targets()})
@@ -2217,20 +2289,41 @@ class Handler(BaseHTTPRequestHandler):
             if not _is_admin(self): _auth_error(self)
             else:
                 try:
-                    conn=get_conn(); total=conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
-                    missing_grade=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(grade,''))='' ").fetchone()[0]
-                    missing_wc=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(work_center,''))='' ").fetchone()[0]
-                    missing_intensity=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(defect_intensity,''))='' ").fetchone()[0]
-                    invalid_weight=conn.execute("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight<0").fetchone()[0]
-                    invalid_decision=conn.execute("SELECT COUNT(*) FROM disposition WHERE quality_decision NOT IN ('PRIME','FOR NEXT PROCESS','SALVAGE','HOLD FOR DECISION','REJECT','RE-WORK','DIVERT') OR TRIM(COALESCE(quality_decision,''))='' ").fetchone()[0]
-                    rows=conn.execute("SELECT heat_no,batch_no, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(heat_no,''))<>'' AND TRIM(COALESCE(batch_no,''))<>'' GROUP BY heat_no,batch_no HAVING COUNT(*)>1 ORDER BY c DESC LIMIT 20").fetchall()
-                    duplicate_records=sum(max(0,int(r[2])-1) for r in rows)
-                    import_errors=conn.execute("SELECT COALESCE(SUM(errors),0) FROM import_history").fetchone()[0]
-                    invalid_dates=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))<>'' AND (length(insp_lot_date)<8 OR date(substr(insp_lot_date,1,10)) IS NULL)").fetchone()[0] if not USE_POSTGRES else conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))<>'' AND to_date(substr(insp_lot_date,1,10),'YYYY-MM-DD') IS NULL").fetchone()[0]
+                    conn=get_conn()
+                    rows=conn.execute("SELECT id,heat_no,batch_no,grade,quality_decision,output_weight,insp_lot_date,defect_intensity,work_center,main_defect FROM disposition").fetchall()
                     conn.close()
-                    issues=missing_grade+missing_wc+invalid_weight+invalid_decision+duplicate_records+invalid_dates
-                    score=round(max(0,100*(1-(issues/max(total,1)))),1)
-                    self._send_json({"total":total,"score":score,"issues":{"missing_grade":missing_grade,"invalid_dates":int(invalid_dates),"duplicates":duplicate_records,"invalid_weights":invalid_weight,"invalid_decisions":invalid_decision,"unknown_work_centers":0,"unknown_grades":0,"missing_intensity":missing_intensity,"import_errors":int(import_errors)},"duplicate_heat": [dict(r) for r in rows]})
+                    valid_decisions={"PRIME","FOR NEXT PROCESS","SALVAGE","HOLD FOR DECISION","REJECT","RE-WORK","DIVERT"}
+                    counts={k:0 for k in ["missing_heat_no","duplicate_heat_batch","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values"]}
+                    bad_ids=set(); pairs={}
+                    for r in rows:
+                        d=dict(r); rid=d.get("id")
+                        heat=str(d.get("heat_no") or "").strip(); batch=str(d.get("batch_no") or "").strip()
+                        if not heat: counts["missing_heat_no"]+=1; bad_ids.add(rid)
+                        if not str(d.get("grade") or "").strip(): counts["missing_grade"]+=1; bad_ids.add(rid)
+                        dec=str(d.get("quality_decision") or "").strip().upper()
+                        if not dec: counts["missing_decision"]+=1; bad_ids.add(rid)
+                        elif dec not in valid_decisions: counts["invalid_values"]+=1; bad_ids.add(rid)
+                        wt=d.get("output_weight")
+                        if wt is None or (isinstance(wt,(int,float)) and (not math.isfinite(float(wt)) or float(wt)<0)): counts["missing_weight"]+=1; bad_ids.add(rid)
+                        datev=str(d.get("insp_lot_date") or "").strip()
+                        invalid_date=False
+                        if not datev: invalid_date=True
+                        else:
+                            try: datetime.strptime(datev[:10], "%Y-%m-%d")
+                            except Exception: invalid_date=True
+                        if invalid_date: counts["invalid_dates"]+=1; bad_ids.add(rid)
+                        if not str(d.get("defect_intensity") or "").strip(): counts["missing_intensity"]+=1; bad_ids.add(rid)
+                        if not str(d.get("work_center") or "").strip() or (not str(d.get("main_defect") or "").strip()): counts["invalid_values"]+=1; bad_ids.add(rid)
+                        if heat and batch: pairs.setdefault((heat.upper(),batch.upper()),[]).append(rid)
+                    dup_groups=[]
+                    for key,ids in pairs.items():
+                        if len(ids)>1:
+                            counts["duplicate_heat_batch"] += len(ids)-1
+                            bad_ids.update(ids[1:]); dup_groups.append({"heat_no":key[0],"batch_no":key[1],"count":len(ids)})
+                    total=len(rows); corrections=len(bad_ids)
+                    issue_total=sum(counts.values())
+                    score=round(max(0,100*(1-(corrections/max(total,1)))),1)
+                    self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_heat":[*sorted(dup_groups,key=lambda x:x["count"],reverse=True)[:20]]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/import_history":
             if not _is_admin(self): _auth_error(self)
@@ -2257,6 +2350,11 @@ class Handler(BaseHTTPRequestHandler):
                     out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Time","User","IP Address","Action","Tab","User Agent"]); [w.writerow([r[4],r[1],r[0],r[2],r[3],r[5]]) for r in rows]
                     data=out.getvalue().encode('utf-8-sig'); self.send_response(200); self.send_header('Content-Type','text/csv; charset=utf-8'); self.send_header('Content-Disposition','attachment; filename="admin_audit_log.csv"'); self.send_header('Content-Length',str(len(data))); self.send_header('Cache-Control','no-store'); self.end_headers(); self.wfile.write(data)
                 except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/audit_trail":
+            if not _require_role(self,"admin","auditor"): return
+            try:
+                conn=get_conn(); rows=conn.execute("SELECT username,role,action,record_id,details,ip_address,user_agent,created_at FROM audit_trail ORDER BY id DESC LIMIT 5000").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
+            except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/database_status":
             if not _is_admin(self):
                 _auth_error(self)
@@ -2364,9 +2462,9 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body=_json_body(self); username=str(body.get("username","")).strip(); display_name=str(body.get("display_name","")).strip() or username; password=str(body.get("password","")); role=str(body.get("role","viewer"))
                 if not username or not password: raise ValueError("Username and password are required")
-                if role not in ("viewer","admin"): raise ValueError("Invalid role")
+                if role not in ("viewer","admin","qa_manager","qa_engineer","importer","auditor"): raise ValueError("Invalid role")
                 if not _strong_password(password): raise ValueError("Password must be at least 12 characters and include uppercase, lowercase, number and special character")
-                conn=get_conn(); conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",(username,display_name,_hash_password(password),role,True)); conn.commit(); conn.close(); self._send_json({"ok":True})
+                conn=get_conn(); conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",(username,display_name,_hash_password(password),role,True)); conn.commit(); conn.close(); _audit(self,"user_create",details={"username":username,"role":role}); self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -2382,7 +2480,7 @@ class Handler(BaseHTTPRequestHandler):
                 current_token=_cookie_value(self.headers.get("Cookie",""),"qdash_admin"); current_meta=SESSIONS.get(current_token,{})
                 if not active and row[1] == current_meta.get("username"):
                     conn.close(); self._send_json({"error":"You cannot disable your own active administrator account."},status=400); return
-                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); self._send_json({"ok":True})
+                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); _audit(self,"user_toggle",record_id=uid,details={"active":active}); self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -2399,7 +2497,7 @@ class Handler(BaseHTTPRequestHandler):
                 conn = get_conn()
                 row = conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?", (username,)).fetchone()
                 conn.close()
-                valid = bool(row and bool(row[5]) and row[4] in ("admin", "data_admin", "quality_manager") and _verify_password(password, row[3]))
+                valid = bool(row and bool(row[5]) and row[4] in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") and _verify_password(password, row[3]))
                 if not valid and ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and (not row or bool(row[5])):
                     valid = True
                 if valid:
@@ -2408,7 +2506,7 @@ class Handler(BaseHTTPRequestHandler):
                     csrf = secrets.token_urlsafe(32)
                     now = _dt.datetime.now().timestamp()
                     display = row[2] if row else "Administrator"
-                    SESSIONS[token] = {"username": username or ADMIN_USERNAME, "display_name": display, "role": "admin", "active": True, "expires": now + SESSION_TTL, "csrf": csrf}
+                    SESSIONS[token] = {"username": username or ADMIN_USERNAME, "display_name": display, "role": (row[4] if row else "admin"), "user_id": (row[0] if row else None), "active": True, "expires": now + SESSION_TTL, "csrf": csrf}
                     secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -2416,7 +2514,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_header("X-Content-Type-Options", "nosniff")
                     self.send_header("Set-Cookie", f"qdash_admin={token}; Path=/; HttpOnly; SameSite=Strict" + ("; Secure" if secure else ""))
                     self.send_header("Set-Cookie", f"{CSRF_COOKIE}={csrf}; Path=/; SameSite=Strict" + ("; Secure" if secure else ""))
-                    data = json.dumps({"authenticated": True, "username": username or ADMIN_USERNAME, "display_name": display, "role": "admin"}).encode("utf-8")
+                    data = json.dumps({"authenticated": True, "username": username or ADMIN_USERNAME, "display_name": display, "role": (row[4] if row else "admin")}).encode("utf-8")
                     self.send_header("Content-Length", str(len(data)))
                     self.end_headers(); self.wfile.write(data)
                     _activity_event(self, "admin_login")
@@ -2464,7 +2562,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/kpi_target":
-            if not _require_role(self, "admin", "quality_manager"): return
+            if not _require_role(self, "admin", "qa_manager"): return
             try:
                 body=_json_body(self); label=str(body.get("label","")).strip(); direction=str(body.get("direction","higher")).strip().lower()
                 if not label: raise ValueError("KPI label is required")
@@ -2479,13 +2577,13 @@ class Handler(BaseHTTPRequestHandler):
                 meta=_admin_meta(self) or {}; changed_by=meta.get("username", "Admin")
                 if oldrow:
                     conn.execute("""INSERT INTO kpi_target_history(label,old_target,new_target,old_warning,new_warning,old_critical,new_critical,old_direction,new_direction,effective_date,changed_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(label,oldrow[0],target,oldrow[1],warning,oldrow[2],critical,oldrow[3],direction,str(body.get("effective_date", "")).strip(),changed_by))
-                conn.commit(); conn.close(); _activity_event(self,"kpi_target_update",tab="Admin")
+                conn.commit(); conn.close(); _activity_event(self,"kpi_target_update",tab="Admin"); _audit(self,"kpi_target_update",details={"label":label,"target":target,"effective_date":str(body.get("effective_date",""))})
                 self._send_json({"ok":True,"targets":get_kpi_targets()})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/admin/record":
-            if not _require_role(self, "admin", "data_admin"): return
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
                 body = _json_body(self)
                 r = _record_from_values([body.get(k, "") for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]], {k:i for i,k in enumerate(["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"])})
@@ -2501,7 +2599,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/import_preview":
-            if not _require_role(self, "admin", "data_admin"): return
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
                 ctype=self.headers.get("Content-Type",""); length=int(self.headers.get("Content-Length","0") or 0); raw=self.rfile.read(length)
                 msg=BytesParser(policy=default).parsebytes((f"Content-Type: {ctype}\r\nMIME-Version: 1.0\r\n\r\n").encode()+raw); uploaded=None
@@ -2541,18 +2639,18 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/import_confirm":
-            if not _require_role(self, "admin", "data_admin"): return
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
                 body=_json_body(self); pid=str(body.get("preview_id","")); item=IMPORT_PREVIEWS.get(pid)
                 if not item or time.time()-item.get("created",0)>IMPORT_PREVIEW_TTL: IMPORT_PREVIEWS.pop(pid,None); raise ValueError("Import preview expired. Please upload the file again.")
                 result=_insert_records(item["records"]); meta=_admin_meta(self) or {};
-                conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]})
+                conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]}); _audit(self,"data_import_confirm",details={"filename":item["filename"],"inserted":result["inserted"],"updated":result.get("updated",0)})
                 self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"updated":result.get("updated",item["summary"].get("updated",0)),"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/admin/import":
-            if not _require_role(self, "admin", "data_admin"): return
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
                 ctype = self.headers.get("Content-Type", "")
                 length = int(self.headers.get("Content-Length", "0") or 0)
@@ -2571,6 +2669,7 @@ class Handler(BaseHTTPRequestHandler):
                 if len(records) > 10000:
                     raise ValueError("Import limited to 10,000 records per upload")
                 result = _insert_records(records)
+                _audit(self,"direct_import",details={"filename":uploaded[0],"detected":len(records),"inserted":result.get("inserted",0),"updated":result.get("updated",0)})
                 self._send_json({"ok": True, "detected": len(records), **result})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -2590,7 +2689,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/admin/delete":
-            if not _require_role(self, "admin", "data_admin"): return
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
                 body = _json_body(self)
                 record_id = int(body.get("id"))
@@ -2598,6 +2697,7 @@ class Handler(BaseHTTPRequestHandler):
                 cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
                 conn.commit()
                 conn.close()
+                _audit(self,"record_delete",record_id=record_id)
                 self._send_json({"ok": True, "deleted": cur.rowcount})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
