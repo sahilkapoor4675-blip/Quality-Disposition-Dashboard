@@ -48,7 +48,7 @@ def main():
             raise AssertionError("server did not start: " + out)
 
         status, ct, html = get("/")
-        assert status == 200 and b"V27.3" in html, "index/version marker missing"
+        assert status == 200 and b"V27.2" in html, "index/version marker missing"
         get("/app.css?v=27.1")
         get("/app.js?v=27.1")
         assert_json("/api/filters", "month")
@@ -68,7 +68,7 @@ def main():
         db.close()
         assert after == before, f"data changed during smoke test: {before} -> {after}"
         assert after_users == before_users and after_usernames == before_usernames, "users table changed during smoke test"
-        print(f"V27.3 SMOKE TEST PASS — {after} disposition records unchanged; KPI payload={len(kpis['kpis'])}; core tabs/API endpoints OK.")
+        print(f"V27.2 SMOKE TEST PASS — {after} disposition records unchanged; KPI payload={len(kpis['kpis'])}; core tabs/API endpoints OK.")
     finally:
         proc.terminate()
         try: proc.wait(timeout=3)
