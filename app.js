@@ -308,9 +308,9 @@ function renderDrillPage(page=1){
     content.innerHTML=html;
   }).catch(e=>{content.innerHTML='<div class="drill-empty">Unable to load records. '+String(e.message||e)+'</div>';document.getElementById('drillCount').textContent='Error';});
 }
-function openDrilldown(metric,title,extra={}){ drillState={metric,title,extra,page:1}; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); renderDrillPage(1); }
+function openDrilldown(metric,title,extra={}){ drillState={metric,title,extra,page:1}; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('drill-modal-open'); renderDrillPage(1); }
 
-function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');}}
+function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open');}
 document.getElementById('qcrDefects')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-defect-btn');if(b)loadRootCause(b.dataset.defect||'');});
 function wireDrilldown(){
   document.getElementById('drillCloseBtn')?.addEventListener('click',closeDrilldown);

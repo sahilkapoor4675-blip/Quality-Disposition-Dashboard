@@ -767,4 +767,88 @@ button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
   .qcr-kpi-grid{grid-template-columns:1fr!important;}
 }
 
-\n/* QCR FINAL CLEAN REBUILD v22 — one layout system only */\n#tab-controlroom{\n  display:block!important;\n  width:100%!important;\n  height:auto!important;\n  min-height:0!important;\n  max-height:none!important;\n  overflow:visible!important;\n  contain:none!important;\n}\n#tab-controlroom .qcr-hero{position:relative!important;}\n#tab-controlroom .qcr-grid{\n  display:grid!important;\n  grid-template-columns:repeat(2,minmax(0,1fr))!important;\n  grid-auto-flow:row!important;\n  grid-auto-rows:auto!important;\n  align-items:start!important;\n  gap:16px!important;\n  width:100%!important;\n  height:auto!important;\n  min-height:0!important;\n  max-height:none!important;\n  margin:0 0 20px!important;\n  padding:0!important;\n  position:static!important;\n  overflow:visible!important;\n}\n#tab-controlroom .qcr-grid::before,#tab-controlroom .qcr-grid::after{display:none!important;content:none!important;}\n#tab-controlroom .qcr-grid>.qcr-card{\n  position:relative!important;\n  inset:auto!important;\n  float:none!important;\n  clear:none!important;\n  grid-row:auto!important;\n  grid-column:auto!important;\n  width:auto!important;\n  margin:0!important;\n  padding:0!important;\n  height:auto!important;\n  min-height:0!important;\n  max-height:none!important;\n  min-width:0!important;\n  overflow:visible!important;\n  align-self:start!important;\n  box-sizing:border-box!important;\n  display:flex!important;\n  flex-direction:column!important;\n}\n#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1 / -1!important;}\n#tab-controlroom .qcr-card h3{flex:0 0 auto!important;}\n#tab-controlroom .qcr-card .qcr-body{\n  display:block!important;\n  height:auto!important;\n  min-height:0!important;\n  max-height:none!important;\n  overflow:visible!important;\n  flex:0 0 auto!important;\n  box-sizing:border-box!important;\n}\n#tab-controlroom .qcr-kpi-grid{height:auto!important;min-height:0!important;}\n#tab-controlroom .qcr-list{height:auto!important;min-height:0!important;}\n#tab-controlroom .qcr-card table{width:100%!important;max-width:100%!important;table-layout:fixed!important;}\n#tab-controlroom .qcr-card th,#tab-controlroom .qcr-card td{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;}\nhtml,body{overflow-x:hidden!important;overflow-y:auto!important;}\nbody{height:auto!important;min-height:100vh!important;}\n.container{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;}\n.tab-panel{height:auto!important;min-height:0!important;max-height:none!important;}\n.tab-panel.hidden{display:none!important;}\n@media(max-width:900px){\n  #tab-controlroom .qcr-grid{grid-template-columns:1fr!important;gap:14px!important;}\n  #tab-controlroom .qcr-grid>.qcr-card,#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1!important;}\n}\n
+
+/* QCR FINAL CLEAN REBUILD v22 — one layout system only */
+#tab-controlroom{
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  contain:none!important;
+}
+#tab-controlroom .qcr-hero{position:relative!important;}
+#tab-controlroom .qcr-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:auto!important;
+  align-items:start!important;
+  gap:16px!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0 0 20px!important;
+  padding:0!important;
+  position:static!important;
+  overflow:visible!important;
+}
+#tab-controlroom .qcr-grid::before,#tab-controlroom .qcr-grid::after{display:none!important;content:none!important;}
+#tab-controlroom .qcr-grid>.qcr-card{
+  position:relative!important;
+  inset:auto!important;
+  float:none!important;
+  clear:none!important;
+  grid-row:auto!important;
+  grid-column:auto!important;
+  width:auto!important;
+  margin:0!important;
+  padding:0!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  min-width:0!important;
+  overflow:visible!important;
+  align-self:start!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  flex-direction:column!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1 / -1!important;}
+#tab-controlroom .qcr-card h3{flex:0 0 auto!important;}
+#tab-controlroom .qcr-card .qcr-body{
+  display:block!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  flex:0 0 auto!important;
+  box-sizing:border-box!important;
+}
+#tab-controlroom .qcr-kpi-grid{height:auto!important;min-height:0!important;}
+#tab-controlroom .qcr-list{height:auto!important;min-height:0!important;}
+#tab-controlroom .qcr-card table{width:100%!important;max-width:100%!important;table-layout:fixed!important;}
+#tab-controlroom .qcr-card th,#tab-controlroom .qcr-card td{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;}
+html,body{overflow-x:hidden!important;overflow-y:auto!important;}
+body{height:auto!important;min-height:100vh!important;}
+.container{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;}
+.tab-panel{height:auto!important;min-height:0!important;max-height:none!important;}
+.tab-panel.hidden{display:none!important;}
+@media(max-width:900px){
+  #tab-controlroom .qcr-grid{grid-template-columns:1fr!important;gap:14px!important;}
+  #tab-controlroom .qcr-grid>.qcr-card,#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1!important;}
+}
+
+
+/* Keep the sticky dashboard filters bar from floating over the drilldown
+   records modal. Filters stay pinned to the top of the main dashboard
+   while scrolling; when a KPI card/drilldown modal is open, the filters
+   bar is pushed behind the modal instead of overlapping it. */
+body.drill-modal-open .filters{
+  z-index:1!important;
+}
+.drill-modal{
+  z-index:200000!important;
+}
