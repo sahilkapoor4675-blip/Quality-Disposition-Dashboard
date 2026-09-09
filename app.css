@@ -769,7 +769,7 @@ button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
 
 
 /* QCR FINAL CLEAN REBUILD v22 — one layout system only */
-#tab-controlroom{
+#tab-controlroom:not(.hidden){
   display:block!important;
   width:100%!important;
   height:auto!important;
@@ -831,8 +831,6 @@ button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
 #tab-controlroom .qcr-list{height:auto!important;min-height:0!important;}
 #tab-controlroom .qcr-card table{width:100%!important;max-width:100%!important;table-layout:fixed!important;}
 #tab-controlroom .qcr-card th,#tab-controlroom .qcr-card td{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;}
-html,body{overflow-x:hidden!important;overflow-y:auto!important;}
-body{height:auto!important;min-height:100vh!important;}
 .container{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;}
 .tab-panel{height:auto!important;min-height:0!important;max-height:none!important;}
 .tab-panel.hidden{display:none!important;}
