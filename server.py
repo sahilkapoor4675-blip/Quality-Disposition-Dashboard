@@ -885,8 +885,11 @@ def compute_yearly_trend(filters):
 # ---------------------------------------------------------------------------
 # Admin authentication / data-management layer
 # ---------------------------------------------------------------------------
-ADMIN_USERNAME = "qcradmin"
-ADMIN_PASSWORD = "QCR@Admin2026!"
+# V27.1: production credentials must come from environment variables.
+# Empty values are allowed for local/dev only when an existing users-table
+# account is already present. There is intentionally NO hard-coded password.
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "").strip()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 SESSION_TTL = 8 * 60 * 60
 SESSIONS = {}
 IMPORT_PREVIEWS = {}
@@ -1380,14 +1383,20 @@ def _ensure_admin_schema():
     except Exception:
         pass
 
-    # Reset the bootstrap admin credentials to the current deployment credentials.
-    # This intentionally removes the old bootstrap login so the supplied new login is deterministic.
-    try:
-        conn.execute("DELETE FROM users")
-    except Exception:
-        pass
-    conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",
-                 (ADMIN_USERNAME, "Administrator", _hash_password(ADMIN_PASSWORD), "admin", True))
+    # V27.1: NEVER delete or reset the users table during startup.
+    # If deployment credentials are explicitly supplied, provision the named
+    # administrator only when that username does not already exist. Existing
+    # users, passwords, roles and viewer accounts remain untouched.
+    if ADMIN_USERNAME and ADMIN_PASSWORD:
+        try:
+            existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
+            if not existing:
+                conn.execute(
+                    "INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",
+                    (ADMIN_USERNAME, "Administrator", _hash_password(ADMIN_PASSWORD), "admin", True)
+                )
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -2791,8 +2800,8 @@ def main():
     _seed_postgres_if_empty()
     ensure_fast_indexes()
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    if not ADMIN_PASSWORD:
-        print("INFO: ADMIN_PASSWORD is not set; administrator authentication will use the existing users table. Set ADMIN_PASSWORD for first-time provisioning or recovery.")
+    if not (ADMIN_USERNAME and ADMIN_PASSWORD):
+        print("INFO: ADMIN_USERNAME/ADMIN_PASSWORD are not set; administrator authentication will use the existing users table. Set both environment variables for first-time provisioning.")
     print(f"Quality Disposition Dashboard running on port {port}")
     server.serve_forever()
 

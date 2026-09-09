@@ -1,5 +1,7 @@
 # Quality Disposition Control Dashboard — Web App
 
+**Version: V27.1 — Stability & Security Maintenance Release**
+
 Pure Python (built-in `http.server`) + SQLite. No Flask. No external CDN.
 Everything runs locally, no internet connection required after setup.
 
@@ -66,11 +68,12 @@ The web app now has two access levels:
 - **Admin:** protected `/admin` page for adding one record, bulk importing `.xlsx/.xlsm/.tsv/.csv`, reviewing the latest records and deleting incorrect records. Write APIs are checked server-side, so hiding a button is not the security mechanism.
 
 ### Admin credentials
-For local testing the default credentials are:
-- Username: `admin`
-- Password: `ChangeMe@123`
+V27.1 has **no hard-coded administrator password** and does not reset the `users` table at startup.
+For a new deployment, provision the first administrator with environment variables:
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
 
-**Before publishing the link, change these using environment variables:**
+**Before publishing the link, set these as environment variables:**
 ```
 ADMIN_USERNAME=your_admin_name
 ADMIN_PASSWORD=your_strong_password
@@ -171,7 +174,7 @@ The live dashboard now provides **Excel, PDF, and CSV** export buttons in the Da
 ### Viewer login & activity monitoring
 Viewer login is currently disabled. The main dashboard is open to all visitors without username/password. Every dashboard page visit and dashboard action is recorded with the visitor IP address, timestamp, event, tab and browser/user-agent. Admin can review **Dashboard Activity** to see unique IPs, opens, last seen time, browser/device information and recent activity. Named viewer login can be enabled in a future version if required. Admin/data-management APIs remain protected by Admin login.
 
-For the first deployment, the environment-backed `ADMIN_USERNAME` / `ADMIN_PASSWORD` account is automatically created as the administrator. Log in to `/admin`, create viewer accounts, then share those credentials with authorized viewers.
+For the first deployment, the environment-backed `ADMIN_USERNAME` / `ADMIN_PASSWORD` account is created only if that username does not already exist. Existing users, roles and passwords are preserved. Log in to `/admin`, create viewer accounts, then share those credentials with authorized viewers.
 
 ## Admin Control Center (Upgraded)
 
