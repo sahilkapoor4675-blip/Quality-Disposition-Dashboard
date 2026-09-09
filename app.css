@@ -484,3 +484,22 @@ body > *{position:relative;z-index:1;}
   .qcr-grid > .qcr-card:not(.qcr-wide) .qcr-body{overflow:auto}
   .qcr-grid > .qcr-card.qcr-intelligence-card .qcr-body{overflow:auto}
 }
+
+/* QCR content-driven sizing: never create an internal scrollbar in QCR cards.
+   Each grid row grows naturally to the tallest content block in that row. */
+.qcr-grid{align-items:stretch!important;grid-auto-rows:auto!important}
+.qcr-grid > .qcr-card,
+.qcr-grid > .qcr-card:not(.qcr-wide),
+.qcr-grid > .qcr-card.qcr-intelligence-card,
+.qcr-grid > .qcr-card.qcr-root-card,
+.qcr-grid > .qcr-card.qcr-wide{height:auto!important;min-height:0!important;max-height:none!important;box-sizing:border-box!important}
+.qcr-grid > .qcr-card .qcr-body,
+.qcr-grid > .qcr-card:not(.qcr-wide) .qcr-body,
+.qcr-grid > .qcr-card.qcr-intelligence-card .qcr-body,
+.qcr-grid > .qcr-card.qcr-root-card .qcr-body{overflow:visible!important;min-height:0!important;max-height:none!important;flex:initial!important}
+.qcr-grid > .qcr-card .qcr-list,
+.qcr-grid > .qcr-card .qcr-kpi-grid,
+.qcr-grid > .qcr-card #qcrComparison,
+.qcr-grid > .qcr-card #qcrTrendPrediction,
+.qcr-grid > .qcr-card #qcrKpiRanking,
+.qcr-grid > .qcr-card #qcrRootCause{overflow:visible!important;max-height:none!important}
