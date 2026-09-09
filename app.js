@@ -31,7 +31,7 @@ async function loadFilters(){
   const res = await fetch("/api/filters");
   const options = await res.json();
   const container = document.getElementById("filters");
-  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 PDF</button><button id="exportCsvBtn" class="export-btn" type="button">📋 CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
     const label = document.createElement("label"); label.textContent = f.label;
@@ -990,9 +990,6 @@ function qcrRenderTargetHistory(rows,target){
   if(!rows.length){el.innerHTML='<div class="qcr-empty">No historical monthly data available.</div>';return;}
   el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • Attainment = Actual ÷ Target</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>Attainment</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
 }
-function qcrReportUrl(ext){const p=new URLSearchParams(currentFilters); return '/api/export/'+ext+'?'+p.toString();}
-document.getElementById('qcrPdfReport')?.addEventListener('click',()=>{window.open(qcrReportUrl('pdf'),'_blank');});
-document.getElementById('qcrExcelReport')?.addEventListener('click',()=>{window.open(qcrReportUrl('excel'),'_blank');});
 
 async function loadControlRoom(signal){
   const filterSnapshot={...currentFilters};

@@ -1659,7 +1659,40 @@ def _excel_report(payload):
         for cc in (2,3,4): w.cell(rr,cc).number_format="0.00%"
         w.cell(rr,5).number_format="0.00"
     autofit(w)
-    intel=payload.get("intel",{}); w=wb.create_sheet("Management Intelligence"); title(w,"Management Meeting Intelligence",1,6); header(w,3,["Section","Item","Detail","Action","Severity","Value"])
+    # Quality Control Room — consolidated export of every QCR section so the single header report truly covers the full webapp.
+    intel=payload.get("intel",{})
+    q=wb.create_sheet("Quality Control Room"); title(q,"Quality Control Room — Complete Export",1,8)
+    header(q,3,["Section","Item","Detail","Action","Severity","Value","Grade","Work Center"])
+    # Core QCR lists
+    for k in payload.get("kpis",{}).get("kpis",[]):
+        q.append(["Critical KPI",k.get("label",""),_export_display_value(k.get("value",0),k.get("fmt","")),"Review target/status","",k.get("value",0),"",""])
+    for x in intel.get("kpi_ranking",[]) or []:
+        q.append(["KPI Target Intelligence",x.get("label",x.get("kpi","")),x.get("status",x.get("detail","")),x.get("action","Review"),x.get("severity",x.get("status","")),x.get("value",x.get("actual","")),"",""])
+    for x in intel.get("early_warnings",[]) or []:
+        q.append(["Early Warning",x.get("title",""),x.get("detail",""),x.get("action",""),x.get("severity",""),x.get("value",""),"",""])
+    for x in intel.get("recurring_patterns",[]) or []:
+        q.append(["Recurring Quality Problem",x.get("defect",""),f'{x.get("period_count",0)} periods • {x.get("qty",0):.3f} MT',"Investigate",x.get("severity","high"),x.get("qty",0),x.get("grade",""),x.get("work_center","")])
+    for x in intel.get("risk_matrix",{}).get("work_centers",[]) if isinstance(intel.get("risk_matrix"),dict) else []:
+        q.append(["Work Center Risk",x.get("name",x.get("work_center","")),x.get("risk",""),x.get("action","Review"),x.get("severity",x.get("risk","")),x.get("score",x.get("reject_pct_qty","")),"",x.get("name",x.get("work_center",""))])
+    for x in intel.get("risk_matrix",{}).get("grades",[]) if isinstance(intel.get("risk_matrix"),dict) else []:
+        q.append(["Grade Risk",x.get("name",x.get("grade","")),x.get("risk",""),x.get("action","Review"),x.get("severity",x.get("risk","")),x.get("score",x.get("reject_pct_qty","")),x.get("name",x.get("grade","")),""])
+    hs=intel.get("health_score",{}) or {}
+    q.append(["Quality Health Score","Overall",hs.get("score",""),"Review reasons",hs.get("status",hs.get("level","")),hs.get("score",""),"",""])
+    for r in hs.get("reasons",[]) or []:
+        q.append(["Health Score Reason",r[0] if isinstance(r,(list,tuple)) and len(r)>0 else str(r),"Score deduction","Review","info",r[1] if isinstance(r,(list,tuple)) and len(r)>1 else "","",""])
+    comp=intel.get("comparison",{}) or {}
+    q.append(["Month vs Previous Month","Comparison",str(comp),"Review","","","",""])
+    why=intel.get("why_changed",{}) or {}
+    q.append(["Why Changed","Drivers",str(why),"Investigate","","","",""])
+    opp=payload.get("monthly",{}).get("improvement_opportunities",[]) or []
+    for x in opp:
+        q.append(["Improvement Opportunity",x.get("title",x.get("issue","")),x.get("detail",x.get("evidence","")),x.get("action",x.get("recommended_action","Investigate")),x.get("severity",""),x.get("value",""),x.get("grade",""),x.get("work_center","")])
+    rc=payload.get("root_cause",{}) or {}
+    for x in rc.get("rows",[]) or []:
+        q.append(["Pareto → Root Cause",rc.get("defect",""),f'Heat {x.get("heat_no","")} • Batch {x.get("batch_no","")} • {float(x.get("output_weight") or 0):.3f} MT',"Investigate", "",x.get("output_weight",""),x.get("grade",""),x.get("work_center","")])
+    autofit(q)
+
+    w=wb.create_sheet("Management Intelligence"); title(w,"Management Meeting Intelligence",1,6); header(w,3,["Section","Item","Detail","Action","Severity","Value"])
     for x in intel.get("early_warnings",[]): w.append(["Early Warning",x.get("title"),x.get("detail"),x.get("action"),x.get("severity"),""])
     for x in intel.get("recurring_patterns",[])[:20]: w.append(["Recurring Problem",f'{x.get("defect")} / {x.get("grade")} / {x.get("work_center")}',f'{x.get("period_count")} periods • {x.get("qty",0):.2f} MT',"Investigate","high",x.get("qty",0)])
     for x in intel.get("health_score",{}).get("reasons",[]): w.append(["Health Score",x[0],"Score deduction","Review","info",x[1]])
