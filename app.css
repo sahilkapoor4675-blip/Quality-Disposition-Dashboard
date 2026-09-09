@@ -1445,3 +1445,141 @@ body.drill-modal-open .filters{
 .qcr-supporting-insights{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0 22px;}.qcr-supporting-insights .qcr-card{height:190px!important;min-height:190px!important;max-height:190px!important;}.qcr-supporting-insights .qcr-body{overflow:auto!important;}
 @media(max-width:900px){#tab-controlroom .qcr-executive-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}.qcr-exec-item.qcr-exec-problem{grid-column:1/-1}.qcr-grid-action,.qcr-grid-performance,.qcr-grid-intelligence{grid-template-columns:1fr!important}.qcr-grid-action .qcr-card,.qcr-grid-performance .qcr-card,.qcr-grid-performance .qcr-wide,.qcr-grid-intelligence .qcr-card,.qcr-grid-intelligence .qcr-wide{grid-column:1!important;height:300px!important;min-height:300px!important;max-height:300px!important}.qcr-supporting-insights{grid-template-columns:1fr}.qcr-supporting-insights .qcr-card{height:220px!important;min-height:220px!important;max-height:220px!important}}
 @media(max-width:600px){#tab-controlroom .qcr-executive-strip{grid-template-columns:1fr 1fr!important;gap:7px}.qcr-exec-item{height:70px;padding:8px}.qcr-exec-item b{font-size:16px}.qcr-problem-row{grid-template-columns:20px minmax(0,1fr);}.qcr-problem-action{grid-column:2;flex-direction:row;justify-content:space-between;align-items:center}.qcr-problem-main>span{white-space:normal}.qcr-problem-fields{gap:6px}.qcr-ranked-row{grid-template-columns:20px minmax(0,1fr);}.qcr-mini-investigate{grid-column:2;justify-self:start}.qcr-breach{grid-template-columns:1fr}.qcr-breach-right{justify-content:space-between}.qcr-grid-action .qcr-card,.qcr-grid-performance .qcr-card,.qcr-grid-performance .qcr-wide,.qcr-grid-intelligence .qcr-card,.qcr-grid-intelligence .qcr-wide{height:280px!important;min-height:280px!important;max-height:280px!important}.qcr-problem-card{height:300px!important;min-height:300px!important;max-height:300px!important}.qcr-problem-card .qcr-body{height:226px!important}.qcr-supporting-insights .qcr-card{height:210px!important;min-height:210px!important;max-height:210px!important}.qcr-zone-heading p{display:none}}
+
+
+/* ================================================================
+   QCR V29.1 — CLEAN SINGLE LAYOUT OVERRIDE
+   This block intentionally supersedes earlier experimental QCR rules.
+   ================================================================ */
+#tab-controlroom:not(.hidden){
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:0 4px 36px 0!important;
+  box-sizing:border-box!important;
+}
+
+/* Three zone headings: full-width, readable, and visually separated. */
+#tab-controlroom .qcr-zone{display:block!important;width:100%!important;margin:22px 0 0!important;}
+#tab-controlroom .qcr-zone-heading{
+  display:flex!important;align-items:center!important;gap:10px!important;
+  width:100%!important;min-height:42px!important;margin:0 0 12px!important;
+  padding:0 2px 9px!important;box-sizing:border-box!important;
+  border-bottom:1px solid #dbe5ed!important;
+}
+#tab-controlroom .qcr-zone-heading span{
+  flex:0 0 auto!important;font:900 9px/1 Manrope,sans-serif!important;
+  letter-spacing:1px!important;color:#118dff!important;
+  padding:5px 7px!important;border:1px solid #cfe7f8!important;
+  border-radius:999px!important;background:#f2f9fe!important;
+}
+#tab-controlroom .qcr-zone-heading h3{
+  flex:0 0 auto!important;margin:0!important;padding:0!important;
+  min-height:0!important;border:0!important;background:none!important;
+  font:900 17px/1.2 'Space Grotesk',sans-serif!important;color:#183a58!important;
+}
+#tab-controlroom .qcr-zone-heading p{
+  flex:1 1 auto!important;min-width:0!important;margin:0!important;
+  font:600 10px/1.35 Manrope,sans-serif!important;color:#718496!important;
+}
+
+/* Executive strip */
+#tab-controlroom .qcr-executive-strip{display:grid!important;grid-template-columns:1.05fr 1fr 1fr 1.7fr 1fr!important;gap:10px!important;margin:0 0 16px!important;width:100%!important;}
+#tab-controlroom .qcr-exec-item{height:78px!important;min-height:78px!important;max-height:78px!important;min-width:0!important;box-sizing:border-box!important;}
+
+/* Problem Finder */
+#tab-controlroom>.qcr-problem-card{height:300px!important;min-height:300px!important;max-height:300px!important;margin:0 0 16px!important;box-sizing:border-box!important;}
+#tab-controlroom>.qcr-problem-card .qcr-problem-head{height:72px!important;min-height:72px!important;max-height:72px!important;box-sizing:border-box!important;}
+#tab-controlroom>.qcr-problem-card .qcr-body{height:auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;}
+
+/* All three grids use the same 2-column system. */
+#tab-controlroom .qcr-grid-action,
+#tab-controlroom .qcr-grid-performance,
+#tab-controlroom .qcr-grid-intelligence{
+  display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  grid-auto-flow:row!important;grid-auto-rows:300px!important;
+  align-items:stretch!important;gap:14px!important;width:100%!important;margin:0!important;
+}
+
+/* Exact requested priority positions. */
+@media(min-width:901px){
+  #tab-controlroom .qcr-grid-action>.qcr-priority-02{grid-column:1!important;grid-row:1!important;}
+  #tab-controlroom .qcr-grid-action>.qcr-priority-03{grid-column:2!important;grid-row:1!important;}
+  #tab-controlroom .qcr-grid-action>.qcr-priority-04{grid-column:1!important;grid-row:2!important;}
+  #tab-controlroom .qcr-grid-action>.qcr-priority-05{grid-column:2!important;grid-row:2!important;}
+  #tab-controlroom .qcr-grid-action>.qcr-priority-06{grid-column:1 / -1!important;grid-row:3!important;}
+  #tab-controlroom .qcr-grid-performance>.qcr-priority-07{grid-column:1!important;grid-row:1!important;}
+  #tab-controlroom .qcr-grid-performance>.qcr-priority-08{grid-column:2!important;grid-row:1!important;}
+  #tab-controlroom .qcr-grid-performance>.qcr-priority-09{grid-column:1 / -1!important;grid-row:2!important;}
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-10{grid-column:1!important;grid-row:1!important;}
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-11{grid-column:2!important;grid-row:1!important;}
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-12{grid-column:1!important;grid-row:2!important;}
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-13{grid-column:2!important;grid-row:2!important;}
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-14{grid-column:1!important;grid-row:3!important;}
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-15{grid-column:2!important;grid-row:3!important;}
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-16{grid-column:1 / -1!important;grid-row:4!important;}
+}
+
+/* Fixed, symmetrical cards. Only the inner body scrolls. */
+#tab-controlroom .qcr-grid-action>.qcr-card,
+#tab-controlroom .qcr-grid-performance>.qcr-card,
+#tab-controlroom .qcr-grid-intelligence>.qcr-card{
+  width:100%!important;height:300px!important;min-height:300px!important;max-height:300px!important;
+  display:flex!important;flex-direction:column!important;align-self:stretch!important;
+  box-sizing:border-box!important;overflow:hidden!important;margin:0!important;
+}
+#tab-controlroom .qcr-grid-performance>.qcr-priority-09{height:250px!important;min-height:250px!important;max-height:250px!important;}
+#tab-controlroom .qcr-grid-intelligence>.qcr-priority-16{height:280px!important;min-height:280px!important;max-height:280px!important;}
+#tab-controlroom .qcr-card>h3{flex:0 0 54px!important;height:54px!important;min-height:54px!important;max-height:54px!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important;box-sizing:border-box!important;}
+#tab-controlroom .qcr-card>.qcr-body{flex:1 1 auto!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;box-sizing:border-box!important;}
+#tab-controlroom .qcr-card>.qcr-body::-webkit-scrollbar{width:7px!important;}
+#tab-controlroom .qcr-card>.qcr-body::-webkit-scrollbar-thumb{background:#cbd7e2!important;border-radius:999px!important;}
+
+/* Health Score card: keep the score and label visible; only reasons scroll. */
+#tab-controlroom .qcr-grid-intelligence>.qcr-priority-14 .qcr-body{overflow:hidden!important;display:flex!important;flex-direction:column!important;}
+#tab-controlroom #qcrHealthScore{display:flex!important;flex-direction:column!important;min-height:0!important;height:100%!important;overflow:hidden!important;}
+#tab-controlroom #qcrHealthScore .qcr-health{flex:0 0 auto!important;padding:3px 0 7px!important;}
+#tab-controlroom #qcrHealthScore .qcr-health-score{font-size:42px!important;line-height:1!important;}
+#tab-controlroom #qcrHealthScore .qcr-health-label{margin-top:5px!important;}
+#tab-controlroom #qcrHealthScore .qcr-health-reasons{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;padding-right:3px!important;}
+#tab-controlroom #qcrHealthScore .qcr-confidence-note{flex:0 0 auto!important;margin-top:6px!important;}
+
+/* Intelligence toggle */
+#tab-controlroom .qcr-intelligence-toggle{display:block!important;width:100%!important;border-top:1px solid #dbe5ed!important;padding-top:0!important;}
+#tab-controlroom .qcr-intelligence-toggle>summary{height:48px!important;min-height:48px!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 2px!important;cursor:pointer!important;list-style:none!important;box-sizing:border-box!important;}
+#tab-controlroom .qcr-intelligence-toggle summary>span{font:900 9px Manrope,sans-serif!important;letter-spacing:1px!important;color:#118dff!important;padding:5px 7px!important;border:1px solid #cfe7f8!important;border-radius:999px!important;background:#f2f9fe!important;}
+#tab-controlroom .qcr-intelligence-toggle summary>b{font:900 17px/1.2 'Space Grotesk',sans-serif!important;color:#183a58!important;}
+#tab-controlroom .qcr-intelligence-toggle summary>em{font:600 10px Manrope,sans-serif!important;color:#7a8c9b!important;font-style:normal!important;}
+
+/* Supporting narrative cards stay below the core workflow. */
+#tab-controlroom .qcr-supporting-insights{display:grid!important;grid-template-columns:1fr 1fr!important;gap:14px!important;margin-top:18px!important;}
+#tab-controlroom .qcr-supporting-insights>.qcr-card{height:220px!important;min-height:220px!important;max-height:220px!important;overflow:hidden!important;}
+#tab-controlroom .qcr-supporting-insights>.qcr-card>.qcr-body{overflow-y:auto!important;min-height:0!important;}
+
+@media(max-width:900px){
+  #tab-controlroom .qcr-executive-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  #tab-controlroom .qcr-exec-problem{grid-column:1 / -1!important;}
+  #tab-controlroom .qcr-grid-action,
+  #tab-controlroom .qcr-grid-performance,
+  #tab-controlroom .qcr-grid-intelligence{grid-template-columns:1fr!important;grid-auto-rows:300px!important;}
+  #tab-controlroom .qcr-grid-action>.qcr-card,
+  #tab-controlroom .qcr-grid-performance>.qcr-card,
+  #tab-controlroom .qcr-grid-intelligence>.qcr-card,
+  #tab-controlroom .qcr-grid-performance>.qcr-priority-09,
+  #tab-controlroom .qcr-grid-intelligence>.qcr-priority-16{grid-column:1!important;grid-row:auto!important;height:300px!important;min-height:300px!important;max-height:300px!important;}
+  #tab-controlroom .qcr-supporting-insights{grid-template-columns:1fr!important;}
+}
+@media(max-width:600px){
+  #tab-controlroom{padding-right:0!important;}
+  #tab-controlroom .qcr-executive-strip{grid-template-columns:1fr 1fr!important;gap:7px!important;}
+  #tab-controlroom .qcr-exec-item{height:72px!important;min-height:72px!important;max-height:72px!important;}
+  #tab-controlroom .qcr-zone-heading{align-items:flex-start!important;flex-wrap:wrap!important;min-height:0!important;padding-bottom:9px!important;}
+  #tab-controlroom .qcr-zone-heading p{flex-basis:100%!important;}
+  #tab-controlroom .qcr-grid-action>.qcr-card,
+  #tab-controlroom .qcr-grid-performance>.qcr-card,
+  #tab-controlroom .qcr-grid-intelligence>.qcr-card{height:280px!important;min-height:280px!important;max-height:280px!important;}
+  #tab-controlroom>.qcr-problem-card{height:300px!important;min-height:300px!important;max-height:300px!important;}
+}
