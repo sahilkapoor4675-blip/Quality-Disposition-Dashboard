@@ -1084,57 +1084,29 @@ async function loadControlRoom(signal){
   }
 }
 
-// ---------- QCR safe CSS-grid masonry layout ----------
-// Uses real CSS grid rows rather than absolute positioning. This prevents cards
-// from overlapping when async content (tables/root-cause/intelligence) changes height.
+// ---------- QCR stable layout ----------
+// QCR uses native CSS grid only. No JS card positioning is used; this keeps
+// the tab responsive and prevents ResizeObserver/layout feedback loops.
 function layoutQcrCards(){
   const grid=document.getElementById('tab-controlroom')?.querySelector('.qcr-grid');
-  if(!grid || window.getComputedStyle(grid).display==='none') return;
-  const cards=[...grid.querySelectorAll(':scope > .qcr-card')];
-  if(!cards.length) return;
-  if(window.innerWidth<=900){
-    cards.forEach(c=>{c.style.gridRowEnd='';});
-    grid.style.removeProperty('grid-auto-rows');
-    return;
-  }
-  const row=8, gap=16;
-  grid.style.setProperty('grid-auto-rows',row+'px','important');
-  grid.style.setProperty('row-gap',gap+'px','important');
-  grid.style.setProperty('column-gap',gap+'px','important');
-  cards.forEach(card=>{
-    card.style.position='relative'; card.style.left=''; card.style.top=''; card.style.width=''; card.style.margin='0';
-    card.style.gridRowEnd='auto';
-  });
-  // First pass gives cards their natural height in the actual two-column width.
-  void grid.offsetHeight;
-  cards.forEach(card=>{
-    const h=Math.max(1,card.getBoundingClientRect().height);
-    const span=Math.max(1,Math.ceil((h+gap)/(row+gap)));
-    card.style.gridRowEnd='span '+span;
+  if(!grid) return;
+  grid.style.removeProperty('height');
+  grid.style.removeProperty('grid-auto-rows');
+  grid.querySelectorAll(':scope > .qcr-card').forEach(card=>{
+    card.style.removeProperty('position');
+    card.style.removeProperty('left');
+    card.style.removeProperty('top');
+    card.style.removeProperty('width');
+    card.style.removeProperty('margin');
+    card.style.removeProperty('grid-row-end');
   });
 }
-let qcrLayoutTimer=null;
 function scheduleQcrLayout(){
-  clearTimeout(qcrLayoutTimer);
-  qcrLayoutTimer=setTimeout(()=>requestAnimationFrame(layoutQcrCards),80);
+  requestAnimationFrame(layoutQcrCards);
 }
 window.addEventListener('resize',scheduleQcrLayout);
 window.addEventListener('load',scheduleQcrLayout);
-let qcrResizeObserver=null;
-function initQcrLayoutObserver(){
-  const grid=document.getElementById('tab-controlroom')?.querySelector('.qcr-grid');
-  if(!grid || qcrResizeObserver) return;
-  if('ResizeObserver' in window){
-    qcrResizeObserver=new ResizeObserver(()=>scheduleQcrLayout());
-    [...grid.children].forEach(c=>qcrResizeObserver.observe(c));
-  }
-  if('MutationObserver' in window){
-    const mo=new MutationObserver(()=>scheduleQcrLayout());
-    mo.observe(grid,{subtree:true,childList:true,characterData:true});
-  }
-  scheduleQcrLayout();
-}
-setTimeout(initQcrLayoutObserver,100);
+setTimeout(scheduleQcrLayout,100);
 
 // ---------- Tab switching ----------
 const TAB_LOADERS = {
