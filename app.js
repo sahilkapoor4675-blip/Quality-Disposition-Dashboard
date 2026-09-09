@@ -886,30 +886,41 @@ function qcrRenderComparison(rows){
 const qcrCoreCache = new Map();
 window.qcrLoadToken=0;
 function qcrCacheKey(filters){ return new URLSearchParams(filters).toString(); }
+function qcrSessionKey(filters){ return 'qcr_last_good_v22_' + qcrCacheKey(filters); }
 async function fetchQcrCore(filters, signal){
   const key=qcrCacheKey(filters); const cached=qcrCoreCache.get(key);
-  if(cached && (Date.now()-cached.ts)<15000) return cached.data;
+  if(cached && (Date.now()-cached.ts)<30000) return cached.data;
   const params=new URLSearchParams(filters).toString();
   let lastError=null;
   for(let attempt=0;attempt<3;attempt++){
     try{
-      const r=await fetch('/api/qcr?'+params+'&_qcr=20&_attempt='+(attempt+1),{signal,cache:'no-store',headers:{'Cache-Control':'no-cache'}});
+      const r=await fetch('/api/qcr?'+params+'&_qcr=22&_attempt='+(attempt+1),{signal,cache:'no-store',headers:{'Cache-Control':'no-cache','Pragma':'no-cache'}});
       let data=null;
       try{data=await r.json();}catch(e){throw new Error('QCR server returned invalid JSON (HTTP '+r.status+')');}
       if(!r.ok || data?.error) throw new Error(data?.error || ('QCR request failed (HTTP '+r.status+')'));
-      qcrCoreCache.set(key,{ts:Date.now(),data}); return data;
+      if(!data || !data.k || !data.d || !data.w){throw new Error('QCR response is incomplete');}
+      qcrCoreCache.set(key,{ts:Date.now(),data});
+      try{sessionStorage.setItem(qcrSessionKey(filters),JSON.stringify({ts:Date.now(),data}));}catch(_){}
+      return data;
     }catch(e){
       if(e.name==='AbortError') throw e;
       lastError=e;
-      if(attempt<2) await new Promise(resolve=>setTimeout(resolve,350*(attempt+1)));
+      if(attempt<2) await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));
     }
   }
+  // A transient API failure must never turn a working QCR into a blank screen.
+  try{
+    const saved=JSON.parse(sessionStorage.getItem(qcrSessionKey(filters))||'null');
+    if(saved?.data?.k && saved?.data?.d && saved?.data?.w){
+      qcrCoreCache.set(key,{ts:Date.now(),data:saved.data});
+      return saved.data;
+    }
+  }catch(_){}
   throw lastError || new Error('Unable to load Control Room data');
 }
-
 function prefetchQcrCore(filters){
   const key=qcrCacheKey(filters), cached=qcrCoreCache.get(key);
-  if(cached && (Date.now()-cached.ts)<15000) return;
+  if(cached && (Date.now()-cached.ts)<30000) return;
   fetchQcrCore(filters).catch(()=>{});
 }
 function qcrRenderTrendPrediction(rows,d,w){
@@ -1079,7 +1090,8 @@ async function loadControlRoom(signal){
       ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="qcr-empty">Unable to load this QCR section. <span class="qcr-error-detail">'+escQcr(msg)+'</span></div>';});
       const root=document.getElementById('qcrRootCause');if(root)root.innerHTML='<div class="qcr-empty">Root-cause data unavailable until QCR data reconnects.</div>';
       const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='DATA RETRY';}
-      setTimeout(()=>{if(!document.hidden){try{loadControlRoom(new AbortController().signal);}catch(_){}}},1200);
+      const hero=document.querySelector('#tab-controlroom .qcr-hero'); if(hero && !document.getElementById('qcrRetryBtn')){const b=document.createElement('button');b.id='qcrRetryBtn';b.type='button';b.textContent='↻ Retry QCR';b.style.cssText='margin-top:10px;padding:7px 12px;border:1px solid #b8cad9;border-radius:8px;background:#fff;color:#183a58;font-weight:800;cursor:pointer;';b.onclick=()=>loadControlRoom(new AbortController().signal);hero.appendChild(b);}
+      const retry=document.getElementById('qcrRetryBtn'); if(retry){retry.onclick=()=>loadControlRoom(new AbortController().signal);}
     }
   }
 }
@@ -1087,26 +1099,8 @@ async function loadControlRoom(signal){
 // ---------- QCR stable layout ----------
 // QCR uses native CSS grid only. No JS card positioning is used; this keeps
 // the tab responsive and prevents ResizeObserver/layout feedback loops.
-function layoutQcrCards(){
-  const grid=document.getElementById('tab-controlroom')?.querySelector('.qcr-grid');
-  if(!grid) return;
-  grid.style.removeProperty('height');
-  grid.style.removeProperty('grid-auto-rows');
-  grid.querySelectorAll(':scope > .qcr-card').forEach(card=>{
-    card.style.removeProperty('position');
-    card.style.removeProperty('left');
-    card.style.removeProperty('top');
-    card.style.removeProperty('width');
-    card.style.removeProperty('margin');
-    card.style.removeProperty('grid-row-end');
-  });
-}
-function scheduleQcrLayout(){
-  requestAnimationFrame(layoutQcrCards);
-}
-window.addEventListener('resize',scheduleQcrLayout);
-window.addEventListener('load',scheduleQcrLayout);
-setTimeout(scheduleQcrLayout,100);
+function layoutQcrCards(){ return; }
+function scheduleQcrLayout(){ return; }
 
 // ---------- Tab switching ----------
 const TAB_LOADERS = {
