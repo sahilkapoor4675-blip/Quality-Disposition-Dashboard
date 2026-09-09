@@ -949,8 +949,8 @@ function qcrRenderKpiRanking(kpis){
 }
 document.getElementById('qcrRootCause')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-root-link');if(!b)return; const p=new URLSearchParams(currentFilters);p.set('grade',b.dataset.rootGrade||'All');p.set('work_center',b.dataset.rootWc||'All');openDrilldown('defect_category',`Root Cause: ${b.dataset.rootGrade||'—'} → ${b.dataset.rootWc||'—'}`,{drill_value:document.querySelector('.qcr-defect-btn')?.dataset.defect||'',grade:b.dataset.rootGrade||'All',work_center:b.dataset.rootWc||'All'});});
 function loadRootCause(defect){
-  const el=document.getElementById('qcrRootCause'); if(!el||!defect)return; el.innerHTML='<div class="qcr-empty">Loading root-cause path…</div>';
-  const p=new URLSearchParams(currentFilters);p.set('defect',defect); fetch('/api/root_cause?'+p.toString(),{cache:'no-store'}).then(r=>r.json()).then(d=>{
+  const el=document.getElementById('qcrRootCause'); if(!el||!defect)return Promise.resolve(); el.innerHTML='<div class="qcr-empty">Loading root-cause path…</div>';
+  const p=new URLSearchParams(currentFilters);p.set('defect',defect); return fetch('/api/root_cause?'+p.toString(),{cache:'no-store'}).then(r=>r.json()).then(d=>{
     if(d.error)throw new Error(d.error); const paths=d.paths||[]; const rec=d.records||[];
     const top=paths[0]; let html=`<div class="qcr-root-title">${defect}</div>`;
     if(top) html+=`<div class="qcr-root-path"><span>Defect<br><b>${defect}</b></span><i>→</i><span>Grade<br><b>${top.grade}</b></span><i>→</i><span>Work Center<br><b>${top.work_center}</b></span><i>→</i><span>Heat / Batch<br><b>${rec[0]?.heat_no||'—'} / ${rec[0]?.batch_no||'—'}</b></span></div>`;
@@ -1021,7 +1021,6 @@ async function loadControlRoom(signal){
   const params=new URLSearchParams(filterSnapshot).toString();
   try{
     const data=await fetchQcrCore(filterSnapshot,signal); const {k,d,w,m,fr}=data;
-    clearTimeout(window.qcrAutoRetryTimer);
     document.getElementById('qcrFreshness').textContent=`Data Through: ${fr.data_through_display||'—'} • Filtered Records: ${Number(fr.filtered_records||0).toLocaleString()}`;
     const criticalLabels=['First Pass Yield % (Prime%)','Defect Rate','Reject % Qty','Hold for Decision % Qty','Salvage % Qty','Rework % Qty'];
     const critical=(k.kpis||[]).filter(x=>criticalLabels.includes(x.label));
@@ -1090,14 +1089,7 @@ async function loadControlRoom(signal){
       const ids=['qcrCriticalKpis','qcrBreaches','qcrDefects','qcrWorkCenters','qcrGrades','qcrComparison','qcrWhyChanged','qcrOpportunities','qcrTrendPrediction','qcrKpiRanking','qcrTargetHistory','qcrEarlyWarnings','qcrHealthScore','qcrRiskMatrix','qcrRecurring','qcrGradeConcentration'];
       ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="qcr-empty">Unable to load this QCR section. <span class="qcr-error-detail">'+escQcr(msg)+'</span></div>';});
       const root=document.getElementById('qcrRootCause');if(root)root.innerHTML='<div class="qcr-empty">Root-cause data unavailable until QCR data reconnects.</div>';
-      const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='RECONNECTING';}
-      // No manual "Retry" button: the Control Room quietly retries itself in the
-      // background so the user never has to click anything for it to recover.
-      clearTimeout(window.qcrAutoRetryTimer);
-      window.qcrAutoRetryTimer=setTimeout(()=>{
-        const stillOnControlRoom=document.querySelector('.tab-btn.active')?.dataset.tab==='controlroom';
-        if(stillOnControlRoom) loadControlRoom(new AbortController().signal);
-      },5000);
+      const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='UNAVAILABLE';}
     }
   }
 }
