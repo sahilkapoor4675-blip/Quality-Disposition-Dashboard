@@ -1056,8 +1056,54 @@ async function loadControlRoom(signal){
     const seen=new Set(); const ranked=opp.sort((a,b)=>b.score-a.score).filter(o=>{const k=o.title.toUpperCase();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
     const oe=document.getElementById('qcrOpportunities');oe.innerHTML=ranked.length?ranked.map((o,i)=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>#${i+1} ${o.title}</b><br><span>${o.detail}</span></div><span class="qcr-opportunity-action">Recommended: ${o.action}</span></div>`).join(''):'<div class="qcr-empty">✓ No improvement opportunity detected for the current selection.</div>';
     markChartsReady();
+    scheduleQcrLayout();
   }catch(e){if(e.name!=='AbortError'){console.error(e);document.getElementById('qcrCriticalKpis').innerHTML='<div class="qcr-empty">Unable to load Control Room data.</div>';}}
 }
+
+// ---------- QCR zero-gap masonry layout ----------
+function layoutQcrCards(){
+  const grid=document.getElementById('tab-controlroom')?.querySelector('.qcr-grid');
+  if(!grid || window.getComputedStyle(grid).display==='none') return;
+  const cards=[...grid.querySelectorAll(':scope > .qcr-card')];
+  if(!cards.length) return;
+  if(window.innerWidth<=900){
+    grid.style.height='auto';
+    cards.forEach(c=>{c.style.position='relative';c.style.left='';c.style.top='';c.style.width='100%';});
+    return;
+  }
+  const gap=16;
+  const width=grid.clientWidth;
+  const colW=Math.max(0,(width-gap)/2);
+  let y=[0,0];
+  cards.forEach(card=>{
+    const wide=card.classList.contains('qcr-wide') || card.classList.contains('qcr-root-card');
+    card.style.position='absolute';
+    card.style.width=wide?'100%':colW+'px';
+    card.style.left='0px';
+    card.style.top='0px';
+    // Force a fresh natural height before positioning.
+    const h=card.offsetHeight;
+    if(wide){
+      const top=Math.max(y[0],y[1]);
+      card.style.top=top+'px';
+      card.style.left='0px';
+      y=[top+h+gap,top+h+gap];
+    }else{
+      const col=y[0]<=y[1]?0:1;
+      const top=y[col];
+      card.style.left=(col?colW+gap:0)+'px';
+      card.style.top=top+'px';
+      y[col]=top+h+gap;
+    }
+  });
+  grid.style.height=Math.max(0,Math.max(y[0],y[1])-gap)+'px';
+}
+let qcrLayoutTimer=null;
+function scheduleQcrLayout(){
+  clearTimeout(qcrLayoutTimer);
+  qcrLayoutTimer=setTimeout(layoutQcrCards,40);
+}
+window.addEventListener('resize',scheduleQcrLayout);
 
 // ---------- Tab switching ----------
 const TAB_LOADERS = {
@@ -1075,7 +1121,7 @@ async function activateTab(tabName){
   const signal = refreshController.signal;
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tabName));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + tabName));
-  try { await TAB_LOADERS[tabName](signal); } catch(e) { if(e.name!=="AbortError") console.error(e); }
+  try { await TAB_LOADERS[tabName](signal); if(tabName==='controlroom') scheduleQcrLayout(); } catch(e) { if(e.name!=="AbortError") console.error(e); }
 }
 
 document.getElementById("tabs").addEventListener("click", (e) => {

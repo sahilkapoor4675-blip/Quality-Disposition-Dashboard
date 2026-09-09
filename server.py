@@ -444,18 +444,22 @@ def compute_kpis(filters, _skip_prev=False):
     salvage_pct_qty = (salvage_qty / output_qty) if output_qty else 0.0
     rework_pct_qty = (rework_qty / output_qty) if output_qty else 0.0
 
+    # Main Dashboard KPI display order — labels/names are intentionally unchanged.
+    # Row 1: Total / Output / Defect / FPY
+    # Row 2: Defect Rate / Reject % / Hold % / Salvage %
+    # Row 3: Hold Qty / Reject Qty / Salvage+Divert Qty / Rework %
     kpis = [
         {"label": "Total Coils", "value": total_coils, "fmt": "int"},
+        {"label": "Output Quantity (MT)", "value": output_qty, "fmt": "num2"},
         {"label": "Defect Coils", "value": defect_coils, "fmt": "int"},
         {"label": "First Pass Yield % (Prime%)", "value": first_pass_yield, "fmt": "pct"},
-        {"label": "Hold for Decision % Qty", "value": hold_pct_qty, "fmt": "pct"},
-        {"label": "Output Quantity (MT)", "value": output_qty, "fmt": "num2"},
-        {"label": "Reject Qty (MT)", "value": reject_qty, "fmt": "num2"},
-        {"label": "Salvage + Divert Qty (MT)", "value": salvage_divert_qty, "fmt": "num2"},
         {"label": "Defect Rate", "value": defect_rate, "fmt": "pct"},
         {"label": "Reject % Qty", "value": reject_pct_qty, "fmt": "pct"},
-        {"label": "Hold For Decision Qty (MT)", "value": hold_qty, "fmt": "num2"},
+        {"label": "Hold for Decision % Qty", "value": hold_pct_qty, "fmt": "pct"},
         {"label": "Salvage % Qty", "value": salvage_pct_qty, "fmt": "pct"},
+        {"label": "Hold For Decision Qty (MT)", "value": hold_qty, "fmt": "num2"},
+        {"label": "Reject Qty (MT)", "value": reject_qty, "fmt": "num2"},
+        {"label": "Salvage + Divert Qty (MT)", "value": salvage_divert_qty, "fmt": "num2"},
         {"label": "Rework % Qty", "value": rework_pct_qty, "fmt": "pct"},
     ]
     assert len(kpis) == 12, "KPI count must be exactly 12"
@@ -465,12 +469,6 @@ def compute_kpis(filters, _skip_prev=False):
         threshold_color = kpi_threshold_color(k["label"], k["value"])
         if threshold_color:
             k["color"] = threshold_color
-
-    # Keep the requested symmetric display order by placing "Salvage % Qty"
-    # before "Salvage + Divert Qty (MT)"; metadata is keyed by label.
-    # (color/direction) is looked up by label later, so it travels correctly
-    # with whichever metric now sits in that position.
-    kpis[5], kpis[10] = kpis[10], kpis[5]
 
     # Quality decision table
     decision_table = []
