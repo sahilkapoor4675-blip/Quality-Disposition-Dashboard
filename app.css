@@ -468,3 +468,19 @@ body > *{position:relative;z-index:1;}
 
 /* Keep tab navigation usable on narrow screens while preserving equal tab sizing. */
 @media(max-width:700px){.tabs{grid-template-columns:repeat(5,minmax(118px,1fr));overflow-x:auto;overflow-y:hidden;padding-bottom:3px;scrollbar-width:thin}.tabs .tab-btn{white-space:nowrap}}
+
+/* QCR section symmetry: paired cards share the exact same visual height. */
+@media (min-width: 901px){
+  .qcr-grid > .qcr-card:not(.qcr-wide){height:300px;min-height:300px;box-sizing:border-box}
+  .qcr-grid > .qcr-card:nth-child(1),
+  .qcr-grid > .qcr-card:nth-child(2){height:250px;min-height:250px}
+  .qcr-grid > .qcr-card:nth-child(3),
+  .qcr-grid > .qcr-card:nth-child(4),
+  .qcr-grid > .qcr-card:nth-child(5),
+  .qcr-grid > .qcr-card:nth-child(6){height:300px;min-height:300px}
+  .qcr-grid > .qcr-card.qcr-intelligence-card{height:220px;min-height:220px}
+  .qcr-grid > .qcr-card.qcr-wide.qcr-root-card{height:250px;min-height:250px}
+  .qcr-grid > .qcr-card.qcr-wide:not(.qcr-root-card){height:auto;min-height:0}
+  .qcr-grid > .qcr-card:not(.qcr-wide) .qcr-body{overflow:auto}
+  .qcr-grid > .qcr-card.qcr-intelligence-card .qcr-body{overflow:auto}
+}
