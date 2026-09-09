@@ -1,0 +1,152 @@
+.qcr-grid>.qcr-card #qcrRootCause{
+  height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+}
+/* Let normal grid flow determine the root-cause card; prevents reserved blank cells. */
+@media(min-width:901px){.qcr-grid>.qcr-root-card{grid-column:1 / -1!important;grid-row:auto!important;}}
+
+.qcr-hero{padding:20px 22px!important;margin-bottom:16px!important;}
+.qcr-hero h2{font-size:28px!important;line-height:1.15!important;}
+.qcr-freshness{font-size:14px!important;margin-top:8px!important;}
+.qcr-quality-status{min-width:220px!important;padding:12px 15px!important;}
+.qcr-quality-status b{font-size:11px!important;}
+.qcr-quality-status strong{font-size:16px!important;}
+.qcr-card h3{font-size:18px!important;min-height:54px!important;padding:15px 18px!important;line-height:1.2!important;}
+.qcr-body{padding:17px 18px!important;}
+.qcr-kpi-grid{gap:12px!important;}
+.qcr-kpi{padding:13px 14px!important;}
+.qcr-kpi .qcr-kpi-name{font-size:14px!important;line-height:1.3!important;}
+.qcr-kpi .qcr-kpi-value{font-size:30px!important;line-height:1.05!important;margin-top:7px!important;}
+.qcr-kpi .qcr-status{font-size:11px!important;padding:5px 9px!important;margin-top:7px!important;}
+.qcr-row{grid-template-columns:40px minmax(0,1fr) auto!important;gap:12px!important;padding:10px 0!important;}
+.qcr-rank{font-size:13px!important;}
+.qcr-name{font-size:14px!important;line-height:1.35!important;}
+.qcr-metric{font-size:14px!important;line-height:1.35!important;}
+.qcr-metric .qcr-pct{font-size:12px!important;}
+.qcr-empty{font-size:14px!important;padding:18px!important;line-height:1.5!important;}
+.qcr-breach{padding:12px 13px!important;}
+.qcr-breach-name{font-size:14px!important;}
+.qcr-breach-meta{font-size:12px!important;}
+.qcr-breach-val{font-size:15px!important;}
+.qcr-opportunity{min-height:0!important;padding:11px 13px!important;}
+.qcr-opportunity-text{font-size:13px!important;line-height:1.5!important;}
+.qcr-opportunity-action{font-size:12px!important;}
+.qcr-intel-status{font-size:12px!important;padding:7px 11px!important;}
+.qcr-intel-main{font-size:30px!important;}
+.qcr-intel-main span{font-size:13px!important;}
+.qcr-intel-meta{font-size:12px!important;line-height:1.5!important;}
+.qcr-kpi-rank b{font-size:13px!important;}
+.qcr-kpi-rank span{font-size:11.5px!important;}
+.qcr-kpi-rank em{font-size:11px!important;}
+.qcr-root-title{font-size:18px!important;}
+.qcr-root-path b{font-size:13px!important;}
+.qcr-root-path span{font-size:11px!important;}
+.qcr-grade-item b{font-size:13px!important;}
+.qcr-grade-item span,.qcr-grade-item em{font-size:11.5px!important;}
+.qcr-why-title{font-size:13px!important;}
+.qcr-why-grid b{font-size:13px!important;}
+.qcr-why-grid span{font-size:12px!important;}
+.qcr-alert b{font-size:13px!important;}
+.qcr-alert small,.qcr-alert em{font-size:11.5px!important;}
+.qcr-health-score{font-size:42px!important;}
+.qcr-health-label{font-size:12px!important;}
+.qcr-health-reasons span{font-size:11.5px!important;}
+.qcr-risk-row span{font-size:12px!important;}
+.qcr-risk-row small,.qcr-risk-row em{font-size:10.5px!important;}
+.qcr-repeat b{font-size:12px!important;}
+.qcr-repeat span,.qcr-repeat>em{font-size:11px!important;}
+
+@media(max-width:900px){
+  .qcr-grid{grid-template-columns:1fr!important;}
+  .qcr-card h3{font-size:17px!important;}
+}
+@media(max-width:600px){
+  html,body{font-size:15px!important;}
+  .filters{top:0!important;min-height:0!important;padding:13px!important;}
+  .filter-trigger{font-size:14px!important;}
+  .qcr-hero h2{font-size:24px!important;}
+  .qcr-kpi-grid{grid-template-columns:1fr!important;}
+}
+
+
+/* QCR FINAL CLEAN REBUILD v22 — one layout system only */
+#tab-controlroom:not(.hidden){
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  contain:none!important;
+}
+#tab-controlroom .qcr-hero{position:relative!important;}
+#tab-controlroom .qcr-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-auto-flow:row!important;
+  grid-auto-rows:auto!important;
+  align-items:start!important;
+  gap:16px!important;
+  width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  margin:0 0 20px!important;
+  padding:0!important;
+  position:static!important;
+  overflow:visible!important;
+}
+#tab-controlroom .qcr-grid::before,#tab-controlroom .qcr-grid::after{display:none!important;content:none!important;}
+#tab-controlroom .qcr-grid>.qcr-card{
+  position:relative!important;
+  inset:auto!important;
+  float:none!important;
+  clear:none!important;
+  grid-row:auto!important;
+  grid-column:auto!important;
+  width:auto!important;
+  margin:0!important;
+  padding:0!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  min-width:0!important;
+  overflow:visible!important;
+  align-self:start!important;
+  box-sizing:border-box!important;
+  display:flex!important;
+  flex-direction:column!important;
+}
+#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1 / -1!important;}
+#tab-controlroom .qcr-card h3{flex:0 0 auto!important;}
+#tab-controlroom .qcr-card .qcr-body{
+  display:block!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  flex:0 0 auto!important;
+  box-sizing:border-box!important;
+}
+#tab-controlroom .qcr-kpi-grid{height:auto!important;min-height:0!important;}
+#tab-controlroom .qcr-list{height:auto!important;min-height:0!important;}
+#tab-controlroom .qcr-card table{width:100%!important;max-width:100%!important;table-layout:fixed!important;}
+#tab-controlroom .qcr-card th,#tab-controlroom .qcr-card td{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;}
+.container{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;}
+.tab-panel{height:auto!important;min-height:0!important;max-height:none!important;}
+.tab-panel.hidden{display:none!important;}
+@media(max-width:900px){
+  #tab-controlroom .qcr-grid{grid-template-columns:1fr!important;gap:14px!important;}
+  #tab-controlroom .qcr-grid>.qcr-card,#tab-controlroom .qcr-grid>.qcr-card.qcr-wide,#tab-controlroom .qcr-grid>.qcr-card.qcr-root-card{grid-column:1!important;}
+}
+
+
+/* Keep the sticky dashboard filters bar from floating over the drilldown
+   records modal. Filters stay pinned to the top of the main dashboard
+   while scrolling; when a KPI card/drilldown modal is open, the filters
+   bar is pushed behind the modal instead of overlapping it. */
+body.drill-modal-open .filters{
+  z-index:1!important;
+}
+.drill-modal{
+  z-index:200000!important;
+}

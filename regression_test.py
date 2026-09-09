@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Non-destructive HTTP regression suite for V27.2.
+"""Non-destructive HTTP regression suite for V27.3.
 Starts the local app against the bundled SQLite DB and verifies core contracts.
 """
 import json, os, sqlite3, subprocess, sys, time, urllib.parse, urllib.request
@@ -39,6 +39,17 @@ def main():
             assert status==200, (path,status)
             assert "X-Request-ID" in headers, path
             checks.append(path)
+        # Verify the modular frontend assets are actually served by the built-in HTTP server.
+        for asset in [
+            '/css/01-foundation.css?v=27.3', '/css/02-components.css?v=27.3',
+            '/css/03-tabs-charts.css?v=27.3', '/css/04-qcr-responsive.css?v=27.3',
+            '/js/01-core-filters-kpi.js?v=27.3', '/js/02-charts.js?v=27.3',
+            '/js/03-analysis-tabs.js?v=27.3', '/js/04-qcr.js?v=27.3',
+            '/js/05-bootstrap.js?v=27.3']:
+            req=urllib.request.Request(BASE+asset)
+            with urllib.request.urlopen(req, timeout=8) as r:
+                assert r.status == 200, asset
+
         # Exercise the real filter contract without changing data.
         params=urllib.parse.urlencode({"work_center":"CND_4HI"})
         status,_data,_=get("/api/kpis?"+params); assert status==200
@@ -48,7 +59,7 @@ def main():
         fp2=con.execute("select coalesce(sum(output_weight),0), min(id), max(id) from disposition").fetchone()
         con.close()
         assert before==after and fp==fp2, (before,after,fp,fp2)
-        print(f"V27.2 REGRESSION PASS — {before} disposition records unchanged; {len(checks)} core endpoints + filter contract OK.")
+        print(f"V27.3 REGRESSION PASS — {before} disposition records unchanged; {len(checks)} core endpoints + filter contract OK.")
     finally:
         p.terminate();
         try: p.wait(timeout=3)

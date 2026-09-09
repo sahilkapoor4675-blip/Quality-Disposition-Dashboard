@@ -9,12 +9,15 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="V27.2">
+<meta name="app-version" content="V27.3">
 <title>Quality Disposition Control Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=27.2">
+<link rel="stylesheet" href="/css/01-foundation.css?v=27.3">
+<link rel="stylesheet" href="/css/02-components.css?v=27.3">
+<link rel="stylesheet" href="/css/03-tabs-charts.css?v=27.3">
+<link rel="stylesheet" href="/css/04-qcr-responsive.css?v=27.3">
 <style id="main-header-font-v18">.quality-intelligence-title{font-family:'Lucida Calligraphy','Lucida Handwriting',cursive!important;}</style>
 </head>
 <body>
@@ -229,6 +232,10 @@
   <div class="footer-note">Data source: Disposition Data (live database) &nbsp;•&nbsp; Runs locally via Python HTTP server + SQLite</div>
 </div>
 
-<script src="/app.js?v=27.2" defer></script>
+<script src="/js/01-core-filters-kpi.js?v=27.3" defer></script>
+<script src="/js/02-charts.js?v=27.3" defer></script>
+<script src="/js/03-analysis-tabs.js?v=27.3" defer></script>
+<script src="/js/04-qcr.js?v=27.3" defer></script>
+<script src="/js/05-bootstrap.js?v=27.3" defer></script>
 </body>
 </html>
