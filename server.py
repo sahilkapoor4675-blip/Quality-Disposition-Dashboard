@@ -2070,14 +2070,17 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
                        "r", encoding="utf-8") as f:
                 self._send_html(f.read())
-        elif path == "/admin":
-            if not _is_admin(self):
-                # Serve the login/admin shell; the page itself never exposes write APIs without auth.
-                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
-                    self._send_html(f.read())
-            else:
-                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
-                    self._send_html(f.read())
+        elif path in {"/admin", "/admin.html"}:
+            # Admin shell is intentionally always served; authentication gates the API/data actions.
+            # No-store prevents a stale authenticated/unauthenticated shell from being reused.
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self._write_body(body.encode("utf-8"))
         elif path == "/api/auth/status":
             meta = _viewer_meta(self)
             if meta:
@@ -2136,17 +2139,16 @@ class Handler(BaseHTTPRequestHandler):
             if hit and now-hit[0] < RESPONSE_CACHE_TTL:
                 self._send_json(hit[1]); return
             try:
-                # Consolidated QCR endpoint: one request for all core sections.
-                # Keep the DB work in one process/connection sequence for SQLite stability;
-                # the response is cached briefly and the frontend renders sections immediately.
-                from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=5) as ex:
-                    fk=ex.submit(compute_kpis, filters)
-                    fd=ex.submit(compute_defect_analysis, filters)
-                    fw=ex.submit(compute_work_center_grade, filters)
-                    fm=ex.submit(compute_monthly_trend, filters)
-                    ff=ex.submit(compute_data_freshness, filters)
-                    k,d,w,m,fr=fk.result(),fd.result(),fw.result(),fm.result(),ff.result()
+                # Consolidated QCR endpoint: run the five SQLite reads sequentially.
+                # The previous threaded fan-out could intermittently return empty/partial
+                # QCR sections on SQLite deployments because multiple connections were
+                # hitting the same database at once. Sequential reads are deterministic
+                # and keep the QCR data identical to the main dashboard calculations.
+                k = compute_kpis(filters)
+                d = compute_defect_analysis(filters)
+                w = compute_work_center_grade(filters)
+                m = compute_monthly_trend(filters)
+                fr = compute_data_freshness(filters)
                 intel=compute_qcr_intelligence(filters, m, d, w, k.get("kpis", []))
                 payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel}
                 RESPONSE_CACHE[cache_key] = (now, payload)

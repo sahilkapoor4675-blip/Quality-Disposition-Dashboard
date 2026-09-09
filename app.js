@@ -890,7 +890,7 @@ async function fetchQcrCore(filters, signal){
   const key=qcrCacheKey(filters); const cached=qcrCoreCache.get(key);
   if(cached && (Date.now()-cached.ts)<15000) return cached.data;
   const params=new URLSearchParams(filters).toString();
-  const r=await fetch('/api/qcr?'+params,{signal}); const data=await r.json();
+  const r=await fetch('/api/qcr?'+params+'&_qcr=17',{signal,cache:'no-store'}); const data=await r.json();
   if(data.error) throw new Error(data.error); qcrCoreCache.set(key,{ts:Date.now(),data}); return data;
 }
 function prefetchQcrCore(filters){

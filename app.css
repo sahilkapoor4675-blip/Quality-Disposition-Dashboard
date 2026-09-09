@@ -844,3 +844,11 @@ button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
     margin:0 0 16px!important;
   }
 }
+
+/* QCR DATA + DRILLDOWN STABILITY v17 */
+/* The drilldown overlay must always sit above the frozen main filters. */
+.drill-modal{z-index:1000000!important;}
+.drill-modal.open{z-index:1000000!important;}
+/* Keep the QCR card packing engine from clipping rendered content. */
+#tab-controlroom .qcr-grid{overflow:visible!important;}
+#tab-controlroom .qcr-card{overflow:hidden!important;}
