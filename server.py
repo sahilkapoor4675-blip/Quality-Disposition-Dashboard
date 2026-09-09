@@ -2147,11 +2147,35 @@ class Handler(BaseHTTPRequestHandler):
                 # QCR sections on SQLite deployments because multiple connections were
                 # hitting the same database at once. Sequential reads are deterministic
                 # and keep the QCR data identical to the main dashboard calculations.
-                k = compute_kpis(filters)
-                d = compute_defect_analysis(filters)
-                w = compute_work_center_grade(filters)
-                m = compute_monthly_trend(filters)
-                fr = compute_data_freshness(filters)
+                #
+                # Each section is isolated: a failure computing any single section
+                # (k/d/w/m/fr) must never blank the entire Control Room. Instead we
+                # fall back to an empty-but-well-formed structure for that section
+                # and record the error so the client can show a precise message.
+                section_errors = {}
+
+                def _safe(name, fn, default):
+                    try:
+                        return fn()
+                    except Exception as exc:
+                        section_errors[name] = str(exc)[:240]
+                        print(f"QCR section '{name}' degraded:", section_errors[name])
+                        return default
+
+                k = _safe("k", lambda: compute_kpis(filters), {"kpis": []})
+                d = _safe("d", lambda: compute_defect_analysis(filters), {
+                    "register": [], "pareto": [], "totals": {"records": 0, "qty": 0},
+                    "register_total": {"defect": "Grand Total", "records": 0, "qty": 0, "pct_records": 0.0},
+                    "pareto_total": {"defect": "Total (Top 10)", "records": 0, "qty": 0, "pct": 0.0, "cum_pct": 0.0},
+                })
+                w = _safe("w", lambda: compute_work_center_grade(filters), {
+                    "by_work_center": [], "by_grade": [], "total_work_center": {}, "total_grade": {},
+                })
+                m = _safe("m", lambda: compute_monthly_trend(filters), {"rows": []})
+                fr = _safe("fr", lambda: compute_data_freshness(filters), {
+                    "filtered_records": 0, "total_records": 0, "data_through": "",
+                    "data_through_display": "—", "updated_display": "—", "latest_date": "",
+                })
                 # Intelligence is deliberately isolated from the core QCR payload.
                 # A failure in an optional analytics calculation must never blank the
                 # entire Control Room.
@@ -2165,7 +2189,10 @@ class Handler(BaseHTTPRequestHandler):
                              "risk_matrix":{"work_centers":[],"grades":[]},"recurring_patterns":[]}
                     intel_error = str(intel_exc)[:240]
                     print("QCR intelligence degraded:", intel_error)
-                payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel, "intel_error": intel_error}
+                payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel,
+                           "intel_error": intel_error, "section_errors": section_errors}
+                # A payload with degraded sections is still real data for the sections
+                # that succeeded, so it is safe (and useful) to cache and return as-is.
                 RESPONSE_CACHE[cache_key] = (now, payload)
                 if len(RESPONSE_CACHE) > 100:
                     oldest = sorted(RESPONSE_CACHE.items(), key=lambda x:x[1][0])[:20]

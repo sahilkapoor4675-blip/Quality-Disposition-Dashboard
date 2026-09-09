@@ -1021,6 +1021,7 @@ async function loadControlRoom(signal){
   const params=new URLSearchParams(filterSnapshot).toString();
   try{
     const data=await fetchQcrCore(filterSnapshot,signal); const {k,d,w,m,fr}=data;
+    clearTimeout(window.qcrAutoRetryTimer);
     document.getElementById('qcrFreshness').textContent=`Data Through: ${fr.data_through_display||'—'} • Filtered Records: ${Number(fr.filtered_records||0).toLocaleString()}`;
     const criticalLabels=['First Pass Yield % (Prime%)','Defect Rate','Reject % Qty','Hold for Decision % Qty','Salvage % Qty','Rework % Qty'];
     const critical=(k.kpis||[]).filter(x=>criticalLabels.includes(x.label));
@@ -1089,9 +1090,14 @@ async function loadControlRoom(signal){
       const ids=['qcrCriticalKpis','qcrBreaches','qcrDefects','qcrWorkCenters','qcrGrades','qcrComparison','qcrWhyChanged','qcrOpportunities','qcrTrendPrediction','qcrKpiRanking','qcrTargetHistory','qcrEarlyWarnings','qcrHealthScore','qcrRiskMatrix','qcrRecurring','qcrGradeConcentration'];
       ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="qcr-empty">Unable to load this QCR section. <span class="qcr-error-detail">'+escQcr(msg)+'</span></div>';});
       const root=document.getElementById('qcrRootCause');if(root)root.innerHTML='<div class="qcr-empty">Root-cause data unavailable until QCR data reconnects.</div>';
-      const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='DATA RETRY';}
-      const hero=document.querySelector('#tab-controlroom .qcr-hero'); if(hero && !document.getElementById('qcrRetryBtn')){const b=document.createElement('button');b.id='qcrRetryBtn';b.type='button';b.textContent='↻ Retry QCR';b.style.cssText='margin-top:10px;padding:7px 12px;border:1px solid #b8cad9;border-radius:8px;background:#fff;color:#183a58;font-weight:800;cursor:pointer;';b.onclick=()=>loadControlRoom(new AbortController().signal);hero.appendChild(b);}
-      const retry=document.getElementById('qcrRetryBtn'); if(retry){retry.onclick=()=>loadControlRoom(new AbortController().signal);}
+      const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='RECONNECTING';}
+      // No manual "Retry" button: the Control Room quietly retries itself in the
+      // background so the user never has to click anything for it to recover.
+      clearTimeout(window.qcrAutoRetryTimer);
+      window.qcrAutoRetryTimer=setTimeout(()=>{
+        const stillOnControlRoom=document.querySelector('.tab-btn.active')?.dataset.tab==='controlroom';
+        if(stillOnControlRoom) loadControlRoom(new AbortController().signal);
+      },5000);
     }
   }
 }
