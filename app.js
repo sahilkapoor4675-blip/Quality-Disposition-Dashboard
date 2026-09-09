@@ -890,9 +890,23 @@ async function fetchQcrCore(filters, signal){
   const key=qcrCacheKey(filters); const cached=qcrCoreCache.get(key);
   if(cached && (Date.now()-cached.ts)<15000) return cached.data;
   const params=new URLSearchParams(filters).toString();
-  const r=await fetch('/api/qcr?'+params+'&_qcr=17',{signal,cache:'no-store'}); const data=await r.json();
-  if(data.error) throw new Error(data.error); qcrCoreCache.set(key,{ts:Date.now(),data}); return data;
+  let lastError=null;
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const r=await fetch('/api/qcr?'+params+'&_qcr=20&_attempt='+(attempt+1),{signal,cache:'no-store',headers:{'Cache-Control':'no-cache'}});
+      let data=null;
+      try{data=await r.json();}catch(e){throw new Error('QCR server returned invalid JSON (HTTP '+r.status+')');}
+      if(!r.ok || data?.error) throw new Error(data?.error || ('QCR request failed (HTTP '+r.status+')'));
+      qcrCoreCache.set(key,{ts:Date.now(),data}); return data;
+    }catch(e){
+      if(e.name==='AbortError') throw e;
+      lastError=e;
+      if(attempt<2) await new Promise(resolve=>setTimeout(resolve,350*(attempt+1)));
+    }
+  }
+  throw lastError || new Error('Unable to load Control Room data');
 }
+
 function prefetchQcrCore(filters){
   const key=qcrCacheKey(filters), cached=qcrCoreCache.get(key);
   if(cached && (Date.now()-cached.ts)<15000) return;
@@ -1057,45 +1071,47 @@ async function loadControlRoom(signal){
     const oe=document.getElementById('qcrOpportunities');oe.innerHTML=ranked.length?ranked.map((o,i)=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>#${i+1} ${o.title}</b><br><span>${o.detail}</span></div><span class="qcr-opportunity-action">Recommended: ${o.action}</span></div>`).join(''):'<div class="qcr-empty">✓ No improvement opportunity detected for the current selection.</div>';
     markChartsReady();
     scheduleQcrLayout();
-  }catch(e){if(e.name!=='AbortError'){console.error(e);document.getElementById('qcrCriticalKpis').innerHTML='<div class="qcr-empty">Unable to load Control Room data.</div>';}}
+  }catch(e){
+    if(e.name!=='AbortError'){
+      console.error('QCR load failed',e);
+      const msg=String(e?.message||'Unable to load Control Room data');
+      const ids=['qcrCriticalKpis','qcrBreaches','qcrDefects','qcrWorkCenters','qcrGrades','qcrComparison','qcrWhyChanged','qcrOpportunities','qcrTrendPrediction','qcrKpiRanking','qcrTargetHistory','qcrEarlyWarnings','qcrHealthScore','qcrRiskMatrix','qcrRecurring','qcrGradeConcentration'];
+      ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="qcr-empty">Unable to load this QCR section. <span class="qcr-error-detail">'+escQcr(msg)+'</span></div>';});
+      const root=document.getElementById('qcrRootCause');if(root)root.innerHTML='<div class="qcr-empty">Root-cause data unavailable until QCR data reconnects.</div>';
+      const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='DATA RETRY';}
+      setTimeout(()=>{if(!document.hidden){try{loadControlRoom(new AbortController().signal);}catch(_){}}},1200);
+    }
+  }
 }
 
-// ---------- QCR robust two-column masonry layout ----------
+// ---------- QCR safe CSS-grid masonry layout ----------
+// Uses real CSS grid rows rather than absolute positioning. This prevents cards
+// from overlapping when async content (tables/root-cause/intelligence) changes height.
 function layoutQcrCards(){
   const grid=document.getElementById('tab-controlroom')?.querySelector('.qcr-grid');
   if(!grid || window.getComputedStyle(grid).display==='none') return;
   const cards=[...grid.querySelectorAll(':scope > .qcr-card')];
   if(!cards.length) return;
   if(window.innerWidth<=900){
-    cards.forEach(c=>{c.style.position='relative';c.style.left='';c.style.top='';c.style.width='100%';});
-    grid.style.height='auto';
+    cards.forEach(c=>{c.style.gridRowEnd='';});
+    grid.style.removeProperty('grid-auto-rows');
     return;
   }
-  const gap=16, width=grid.clientWidth, colW=Math.max(0,(width-gap)/2);
-  // First pass: give every card its final width but temporarily keep it in normal flow
-  // so offsetHeight always measures the complete rendered content.
+  const row=8, gap=16;
+  grid.style.setProperty('grid-auto-rows',row+'px','important');
+  grid.style.setProperty('row-gap',gap+'px','important');
+  grid.style.setProperty('column-gap',gap+'px','important');
   cards.forEach(card=>{
-    const wide=card.classList.contains('qcr-wide') || card.classList.contains('qcr-root-card');
-    card.style.position='relative'; card.style.left=''; card.style.top='';
-    card.style.width=wide?'100%':colW+'px'; card.style.margin='0 0 '+gap+'px 0';
+    card.style.position='relative'; card.style.left=''; card.style.top=''; card.style.width=''; card.style.margin='0';
+    card.style.gridRowEnd='auto';
   });
-  // Force layout after widths have settled, then place cards absolutely using measured heights.
-  const heights=cards.map(card=>card.offsetHeight);
-  let y=[0,0];
-  cards.forEach((card,i)=>{
-    const wide=card.classList.contains('qcr-wide') || card.classList.contains('qcr-root-card');
-    const h=heights[i];
-    if(wide){
-      const top=Math.max(y[0],y[1]);
-      card.style.position='absolute'; card.style.width='100%'; card.style.left='0px'; card.style.top=top+'px'; card.style.margin='0';
-      y=[top+h+gap,top+h+gap];
-    }else{
-      const col=y[0]<=y[1]?0:1, top=y[col];
-      card.style.position='absolute'; card.style.width=colW+'px'; card.style.left=(col?colW+gap:0)+'px'; card.style.top=top+'px'; card.style.margin='0';
-      y[col]=top+h+gap;
-    }
+  // First pass gives cards their natural height in the actual two-column width.
+  void grid.offsetHeight;
+  cards.forEach(card=>{
+    const h=Math.max(1,card.getBoundingClientRect().height);
+    const span=Math.max(1,Math.ceil((h+gap)/(row+gap)));
+    card.style.gridRowEnd='span '+span;
   });
-  grid.style.height=Math.max(0,Math.max(y[0],y[1])-gap)+'px';
 }
 let qcrLayoutTimer=null;
 function scheduleQcrLayout(){
@@ -1111,7 +1127,6 @@ function initQcrLayoutObserver(){
   if('ResizeObserver' in window){
     qcrResizeObserver=new ResizeObserver(()=>scheduleQcrLayout());
     [...grid.children].forEach(c=>qcrResizeObserver.observe(c));
-    qcrResizeObserver.observe(grid);
   }
   if('MutationObserver' in window){
     const mo=new MutationObserver(()=>scheduleQcrLayout());

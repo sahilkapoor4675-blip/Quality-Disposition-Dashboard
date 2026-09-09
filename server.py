@@ -2152,8 +2152,20 @@ class Handler(BaseHTTPRequestHandler):
                 w = compute_work_center_grade(filters)
                 m = compute_monthly_trend(filters)
                 fr = compute_data_freshness(filters)
-                intel=compute_qcr_intelligence(filters, m, d, w, k.get("kpis", []))
-                payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel}
+                # Intelligence is deliberately isolated from the core QCR payload.
+                # A failure in an optional analytics calculation must never blank the
+                # entire Control Room.
+                try:
+                    intel=compute_qcr_intelligence(filters, m, d, w, k.get("kpis", []))
+                    intel_error = ""
+                except Exception as intel_exc:
+                    intel = {"comparison":{"current":None,"previous":None,"rows":[]},"why_changed":None,
+                             "forecast":{},"early_warnings":[],"kpi_ranking":[],
+                             "health_score":{"score":0,"status":"amber","reasons":[],"components":[]},
+                             "risk_matrix":{"work_centers":[],"grades":[]},"recurring_patterns":[]}
+                    intel_error = str(intel_exc)[:240]
+                    print("QCR intelligence degraded:", intel_error)
+                payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel, "intel_error": intel_error}
                 RESPONSE_CACHE[cache_key] = (now, payload)
                 if len(RESPONSE_CACHE) > 100:
                     oldest = sorted(RESPONSE_CACHE.items(), key=lambda x:x[1][0])[:20]
