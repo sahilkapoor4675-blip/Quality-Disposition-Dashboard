@@ -312,7 +312,7 @@ function openDrilldown(metric,title,extra={}){ drillState={metric,title,extra,pa
 
 function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open');}
 qcrWireProblemActions();
-document.getElementById('qcrRiskMatrix')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-risk-item');if(!b)return;const p={};if(b.dataset.riskDim==='Work Center')p.work_center=b.dataset.riskName;else if(b.dataset.riskDim==='Grade')p.grade=b.dataset.riskName;openDrilldown('quality_investigation',`Risk Investigation — ${b.dataset.riskName}`,p);});
+document.getElementById('qcrRiskMatrix')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-risk-item');if(!b)return;const p={};if(b.dataset.riskDim==='Work Center')p.work_center=b.dataset.riskName;else if(b.dataset.riskDim==='Grade')p.grade=b.dataset.riskName;qcrInvestigation(p,`Risk Investigation — ${b.dataset.riskName}`);});
 function wireDrilldown(){
   document.getElementById('drillCloseBtn')?.addEventListener('click',closeDrilldown);
   document.getElementById('drillModal')?.addEventListener('click',e=>{if(e.target.id==='drillModal')closeDrilldown();});
@@ -882,7 +882,7 @@ function qcrRenderList(id, rows, nameKey, metricKey, metricFmt){
 function qcrRenderBreaches(kpis){
   const el=document.getElementById('qcrBreaches'); const bad=kpis.filter(k=>qcrStatus(k.label,k.value)==='bad'); const amber=kpis.filter(k=>qcrStatus(k.label,k.value)==='amber'); const rows=[...bad,...amber];
   if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No KPI target breaches. All configured KPIs are on target.</div>';return;}
-  el.innerHTML=rows.map(k=>`<div class="qcr-breach"><div><div class="qcr-breach-name">${k.label}</div><div class="qcr-breach-meta">${qcrStatus(k.label,k.value)==='bad'?'Critical breach':'Watch level'} • Target ${qcrTargetText(k.label)}</div></div><div class="qcr-breach-right"><div class="qcr-breach-val">${qcrFmtKpi(k)}</div><button class="qcr-mini-investigate qcr-kpi-investigate" type="button">Investigate →</button></div></div>`).join('');
+  el.innerHTML=rows.map(k=>`<div class="qcr-breach"><div><div class="qcr-breach-name">${k.label}</div><div class="qcr-breach-meta">${qcrStatus(k.label,k.value)==='bad'?'Critical breach':'Watch level'} • Target ${qcrTargetText(k.label)}</div></div><div class="qcr-breach-right"><div class="qcr-breach-val">${qcrFmtKpi(k)}</div><button class="qcr-mini-investigate qcr-kpi-investigate" type="button" data-kpi-metric="${escQcr(k.label)}">Investigate →</button></div></div>`).join('');
 }
 function qcrRenderComparison(rows){
   const el=document.getElementById('qcrComparison'); if(!rows.length){el.innerHTML='<div class="qcr-empty">Monthly comparison is not available.</div>';return;}
@@ -1036,15 +1036,47 @@ function qcrRenderWhyDecomposition(intel){
   const d=z.defect_contributor,w=z.wc_contributor,g=z.decomposition?.grade;
   el.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b><span>${d?.name?`Defect mix driver: <b>${escQcr(d.name)}</b> ${Number(d.change_pp||0)>=0?'+':''}${Number(d.change_pp||0).toFixed(2)} pp share`:'No dominant defect contributor identified.'}</span></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b><span>${w?.name?`Work-center driver: <b>${escQcr(w.name)}</b> ${Number(w.change_pp||0)>=0?'+':''}${Number(w.change_pp||0).toFixed(2)} pp share`:'No dominant work-center contributor identified.'}</span></div></div><div class="qcr-why-decomp"><div class="qcr-why-box"><small>Work Center</small><b>${escQcr(w?.name||'—')}</b><span>${w?`${Number(w.change_pp||0)>=0?'+':''}${Number(w.change_pp||0).toFixed(2)} pp mix change • ${Number(w.contribution_pct||0).toFixed(0)}% of positive increase`: 'No dominant contributor'}</span></div><div class="qcr-why-box"><small>Grade</small><b>${escQcr(g?.name||'—')}</b><span>Highest current quality-risk grade</span></div><div class="qcr-why-box"><small>Defect</small><b>${escQcr(d?.name||'—')}</b><span>${d?`${Number(d.change_pp||0)>=0?'+':''}${Number(d.change_pp||0).toFixed(2)} pp mix change • ${Number(d.contribution_pct||0).toFixed(0)}% of positive increase`:'No dominant contributor'}</span></div></div><div class="qcr-quality-story" style="margin-top:10px"><div class="qcr-story-text"><b>${escQcr(z.statement||'')}</b></div></div>`;
 }
+function qcrInvestigation(extra={}, title='QCR Investigation'){
+  const p={};
+  Object.entries(extra||{}).forEach(([k,v])=>{if(v!==undefined&&v!==null&&String(v).trim()&&String(v).toLowerCase()!=='all'&&String(v)!=='—')p[k]=v;});
+  openDrilldown('quality_investigation',title,p);
+}
 function qcrWireProblemActions(){
-  document.getElementById('qcrProblemFinder')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-investigate-btn');if(!b)return;const p={};const where=b.dataset.qcrWhere,grade=b.dataset.qcrGrade,defect=b.dataset.qcrDefect;if(where&&where!=='—')p.work_center=where;if(grade&&grade!=='—')p.grade=grade;openDrilldown(defect&&defect!=='—'?'defect_category':'quality_investigation',`QCR Investigation — ${defect&&defect!=='—'?defect:'Quality issue'}`,Object.assign({},p,defect&&defect!=='—'?{drill_value:defect}:{}));});
-  document.getElementById('qcrDefects')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-defect-btn');if(!b)return;loadRootCause(b.dataset.defect||'');});
-  document.getElementById('qcrWorkCenters')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-mini-investigate');if(!b)return;openDrilldown('quality_investigation',`Work Center Investigation — ${b.dataset.qcrWc}`,{work_center:b.dataset.qcrWc});});
-  document.getElementById('qcrGrades')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-mini-investigate');if(!b)return;openDrilldown('quality_investigation',`Grade Investigation — ${b.dataset.qcrGrade}`,{grade:b.dataset.qcrGrade});});
-  document.getElementById('qcrBreaches')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-kpi-investigate');if(!b)return;const row=b.closest('.qcr-breach');const label=row?.querySelector('.qcr-breach-name')?.textContent||'KPI breach';openDrilldown('quality_investigation',`KPI Investigation — ${label}`,{});});
-  document.getElementById('qcrOpportunities')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-opportunity-btn');if(!b)return;openDrilldown('quality_investigation',`Improvement Investigation — ${b.dataset.oppTitle||'Quality opportunity'}`,{});});
-  document.getElementById('qcrEarlyWarnings')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-alert-investigate');if(!b)return;openDrilldown('quality_investigation',`Alert Investigation — ${b.dataset.alertTitle||'Quality alert'}`,{work_center:b.dataset.alertWc||'All',grade:b.dataset.alertGrade||'All',drill_value:b.dataset.alertDefect||''});});
-  document.getElementById('qcrRecurring')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-repeat-investigate');if(!b)return;openDrilldown('defect_category',`Recurring Problem — ${b.dataset.repeatDefect}`,{work_center:b.dataset.repeatWc||'All',grade:b.dataset.repeatGrade||'All',drill_value:b.dataset.repeatDefect||''});});
+  document.getElementById('qcrProblemFinder')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-investigate-btn'); if(!b)return;
+    const defect=b.dataset.qcrDefect, where=b.dataset.qcrWhere, grade=b.dataset.qcrGrade;
+    qcrInvestigation({work_center:where,grade,drill_value:defect},`QCR Investigation — ${defect&&defect!=='—'?defect:'Quality issue'}`);
+  });
+  document.getElementById('qcrDefects')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-defect-btn'); if(!b)return;
+    loadRootCause(b.dataset.defect||'');
+  });
+  document.getElementById('qcrWorkCenters')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-mini-investigate'); if(!b)return;
+    qcrInvestigation({work_center:b.dataset.qcrWc},`Work Center Investigation — ${b.dataset.qcrWc}`);
+  });
+  document.getElementById('qcrGrades')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-mini-investigate'); if(!b)return;
+    qcrInvestigation({grade:b.dataset.qcrGrade},`Grade Investigation — ${b.dataset.qcrGrade}`);
+  });
+  document.getElementById('qcrBreaches')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-kpi-investigate'); if(!b)return;
+    const row=b.closest('.qcr-breach'); const label=row?.querySelector('.qcr-breach-name')?.textContent||'KPI breach';
+    const metric=b.dataset.kpiMetric||label;
+    qcrInvestigation({metric},`KPI Investigation — ${label}`);
+  });
+  document.getElementById('qcrOpportunities')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-opportunity-btn'); if(!b)return;
+    qcrInvestigation({work_center:b.dataset.oppWc,grade:b.dataset.oppGrade,drill_value:b.dataset.oppDefect},`Improvement Investigation — ${b.dataset.oppTitle||'Quality opportunity'}`);
+  });
+  document.getElementById('qcrEarlyWarnings')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-alert-investigate'); if(!b)return;
+    qcrInvestigation({work_center:b.dataset.alertWc,grade:b.dataset.alertGrade,drill_value:b.dataset.alertDefect},`Alert Investigation — ${b.dataset.alertTitle||'Quality alert'}`);
+  });
+  document.getElementById('qcrRecurring')?.addEventListener('click',e=>{
+    const b=e.target.closest('.qcr-repeat-investigate'); if(!b)return;
+    qcrInvestigation({work_center:b.dataset.repeatWc,grade:b.dataset.repeatGrade,drill_value:b.dataset.repeatDefect},`Recurring Problem — ${b.dataset.repeatDefect||'Quality problem'}`);
+  });
 }
 
 function qcrRenderAdvancedIntel(intel){
@@ -1072,7 +1104,7 @@ function qcrRenderExecutive(intel, critical, comparisonRows){
   let trend='→', trendText='Stable';
   if(prev&&cur){const a=Number(prev.fpy||prev.fpy_pct||0),b=Number(cur.fpy||cur.fpy_pct||0);if(b<a){trend='↓';trendText='Quality declining';}else if(b>a){trend='↑';trendText='Quality improving';}}
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  set('qcrExecHealth',`${h.toFixed(0)}/100`);set('qcrExecHealthState',health.status==='good'?'Healthy':health.status==='bad'?'Critical':'Attention');set('qcrExecCritical',crit);set('qcrExecAttention',att);set('qcrExecProblem',top?.title||'No material issue');set('qcrExecDriver',top?.driver_path||top?.where||'Continue monitoring');set('qcrExecTrend',trend);set('qcrExecTrendText',trendText);
+  set('qcrExecHealth',`${h.toFixed(0)}/100`);set('qcrExecHealthState',health.status==='good'?'Healthy':health.status==='bad'?'Critical':'Attention');set('qcrExecCritical',crit);set('qcrExecBreaches',critical.filter(k=>qcrStatus(k.label,k.value)!=='good').length);set('qcrExecProblem',top?.title||'No material issue');set('qcrExecDriver',top?.driver_path||top?.where||'Continue monitoring');set('qcrExecTrend',trend);set('qcrExecTrendText',trendText);
 }
 async function loadControlRoom(signal){
   const filterSnapshot={...currentFilters};
@@ -1136,11 +1168,11 @@ async function loadControlRoom(signal){
     // Improvement Opportunities: ranked, action-oriented and de-duplicated.
     const opp=[];
     critical.forEach(x=>{const st=qcrStatus(x.label,x.value);if(st==='good')return;const c=KPI_TARGETS[x.label]||{};opp.push({score:st==='bad'?100:60,icon:st==='bad'?'🚨':'👀',title:x.label,detail:`${qcrFmtKpi(x)} vs target ${qcrTargetText(x.label)}`,action:st==='bad'?'Investigate':'Review'});});
-    worstWc.slice(0,3).forEach((x,i)=>opp.push({score:85-i*5,icon:'🏭',title:`${x.name}`,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Investigate'}));
-    worstGr.slice(0,3).forEach((x,i)=>opp.push({score:80-i*5,icon:'🧪',title:`${x.name}`,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Review'}));
-    topDefects.slice(0,3).forEach((x,i)=>opp.push({score:75-i*5,icon:'🎯',title:`${x.defect}`,detail:`${Number(x.qty||0).toFixed(2)} MT • ${defectTotalQty?(Number(x.qty||0)/defectTotalQty*100).toFixed(2):'0.00'}% of defect qty • ${Number(x.records||0).toLocaleString()} coils`,action:'Investigate'}));
+    worstWc.slice(0,3).forEach((x,i)=>opp.push({score:85-i*5,icon:'🏭',title:`${x.name}`,work_center:x.name,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Investigate'}));
+    worstGr.slice(0,3).forEach((x,i)=>opp.push({score:80-i*5,icon:'🧪',title:`${x.name}`,grade:x.name,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Review'}));
+    topDefects.slice(0,3).forEach((x,i)=>opp.push({score:75-i*5,icon:'🎯',title:`${x.defect}`,defect:x.defect,detail:`${Number(x.qty||0).toFixed(2)} MT • ${defectTotalQty?(Number(x.qty||0)/defectTotalQty*100).toFixed(2):'0.00'}% of defect qty • ${Number(x.records||0).toLocaleString()} coils`,action:'Investigate'}));
     const seen=new Set(); const ranked=opp.sort((a,b)=>b.score-a.score).filter(o=>{const k=o.title.toUpperCase();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
-    const oe=document.getElementById('qcrOpportunities');oe.innerHTML=ranked.length?ranked.map((o,i)=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>#${i+1} ${escQcr(o.title)}</b><br><span>${escQcr(o.detail)}</span></div><button class="qcr-mini-investigate qcr-opportunity-btn" type="button" data-opp-title="${escQcr(o.title)}">${o.action} →</button></div>`).join(''):'<div class="qcr-empty">✓ No improvement opportunity detected for the current selection.</div>';
+    const oe=document.getElementById('qcrOpportunities');oe.innerHTML=ranked.length?ranked.map((o,i)=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>#${i+1} ${escQcr(o.title)}</b><br><span>${escQcr(o.detail)}</span></div><button class="qcr-mini-investigate qcr-opportunity-btn" type="button" data-opp-title="${escQcr(o.title)}" data-opp-wc="${escQcr(o.work_center||'')}" data-opp-grade="${escQcr(o.grade||'')}" data-opp-defect="${escQcr(o.defect||'')}">${o.action} →</button></div>`).join(''):'<div class="qcr-empty">✓ No improvement opportunity detected for the current selection.</div>';
     markChartsReady();
     scheduleQcrLayout();
   }catch(e){

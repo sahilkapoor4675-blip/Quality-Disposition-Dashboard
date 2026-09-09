@@ -2097,6 +2097,17 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000, offset=0):
         clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(drill_value or '')
     elif metric == 'heat_detail':
         clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
+    elif metric == 'quality_investigation':
+        # QCR one-click investigations may provide any combination of WC/Grade/Defect.
+        wc = str(filters.get('work_center') or 'All').strip()
+        grade = str(filters.get('grade') or 'All').strip()
+        defect = str(drill_value or '').strip()
+        if wc and wc.lower() != 'all':
+            clauses.append("work_center = ?"); extra.append(wc)
+        if grade and grade.lower() != 'all':
+            clauses.append("grade = ?"); extra.append(grade)
+        if defect and defect.lower() not in {'all','—','-'}:
+            clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(defect)
     # Total Coils / Output Quantity / unknown => current filtered selection.
     if clauses:
         where_sql = where_sql + (' AND ' if where_sql else 'WHERE ') + ' AND '.join(clauses)
@@ -2276,6 +2287,11 @@ class Handler(BaseHTTPRequestHandler):
                 elif metric == 'decision_category': clauses.append("quality_decision = ?"); extra.append(drill_value or '')
                 elif metric == 'defect_category': clauses.append("main_defect = ?"); extra.append(drill_value or '')
                 elif metric == 'heat_detail': clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
+                elif metric == 'quality_investigation':
+                    wc=str(qs.get('work_center','All') or 'All').strip(); grade=str(qs.get('grade','All') or 'All').strip(); defect=str(drill_value or '').strip()
+                    if wc and wc.lower()!='all': clauses.append('work_center = ?'); extra.append(wc)
+                    if grade and grade.lower()!='all': clauses.append('grade = ?'); extra.append(grade)
+                    if defect and defect.lower() not in {'all','—','-'}: clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(defect)
                 if clauses: where_sql=where_sql+(' AND ' if where_sql else 'WHERE ')+' AND '.join(clauses); base_params+=extra
                 conn=get_conn(); cur=conn.cursor(); cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}",base_params); total_rows,total_coils,total_weight=cur.fetchone(); conn.close()
                 rows=_drilldown_rows(filters, metric, drill_value, limit=page_size, offset=offset)
