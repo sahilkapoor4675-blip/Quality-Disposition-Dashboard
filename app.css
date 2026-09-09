@@ -776,3 +776,46 @@ button,select,input,.filters,.filters *{font-family:var(--font-body)!important;}
 .qcr-kpi .qcr-kpi-name,.qcr-kpi .qcr-status,.qcr-kpi .qcr-kpi-value,.qcr-kpi .qcr-kpi-value *{font-family:'DM Sans','Segoe UI',Arial,sans-serif!important;}
 .qcr-kpi .qcr-kpi-value,.qcr-metric,.qcr-breach-val,.qcr-intel-main,.qcr-why-grid b,.qcr-grade-item em,.qcr-health-score{font-family:'Outfit','Segoe UI',Arial,sans-serif!important;}
 .qcr-hero h2,.qcr-card h3,.qcr-root-title,.qcr-why-title,.qcr-subtitle{font-family:'Sora','Segoe UI',Arial,sans-serif!important;}
+
+/* QCR CARD GAP FIX v14 — masonry-style packing, no reserved row gaps */
+.qcr-grid{
+  display:block!important;
+  width:100%!important;
+  overflow:visible!important;
+}
+.qcr-grid::after{
+  content:"";
+  display:block!important;
+  clear:both!important;
+}
+@media(min-width:901px){
+  .qcr-grid > .qcr-card{
+    float:left!important;
+    width:calc(50% - 8px)!important;
+    margin:0 16px 16px 0!important;
+    box-sizing:border-box!important;
+    clear:none!important;
+  }
+  .qcr-grid > .qcr-card:nth-child(even){
+    margin-right:0!important;
+  }
+  .qcr-grid > .qcr-card.qcr-wide{
+    float:none!important;
+    width:100%!important;
+    margin:0 0 16px 0!important;
+    clear:both!important;
+  }
+  .qcr-grid > .qcr-card.qcr-root-card{
+    float:none!important;
+    width:100%!important;
+    margin:0 0 16px 0!important;
+    clear:both!important;
+  }
+}
+@media(max-width:900px){
+  .qcr-grid > .qcr-card{
+    float:none!important;
+    width:100%!important;
+    margin:0 0 16px 0!important;
+  }
+}
