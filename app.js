@@ -311,7 +311,6 @@ function renderDrillPage(page=1){
 function openDrilldown(metric,title,extra={}){ drillState={metric,title,extra,page:1}; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('drill-modal-open'); renderDrillPage(1); }
 
 function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open');}
-document.getElementById('qcrDefects')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-defect-btn');if(b)loadRootCause(b.dataset.defect||'');});
 qcrWireProblemActions();
 document.getElementById('qcrRiskMatrix')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-risk-item');if(!b)return;const p={};if(b.dataset.riskDim==='Work Center')p.work_center=b.dataset.riskName;else if(b.dataset.riskDim==='Grade')p.grade=b.dataset.riskName;openDrilldown('quality_investigation',`Risk Investigation — ${b.dataset.riskName}`,p);});
 function wireDrilldown(){
@@ -870,12 +869,20 @@ function qcrFmtKpi(k){ return k.fmt==='pct' ? (Number(k.value||0)*100).toFixed(2
 function qcrTargetText(label){ const c=KPI_TARGETS[label]; if(!c)return 'Target not set'; return `${c.direction==='lower'?'≤':'≥'} ${fmtTarget(c.target,'pct')}`; }
 function qcrRenderList(id, rows, nameKey, metricKey, metricFmt){
   const el=document.getElementById(id); if(!el)return; if(!rows.length){el.innerHTML='<div class="qcr-empty">No data available for current selection.</div>';return;}
-  el.innerHTML=rows.map((r,i)=>`<div class="qcr-row"><div class="qcr-rank">${i+1}</div><div class="qcr-name">${String(r[nameKey]??'—')}</div><div class="qcr-metric">${metricFmt(Number(r[metricKey]||0))}</div></div>`).join('');
+  const isWc=id==='qcrWorkCenters', isGrade=id==='qcrGrades';
+  el.innerHTML=rows.map((r,i)=>{
+    const name=String(r[nameKey]??'—'); const reject=Number(r[metricKey]||0); const coils=Number(r.coils||0);
+    const sev=reject>=0.05?'CRITICAL':reject>=0.03?'ATTENTION':'NORMAL';
+    const action= isWc ? `Investigate ${name}` : isGrade ? `Review ${name}` : 'Investigate';
+    const attrs=isWc?`data-qcr-wc="${escQcr(name)}"`:isGrade?`data-qcr-grade="${escQcr(name)}"`:'';
+    return `<div class="qcr-ranked-row"><div class="qcr-rank">${i+1}</div><div class="qcr-ranked-main"><b>${escQcr(name)}</b><span>${metricFmt(reject)}${coils?` • ${coils.toLocaleString()} coils`:''}</span><em class="qcr-severity-pill ${sev.toLowerCase()}">${sev}</em></div><button class="qcr-mini-investigate" type="button" ${attrs}>${action} →</button></div>`;
+  }).join('');
 }
+
 function qcrRenderBreaches(kpis){
   const el=document.getElementById('qcrBreaches'); const bad=kpis.filter(k=>qcrStatus(k.label,k.value)==='bad'); const amber=kpis.filter(k=>qcrStatus(k.label,k.value)==='amber'); const rows=[...bad,...amber];
   if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No KPI target breaches. All configured KPIs are on target.</div>';return;}
-  el.innerHTML=rows.map(k=>`<div class="qcr-breach"><div><div class="qcr-breach-name">${k.label}</div><div class="qcr-breach-meta">${qcrStatus(k.label,k.value)==='bad'?'Critical breach':'Watch level'} • Target ${qcrTargetText(k.label)}</div></div><div class="qcr-breach-val">${qcrFmtKpi(k)}</div></div>`).join('');
+  el.innerHTML=rows.map(k=>`<div class="qcr-breach"><div><div class="qcr-breach-name">${k.label}</div><div class="qcr-breach-meta">${qcrStatus(k.label,k.value)==='bad'?'Critical breach':'Watch level'} • Target ${qcrTargetText(k.label)}</div></div><div class="qcr-breach-right"><div class="qcr-breach-val">${qcrFmtKpi(k)}</div><button class="qcr-mini-investigate qcr-kpi-investigate" type="button">Investigate →</button></div></div>`).join('');
 }
 function qcrRenderComparison(rows){
   const el=document.getElementById('qcrComparison'); if(!rows.length){el.innerHTML='<div class="qcr-empty">Monthly comparison is not available.</div>';return;}
@@ -1003,18 +1010,17 @@ async function loadQcrSecondary(filterSnapshot, d, w, m, signal, loadToken){
 }
 function escQcr(v){return String(v??'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function qcrRenderProblemFinder(intel){
-  const el=document.getElementById('qcrProblemFinder'), count=document.getElementById('qcrProblemCount');
-  const allRows=Array.isArray(intel?.problem_finder)?intel.problem_finder:[], rows=allRows.slice(0,5);
-  if(count) count.textContent=`${allRows.length} detected • Top ${rows.length} shown`;
-  if(!el)return;
+  const el=document.getElementById('qcrProblemFinder'), count=document.getElementById('qcrProblemCount'); if(!el)return;
+  const rows=(Array.isArray(intel?.problem_finder)?intel.problem_finder:[]).slice(0,5);
+  if(count)count.textContent=`${rows.length} issue${rows.length===1?'':'s'}`;
   if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No material quality problem detected for the current selection. Continue monitoring.</div>';return;}
   el.innerHTML=rows.map((x,i)=>{
-    const sev=String(x.severity||'Attention').toLowerCase();
-    const tags=[x.where&&x.where!=='—'?`Where: ${escQcr(x.where)}`:'',x.grade&&x.grade!=='—'?`Grade: ${escQcr(x.grade)}`:'',x.defect&&x.defect!=='—'?`Defect: ${escQcr(x.defect)}`:'',x.period&&x.period!=='—'?`When: ${escQcr(x.period)}`:'',x.records?`Sample: ${Number(x.records).toLocaleString()} coils`:'',x.confidence?`Confidence: ${escQcr(x.confidence)}`:''].filter(Boolean);
-    const www=`<div class="qcr-what-where-why"><div class="qcr-www"><div class="qcr-www-step"><small>What</small><b>${escQcr(x.what)}</b></div><div class="qcr-www-arrow">→</div><div class="qcr-www-step"><small>Where</small><b>${escQcr(x.where)}</b></div><div class="qcr-www-arrow">→</div><div class="qcr-www-step"><small>Grade</small><b>${escQcr(x.grade)}</b></div><div class="qcr-www-arrow">→</div><div class="qcr-www-step"><small>Defect</small><b>${escQcr(x.defect)}</b></div><div class="qcr-www-arrow">→</div><div class="qcr-www-step"><small>When</small><b>${escQcr(x.period)}</b></div><div class="qcr-www-arrow">→</div><div class="qcr-www-step"><small>How much</small><b>${x.impact_qty?Number(x.impact_qty).toFixed(2)+' MT':escQcr(x.change||'—')}</b></div></div></div>`;
-    return `<div class="qcr-problem ${sev}"><div class="qcr-problem-rank">${i+1}</div><div class="qcr-problem-main"><b>${escQcr(x.title)}</b><small>${escQcr(x.detail)} ${x.driver_path?`<strong>Main driver: ${escQcr(x.driver_path)}.</strong>`:''} <strong>Recommended: ${escQcr(x.action||'Investigate')}</strong></small><div class="qcr-problem-meta">${tags.map((t,j)=>`<span class="${j===0?'qcr-chip-bad':''}">${t}</span>`).join('')}</div>${www}</div><div class="qcr-problem-action"><span class="qcr-problem-severity ${sev}">${escQcr(x.severity)}</span><button class="qcr-investigate-btn" type="button" data-qcr-where="${escQcr(x.where)}" data-qcr-grade="${escQcr(x.grade)}" data-qcr-defect="${escQcr(x.defect)}">Investigate →</button></div></div>`;
+    const sev=String(x.severity||'Observation').toUpperCase(); const conf=String(x.confidence||'MEDIUM').toUpperCase();
+    const driver=x.driver_path||x.where||'—'; const change=x.change|| (x.impact_qty?`${Number(x.impact_qty).toFixed(2)} MT`:'—');
+    return `<div class="qcr-problem-row ${sev.toLowerCase()}"><div class="qcr-problem-rank">${i+1}</div><div class="qcr-problem-main"><b>${escQcr(x.title||x.what||'Quality issue')}</b><span>${escQcr(x.detail||'Material quality signal detected.')}</span><div class="qcr-problem-fields"><span><small>DRIVER</small>${escQcr(driver)}</span><span><small>CHANGE</small>${escQcr(change)}</span><span><small>CONFIDENCE</small>${conf} · ${Number(x.records||0).toLocaleString()} records</span></div></div><div class="qcr-problem-action"><em class="qcr-severity-pill ${sev.toLowerCase()}">${sev}</em><button class="qcr-investigate-btn" type="button" data-qcr-where="${escQcr(x.where||'')}" data-qcr-grade="${escQcr(x.grade||'')}" data-qcr-defect="${escQcr(x.defect||'')}">Investigate →</button></div></div>`;
   }).join('');
 }
+
 function qcrRenderQualityStory(intel){
   const el=document.getElementById('qcrQualityStory');if(!el)return; const story=String(intel?.quality_story||'No quality story available.'); const top=(intel?.problem_finder||[])[0];
   const tags=[]; if(top?.where&&top.where!=='—')tags.push(`Where: ${top.where}`);if(top?.grade&&top.grade!=='—')tags.push(`Grade: ${top.grade}`);if(top?.defect&&top.defect!=='—')tags.push(`Defect: ${top.defect}`);if(top?.confidence)tags.push(`Confidence: ${top.confidence}`);
@@ -1032,17 +1038,24 @@ function qcrRenderWhyDecomposition(intel){
 }
 function qcrWireProblemActions(){
   document.getElementById('qcrProblemFinder')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-investigate-btn');if(!b)return;const p={};const where=b.dataset.qcrWhere,grade=b.dataset.qcrGrade,defect=b.dataset.qcrDefect;if(where&&where!=='—')p.work_center=where;if(grade&&grade!=='—')p.grade=grade;openDrilldown(defect&&defect!=='—'?'defect_category':'quality_investigation',`QCR Investigation — ${defect&&defect!=='—'?defect:'Quality issue'}`,Object.assign({},p,defect&&defect!=='—'?{drill_value:defect}:{}));});
+  document.getElementById('qcrDefects')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-defect-btn');if(!b)return;loadRootCause(b.dataset.defect||'');});
+  document.getElementById('qcrWorkCenters')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-mini-investigate');if(!b)return;openDrilldown('quality_investigation',`Work Center Investigation — ${b.dataset.qcrWc}`,{work_center:b.dataset.qcrWc});});
+  document.getElementById('qcrGrades')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-mini-investigate');if(!b)return;openDrilldown('quality_investigation',`Grade Investigation — ${b.dataset.qcrGrade}`,{grade:b.dataset.qcrGrade});});
+  document.getElementById('qcrBreaches')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-kpi-investigate');if(!b)return;const row=b.closest('.qcr-breach');const label=row?.querySelector('.qcr-breach-name')?.textContent||'KPI breach';openDrilldown('quality_investigation',`KPI Investigation — ${label}`,{});});
+  document.getElementById('qcrOpportunities')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-opportunity-btn');if(!b)return;openDrilldown('quality_investigation',`Improvement Investigation — ${b.dataset.oppTitle||'Quality opportunity'}`,{});});
+  document.getElementById('qcrEarlyWarnings')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-alert-investigate');if(!b)return;openDrilldown('quality_investigation',`Alert Investigation — ${b.dataset.alertTitle||'Quality alert'}`,{work_center:b.dataset.alertWc||'All',grade:b.dataset.alertGrade||'All',drill_value:b.dataset.alertDefect||''});});
+  document.getElementById('qcrRecurring')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-repeat-investigate');if(!b)return;openDrilldown('defect_category',`Recurring Problem — ${b.dataset.repeatDefect}`,{work_center:b.dataset.repeatWc||'All',grade:b.dataset.repeatGrade||'All',drill_value:b.dataset.repeatDefect||''});});
 }
 
 function qcrRenderAdvancedIntel(intel){
   const ew=document.getElementById('qcrEarlyWarnings');
-  if(ew){const rows=intel?.early_warnings||[]; ew.innerHTML=rows.length?rows.map(x=>`<div class="qcr-alert ${x.severity}"><span>${x.severity==='high'?'🔴':'🟠'}</span><div><b>${escQcr(x.title)}</b><small>${escQcr(x.detail)}</small><em>Recommended: ${escQcr(x.action)}</em></div></div>`).join(''):'<div class="qcr-empty">✓ No early-warning condition detected.</div>';}
+  if(ew){const rows=intel?.early_warnings||[]; ew.innerHTML=rows.length?rows.map(x=>`<div class="qcr-alert ${x.severity}"><span>${x.severity==='high'?'🔴':'🟠'}</span><div><b>${escQcr(x.title)}</b><small>${escQcr(x.detail)}</small><em>Recommended: ${escQcr(x.action)}</em><button class="qcr-alert-investigate" type="button" data-alert-title="${escQcr(x.title)}" data-alert-wc="${escQcr(x.work_center||'')}" data-alert-grade="${escQcr(x.grade||'')}" data-alert-defect="${escQcr(x.defect||'')}">Investigate →</button></div></div>`).join(''):'<div class="qcr-empty">✓ No early-warning condition detected.</div>';}
   const hs=document.getElementById('qcrHealthScore');
-  if(hs){const h=intel?.health_score||{}; const reasons=(h.reasons||[]); hs.innerHTML=`<div class="qcr-health"><div class="qcr-health-score ${h.status||'amber'}">${Number(h.score||0).toFixed(1)}<small>/100</small></div><div class="qcr-health-label">${h.status==='good'?'🟢 Healthy':h.status==='bad'?'🔴 Critical':'🟠 Attention Required'}</div></div><div class="qcr-health-reasons">${reasons.length?reasons.map(r=>`<span>−${Number(r[1]||0).toFixed(1)} <b>${escQcr(r[0])}</b></span>`).join(''):'<span>All weighted quality components are performing within target.</span>'}</div>`;}
+  if(hs){const h=intel?.health_score||{}; const reasons=(h.reasons||[]); hs.innerHTML=`<div class="qcr-health"><div class="qcr-health-score ${h.status||'amber'}">${Number(h.score||0).toFixed(1)}<small>/100</small></div><div class="qcr-health-label">${h.status==='good'?'🟢 Healthy':h.status==='bad'?'🔴 Critical':'🟠 Attention Required'}</div></div><div class="qcr-health-reasons">${reasons.length?reasons.map(r=>{const n=Number(r[1]||0);return `<span class="${n>=0?'positive':'negative'}">${n>=0?'+':''}${n.toFixed(1)} <b>${escQcr(r[0])}</b></span>`}).join(''):'<span>All weighted quality components are performing within target.</span>'}</div><div class="qcr-confidence-note">Score is explainable from weighted KPI, trend, recurrence and target signals.</div>`;}
   const rm=document.getElementById('qcrRiskMatrix');
   if(rm){const wc=intel?.risk_matrix?.work_centers||[],gr=intel?.risk_matrix?.grades||[]; const block=(title,arr)=>{const levels=['High','Medium','Low'];return `<div class="qcr-risk-block"><b>${title}</b><div class="qcr-risk-matrix">${levels.map(level=>`<div class="qcr-risk-col"><strong>${level}</strong>${arr.filter(x=>x.risk===level).slice(0,4).map(x=>`<button class="qcr-risk-item" type="button" data-risk-dim="${title}" data-risk-name="${escQcr(x.name)}"><span>${escQcr(x.name)}</span><small>${(Number(x.reject_pct||0)*100).toFixed(2)}% Reject • ${Number(x.score||0).toFixed(0)} score</small></button>`).join('')||'<em>—</em>'}</div>`).join('')}</div></div>`}; rm.innerHTML=(wc.length||gr.length)?block('Work Center',wc)+block('Grade',gr):'<div class="qcr-empty">No risk data available.</div>'; }
   const rp=document.getElementById('qcrRecurring');
-  if(rp){const rows=intel?.recurring_patterns||[]; rp.innerHTML=rows.length?rows.slice(0,6).map((x,i)=>`<div class="qcr-repeat"><div><b>🔴 #${i+1} ${escQcr(x.defect)}</b><span>${escQcr(x.grade)} • ${escQcr(x.work_center)}</span></div><div class="qcr-repeat-months">${(x.months||[]).map(m=>`<span>${escQcr(m.month)}: <b>${Number(m.coils||0).toLocaleString()}</b> coils</span>`).join('')}</div><em>Recurring • ${x.period_count} periods • ${Number(x.qty||0).toFixed(2)} MT</em></div>`).join(''):'<div class="qcr-empty">✓ No recurring Grade + Defect + Work Center pattern found across multiple periods.</div>';}
+  if(rp){const rows=intel?.recurring_patterns||[]; rp.innerHTML=rows.length?rows.slice(0,6).map((x,i)=>`<div class="qcr-repeat"><div><b>🔴 #${i+1} ${escQcr(x.defect)}</b><span>${escQcr(x.grade)} • ${escQcr(x.work_center)}</span></div><div class="qcr-repeat-months">${(x.months||[]).map(m=>`<span>${escQcr(m.month)}: <b>${Number(m.coils||0).toLocaleString()}</b> coils</span>`).join('')}</div><em>Recurring • ${x.period_count} periods • ${Number(x.qty||0).toFixed(2)} MT</em><button class="qcr-repeat-investigate" type="button" data-repeat-defect="${escQcr(x.defect)}" data-repeat-grade="${escQcr(x.grade)}" data-repeat-wc="${escQcr(x.work_center)}">Investigate →</button></div>`).join(''):'<div class="qcr-empty">✓ No recurring Grade + Defect + Work Center pattern found across multiple periods.</div>';}
 }
 function qcrRenderTargetHistory(rows,target){
   const el=document.getElementById('qcrTargetHistory'); if(!el)return;
@@ -1050,6 +1063,17 @@ function qcrRenderTargetHistory(rows,target){
   el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • Attainment = Actual ÷ Target</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>Attainment</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
 }
 
+function qcrRenderExecutive(intel, critical, comparisonRows){
+  const health=intel?.health_score||{}; const h=Number(health.score||0); const pf=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
+  const crit=pf.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
+  const att=pf.filter(x=>String(x.severity||'').toLowerCase()==='attention').length;
+  const top=pf[0];
+  const prev=comparisonRows?.length>1?comparisonRows[comparisonRows.length-2]:null, cur=comparisonRows?.length?comparisonRows[comparisonRows.length-1]:null;
+  let trend='→', trendText='Stable';
+  if(prev&&cur){const a=Number(prev.fpy||prev.fpy_pct||0),b=Number(cur.fpy||cur.fpy_pct||0);if(b<a){trend='↓';trendText='Quality declining';}else if(b>a){trend='↑';trendText='Quality improving';}}
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  set('qcrExecHealth',`${h.toFixed(0)}/100`);set('qcrExecHealthState',health.status==='good'?'Healthy':health.status==='bad'?'Critical':'Attention');set('qcrExecCritical',crit);set('qcrExecAttention',att);set('qcrExecProblem',top?.title||'No material issue');set('qcrExecDriver',top?.driver_path||top?.where||'Continue monitoring');set('qcrExecTrend',trend);set('qcrExecTrendText',trendText);
+}
 async function loadControlRoom(signal){
   const filterSnapshot={...currentFilters};
   const params=new URLSearchParams(filterSnapshot).toString();
@@ -1086,7 +1110,7 @@ async function loadControlRoom(signal){
 
     qcrRenderBreaches(critical);
     const defectTotalQty=Number(d.totals?.qty||0); const topDefects=(d.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0)).slice(0,5); const qcrDefEl=document.getElementById('qcrDefects');
-    if(!topDefects.length){qcrDefEl.innerHTML='<div class="qcr-empty">No defect data available for current selection.</div>';}else{qcrDefEl.innerHTML=topDefects.map((r,i)=>{const qty=Number(r.qty||0);const pct=defectTotalQty?qty/defectTotalQty:0;return `<button class="qcr-row qcr-defect-btn" data-defect="${String(r.defect??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><span class="qcr-rank">${i+1}</span><span class="qcr-name">${String(r.defect??'—')}</span><span class="qcr-metric"><span class="qcr-qty">${qty.toFixed(2)} MT</span><span class="qcr-pct">${(pct*100).toFixed(2)}% of Defect Qty • ${Number(r.records||0).toLocaleString()} coils</span></span></button>`;}).join('');}
+    if(!topDefects.length){qcrDefEl.innerHTML='<div class="qcr-empty">No defect data available for current selection.</div>';}else{qcrDefEl.innerHTML=topDefects.map((r,i)=>{const qty=Number(r.qty||0);const pct=defectTotalQty?qty/defectTotalQty:0;const sev=pct>=0.35?'CRITICAL':pct>=0.20?'ATTENTION':'NORMAL';const defect=String(r.defect??'');return `<div class="qcr-ranked-row qcr-defect-ranked"><div class="qcr-rank">${i+1}</div><div class="qcr-ranked-main"><b>${escQcr(defect)}</b><span>${qty.toFixed(2)} MT • ${(pct*100).toFixed(2)}% of defect qty • ${Number(r.records||0).toLocaleString()} coils</span><em class="qcr-severity-pill ${sev.toLowerCase()}">${sev}</em></div><button class="qcr-mini-investigate qcr-defect-btn" type="button" data-defect="${escQcr(defect)}">View Pareto →</button></div>`;}).join('');}
 
     const worstWc=[...(w.by_work_center||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
     const worstGr=[...(w.by_grade||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
@@ -1095,6 +1119,7 @@ async function loadControlRoom(signal){
     // All QCR intelligence is now returned by the consolidated endpoint so these
     // sections never depend on a chain of secondary browser requests.
     qcrRenderComparison((m&&m.rows)||[]);
+    qcrRenderExecutive(data?.intel||{},critical,(m&&m.rows)||[]);
     qcrRenderTrendPrediction((m&&m.rows)||[],d,w); qcrRenderKpiRanking(critical);
     fetch('/api/qcr_target_history?'+params,{signal}).then(r=>r.json()).then(th=>{if(!th.error){qcrRenderTargetHistory(th.rows||[],th.target); scheduleQcrLayout();}}).catch(()=>{});
     const intel=data?.intel||{};
@@ -1105,8 +1130,6 @@ async function loadControlRoom(signal){
     qcrRenderAdvancedIntel(intel);
     const gc=document.getElementById('qcrGradeConcentration');
     if(gc){const rows=Array.isArray(intel.grade_concentration)?intel.grade_concentration:[];gc.innerHTML=rows.length?'<div class="qcr-subtitle">Problem concentration</div>'+rows.map(x=>`<div class="qcr-grade-item"><b>${x.grade||'—'}</b><span>Defect: ${x.defect||'—'}</span><span>WC: ${x.wc||'—'}</span><em>Reject ${(Number(x.reject_pct||0)*100).toFixed(2)}%</em></div>`).join(''):'<div class="qcr-empty">No grade concentration available.</div>';}
-    const why=document.getElementById('qcrWhyChanged');
-    if(why){const z=intel.why_changed;if(z&&z.current&&z.previous){const fc=z.defect_contributor,fw=z.wc_contributor;why.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b><span>${fc?.name?`Main contributor: <b>${fc.name}</b> ${Number(fc.change_pp||0)>=0?'+':''}${Number(fc.change_pp||0).toFixed(2)} pp defect share`:'No dominant defect contributor identified.'}</span></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b><span>${fw?.name?`Major contributor: <b>${fw.name}</b> ${Number(fw.change_pp||0)>=0?'+':''}${Number(fw.change_pp||0).toFixed(2)} pp Reject`:'No dominant work-center contributor identified.'}</span></div></div>`;}else{why.innerHTML='<div class="qcr-why-title">Why changed?</div><div class="qcr-empty">Previous month comparison is not available for this selection.</div>';}}
     const loadToken=++window.qcrLoadToken;
     if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect).finally(scheduleQcrLayout);
 
@@ -1117,7 +1140,7 @@ async function loadControlRoom(signal){
     worstGr.slice(0,3).forEach((x,i)=>opp.push({score:80-i*5,icon:'🧪',title:`${x.name}`,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Review'}));
     topDefects.slice(0,3).forEach((x,i)=>opp.push({score:75-i*5,icon:'🎯',title:`${x.defect}`,detail:`${Number(x.qty||0).toFixed(2)} MT • ${defectTotalQty?(Number(x.qty||0)/defectTotalQty*100).toFixed(2):'0.00'}% of defect qty • ${Number(x.records||0).toLocaleString()} coils`,action:'Investigate'}));
     const seen=new Set(); const ranked=opp.sort((a,b)=>b.score-a.score).filter(o=>{const k=o.title.toUpperCase();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
-    const oe=document.getElementById('qcrOpportunities');oe.innerHTML=ranked.length?ranked.map((o,i)=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>#${i+1} ${o.title}</b><br><span>${o.detail}</span></div><span class="qcr-opportunity-action">Recommended: ${o.action}</span></div>`).join(''):'<div class="qcr-empty">✓ No improvement opportunity detected for the current selection.</div>';
+    const oe=document.getElementById('qcrOpportunities');oe.innerHTML=ranked.length?ranked.map((o,i)=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>#${i+1} ${escQcr(o.title)}</b><br><span>${escQcr(o.detail)}</span></div><button class="qcr-mini-investigate qcr-opportunity-btn" type="button" data-opp-title="${escQcr(o.title)}">${o.action} →</button></div>`).join(''):'<div class="qcr-empty">✓ No improvement opportunity detected for the current selection.</div>';
     markChartsReady();
     scheduleQcrLayout();
   }catch(e){
