@@ -1013,7 +1013,9 @@ function qcrRenderProblemFinder(intel){
   const el=document.getElementById('qcrProblemFinder'), count=document.getElementById('qcrProblemCount'); if(!el)return;
   const all=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
   const rows=all.slice(0,5);
-  if(count)count.textContent=all.length?`${all.length} issue${all.length===1?'':'s'}${all.length>rows.length?` · top ${rows.length} shown`:''}`:'0 issues';
+  const critCount=all.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
+  const shownNote=all.length>rows.length?` · top ${rows.length} shown`:'';
+  if(count)count.textContent=all.length?(critCount>0?`${critCount} critical issue${critCount===1?'':'s'}${shownNote}`:`${all.length} issue${all.length===1?'':'s'}${shownNote}`):'0 issues';
   if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No material quality problem detected for the current selection. Continue monitoring.</div>';return;}
   el.innerHTML=rows.map((x,i)=>{
     const sev=String(x.severity||'Observation').toUpperCase(); const conf=String(x.confidence||'MEDIUM').toUpperCase();
@@ -1093,7 +1095,7 @@ function qcrRenderAdvancedIntel(intel){
 function qcrRenderTargetHistory(rows,target){
   const el=document.getElementById('qcrTargetHistory'); if(!el)return;
   if(!rows.length){el.innerHTML='<div class="qcr-empty">No historical monthly data available.</div>';return;}
-  el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • Attainment = Actual ÷ Target — how close each period came to the target (100% = target fully met, below 100% = shortfall)</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>Attainment</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
+  el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • % Target Achieved shows how much of the target was reached each period (100% = target fully met)</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>% Target Achieved</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
 }
 
 function qcrRenderExecutive(intel, critical, comparisonRows){
