@@ -1100,33 +1100,12 @@ async function loadControlRoom(signal){
 function layoutQcrCards(){ return; }
 function scheduleQcrLayout(){ return; }
 
-// ---------- Export Center ----------
-function updateExportTab(){
-  const host=document.getElementById("exportCenter");
-  if(!host) return;
-  const active=Object.entries(currentFilters).filter(([k,v])=>v && v!=="All").map(([k,v])=>`${k}: ${v}`).join(" • ") || "All data";
-  host.innerHTML=`<div class="export-center-head"><div><div class="export-center-title">Quality Report Export Center</div><div class="export-center-sub">Exports use the same live filtered dataset as the dashboard and QCR.</div></div><span class="export-filter-pill">${active}</span></div>
-  <div class="export-center-grid">
-    <button class="export-card" data-format="excel"><span>📊</span><b>Excel Report</b><small>16 KPIs, charts, analysis tables, QCR intelligence and exact filtered row-level data.</small></button>
-    <button class="export-card" data-format="pdf"><span>📄</span><b>PDF Report</b><small>Presentation-ready dashboard, charts, trends, defect analysis and QCR sections.</small></button>
-    <button class="export-card" data-format="ppt"><span>📽️</span><b>PowerPoint Report</b><small>16:9 management deck with KPI scorecard, charts, trends, QCR alerts and root cause.</small></button>
-  </div>
-  <div class="export-note">Tip: select dashboard filters first, then export. Every format carries the active filter context.</div>`;
-  host.querySelectorAll(".export-card").forEach(btn=>btn.addEventListener("click",()=>exportDashboard(btn.dataset.format)));
-}
-function exportDashboard(format){
-  const params=new URLSearchParams(currentFilters).toString();
-  window.location.href=`/api/export/${format}?${params}`;
-}
-
-// ---------- Tab switching ----------
 const TAB_LOADERS = {
   dashboard: loadKpis,
   controlroom: loadControlRoom,
   wcgrade: loadWcGrade,
   defects: loadDefectAnalysis,
   weekly: loadPeriodTrend,
-  exports: async function(){ updateExportTab(); },
 };
 
 async function activateTab(tabName){
