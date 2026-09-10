@@ -59,7 +59,11 @@
     <div class="qcr-hero"><div class="qcr-hero-row"><div><h2>🚨 Quality Control Room</h2><div class="qcr-freshness" id="qcrFreshness">Data Through: — • Filtered Records: —</div></div><div class="qcr-quality-status" id="qcrQualityStatus"><span class="qcr-status-dot">●</span><span><b>QUALITY STATUS</b><strong>—</strong></span></div></div></div>
 
     <div class="qcr-executive-strip" id="qcrExecutiveStrip">
-      <div class="qcr-exec-item"><small>QUALITY HEALTH</small><b id="qcrExecHealth">—/100</b><span id="qcrExecHealthState">—</span></div>
+      <div class="qcr-exec-item qcr-exec-health">
+        <small>QUALITY HEALTH</small><b id="qcrExecHealth">—/100</b><span id="qcrExecHealthState">—</span>
+        <button class="qcr-exec-why qcr-hidden" id="qcrHealthWhyBtn" type="button">Why? ▾</button>
+        <div class="qcr-health-reasons qcr-hidden" id="qcrHealthReasons"></div>
+      </div>
       <div class="qcr-exec-item"><small>CRITICAL ISSUES</small><b id="qcrExecCritical">0</b><span>Detected</span></div>
       <div class="qcr-exec-item"><small>TARGET BREACHES</small><b id="qcrExecBreaches">0</b><span>Above configured target</span></div>
       <div class="qcr-exec-item qcr-exec-problem"><small>BIGGEST PROBLEM</small><b id="qcrExecProblem">—</b><span id="qcrExecDriver">No material issue</span></div>
@@ -72,44 +76,48 @@
     </div>
 
     <div class="qcr-story-card qcr-card qcr-wide">
-      <div class="qcr-body"><div id="qcrQualityStory" class="qcr-quality-story"><div class="qcr-empty">Building quality story…</div></div></div>
+      <div class="qcr-body">
+        <div id="qcrQualityStory" class="qcr-quality-story"><div class="qcr-empty">Building quality story…</div></div>
+        <div id="qcrQualityImprovements" class="qcr-improving-line"></div>
+      </div>
     </div>
 
     <section class="qcr-zone qcr-zone-action">
-      <div class="qcr-zone-heading"><h3>Action Required</h3><p>Focus on problems that need investigation now.</p></div>
+      <div class="qcr-zone-heading"><h3>Action Required</h3><p>Which KPIs and areas need investigation right now.</p></div>
       <div class="qcr-grid qcr-grid-action">
-        <div class="qcr-card"><h3>🔴 Critical KPIs</h3><div class="qcr-body"><div class="qcr-kpi-grid" id="qcrCriticalKpis"></div></div></div>
-        <div class="qcr-card"><h3>🎯 Target Breaches</h3><div class="qcr-body"><div class="qcr-list" id="qcrBreaches"></div></div></div>
-        <div class="qcr-card"><h3>🎯 Top 5 Defects</h3><div class="qcr-body"><div class="qcr-list" id="qcrDefects"></div></div></div>
-        <div class="qcr-card"><h3>🏭 Worst Work Centers</h3><div class="qcr-body"><div class="qcr-list" id="qcrWorkCenters"></div></div></div>
-        <div class="qcr-card qcr-wide qcr-root-card"><h3>🔥 Pareto → Root Cause Investigation</h3><div class="qcr-body"><div id="qcrRootCause" class="qcr-root-cause"><div class="qcr-empty">Select a defect from Top 5 Defects to investigate its Grade → Work Center → Heat → Batch path.</div></div></div></div>
+        <div class="qcr-card qcr-wide"><h3>🔴 Critical KPIs</h3><div class="qcr-body"><div class="qcr-kpi-grid" id="qcrCriticalKpis"></div></div></div>
+
+        <div class="qcr-card qcr-wide qcr-contrib-card">
+          <h3>🏭 Top Contributors</h3>
+          <div class="qcr-tabs" id="qcrContribTabs">
+            <button class="qcr-tab-btn active" type="button" data-contrib-tab="defect">🎯 Defects</button>
+            <button class="qcr-tab-btn" type="button" data-contrib-tab="wc">🏭 Work Centers</button>
+            <button class="qcr-tab-btn" type="button" data-contrib-tab="grade">🧪 Grades</button>
+          </div>
+          <div class="qcr-body">
+            <div class="qcr-tab-panel-c qcr-list" id="qcrContribDefect" data-contrib-panel="defect"></div>
+            <div class="qcr-tab-panel-c qcr-list qcr-hidden" id="qcrContribWc" data-contrib-panel="wc"></div>
+            <div class="qcr-tab-panel-c qcr-list qcr-hidden" id="qcrContribGrade" data-contrib-panel="grade"></div>
+            <div id="qcrContribFooter"></div>
+          </div>
+        </div>
+
+        <div class="qcr-card qcr-wide qcr-root-card"><h3>🔥 Pareto → Root Cause Investigation</h3><div class="qcr-body"><div id="qcrRootCause" class="qcr-root-cause"><div class="qcr-empty">Select a defect from Top Contributors to investigate its Grade → Work Center → Heat → Batch path.</div></div></div></div>
       </div>
     </section>
 
     <section class="qcr-zone qcr-zone-performance">
-      <div class="qcr-zone-heading"><h3>Performance</h3><p>Understand what changed and where improvement is possible.</p></div>
-      <div class="qcr-grid qcr-grid-performance">
-        <div class="qcr-card"><h3>🧪 Worst Grades</h3><div class="qcr-body"><div class="qcr-list" id="qcrGrades"></div><div id="qcrGradeConcentration" class="qcr-grade-concentration"></div></div></div>
-        <div class="qcr-card qcr-comparison-card"><h3>📈 What Changed?</h3><div class="qcr-body"><div id="qcrComparison"></div><details class="qcr-accordion"><summary>Why changed?</summary><div id="qcrWhyChanged" class="qcr-why-changed"></div></details></div></div>
-        <div class="qcr-card qcr-wide"><h3>💡 Improvement Opportunities</h3><div class="qcr-body"><div class="qcr-list" id="qcrOpportunities"></div><div class="qcr-improvements-divider">What's Improved</div><div class="qcr-list" id="qcrQualityImprovements"></div></div></div>
+      <div class="qcr-zone-heading"><h3>Trend &amp; History</h3><p>What changed, why it changed, and how it's tracking against target.</p></div>
+      <div class="qcr-card qcr-wide qcr-trend-card">
+        <h3>📈 Quality Trend &amp; Target History</h3>
+        <div class="qcr-body">
+          <div id="qcrTrendPrediction"></div>
+          <div id="qcrComparison"></div>
+          <details class="qcr-accordion"><summary>Why did it change?</summary><div id="qcrWhyChanged" class="qcr-why-changed"></div></details>
+          <details class="qcr-accordion"><summary>Full target history — First Pass Yield % (Prime%)</summary><div id="qcrTargetHistory"></div></details>
+        </div>
       </div>
     </section>
-
-    <section class="qcr-zone qcr-zone-intelligence">
-      <details class="qcr-intelligence-toggle" open>
-        <summary><div class="qcr-toggle-text"><b>Intelligence &amp; Analytics</b><em>Explain signals, trends, risk and recurrence</em></div></summary>
-        <div class="qcr-grid qcr-grid-intelligence">
-          <div class="qcr-card qcr-intelligence-card"><h3>📈 Quality Trend Intelligence</h3><div class="qcr-body"><div id="qcrTrendPrediction"></div></div></div>
-          <div class="qcr-card qcr-intelligence-card"><h3>🎯 KPI Target Intelligence</h3><div class="qcr-body"><div id="qcrKpiRanking"></div></div></div>
-          <div class="qcr-card qcr-intelligence-card"><h3>📊 First Pass Yield % (Prime%) — Target vs Actual History</h3><div class="qcr-body"><div id="qcrTargetHistory"></div></div></div>
-          <div class="qcr-card qcr-intelligence-card"><h3>🚨 Active Alerts</h3><div class="qcr-body"><div id="qcrEarlyWarnings"></div></div></div>
-          <div class="qcr-card qcr-intelligence-card"><h3>💯 Quality Health Score</h3><div class="qcr-body"><div id="qcrHealthScore"></div></div></div>
-          <div class="qcr-card qcr-intelligence-card"><h3>🏭 Work Center &amp; Grade Risk</h3><div class="qcr-body"><div id="qcrRiskMatrix"></div></div></div>
-          <div class="qcr-card qcr-intelligence-card qcr-wide"><h3>🔍 Recurring Quality Problems</h3><div class="qcr-body"><div id="qcrRecurring"></div></div></div>
-        </div>
-      </details>
-    </section>
-
 
   </div>
 
