@@ -336,6 +336,7 @@ async function loadKpis(signal){
   renderDecisionTable(data.decision_table, data.decision_total);
   renderDefectTable(data.top_defects, data.top_defects_total);
   renderIntensityTable(data.intensity_table, data.intensity_total);
+  dashLoadFishbone(data.top_defects);
 
   const decisionRows = data.decision_table.filter(r => r.qty > 0);
   makePieChart(document.getElementById("decisionPie"), decisionRows, "qty", "decision",
@@ -963,8 +964,57 @@ function qcrLoadFishbone(topDefects){
 }
 document.getElementById('qcrFishboneChips')?.addEventListener('click',e=>{
   const b=e.target.closest('.qcr-fishbone-chip'); if(!b)return;
-  document.querySelectorAll('.qcr-fishbone-chip').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('#qcrFishboneChips .qcr-fishbone-chip').forEach(x=>x.classList.toggle('active',x===b));
   qcrRenderFishboneDiagram((qcrFishboneData.items||[])[Number(b.dataset.idx||0)]);
+});
+// ---------- 6M Fishbone Analysis (Dashboard tab → below Top 5 Defects Pareto) ----------
+// Same /api/fishbone source as the Quality Control Room tab, but driven by the
+// Dashboard's own filtered Top 5 Defects (data.top_defects from /api/kpis), so it
+// reacts to every filter change on the Dashboard tab independently of the QCR tab.
+let dashFishboneData = {items:[]};
+function dashRenderFishboneChips(items){
+  const chipsEl=document.getElementById('dashFishboneChips'); if(!chipsEl) return;
+  chipsEl.innerHTML = items.map((it,i)=>`<button class="qcr-fishbone-chip${i===0?' active':''}" type="button" data-idx="${i}">${escQcr(it.defect)}${it.matched?'':' ⚠'}</button>`).join('');
+}
+function dashRenderFishboneDiagram(item){
+  const el=document.getElementById('dashFishboneDiagram'); if(!el) return;
+  if(!item){ el.innerHTML='<div class="qcr-empty">No defect data available for the current selection.</div>'; return; }
+  if(!item.matched){
+    el.innerHTML=`<div class="qcr-empty">No 6M Fishbone mapping found for <b>${escQcr(item.defect)}</b> yet. Ask an admin to import/update the 6M Fishbone Master, or add a defect mapping in Admin → 6M Fishbone Analysis.</div>`;
+    return;
+  }
+  const c=item.causes||{};
+  const note = item.match_type==='fuzzy' ? `<div class="qcr-fb-note">Matched to master defect "${escQcr(item.matched_defect)}" (closest match, ${Math.round((item.confidence||0)*100)}% confidence). If this looks wrong, fix it in Admin → 6M Fishbone Analysis.</div>` : '';
+  el.innerHTML = `
+    <div class="qcr-fb-title">🐟 6M Fishbone — ${escQcr(item.defect)}</div>
+    ${note}
+    <div class="qcr-fb-grid">
+      ${qcrFishboneCard('man','Man','👤',c.man)}
+      ${qcrFishboneCard('machine','Machine','⚙️',c.machine)}
+      ${qcrFishboneCard('material','Material','🧱',c.material)}
+      ${qcrFishboneCard('method','Method','📋',c.method)}
+      ${qcrFishboneCard('measurement','Measurement','📏',c.measurement)}
+      ${qcrFishboneCard('environment','Environment','🌤️',c.environment)}
+    </div>
+    <div class="qcr-fb-spine"><span>${escQcr(item.defect)}</span></div>`;
+}
+function dashLoadFishbone(topDefects){
+  const chipsEl=document.getElementById('dashFishboneChips'), diagEl=document.getElementById('dashFishboneDiagram');
+  if(!chipsEl || !diagEl) return;
+  const names=(topDefects||[]).map(r=>r.defect).filter(n=>n && n!=='—').slice(0,5);
+  if(!names.length){ chipsEl.innerHTML=''; diagEl.innerHTML='<div class="qcr-empty">No defect data available for the current selection.</div>'; return; }
+  diagEl.innerHTML='<div class="qcr-empty">Loading 6M fishbone analysis…</div>';
+  fetch('/api/fishbone?defects='+encodeURIComponent(names.join('|')),{cache:'no-store'}).then(r=>r.json()).then(d=>{
+    if(d.error) throw new Error(d.error);
+    dashFishboneData=d;
+    dashRenderFishboneChips(d.items||[]);
+    dashRenderFishboneDiagram((d.items||[])[0]);
+  }).catch(()=>{ diagEl.innerHTML='<div class="qcr-empty">6M fishbone data unavailable.</div>'; });
+}
+document.getElementById('dashFishboneChips')?.addEventListener('click',e=>{
+  const b=e.target.closest('.qcr-fishbone-chip'); if(!b)return;
+  document.querySelectorAll('#dashFishboneChips .qcr-fishbone-chip').forEach(x=>x.classList.toggle('active',x===b));
+  dashRenderFishboneDiagram((dashFishboneData.items||[])[Number(b.dataset.idx||0)]);
 });
 function qcrRenderHealthReasons(intel){
   const btn=document.getElementById('qcrHealthWhyBtn'), box=document.getElementById('qcrHealthReasons'); if(!btn||!box)return;
