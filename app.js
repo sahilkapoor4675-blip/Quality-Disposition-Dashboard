@@ -31,7 +31,7 @@ async function loadFilters(){
   const res = await fetch("/api/filters");
   const options = await res.json();
   const container = document.getElementById("filters");
-  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
     const label = document.createElement("label"); label.textContent = f.label;
@@ -63,9 +63,9 @@ async function loadFilters(){
     renderOptions();
   });
   document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); updateActiveFilterBadge(); triggerFilterRefresh();});
-  function exportDashboard(format){ const params=new URLSearchParams(currentFilters).toString(); window.location.href=`/api/export/${format}?${params}`; }
   document.getElementById("exportExcelBtn").addEventListener("click",()=>exportDashboard("excel"));
   document.getElementById("exportPdfBtn").addEventListener("click",()=>exportDashboard("pdf"));
+  document.getElementById("exportPptBtn").addEventListener("click",()=>exportDashboard("ppt"));
   document.getElementById("exportCsvBtn").addEventListener("click",()=>exportDashboard("csv"));
   document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));},{once:true});
   updateActiveFilterBadge();
@@ -311,7 +311,7 @@ function renderDrillPage(page=1){
 function openDrilldown(metric,title,extra={}){ drillState={metric,title,extra,page:1}; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('drill-modal-open'); renderDrillPage(1); }
 
 function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open');}
-qcrWireProblemActions();
+document.getElementById('qcrDefects')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-defect-btn');if(b)loadRootCause(b.dataset.defect||'');});
 function wireDrilldown(){
   document.getElementById('drillCloseBtn')?.addEventListener('click',closeDrilldown);
   document.getElementById('drillModal')?.addEventListener('click',e=>{if(e.target.id==='drillModal')closeDrilldown();});
@@ -866,56 +866,14 @@ function qcrStatus(label, value){
 }
 function qcrFmtKpi(k){ return k.fmt==='pct' ? (Number(k.value||0)*100).toFixed(2)+'%' : k.fmt==='int' ? Math.round(Number(k.value||0)).toLocaleString() : Number(k.value||0).toFixed(2); }
 function qcrTargetText(label){ const c=KPI_TARGETS[label]; if(!c)return 'Target not set'; return `${c.direction==='lower'?'≤':'≥'} ${fmtTarget(c.target,'pct')}`; }
-// Top Contributors: Defects / Work Centers / Grades in one tabbed card.
-// Replaces the old separate Top 5 Defects, Worst Work Centers, Worst Grades,
-// Grade Concentration, Work Center & Grade Risk and Recurring Quality
-// Problems cards — same underlying rows, shown once each, with a
-// "Recurring" / risk badge inline instead of a whole extra card.
-function qcrRenderContribPanel(id, rows, kind, meta){
-  const el=document.getElementById(id); if(!el)return;
-  if(!rows.length){el.innerHTML='<div class="qcr-empty">No data available for current selection.</div>';return;}
-  el.innerHTML=rows.map((r,i)=>{
-    let name,metricText,sev,attrs,action,badges='';
-    if(kind==='defect'){
-      name=String(r.defect??'—'); const qty=Number(r.qty||0); const pct=meta.total?qty/meta.total:0;
-      sev=pct>=0.35?'CRITICAL':pct>=0.20?'ATTENTION':'NORMAL';
-      metricText=`${qty.toFixed(2)} MT • ${(pct*100).toFixed(2)}% of defect qty • ${Number(r.records||0).toLocaleString()} coils`;
-      attrs=`data-defect="${escQcr(name)}"`; action='View Pareto';
-      if(meta.recurring.has(name)) badges+='<span class="qcr-badge qcr-badge-recurring">🔁 Recurring</span>';
-    }else{
-      name=String(r.name??'—'); const reject=Number(r.reject_pct_qty||0), coils=Number(r.coils||0);
-      sev=reject>=0.05?'CRITICAL':reject>=0.03?'ATTENTION':'NORMAL';
-      metricText=`${(reject*100).toFixed(2)}% Reject${coils?` • ${coils.toLocaleString()} coils`:''}`;
-      attrs= kind==='wc' ? `data-qcr-wc="${escQcr(name)}"` : `data-qcr-grade="${escQcr(name)}"`;
-      action= kind==='wc' ? `Investigate ${name}` : `Review ${name}`;
-      if(meta.recurring.has(name)) badges+='<span class="qcr-badge qcr-badge-recurring">🔁 Recurring</span>';
-      const risk=meta.risk?meta.risk[name]:null; if(risk&&risk!=='Low') badges+=`<span class="qcr-badge qcr-badge-risk-${risk.toLowerCase()}">${risk} risk</span>`;
-    }
-    return `<div class="qcr-ranked-row"><div class="qcr-rank">${i+1}</div><div class="qcr-ranked-main"><b>${escQcr(name)}</b><span>${metricText}</span>${badges?`<div class="qcr-badges">${badges}</div>`:''}<em class="qcr-severity-pill ${sev.toLowerCase()}">${sev}</em></div><button class="qcr-mini-investigate qcr-contrib-btn" type="button" ${attrs}>${action} →</button></div>`;
-  }).join('');
+function qcrRenderList(id, rows, nameKey, metricKey, metricFmt){
+  const el=document.getElementById(id); if(!el)return; if(!rows.length){el.innerHTML='<div class="qcr-empty">No data available for current selection.</div>';return;}
+  el.innerHTML=rows.map((r,i)=>`<div class="qcr-row"><div class="qcr-rank">${i+1}</div><div class="qcr-name">${String(r[nameKey]??'—')}</div><div class="qcr-metric">${metricFmt(Number(r[metricKey]||0))}</div></div>`).join('');
 }
-function qcrRenderTopContributors(topDefects, defectTotalQty, worstWc, worstGr, intel){
-  const patterns=Array.isArray(intel?.recurring_patterns)?intel.recurring_patterns:[];
-  const recDefects=new Set(patterns.map(x=>x.defect).filter(Boolean));
-  const recWc=new Set(patterns.map(x=>x.work_center).filter(Boolean));
-  const recGrade=new Set(patterns.map(x=>x.grade).filter(Boolean));
-  const riskWc={}; (intel?.risk_matrix?.work_centers||[]).forEach(x=>{riskWc[x.name]=x.risk;});
-  const riskGrade={}; (intel?.risk_matrix?.grades||[]).forEach(x=>{riskGrade[x.name]=x.risk;});
-  qcrRenderContribPanel('qcrContribDefect', topDefects, 'defect', {total:defectTotalQty, recurring:recDefects});
-  qcrRenderContribPanel('qcrContribWc', worstWc, 'wc', {recurring:recWc, risk:riskWc});
-  qcrRenderContribPanel('qcrContribGrade', worstGr, 'grade', {recurring:recGrade, risk:riskGrade});
-  const footer=document.getElementById('qcrContribFooter');
-  if(footer){
-    const gc=Array.isArray(intel?.grade_concentration)?intel.grade_concentration:[]; const top=gc[0];
-    footer.innerHTML=top?`<div class="qcr-hot-combo">🔥 Hottest combination: <b>${escQcr(top.grade||'—')}</b> grade • <b>${escQcr(top.defect||'—')}</b> defect • <b>${escQcr(top.wc||'—')}</b> work center — ${(Number(top.reject_pct||0)*100).toFixed(2)}% reject</div>`:'';
-  }
-}
-function qcrRenderHealthReasons(intel){
-  const btn=document.getElementById('qcrHealthWhyBtn'), box=document.getElementById('qcrHealthReasons'); if(!btn||!box)return;
-  const reasons=Array.isArray(intel?.health_score?.reasons)?intel.health_score.reasons:[];
-  if(!reasons.length){btn.classList.add('qcr-hidden'); box.classList.add('qcr-hidden'); box.innerHTML=''; return;}
-  btn.classList.remove('qcr-hidden'); btn.textContent='Why? ▾'; box.classList.add('qcr-hidden');
-  box.innerHTML=reasons.map(r=>{const n=Math.abs(Number(r[1]||0));return `<span class="negative">-${n.toFixed(1)} pts <b>${escQcr(r[0])}</b></span>`;}).join('');
+function qcrRenderBreaches(kpis){
+  const el=document.getElementById('qcrBreaches'); const bad=kpis.filter(k=>qcrStatus(k.label,k.value)==='bad'); const amber=kpis.filter(k=>qcrStatus(k.label,k.value)==='amber'); const rows=[...bad,...amber];
+  if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No KPI target breaches. All configured KPIs are on target.</div>';return;}
+  el.innerHTML=rows.map(k=>`<div class="qcr-breach"><div><div class="qcr-breach-name">${k.label}</div><div class="qcr-breach-meta">${qcrStatus(k.label,k.value)==='bad'?'Critical breach':'Watch level'} • Target ${qcrTargetText(k.label)}</div></div><div class="qcr-breach-val">${qcrFmtKpi(k)}</div></div>`).join('');
 }
 function qcrRenderComparison(rows){
   const el=document.getElementById('qcrComparison'); if(!rows.length){el.innerHTML='<div class="qcr-empty">Monthly comparison is not available.</div>';return;}
@@ -928,7 +886,7 @@ function qcrRenderComparison(rows){
 const qcrCoreCache = new Map();
 window.qcrLoadToken=0;
 function qcrCacheKey(filters){ return new URLSearchParams(filters).toString(); }
-function qcrSessionKey(filters){ return 'qcr_last_good_v28_' + qcrCacheKey(filters); }
+function qcrSessionKey(filters){ return 'qcr_last_good_v22_' + qcrCacheKey(filters); }
 async function fetchQcrCore(filters, signal){
   const key=qcrCacheKey(filters); const cached=qcrCoreCache.get(key);
   if(cached && (Date.now()-cached.ts)<30000) return cached.data;
@@ -936,7 +894,7 @@ async function fetchQcrCore(filters, signal){
   let lastError=null;
   for(let attempt=0;attempt<3;attempt++){
     try{
-      const r=await fetch('/api/qcr?'+params+'&_qcr=28&_attempt='+(attempt+1),{signal,cache:'no-store',headers:{'Cache-Control':'no-cache','Pragma':'no-cache'}});
+      const r=await fetch('/api/qcr?'+params+'&_qcr=22&_attempt='+(attempt+1),{signal,cache:'no-store',headers:{'Cache-Control':'no-cache','Pragma':'no-cache'}});
       let data=null;
       try{data=await r.json();}catch(e){throw new Error('QCR server returned invalid JSON (HTTP '+r.status+')');}
       if(!r.ok || data?.error) throw new Error(data?.error || ('QCR request failed (HTTP '+r.status+')'));
@@ -975,10 +933,19 @@ function qcrRenderTrendPrediction(rows,d,w){
     const slope=a=>{const n=a.length,xm=(n-1)/2,ym=a.reduce((x,y)=>x+y,0)/n,den=a.reduce((x,_,i)=>x+(i-xm)*(i-xm),0);return den? a.reduce((x,y,i)=>x+(i-xm)*(y-ym),0)/den:0;};
     const sf=slope(fpy),sr=slope(rej),deteriorating=sf<-0.001||sr>0.001,stable=!deteriorating&&Math.abs(sf)<0.0005&&Math.abs(sr)<0.0005;
     const status=deteriorating?'⚠️ Deteriorating Trend':stable?'✓ Stable Trend':'↕ Mixed Trend',cls=deteriorating?'bad':stable?'good':'amber',next=Math.max(0,Math.min(1,fpy[fpy.length-1]+sf));
-    // Contributors (Grade/Defect/Work Center) are intentionally not repeated
-    // here — they're already ranked in "Top Contributors" above.
-    el.innerHTML=`<div class="qcr-intel-status ${cls}">${status}</div><div class="qcr-intel-main">FPY ${ (fpy[fpy.length-1]*100).toFixed(2)}% <span>→ projected ${(next*100).toFixed(2)}%</span></div><div class="qcr-intel-meta">Last ${recent.length} months: ${recent.map(r=>r.name).join(' → ')}</div><div class="qcr-intel-meta">${sf<0?'FPY is trending down.':'FPY is not declining.'} ${sr>0?'Reject % is increasing.':'Reject % is not increasing.'}</div>`;
+    const grades=Array.isArray(w?.by_grade)?w.by_grade:[],wcs=Array.isArray(w?.by_work_center)?w.by_work_center:[],defs=Array.isArray(d?.register)?d.register:[];
+    const gr=grades.filter(x=>Number(x?.coils||0)>0).sort((a,b)=>Number(b?.reject_pct_qty||0)-Number(a?.reject_pct_qty||0))[0];
+    const wc=wcs.filter(x=>Number(x?.coils||0)>0).sort((a,b)=>Number(b?.reject_pct_qty||0)-Number(a?.reject_pct_qty||0))[0];
+    const df=defs.filter(x=>Number(x?.qty||0)>0).sort((a,b)=>Number(b?.qty||0)-Number(a?.qty||0))[0];
+    el.innerHTML=`<div class="qcr-intel-status ${cls}">${status}</div><div class="qcr-intel-main">FPY ${ (fpy[fpy.length-1]*100).toFixed(2)}% <span>→ projected ${(next*100).toFixed(2)}%</span></div><div class="qcr-intel-meta">Last ${recent.length} months: ${recent.map(r=>r.name).join(' → ')}</div><div class="qcr-intel-meta">${sf<0?'FPY is trending down.':'FPY is not declining.'} ${sr>0?'Reject % is increasing.':'Reject % is not increasing.'}</div><div class="qcr-contributor"><b>Main contributors:</b> Grade ${gr?.name||'—'} • Defect ${df?.defect||'—'} • Work Center ${wc?.name||'—'}</div>`;
   }catch(e){console.error('QCR trend intelligence',e);el.innerHTML='<div class="qcr-empty">Trend intelligence unavailable.</div>';}
+}
+function qcrRenderKpiRanking(kpis){
+  const el=document.getElementById('qcrKpiRanking'); if(!el)return;
+  try{
+    const rows=(Array.isArray(kpis)?kpis:[]).map(k=>{const c=KPI_TARGETS[k.label];if(!c||c.target==null)return null;const v=Number(k.value||0),t=Number(c.target),status=qcrStatus(k.label,v),severity=status==='bad'?3:status==='amber'?2:1,gapPct=Math.abs(v-t)/(Math.abs(t)||1);return {...k,status,severity,gapPct};}).filter(Boolean).sort((a,b)=>b.severity-a.severity||b.gapPct-a.gapPct);
+    el.innerHTML=rows.length?rows.map((k,i)=>`<div class="qcr-kpi-rank"><b>${i+1}. ${k.label}</b><span>Actual ${qcrFmtKpi(k)} • Target ${qcrTargetText(k.label)} • Gap ${k.gapPct>=0?'':''}${((Number(k.value||0)-Number(KPI_TARGETS[k.label].target||0))*100).toFixed(2)} pp</span><em class="${k.status}">${k.status==='bad'?'CRITICAL':k.status==='amber'?'WARNING':'ON TARGET'}</em></div>`).join(''):'<div class="qcr-empty">No target-configured KPIs.</div>';
+  }catch(e){console.error('QCR KPI intelligence',e);el.innerHTML='<div class="qcr-empty">KPI target intelligence unavailable.</div>';}
 }
 document.getElementById('qcrRootCause')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-root-link');if(!b)return; const p=new URLSearchParams(currentFilters);p.set('grade',b.dataset.rootGrade||'All');p.set('work_center',b.dataset.rootWc||'All');openDrilldown('defect_category',`Root Cause: ${b.dataset.rootGrade||'—'} → ${b.dataset.rootWc||'—'}`,{drill_value:document.querySelector('.qcr-defect-btn')?.dataset.defect||'',grade:b.dataset.rootGrade||'All',work_center:b.dataset.rootWc||'All'});});
 function loadRootCause(defect){
@@ -991,101 +958,64 @@ function loadRootCause(defect){
     el.innerHTML=html;
   }).catch(e=>{el.innerHTML='<div class="qcr-empty">Root-cause data unavailable.</div>';});
 }
-// NOTE: Grade Concentration and "Why changed?" used to also be computed here
-// via extra client-side API calls. That logic is dead weight now — the
-// consolidated intel endpoint (qcrRenderWhyDecomposition + the grade
-// concentration block in loadControlRoom) already provides a richer version
-// of the same insight, so the duplicate implementation was removed.
+async function loadQcrSecondary(filterSnapshot, d, w, m, signal, loadToken){
+  try{
+    const gc=document.getElementById('qcrGradeConcentration');
+    if(gc){
+      const gradesForDetail=([...((w.by_grade||[]))].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,3));
+      const details=[];
+      for(const gr of gradesForDetail){
+        if(loadToken!==window.qcrLoadToken) return;
+        const p=new URLSearchParams(filterSnapshot); p.set('grade',gr.name);
+        const [dd,ww]=await Promise.all([
+          fetch('/api/defect_analysis?'+p.toString(),{signal}).then(r=>r.json()),
+          fetch('/api/work_center_grade?'+p.toString(),{signal}).then(r=>r.json())
+        ]);
+        const td=(dd.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0))[0];
+        const mw=(ww.by_work_center||[]).filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0))[0];
+        details.push({grade:gr.name,defect:td?.defect||'—',wc:mw?.name||'—',qty:Number(gr.output_qty||0),reject:Number(gr.reject_pct_qty||0)});
+      }
+      gc.innerHTML=details.length?`<div class="qcr-subtitle">Problem concentration</div>`+details.map(x=>`<div class="qcr-grade-item"><b>${x.grade}</b><span>Defect: ${x.defect}</span><span>WC: ${x.wc}</span><em>Reject ${(x.reject*100).toFixed(2)}%</em></div>`).join(''):'<div class="qcr-empty">No grade concentration available.</div>';
+    }
+    const why=document.getElementById('qcrWhyChanged');
+    if(why){
+      const rows=m.rows||[]; let idx=rows.length-1; const selectedMonth=filterSnapshot.month && filterSnapshot.month!=='All' ? filterSnapshot.month : ''; if(selectedMonth){ const found=rows.findIndex(r=>r.name===selectedMonth); if(found>=0) idx=found; } const cur=rows[idx], prev=idx>0?rows[idx-1]:null;
+      if(!cur||!prev){why.innerHTML='';}
+      else{
+        const p1=new URLSearchParams(filterSnapshot); p1.set('month',cur.name);
+        const p0=new URLSearchParams(filterSnapshot); p0.set('month',prev.name);
+        const [dc,dp,wcC,wcP]=await Promise.all([
+          fetch('/api/defect_analysis?'+p1.toString(),{signal}).then(r=>r.json()), fetch('/api/defect_analysis?'+p0.toString(),{signal}).then(r=>r.json()),
+          fetch('/api/work_center_grade?'+p1.toString(),{signal}).then(r=>r.json()), fetch('/api/work_center_grade?'+p0.toString(),{signal}).then(r=>r.json())
+        ]);
+        if(loadToken!==window.qcrLoadToken)return;
+        const defectDelta=(dc.register||[]).map(x=>{const old=(dp.register||[]).find(y=>y.defect===x.defect);const nowQty=Number(x.qty||0),oldQty=Number(old?.qty||0),outNow=Number(dc.totals?.qty||0),outOld=Number(dp.totals?.qty||0);return {name:x.defect,change:((outNow?nowQty/outNow:0)-(outOld?oldQty/outOld:0))*100};}).sort((a,b)=>Math.abs(b.change)-Math.abs(a.change))[0];
+        const wcDelta=(wcC.by_work_center||[]).map(x=>{const old=(wcP.by_work_center||[]).find(y=>y.name===x.name);return {name:x.name,change:(Number(x.reject_pct_qty||0)-Number(old?.reject_pct_qty||0))*100};}).sort((a,b)=>Math.abs(b.change)-Math.abs(a.change))[0];
+        const fpyd=(Number(cur.first_pass_yield_pct||0)-Number(prev.first_pass_yield_pct||0))*100, rejD=(Number(cur.reject_pct_qty||0)-Number(prev.reject_pct_qty||0))*100;
+        const fpyContrib=defectDelta?.name?`Main contributor: <b>${defectDelta.name}</b> ${defectDelta.change>=0?'+':''}${defectDelta.change.toFixed(2)} pp defect share`:'No dominant defect contributor identified.';
+        const rejContrib=wcDelta?.name?`Major contributor: <b>${wcDelta.name}</b> ${wcDelta.change>=0?'+':''}${wcDelta.change.toFixed(2)} pp Reject`:'No dominant work-center contributor identified.';
+        why.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${fpyd>=0?'↑':'↓'} ${Math.abs(fpyd).toFixed(2)} pp</b><span>${fpyContrib}</span></div><div><b>Reject ${rejD>=0?'↑':'↓'} ${Math.abs(rejD).toFixed(2)} pp</b><span>${rejContrib}</span></div></div>`;
+      }
+    }
+  }catch(e){ if(e.name!=='AbortError') console.error(e); }
+}
 function escQcr(v){return String(v??'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function qcrRenderProblemFinder(intel){
-  const el=document.getElementById('qcrProblemFinder'), count=document.getElementById('qcrProblemCount'); if(!el)return;
-  const all=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
-  const rows=all.slice(0,5);
-  const critCount=all.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
-  const shownNote=all.length>rows.length?` · top ${rows.length} shown`:'';
-  if(count)count.textContent=all.length?(critCount>0?`${critCount} critical issue${critCount===1?'':'s'}${shownNote}`:`${all.length} issue${all.length===1?'':'s'}${shownNote}`):'0 issues';
-  if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No material quality problem detected for the current selection. Continue monitoring.</div>';return;}
-  el.innerHTML=rows.map((x,i)=>{
-    const sev=String(x.severity||'Observation').toUpperCase(); const conf=String(x.confidence||'MEDIUM').toUpperCase();
-    const driver=x.driver_path||x.where||'—'; const change=x.change|| (x.impact_qty?`${Number(x.impact_qty).toFixed(2)} MT`:'—');
-    return `<div class="qcr-problem-row ${sev.toLowerCase()}"><div class="qcr-problem-rank">${i+1}</div><div class="qcr-problem-main"><b>${escQcr(x.title||x.what||'Quality issue')}</b><span>${escQcr(x.detail||'Material quality signal detected.')}</span><div class="qcr-problem-fields"><span><small>DRIVER</small>${escQcr(driver)}</span><span><small>CHANGE</small>${escQcr(change)}</span><span><small>CONFIDENCE</small>${conf} · ${Number(x.records||0).toLocaleString()} records</span></div></div><div class="qcr-problem-action"><em class="qcr-severity-pill ${sev.toLowerCase()}">${sev}</em><button class="qcr-investigate-btn" type="button" data-qcr-where="${escQcr(x.where||'')}" data-qcr-grade="${escQcr(x.grade||'')}" data-qcr-defect="${escQcr(x.defect||'')}">Investigate →</button></div></div>`;
-  }).join('');
-}
-
-function qcrRenderQualityStory(intel){
-  // Where/Grade/Defect/Confidence used to repeat here as pill tags, but that's
-  // the exact same info already shown in the "What Needs Attention" row right
-  // above this card — dropped to avoid saying the same thing twice.
-  const el=document.getElementById('qcrQualityStory');if(!el)return; const story=String(intel?.quality_story||'No quality story available.');
-  el.innerHTML=`<div class="qcr-story-label">📋 Quality Story</div><div class="qcr-story-text">${escQcr(story)}</div>`;
-}
-function qcrRenderQualityImprovements(intel){
-  // Compact single line under the Quality Story — no longer a whole extra
-  // card of its own; the improvement names/details were the only new
-  // information here, so we keep just that, in one line.
-  const el=document.getElementById('qcrQualityImprovements');if(!el)return;const rows=Array.isArray(intel?.improvements)?intel.improvements:[];
-  if(!rows.length){el.innerHTML='';return;}
-  el.innerHTML=`<span class="qcr-improving-label">🟢 Improving:</span> `+rows.slice(0,3).map(x=>`<b>${escQcr(x.name||'Quality improvement')}</b> <small>(${escQcr(x.detail||'positive movement')})</small>`).join(' • ');
-}
-function qcrRenderWhyDecomposition(intel){
-  // Trimmed to the two headline deltas + the one-line explanation — the
-  // Grade/Defect/Work Center names it used to repeat here are already
-  // ranked in "Top Contributors" above, so they're not re-listed.
-  const el=document.getElementById('qcrWhyChanged');if(!el)return; const z=intel?.why_changed;
-  if(!z||!z.current||!z.previous){el.innerHTML='<div class="qcr-empty">Previous period comparison is not available for this selection.</div>';return;}
-  el.innerHTML=`<div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b></div></div><div class="qcr-story-text">${escQcr(z.statement||'')}</div>`;
-}
-function qcrInvestigation(extra={}, title='QCR Investigation'){
-  const p={};
-  Object.entries(extra||{}).forEach(([k,v])=>{if(v!==undefined&&v!==null&&String(v).trim()&&String(v).toLowerCase()!=='all'&&String(v)!=='—')p[k]=v;});
-  openDrilldown('quality_investigation',title,p);
-}
-function qcrWireProblemActions(){
-  document.getElementById('qcrProblemFinder')?.addEventListener('click',e=>{
-    const b=e.target.closest('.qcr-investigate-btn'); if(!b)return;
-    const defect=b.dataset.qcrDefect, where=b.dataset.qcrWhere, grade=b.dataset.qcrGrade;
-    qcrInvestigation({work_center:where,grade,drill_value:defect},`QCR Investigation — ${defect&&defect!=='—'?defect:'Quality issue'}`);
-  });
-  // Top Contributors: tab switching + investigate/root-cause wiring (event
-  // delegation, since each tab's rows are re-rendered on every load).
-  document.getElementById('qcrContribTabs')?.addEventListener('click',e=>{
-    const b=e.target.closest('.qcr-tab-btn'); if(!b)return;
-    const tab=b.dataset.contribTab;
-    document.querySelectorAll('#qcrContribTabs .qcr-tab-btn').forEach(x=>x.classList.toggle('active',x===b));
-    document.querySelectorAll('.qcr-tab-panel-c').forEach(p=>p.classList.toggle('qcr-hidden',p.dataset.contribPanel!==tab));
-  });
-  document.querySelector('.qcr-contrib-card')?.addEventListener('click',e=>{
-    const b=e.target.closest('.qcr-contrib-btn'); if(!b)return;
-    if(b.dataset.defect){ loadRootCause(b.dataset.defect); return; }
-    if(b.dataset.qcrWc){ qcrInvestigation({work_center:b.dataset.qcrWc},`Work Center Investigation — ${b.dataset.qcrWc}`); return; }
-    if(b.dataset.qcrGrade){ qcrInvestigation({grade:b.dataset.qcrGrade},`Grade Investigation — ${b.dataset.qcrGrade}`); return; }
-  });
-  // Quality Health "Why?" toggle in the executive strip (replaces the old
-  // standalone Quality Health Score card — same reasons, one click away).
-  document.getElementById('qcrHealthWhyBtn')?.addEventListener('click',()=>{
-    const box=document.getElementById('qcrHealthReasons'); if(!box)return;
-    const nowHidden=box.classList.toggle('qcr-hidden');
-    const btn=document.getElementById('qcrHealthWhyBtn'); if(btn)btn.textContent=nowHidden?'Why? ▾':'Why? ▴';
-  });
+function qcrRenderAdvancedIntel(intel){
+  const ew=document.getElementById('qcrEarlyWarnings');
+  if(ew){const rows=intel?.early_warnings||[]; ew.innerHTML=rows.length?rows.map(x=>`<div class="qcr-alert ${x.severity}"><span>${x.severity==='high'?'🔴':'🟠'}</span><div><b>${escQcr(x.title)}</b><small>${escQcr(x.detail)}</small><em>Recommended: ${escQcr(x.action)}</em></div></div>`).join(''):'<div class="qcr-empty">✓ No early-warning condition detected.</div>';}
+  const hs=document.getElementById('qcrHealthScore');
+  if(hs){const h=intel?.health_score||{}; const reasons=(h.reasons||[]); hs.innerHTML=`<div class="qcr-health"><div class="qcr-health-score ${h.status||'amber'}">${Number(h.score||0).toFixed(1)}<small>/100</small></div><div class="qcr-health-label">${h.status==='good'?'🟢 Healthy':h.status==='bad'?'🔴 Critical':'🟠 Attention Required'}</div></div><div class="qcr-health-reasons">${reasons.length?reasons.map(r=>`<span>−${Number(r[1]||0).toFixed(1)} <b>${escQcr(r[0])}</b></span>`).join(''):'<span>All weighted quality components are performing within target.</span>'}</div>`;}
+  const rm=document.getElementById('qcrRiskMatrix');
+  if(rm){const wc=intel?.risk_matrix?.work_centers||[],gr=intel?.risk_matrix?.grades||[]; const block=(title,arr)=>`<div class="qcr-risk-block"><b>${title}</b>${arr.slice(0,4).map(x=>`<div class="qcr-risk-row"><span>${escQcr(x.name)}</span><small>${(Number(x.reject_pct||0)*100).toFixed(2)}% Reject • ${x.trend>=0?'+':''}${(Number(x.trend||0)*100).toFixed(2)} pp trend</small><em class="${String(x.risk).toLowerCase()}">${escQcr(x.risk)}</em></div>`).join('')}</div>`; rm.innerHTML=(wc.length||gr.length)?block('Work Center',wc)+block('Grade',gr):'<div class="qcr-empty">No risk data available.</div>';}
+  const rp=document.getElementById('qcrRecurring');
+  if(rp){const rows=intel?.recurring_patterns||[]; rp.innerHTML=rows.length?rows.slice(0,6).map((x,i)=>`<div class="qcr-repeat"><div><b>🔴 #${i+1} ${escQcr(x.defect)}</b><span>${escQcr(x.grade)} • ${escQcr(x.work_center)}</span></div><div class="qcr-repeat-months">${(x.months||[]).map(m=>`<span>${escQcr(m.month)}: <b>${Number(m.coils||0).toLocaleString()}</b> coils</span>`).join('')}</div><em>Recurring • ${x.period_count} periods • ${Number(x.qty||0).toFixed(2)} MT</em></div>`).join(''):'<div class="qcr-empty">✓ No recurring Grade + Defect + Work Center pattern found across multiple periods.</div>';}
 }
 function qcrRenderTargetHistory(rows,target){
   const el=document.getElementById('qcrTargetHistory'); if(!el)return;
   if(!rows.length){el.innerHTML='<div class="qcr-empty">No historical monthly data available.</div>';return;}
-  el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • % Target Achieved shows how much of the target was reached each period (100% = target fully met)</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>% Target Achieved</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=att>=0.97?'good':att>=0.90?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
+  el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • Attainment = Actual ÷ Target</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>Attainment</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
 }
 
-function qcrRenderExecutive(intel, critical, comparisonRows){
-  const health=intel?.health_score||{}; const h=Number(health.score||0); const pf=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
-  const crit=pf.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
-  const att=pf.filter(x=>String(x.severity||'').toLowerCase()==='attention').length;
-  const top=pf[0];
-  const prev=comparisonRows?.length>1?comparisonRows[comparisonRows.length-2]:null, cur=comparisonRows?.length?comparisonRows[comparisonRows.length-1]:null;
-  let trend='●', trendText='Stable', trendClass='neutral';
-  if(prev&&cur){const a=Number(prev.fpy||prev.fpy_pct||0),b=Number(cur.fpy||cur.fpy_pct||0);if(b<a){trend='▼';trendText='Quality declining';trendClass='bad';}else if(b>a){trend='▲';trendText='Quality improving';trendClass='good';}}
-  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  set('qcrExecHealth',`${h.toFixed(0)}/100`);set('qcrExecHealthState',health.status==='good'?'Healthy':health.status==='bad'?'Critical':'Attention');set('qcrExecCritical',crit);set('qcrExecBreaches',critical.filter(k=>qcrStatus(k.label,k.value)!=='good').length);set('qcrExecProblem',top?.title||'No material issue');set('qcrExecDriver',top?.driver_path||top?.where||'Continue monitoring');set('qcrExecTrend',trend);set('qcrExecTrendText',trendText);
-  const trendEl=document.getElementById('qcrExecTrend'); if(trendEl)trendEl.className='qcr-trend-symbol '+trendClass;
-}
 async function loadControlRoom(signal){
   const filterSnapshot={...currentFilters};
   const params=new URLSearchParams(filterSnapshot).toString();
@@ -1094,19 +1024,13 @@ async function loadControlRoom(signal){
     document.getElementById('qcrFreshness').textContent=`Data Through: ${fr.data_through_display||'—'} • Filtered Records: ${Number(fr.filtered_records||0).toLocaleString()}`;
     const criticalLabels=['First Pass Yield % (Prime%)','Defect Rate','Reject % Qty','Hold for Decision % Qty','Salvage % Qty','Rework % Qty'];
     const critical=(k.kpis||[]).filter(x=>criticalLabels.includes(x.label));
-    // Worst-first ordering + inline target/gap folds in what used to be a
-    // separate "KPI Target Intelligence" ranking card — same numbers, one place.
-    const qcrStatusOrder={bad:0,amber:1,good:2,neutral:3};
-    const criticalSorted=[...critical].sort((a,b)=>(qcrStatusOrder[qcrStatus(a.label,a.value)]??3)-(qcrStatusOrder[qcrStatus(b.label,b.value)]??3));
     const qcrGrid=document.getElementById('qcrCriticalKpis');
     const nextQcrValues=new Map(); qcrGrid.innerHTML='';
-    criticalSorted.forEach(x=>{
+    critical.forEach(x=>{
       const st=qcrStatus(x.label,x.value), cur=Number(x.value)||0, old=window.qcrPreviousKpiValues?.get(x.label);
       const changed=Number.isFinite(old)&&Math.abs(old-cur)>1e-12;
       const card=document.createElement('div'); card.className='qcr-kpi';
-      const cfg=KPI_TARGETS[x.label];
-      const targetLine=(cfg&&cfg.target!=null)?`<div class="qcr-kpi-target">Target ${qcrTargetText(x.label)} • Gap ${((cur-Number(cfg.target))*100)>=0?'+':''}${((cur-Number(cfg.target))*100).toFixed(2)} pp</div>`:'';
-      card.innerHTML=`<div class="qcr-kpi-name">${KPI_ICONS[x.label]||'📊'} ${x.label}</div><div class="qcr-kpi-value ${st}">${qcrFmtKpi(x)}</div>${targetLine}<span class="qcr-status ${st}">${st==='good'?'ON TARGET':st==='amber'?'WATCH':st==='bad'?'CRITICAL':'REFERENCE'}</span>`;
+      card.innerHTML=`<div class="qcr-kpi-name">${KPI_ICONS[x.label]||'📊'} ${x.label}</div><div class="qcr-kpi-value">${qcrFmtKpi(x)}</div><span class="qcr-status ${st}">${st==='good'?'ON TARGET':st==='amber'?'WATCH':st==='bad'?'CRITICAL':'REFERENCE'}</span>`;
       qcrGrid.appendChild(card); nextQcrValues.set(x.label,cur);
       if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
         const el=card.querySelector('.qcr-kpi-value'); el.classList.add(cur>old?'value-change-up':'value-change-down');
@@ -1126,32 +1050,43 @@ async function loadControlRoom(signal){
     else if(amberKpis>0 || maxWc>0.03 || maxGr>0.03 || topDefPct>=0.25){ overall='ATTENTION REQUIRED'; overallClass='amber'; }
     const qs=document.getElementById('qcrQualityStatus'); if(qs){qs.className='qcr-quality-status '+overallClass;qs.querySelector('strong').textContent=overall;}
 
-    const defectTotalQty=Number(d.totals?.qty||0); const topDefects=(d.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0)).slice(0,5);
+    qcrRenderBreaches(critical);
+    const defectTotalQty=Number(d.totals?.qty||0); const topDefects=(d.register||[]).filter(x=>Number(x.qty||0)>0).sort((a,b)=>Number(b.qty||0)-Number(a.qty||0)).slice(0,5); const qcrDefEl=document.getElementById('qcrDefects');
+    if(!topDefects.length){qcrDefEl.innerHTML='<div class="qcr-empty">No defect data available for current selection.</div>';}else{qcrDefEl.innerHTML=topDefects.map((r,i)=>{const qty=Number(r.qty||0);const pct=defectTotalQty?qty/defectTotalQty:0;return `<button class="qcr-row qcr-defect-btn" data-defect="${String(r.defect??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"><span class="qcr-rank">${i+1}</span><span class="qcr-name">${String(r.defect??'—')}</span><span class="qcr-metric"><span class="qcr-qty">${qty.toFixed(2)} MT</span><span class="qcr-pct">${(pct*100).toFixed(2)}% of Defect Qty • ${Number(r.records||0).toLocaleString()} coils</span></span></button>`;}).join('');}
+
     const worstWc=[...(w.by_work_center||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
     const worstGr=[...(w.by_grade||[])].filter(x=>Number(x.coils||0)>0).sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)).slice(0,5);
+    qcrRenderList('qcrWorkCenters',worstWc,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
+    qcrRenderList('qcrGrades',worstGr,'name','reject_pct_qty',v=>(v*100).toFixed(2)+'% Reject');
     // All QCR intelligence is now returned by the consolidated endpoint so these
     // sections never depend on a chain of secondary browser requests.
     qcrRenderComparison((m&&m.rows)||[]);
-    qcrRenderExecutive(data?.intel||{},critical,(m&&m.rows)||[]);
-    qcrRenderTrendPrediction((m&&m.rows)||[],d,w);
+    qcrRenderTrendPrediction((m&&m.rows)||[],d,w); qcrRenderKpiRanking(critical);
     fetch('/api/qcr_target_history?'+params,{signal}).then(r=>r.json()).then(th=>{if(!th.error){qcrRenderTargetHistory(th.rows||[],th.target); scheduleQcrLayout();}}).catch(()=>{});
     const intel=data?.intel||{};
-    qcrRenderProblemFinder(intel);
-    qcrRenderQualityStory(intel);
-    qcrRenderQualityImprovements(intel);
-    qcrRenderWhyDecomposition(intel);
-    qcrRenderHealthReasons(intel);
-    qcrRenderTopContributors(topDefects,defectTotalQty,worstWc,worstGr,intel);
+    qcrRenderAdvancedIntel(intel);
+    const gc=document.getElementById('qcrGradeConcentration');
+    if(gc){const rows=Array.isArray(intel.grade_concentration)?intel.grade_concentration:[];gc.innerHTML=rows.length?'<div class="qcr-subtitle">Problem concentration</div>'+rows.map(x=>`<div class="qcr-grade-item"><b>${x.grade||'—'}</b><span>Defect: ${x.defect||'—'}</span><span>WC: ${x.wc||'—'}</span><em>Reject ${(Number(x.reject_pct||0)*100).toFixed(2)}%</em></div>`).join(''):'<div class="qcr-empty">No grade concentration available.</div>';}
+    const why=document.getElementById('qcrWhyChanged');
+    if(why){const z=intel.why_changed;if(z&&z.current&&z.previous){const fc=z.defect_contributor,fw=z.wc_contributor;why.innerHTML=`<div class="qcr-why-title">Why changed?</div><div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b><span>${fc?.name?`Main contributor: <b>${fc.name}</b> ${Number(fc.change_pp||0)>=0?'+':''}${Number(fc.change_pp||0).toFixed(2)} pp defect share`:'No dominant defect contributor identified.'}</span></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b><span>${fw?.name?`Major contributor: <b>${fw.name}</b> ${Number(fw.change_pp||0)>=0?'+':''}${Number(fw.change_pp||0).toFixed(2)} pp Reject`:'No dominant work-center contributor identified.'}</span></div></div>`;}else{why.innerHTML='<div class="qcr-why-title">Why changed?</div><div class="qcr-empty">Previous month comparison is not available for this selection.</div>';}}
     const loadToken=++window.qcrLoadToken;
     if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect).finally(scheduleQcrLayout);
 
+    // Improvement Opportunities: ranked, action-oriented and de-duplicated.
+    const opp=[];
+    critical.forEach(x=>{const st=qcrStatus(x.label,x.value);if(st==='good')return;const c=KPI_TARGETS[x.label]||{};opp.push({score:st==='bad'?100:60,icon:st==='bad'?'🚨':'👀',title:x.label,detail:`${qcrFmtKpi(x)} vs target ${qcrTargetText(x.label)}`,action:st==='bad'?'Investigate':'Review'});});
+    worstWc.slice(0,3).forEach((x,i)=>opp.push({score:85-i*5,icon:'🏭',title:`${x.name}`,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Investigate'}));
+    worstGr.slice(0,3).forEach((x,i)=>opp.push({score:80-i*5,icon:'🧪',title:`${x.name}`,detail:`Reject ${((Number(x.reject_pct_qty)||0)*100).toFixed(2)}% • ${Number(x.coils||0).toLocaleString()} coils`,action:'Review'}));
+    topDefects.slice(0,3).forEach((x,i)=>opp.push({score:75-i*5,icon:'🎯',title:`${x.defect}`,detail:`${Number(x.qty||0).toFixed(2)} MT • ${defectTotalQty?(Number(x.qty||0)/defectTotalQty*100).toFixed(2):'0.00'}% of defect qty • ${Number(x.records||0).toLocaleString()} coils`,action:'Investigate'}));
+    const seen=new Set(); const ranked=opp.sort((a,b)=>b.score-a.score).filter(o=>{const k=o.title.toUpperCase();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,8);
+    const oe=document.getElementById('qcrOpportunities');oe.innerHTML=ranked.length?ranked.map((o,i)=>`<div class="qcr-opportunity"><span class="qcr-opportunity-icon">${o.icon}</span><div class="qcr-opportunity-text"><b>#${i+1} ${o.title}</b><br><span>${o.detail}</span></div><span class="qcr-opportunity-action">Recommended: ${o.action}</span></div>`).join(''):'<div class="qcr-empty">✓ No improvement opportunity detected for the current selection.</div>';
     markChartsReady();
     scheduleQcrLayout();
   }catch(e){
     if(e.name!=='AbortError'){
       console.error('QCR load failed',e);
       const msg=String(e?.message||'Unable to load Control Room data');
-      const ids=['qcrProblemFinder','qcrQualityStory','qcrQualityImprovements','qcrCriticalKpis','qcrContribDefect','qcrContribWc','qcrContribGrade','qcrComparison','qcrWhyChanged','qcrTrendPrediction','qcrTargetHistory'];
+      const ids=['qcrCriticalKpis','qcrBreaches','qcrDefects','qcrWorkCenters','qcrGrades','qcrComparison','qcrWhyChanged','qcrOpportunities','qcrTrendPrediction','qcrKpiRanking','qcrTargetHistory','qcrEarlyWarnings','qcrHealthScore','qcrRiskMatrix','qcrRecurring','qcrGradeConcentration'];
       ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="qcr-empty">Unable to load this QCR section. <span class="qcr-error-detail">'+escQcr(msg)+'</span></div>';});
       const root=document.getElementById('qcrRootCause');if(root)root.innerHTML='<div class="qcr-empty">Root-cause data unavailable until QCR data reconnects.</div>';
       const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='UNAVAILABLE';}
@@ -1165,6 +1100,25 @@ async function loadControlRoom(signal){
 function layoutQcrCards(){ return; }
 function scheduleQcrLayout(){ return; }
 
+// ---------- Export Center ----------
+function updateExportTab(){
+  const host=document.getElementById("exportCenter");
+  if(!host) return;
+  const active=Object.entries(currentFilters).filter(([k,v])=>v && v!=="All").map(([k,v])=>`${k}: ${v}`).join(" • ") || "All data";
+  host.innerHTML=`<div class="export-center-head"><div><div class="export-center-title">Quality Report Export Center</div><div class="export-center-sub">Exports use the same live filtered dataset as the dashboard and QCR.</div></div><span class="export-filter-pill">${active}</span></div>
+  <div class="export-center-grid">
+    <button class="export-card" data-format="excel"><span>📊</span><b>Excel Report</b><small>16 KPIs, charts, analysis tables, QCR intelligence and exact filtered row-level data.</small></button>
+    <button class="export-card" data-format="pdf"><span>📄</span><b>PDF Report</b><small>Presentation-ready dashboard, charts, trends, defect analysis and QCR sections.</small></button>
+    <button class="export-card" data-format="ppt"><span>📽️</span><b>PowerPoint Report</b><small>16:9 management deck with KPI scorecard, charts, trends, QCR alerts and root cause.</small></button>
+  </div>
+  <div class="export-note">Tip: select dashboard filters first, then export. Every format carries the active filter context.</div>`;
+  host.querySelectorAll(".export-card").forEach(btn=>btn.addEventListener("click",()=>exportDashboard(btn.dataset.format)));
+}
+function exportDashboard(format){
+  const params=new URLSearchParams(currentFilters).toString();
+  window.location.href=`/api/export/${format}?${params}`;
+}
+
 // ---------- Tab switching ----------
 const TAB_LOADERS = {
   dashboard: loadKpis,
@@ -1172,6 +1126,7 @@ const TAB_LOADERS = {
   wcgrade: loadWcGrade,
   defects: loadDefectAnalysis,
   weekly: loadPeriodTrend,
+  exports: async function(){ updateExportTab(); },
 };
 
 async function activateTab(tabName){
