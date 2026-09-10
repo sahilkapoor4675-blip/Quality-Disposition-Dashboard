@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=28.0.0">
+<link rel="stylesheet" href="/app.css?v=28.1.0">
 <style id="main-header-font-v18">.quality-intelligence-title{font-family:'Lucida Calligraphy','Lucida Handwriting',cursive!important;}</style>
 </head>
 <body>
@@ -71,6 +71,10 @@
       <div class="qcr-body"><div id="qcrProblemFinder" class="qcr-problem-list"><div class="qcr-empty">Analysing quality signals…</div></div></div>
     </div>
 
+    <div class="qcr-story-card qcr-card qcr-wide">
+      <div class="qcr-body"><div id="qcrQualityStory" class="qcr-quality-story"><div class="qcr-empty">Building quality story…</div></div></div>
+    </div>
+
     <section class="qcr-zone qcr-zone-action">
       <div class="qcr-zone-heading"><span>ZONE A</span><h3>Action Required</h3><p>Focus on problems that need investigation now.</p></div>
       <div class="qcr-grid qcr-grid-action">
@@ -87,7 +91,7 @@
       <div class="qcr-grid qcr-grid-performance">
         <div class="qcr-card"><h3>🧪 Worst Grades</h3><div class="qcr-body"><div class="qcr-list" id="qcrGrades"></div><div id="qcrGradeConcentration" class="qcr-grade-concentration"></div></div></div>
         <div class="qcr-card qcr-comparison-card"><h3>📈 What Changed?</h3><div class="qcr-body"><div id="qcrComparison"></div><details class="qcr-accordion"><summary>Why changed?</summary><div id="qcrWhyChanged" class="qcr-why-changed"></div></details></div></div>
-        <div class="qcr-card qcr-wide"><h3>💡 Improvement Opportunities</h3><div class="qcr-body"><div class="qcr-list" id="qcrOpportunities"></div></div></div>
+        <div class="qcr-card qcr-wide"><h3>💡 Improvement Opportunities</h3><div class="qcr-body"><div class="qcr-list" id="qcrOpportunities"></div><div class="qcr-improvements-divider">What's Improved</div><div class="qcr-list" id="qcrQualityImprovements"></div></div></div>
       </div>
     </section>
 
@@ -262,6 +266,6 @@
   <div class="footer-note">Data source: Disposition Data (live database) &nbsp;•&nbsp; Runs locally via Python HTTP server + SQLite</div>
 </div>
 
-<script src="/app.js?v=28.0.0" defer></script>
+<script src="/app.js?v=28.1.0" defer></script>
 </body>
 </html>
