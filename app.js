@@ -976,6 +976,68 @@ function dashRenderFishboneChips(items){
   const chipsEl=document.getElementById('dashFishboneChips'); if(!chipsEl) return;
   chipsEl.innerHTML = items.map((it,i)=>`<button class="qcr-fishbone-chip${i===0?' active':''}" type="button" data-idx="${i}">${escQcr(it.defect)}${it.matched?'':' ⚠'}</button>`).join('');
 }
+// True Ishikawa/fishbone skeleton (spine + 6 angled bones converging on the
+// defect "head"), built as one SVG — as opposed to the qcr-fb-grid card
+// layout used on the Quality Control Room tab. Same underlying causes data.
+function fbList(v){ return Array.isArray(v) ? v.filter(x=>x!==null && x!==undefined && String(x).trim()!=='') : (v?[v]:[]); }
+function fbWrapTitle(s,maxChars){
+  s=String(s||'').trim();
+  if(s.length<=maxChars) return [s];
+  const words=s.split(/\s+/); let l1='',l2='';
+  for(const w of words){ if((l1+' '+w).trim().length<=maxChars && !l2) l1=(l1+' '+w).trim(); else l2=(l2+' '+w).trim(); }
+  if(l2.length>maxChars) l2=l2.slice(0,maxChars-1)+'…';
+  return l2 ? [l1,l2] : [l1];
+}
+const FISHBONE_BRANCHES = [
+  {key:'man',         label:'Man',         icon:'👤', color:'#118DFF', anchorX:175, side:'top'},
+  {key:'machine',     label:'Machine',     icon:'⚙️', color:'#16A34A', anchorX:460, side:'top'},
+  {key:'material',    label:'Material',    icon:'🧱', color:'#D97706', anchorX:745, side:'top'},
+  {key:'method',      label:'Method',      icon:'📋', color:'#7C3AED', anchorX:175, side:'bottom'},
+  {key:'measurement', label:'Measurement', icon:'📏', color:'#DB2777', anchorX:460, side:'bottom'},
+  {key:'environment', label:'Environment', icon:'🌤️', color:'#0891B2', anchorX:745, side:'bottom'},
+];
+function buildFishboneSvg(item){
+  const causes=item.causes||{};
+  const W=1050, H=486, spineY=248, spineX1=30, spineX2=858;
+  let svg='';
+  // ---- spine + arrowhead into the head box ----
+  svg+=`<line x1="${spineX1}" y1="${spineY}" x2="${spineX2}" y2="${spineY}" stroke="#243B53" stroke-width="3"/>`;
+  svg+=`<polygon points="${spineX2},${spineY} ${spineX2-20},${spineY-13} ${spineX2-20},${spineY+13}" fill="#243B53"/>`;
+  // ---- head box (the defect / effect) ----
+  const headX=spineX2, headW=172, headH=88, headY=spineY-headH/2;
+  svg+=`<rect x="${headX}" y="${headY}" width="${headW}" height="${headH}" rx="12" fill="#16324F"/>`;
+  const dLines=fbWrapTitle(item.defect,16);
+  svg+=dLines.map((ln,i)=>`<text x="${headX+headW/2}" y="${spineY - (dLines.length>1?9:0) + i*20 + 6}" font-size="15" font-weight="800" fill="#fff" text-anchor="middle">${escQcr(ln)}</text>`).join('');
+  // ---- 6 angled bones ----
+  const TIP_DX=-120, TIP_DY=150;
+  FISHBONE_BRANCHES.forEach(b=>{
+    const tipX=b.anchorX+TIP_DX, tipY = b.side==='top' ? spineY-TIP_DY : spineY+TIP_DY;
+    const dx=tipX-b.anchorX, dy=tipY-spineY, len=Math.sqrt(dx*dx+dy*dy)||1, ux=dx/len, uy=dy/len;
+    let px=-uy, py=ux; if(px<0){ px=uy; py=-ux; } // perpendicular that leans toward the head (right)
+    svg+=`<line x1="${b.anchorX}" y1="${spineY}" x2="${tipX}" y2="${tipY}" stroke="${b.color}" stroke-width="2.5"/>`;
+    svg+=`<circle cx="${b.anchorX}" cy="${spineY}" r="4" fill="${b.color}"/>`;
+    const full=fbList(causes[b.key]).slice(0,5);
+    const extra=fbList(causes[b.key]).length-full.length;
+    const items=full.length?full:['No cause on file'];
+    const n=items.length;
+    items.forEach((txt,i)=>{
+      const t=(i+1)/(n+1);
+      const bx=b.anchorX+dx*t, by=spineY+dy*t;
+      const ex=bx+px*16, ey=by+py*16;
+      svg+=`<line x1="${bx}" y1="${by}" x2="${ex}" y2="${ey}" stroke="${full.length?b.color:'#c3cdd8'}" stroke-width="1.5"/>`;
+      const anchor = px>=0 ? 'start':'end';
+      const tx = ex + (px>=0?5:-5);
+      svg+=`<text x="${tx}" y="${ey+4}" font-size="12" font-weight="${full.length?'700':'600'}" font-style="${full.length?'normal':'italic'}" fill="${full.length?'#243B53':'#9aa7b4'}" text-anchor="${anchor}">${escQcr(truncateLabel(txt,24))}<title>${escQcr(txt)}</title></text>`;
+    });
+    if(extra>0){
+      svg+=`<text x="${tipX}" y="${b.side==='top'?tipY-38:tipY+50}" font-size="11" font-weight="700" fill="${b.color}" text-anchor="middle">+${extra} more</text>`;
+    }
+    const boxW=150, boxH=30, boxX=tipX-boxW/2, boxY=b.side==='top'?tipY-boxH:tipY;
+    svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="8" fill="${b.color}"/>`;
+    svg+=`<text x="${tipX}" y="${boxY+boxH/2+5}" font-size="13" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
+  });
+  return `<svg class="chart-svg fishbone-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
+}
 function dashRenderFishboneDiagram(item){
   const el=document.getElementById('dashFishboneDiagram'); if(!el) return;
   if(!item){ el.innerHTML='<div class="qcr-empty">No defect data available for the current selection.</div>'; return; }
@@ -983,20 +1045,8 @@ function dashRenderFishboneDiagram(item){
     el.innerHTML=`<div class="qcr-empty">No 6M Fishbone mapping found for <b>${escQcr(item.defect)}</b> yet. Ask an admin to import/update the 6M Fishbone Master, or add a defect mapping in Admin → 6M Fishbone Analysis.</div>`;
     return;
   }
-  const c=item.causes||{};
   const note = item.match_type==='fuzzy' ? `<div class="qcr-fb-note">Matched to master defect "${escQcr(item.matched_defect)}" (closest match, ${Math.round((item.confidence||0)*100)}% confidence). If this looks wrong, fix it in Admin → 6M Fishbone Analysis.</div>` : '';
-  el.innerHTML = `
-    <div class="qcr-fb-title">🐟 6M Fishbone — ${escQcr(item.defect)}</div>
-    ${note}
-    <div class="qcr-fb-grid">
-      ${qcrFishboneCard('man','Man','👤',c.man)}
-      ${qcrFishboneCard('machine','Machine','⚙️',c.machine)}
-      ${qcrFishboneCard('material','Material','🧱',c.material)}
-      ${qcrFishboneCard('method','Method','📋',c.method)}
-      ${qcrFishboneCard('measurement','Measurement','📏',c.measurement)}
-      ${qcrFishboneCard('environment','Environment','🌤️',c.environment)}
-    </div>
-    <div class="qcr-fb-spine"><span>${escQcr(item.defect)}</span></div>`;
+  el.innerHTML = `${note}${buildFishboneSvg(item)}`;
 }
 function dashLoadFishbone(topDefects){
   const chipsEl=document.getElementById('dashFishboneChips'), diagEl=document.getElementById('dashFishboneDiagram');

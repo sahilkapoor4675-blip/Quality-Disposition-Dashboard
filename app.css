@@ -678,6 +678,8 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-fb-spine span{background:#16324F;color:#fff;padding:4px 12px;border-radius:999px;}
 @media(max-width:900px){.qcr-fb-grid{grid-template-columns:1fr 1fr;}}
 @media(max-width:600px){.qcr-fb-grid{grid-template-columns:1fr;}}
+#dashFishboneDiagram{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px 10px 6px;}
+#dashFishboneDiagram .fishbone-svg{display:block;width:100%;height:auto;}
 .qcr-ranked-main{min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start;}
 .qcr-ranked-main>b{font:750 14px Manrope,sans-serif;color:#263f54;overflow-wrap:anywhere;}
 .qcr-ranked-main>span{font:700 15.5px Manrope,sans-serif;color:#718496;}
