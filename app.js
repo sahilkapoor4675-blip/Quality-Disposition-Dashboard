@@ -921,8 +921,10 @@ function qcrRenderFishboneChips(items){
   const chipsEl=document.getElementById('qcrFishboneChips'); if(!chipsEl) return;
   chipsEl.innerHTML = items.map((it,i)=>`<button class="qcr-fishbone-chip${i===0?' active':''}" type="button" data-idx="${i}">${escQcr(it.defect)}${it.matched?'':' ⚠'}</button>`).join('');
 }
-function qcrFishboneCard(field,label,icon,text){
-  return `<div class="qcr-fb-branch qcr-fb-${field}"><div class="qcr-fb-head">${icon} ${label}</div><div class="qcr-fb-text">${text?escQcr(text):'—'}</div></div>`;
+function qcrFishboneCard(field,label,icon,items){
+  const list=Array.isArray(items)?items:(items?[items]:[]);
+  const body=list.length?`<ul class="qcr-fb-ul">${list.map(t=>`<li>${escQcr(t)}</li>`).join('')}</ul>`:'<div class="qcr-fb-empty">No cause on file</div>';
+  return `<div class="qcr-fb-branch qcr-fb-${field}"><div class="qcr-fb-head"><span class="qcr-fb-icon">${icon}</span>${label}<span class="qcr-fb-count">${list.length||''}</span></div>${body}</div>`;
 }
 function qcrRenderFishboneDiagram(item){
   const el=document.getElementById('qcrFishboneDiagram'); if(!el) return;

@@ -1398,6 +1398,27 @@ def _fishbone_aliases(force=False):
     return FISHBONE_CACHE["aliases"]
 
 
+def _split_causes(text):
+    """Split a single 6M master cell into a list of individual causes.
+    A defect can have more than one reason under the same M — in the
+    source Excel these are entered as separate lines inside the same
+    cell (Alt+Enter) or separated by ';'. Falls back to a single-item
+    list so a plain one-line cell still renders as a (one-item) list,
+    exactly as it was entered in the sheet."""
+    if not text:
+        return []
+    raw = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    parts = raw.split("\n") if "\n" in raw else raw.split(";")
+    out = []
+    for p in parts:
+        p = p.strip()
+        p = re.sub(r"^[\-\*\u2022]+\s*", "", p)
+        p = re.sub(r"^\(?\d+[\.\)]\s*", "", p)
+        if p:
+            out.append(p)
+    return out
+
+
 def _fishbone_match(defect_name):
     """Match a disposition main_defect value to a 6M Fishbone master row.
     Order of precedence: manual admin alias -> exact normalized match ->
@@ -1412,15 +1433,15 @@ def _fishbone_match(defect_name):
         target_norm = _norm_defect_key(aliases[norm])
         row = by_norm.get(target_norm)
         if row:
-            return {"defect": defect_name, "matched": True, "match_type": "alias", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: row.get(f, "") for f in FISHBONE_CAUSE_FIELDS}}
+            return {"defect": defect_name, "matched": True, "match_type": "alias", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: _split_causes(row.get(f, "")) for f in FISHBONE_CAUSE_FIELDS}}
     if norm in by_norm:
         row = by_norm[norm]
-        return {"defect": defect_name, "matched": True, "match_type": "exact", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: row.get(f, "") for f in FISHBONE_CAUSE_FIELDS}}
+        return {"defect": defect_name, "matched": True, "match_type": "exact", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: _split_causes(row.get(f, "")) for f in FISHBONE_CAUSE_FIELDS}}
     close = difflib.get_close_matches(norm, list(by_norm.keys()), n=1, cutoff=FISHBONE_FUZZY_CUTOFF)
     if close:
         row = by_norm[close[0]]
         score = difflib.SequenceMatcher(None, norm, close[0]).ratio()
-        return {"defect": defect_name, "matched": True, "match_type": "fuzzy", "matched_defect": row["defect_name"], "confidence": round(score, 2), "causes": {f: row.get(f, "") for f in FISHBONE_CAUSE_FIELDS}}
+        return {"defect": defect_name, "matched": True, "match_type": "fuzzy", "matched_defect": row["defect_name"], "confidence": round(score, 2), "causes": {f: _split_causes(row.get(f, "")) for f in FISHBONE_CAUSE_FIELDS}}
     return {"defect": defect_name, "matched": False, "match_type": "none", "matched_defect": None, "confidence": 0, "causes": None}
 
 
