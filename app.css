@@ -591,6 +591,10 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-kpi{border:1px solid #e3eaf0;border-radius:9px;padding:12px 13px;background:#fbfdff;}
 .qcr-kpi .qcr-kpi-name{font:700 15.5px Manrope,sans-serif;color:#526b7d;line-height:1.25;}
 .qcr-kpi .qcr-kpi-value{font:800 22px 'Space Grotesk',sans-serif;color:#16324f;margin-top:5px;}
+.qcr-kpi-value.good{color:#15803d;}
+.qcr-kpi-value.amber{color:#b45309;}
+.qcr-kpi-value.bad{color:#b91c1c;}
+.qcr-kpi-value.neutral{color:#16324f;}
 .qcr-kpi .qcr-status{display:inline-block;margin-top:6px;border-radius:999px;padding:4px 8px;font:800 12.5px Manrope,sans-serif;}
 .qcr-status.good{background:#dcfce7;color:#15803d;}
 .qcr-status.amber{background:#fef3c7;color:#a16207;}
@@ -653,7 +657,9 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-compare th{background:#f3f7fa;color:#38536a;font:800 13.5px Manrope,sans-serif;text-transform:uppercase;padding:9px;border:1px solid #dfe7ee;}
 .qcr-compare td{padding:9px;border:1px solid #e5edf3;font:700 14px Manrope,sans-serif;color:#334e63;}
 .qcr-compare td:not(:first-child){text-align:center;}
+.qcr-delta{font-weight:800;}
 .qcr-delta.good{color:#15803d;}
+.qcr-delta.amber{color:#b45309;}
 .qcr-delta.bad{color:#b91c1c;}
 .qcr-delta.equal{color:#64748b;}
 .qcr-accordion{margin-top:12px;}
@@ -702,7 +708,7 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-health-score small{font-size:15px;font-weight:700;}
 .qcr-health-label{font:800 13.5px Manrope,sans-serif;margin-top:6px;color:#38536a;}
 .qcr-health-reasons{width:100%;display:grid;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #edf2f6;}
-.qcr-health-reasons span{padding:6px 8px;background:#fbfdff;border:1px solid #e1e9ef;border-radius:7px;font:700 15px Manrope,sans-serif;color:#63788a;}
+.qcr-health-reasons span{padding:6px 8px;background:#fbfdff;border:1px solid #e1e9ef;border-radius:7px;font:800 15px Manrope,sans-serif;color:#63788a;}
 .qcr-health-reasons span b{font-weight:800;}
 .qcr-health-reasons span.positive{color:#15803d;}
 .qcr-health-reasons span.negative{color:#b91c1c;}
