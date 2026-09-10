@@ -1011,8 +1011,9 @@ async function loadQcrSecondary(filterSnapshot, d, w, m, signal, loadToken){
 function escQcr(v){return String(v??'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function qcrRenderProblemFinder(intel){
   const el=document.getElementById('qcrProblemFinder'), count=document.getElementById('qcrProblemCount'); if(!el)return;
-  const rows=(Array.isArray(intel?.problem_finder)?intel.problem_finder:[]).slice(0,5);
-  if(count)count.textContent=`${rows.length} issue${rows.length===1?'':'s'}`;
+  const all=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
+  const rows=all.slice(0,5);
+  if(count)count.textContent=all.length?`${all.length} issue${all.length===1?'':'s'}${all.length>rows.length?` · top ${rows.length} shown`:''}`:'0 issues';
   if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No material quality problem detected for the current selection. Continue monitoring.</div>';return;}
   el.innerHTML=rows.map((x,i)=>{
     const sev=String(x.severity||'Observation').toUpperCase(); const conf=String(x.confidence||'MEDIUM').toUpperCase();
@@ -1092,7 +1093,7 @@ function qcrRenderAdvancedIntel(intel){
 function qcrRenderTargetHistory(rows,target){
   const el=document.getElementById('qcrTargetHistory'); if(!el)return;
   if(!rows.length){el.innerHTML='<div class="qcr-empty">No historical monthly data available.</div>';return;}
-  el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • Attainment = Actual ÷ Target</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>Attainment</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
+  el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • Attainment = Actual ÷ Target — how close each period came to the target (100% = target fully met, below 100% = shortfall)</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>Attainment</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=a>=t?'good':a>=t*0.95?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
 }
 
 function qcrRenderExecutive(intel, critical, comparisonRows){
@@ -1101,10 +1102,11 @@ function qcrRenderExecutive(intel, critical, comparisonRows){
   const att=pf.filter(x=>String(x.severity||'').toLowerCase()==='attention').length;
   const top=pf[0];
   const prev=comparisonRows?.length>1?comparisonRows[comparisonRows.length-2]:null, cur=comparisonRows?.length?comparisonRows[comparisonRows.length-1]:null;
-  let trend='→', trendText='Stable';
-  if(prev&&cur){const a=Number(prev.fpy||prev.fpy_pct||0),b=Number(cur.fpy||cur.fpy_pct||0);if(b<a){trend='↓';trendText='Quality declining';}else if(b>a){trend='↑';trendText='Quality improving';}}
+  let trend='●', trendText='Stable', trendClass='neutral';
+  if(prev&&cur){const a=Number(prev.fpy||prev.fpy_pct||0),b=Number(cur.fpy||cur.fpy_pct||0);if(b<a){trend='▼';trendText='Quality declining';trendClass='bad';}else if(b>a){trend='▲';trendText='Quality improving';trendClass='good';}}
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   set('qcrExecHealth',`${h.toFixed(0)}/100`);set('qcrExecHealthState',health.status==='good'?'Healthy':health.status==='bad'?'Critical':'Attention');set('qcrExecCritical',crit);set('qcrExecBreaches',critical.filter(k=>qcrStatus(k.label,k.value)!=='good').length);set('qcrExecProblem',top?.title||'No material issue');set('qcrExecDriver',top?.driver_path||top?.where||'Continue monitoring');set('qcrExecTrend',trend);set('qcrExecTrendText',trendText);
+  const trendEl=document.getElementById('qcrExecTrend'); if(trendEl)trendEl.className='qcr-trend-symbol '+trendClass;
 }
 async function loadControlRoom(signal){
   const filterSnapshot={...currentFilters};

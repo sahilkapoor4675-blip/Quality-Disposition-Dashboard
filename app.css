@@ -529,6 +529,9 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-exec-item span{font:600 10px Manrope,sans-serif;color:#718496;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .qcr-exec-problem{background:linear-gradient(135deg,#fff7ed,#fff);border-color:#fed7aa;}
 .qcr-exec-problem b{font-size:15px;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25;}
+.qcr-trend-symbol.good{color:#15803d;}
+.qcr-trend-symbol.bad{color:#b91c1c;}
+.qcr-trend-symbol.neutral{color:#718496;}
 
 /* ---- Zones: Action Required (A) / Performance (B) / Intelligence (C) ---- */
 .qcr-zone{margin:24px 0 0;width:100%;}
