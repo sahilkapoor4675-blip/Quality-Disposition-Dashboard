@@ -1917,7 +1917,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
         if len(positive)>=2:
             a,b=positive[-2],positive[-1]
             if a["qty"]>0 and b["qty"]<a["qty"]*.70:
-                improvements.append({"type":"defect","name":defect,"change_pct":pct_change(b["qty"],a["qty"]),"detail":f"{defect} reduced {abs(pct_change(b['qty'],a['qty'])):.0f}% vs previous recorded period."})
+                improvements.append({"type":"defect","name":defect,"change_pct":pct_change(b["qty"],a["qty"]),"detail":f"{defect} reduced {abs(pct_change(b['qty'],a['qty'])):.0f}% in {b['month']} vs {a['month']}."})
     recurring.sort(key=lambda x:(x["period_count"],x["qty"]),reverse=True);recurring=recurring[:8]
     # Attach the current dominant Work Center / Grade for each recurring defect.
     if recurring and cur:
@@ -2052,9 +2052,9 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     # Good-news improvements from KPI changes.
     if cur and prev:
         if num(cur.get("first_pass_yield_pct"))>num(prev.get("first_pass_yield_pct"))+.005:
-            improvements.append({"type":"kpi","name":"FPY","change_pct":(num(cur.get("first_pass_yield_pct"))-num(prev.get("first_pass_yield_pct")))*100,"detail":f"FPY improved {(num(cur.get('first_pass_yield_pct'))-num(prev.get('first_pass_yield_pct')))*100:.2f} pp."})
+            improvements.append({"type":"kpi","name":"FPY","change_pct":(num(cur.get("first_pass_yield_pct"))-num(prev.get("first_pass_yield_pct")))*100,"detail":f"FPY improved {(num(cur.get('first_pass_yield_pct'))-num(prev.get('first_pass_yield_pct')))*100:.2f} pp in {cur.get('name','current period')} vs {prev.get('name','previous period')}."})
         if num(cur.get("reject_pct_qty"))<num(prev.get("reject_pct_qty"))-.005:
-            improvements.append({"type":"kpi","name":"Reject %","change_pct":(num(cur.get("reject_pct_qty"))-num(prev.get("reject_pct_qty")))*100,"detail":f"Reject reduced {abs((num(cur.get('reject_pct_qty'))-num(prev.get('reject_pct_qty')))*100):.2f} pp."})
+            improvements.append({"type":"kpi","name":"Reject %","change_pct":(num(cur.get("reject_pct_qty"))-num(prev.get("reject_pct_qty")))*100,"detail":f"Reject reduced {abs((num(cur.get('reject_pct_qty'))-num(prev.get('reject_pct_qty')))*100):.2f} pp in {cur.get('name','current period')} vs {prev.get('name','previous period')}."})
     improvements=improvements[:6]
 
     # Backward-compatible early warnings list plus new findings.

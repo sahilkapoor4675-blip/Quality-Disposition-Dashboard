@@ -532,10 +532,9 @@ body.drill-modal-open .filters{z-index:1;}
 
 /* ---- Zones: Action Required (A) / Performance (B) / Intelligence (C) ---- */
 .qcr-zone{margin:24px 0 0;width:100%;}
-.qcr-zone-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;padding:0 0 10px;border-bottom:1px solid #dbe5ed;}
-.qcr-zone-heading span{flex:0 0 auto;font:900 9px Manrope,sans-serif;letter-spacing:1px;color:#118dff;padding:5px 8px;border:1px solid #cfe7f8;border-radius:999px;background:#f2f9fe;}
-.qcr-zone-heading h3{margin:0;font:900 17px 'DM Sans',sans-serif;color:#183a58;}
-.qcr-zone-heading p{margin:0;flex-basis:100%;font:600 12px Manrope,sans-serif;color:#7a8c9b;}
+.qcr-zone-heading{margin:0 0 16px;padding:2px 0 14px 15px;border-bottom:1px solid #dbe5ed;border-left:4px solid #118DFF;}
+.qcr-zone-heading h3{margin:0;font:800 21px 'DM Sans',sans-serif;color:#12283f;letter-spacing:.15px;}
+.qcr-zone-heading p{margin:5px 0 0;font:600 12.5px Manrope,sans-serif;color:#7a8c9b;letter-spacing:.1px;}
 
 /* ---- Card grid: content-driven height, real vertical rhythm ---- */
 .qcr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch;}
@@ -682,12 +681,12 @@ body.drill-modal-open .filters{z-index:1;}
 
 /* ---- Intelligence section (Zone C, collapsible) ---- */
 .qcr-intelligence-toggle{margin-top:26px;border-top:1px solid #dbe5ed;padding-top:16px;}
-.qcr-intelligence-toggle>summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;padding:4px 0;}
+.qcr-intelligence-toggle>summary{display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;list-style:none;padding:2px 0 14px 15px;border-left:4px solid #118DFF;}
 .qcr-intelligence-toggle>summary::-webkit-details-marker{display:none;}
-.qcr-intelligence-toggle>summary>span{font:900 9px Manrope,sans-serif;letter-spacing:1px;color:#118dff;padding:5px 8px;border:1px solid #cfe7f8;border-radius:999px;background:#f2f9fe;}
-.qcr-intelligence-toggle>summary>b{margin:0;font:900 17px 'DM Sans',sans-serif;color:#183a58;}
-.qcr-intelligence-toggle>summary>em{font:600 11px Manrope,sans-serif;color:#7a8c9b;font-style:normal;}
-.qcr-intelligence-toggle>summary::after{content:'⌄';margin-left:auto;font:900 18px Manrope,sans-serif;color:#7b8e9d;}
+.qcr-toggle-text{display:flex;flex-direction:column;gap:5px;min-width:0;}
+.qcr-toggle-text b{font:800 21px 'DM Sans',sans-serif;color:#12283f;letter-spacing:.15px;}
+.qcr-toggle-text em{font:600 12.5px Manrope,sans-serif;color:#7a8c9b;font-style:normal;letter-spacing:.1px;}
+.qcr-intelligence-toggle>summary::after{content:'⌄';flex:0 0 auto;font:900 20px Manrope,sans-serif;color:#7b8e9d;}
 .qcr-intelligence-toggle:not([open])>summary::after{content:'›';}
 .qcr-grid-intelligence{margin-top:16px;}
 
@@ -775,7 +774,6 @@ body.drill-modal-open .filters{z-index:1;}
   .qcr-card.qcr-wide,.qcr-card.qcr-root-card{grid-column:1;}
   .qcr-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
   .qcr-why-decomp,.qcr-risk-matrix{grid-template-columns:1fr;}
-  .qcr-zone-heading p{flex-basis:100%;}
   .qcr-card>h3{font-size:15px;}
 }
 
@@ -796,5 +794,4 @@ body.drill-modal-open .filters{z-index:1;}
   .qcr-ranked-row{grid-template-columns:22px minmax(0,1fr);}
   .qcr-ranked-row>.qcr-mini-investigate{grid-column:2;justify-self:start;margin-top:4px;}
   .qcr-why-grid{grid-template-columns:1fr;}
-  .qcr-zone-heading p{display:none;}
 }
