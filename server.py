@@ -10,6 +10,8 @@ import json
 import math
 import gzip
 import os
+import re
+import difflib
 import sqlite3
 
 try:
@@ -74,6 +76,13 @@ USE_POSTGRES = bool(DATABASE_URL)
 PG_POOL = None
 RESPONSE_CACHE = {}
 RESPONSE_CACHE_TTL = 10
+
+# 6M Fishbone (Man/Machine/Material/Method/Measurement/Environment) master
+# data cache. The master list only changes when an admin re-imports the
+# 6M master workbook, so it is cached in memory and invalidated on import.
+FISHBONE_CACHE = {"rows": None, "aliases": None, "loaded_at": 0}
+FISHBONE_CAUSE_FIELDS = ["man", "machine", "material", "method", "measurement", "environment"]
+FISHBONE_FUZZY_CUTOFF = 0.80
 
 
 def _ensure_database():
@@ -1277,6 +1286,144 @@ def _insert_records(records):
     conn.commit(); conn.close(); RESPONSE_CACHE.clear(); return {"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
 
 
+def _norm_defect_key(s):
+    """Normalize a defect name for matching: uppercase, letters/digits only.
+    Used to match disposition.main_defect values (e.g. 'INTERWRAP SCRATCHES (R')
+    against the 6M Fishbone master defect list (e.g. 'Interwrap Scratch (Rolled)'),
+    since the two lists don't use identical spelling/abbreviations."""
+    return re.sub(r"[^A-Z0-9]+", "", str(s or "").upper())
+
+
+def _parse_fishbone_file(filename, data):
+    """Parse an uploaded 6M Fishbone Defect Master workbook (.xlsx/.xlsm).
+    Expected columns (any order, case-insensitive, matched by keyword):
+    Defect List, Man Causes, Machine Causes, Material Causes, Method Causes,
+    Measurement Causes, Environment Causes. Uses the 'Master_Data' sheet
+    when present, otherwise the first sheet."""
+    ext = os.path.splitext(filename.lower())[1]
+    if ext not in (".xlsx", ".xlsm"):
+        raise ValueError("6M Fishbone master must be uploaded as an .xlsx or .xlsm file")
+    try:
+        import openpyxl
+    except ImportError:
+        raise ValueError("Excel import requires openpyxl.")
+    wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+    ws = wb["Master_Data"] if "Master_Data" in wb.sheetnames else wb[wb.sheetnames[0]]
+    iterator = ws.iter_rows(values_only=True)
+    try:
+        headers = list(next(iterator))
+    except StopIteration:
+        raise ValueError("The uploaded 6M master file is empty")
+    col_map = {}
+    keyword_map = {
+        "defect": "defect_name", "man": "man", "machine": "machine",
+        "material": "material", "method": "method", "measurement": "measurement",
+        "environment": "environment",
+    }
+    for idx, h in enumerate(headers):
+        key = str(h or "").strip().lower()
+        for kw, field in keyword_map.items():
+            if kw in key:
+                col_map[field] = idx
+                break
+    if "defect_name" not in col_map:
+        raise ValueError("Could not find a 'Defect List' column in the uploaded file")
+    records = []
+    for values in iterator:
+        if not any(v not in (None, "") for v in values):
+            continue
+        name = str(values[col_map["defect_name"]] or "").strip() if col_map["defect_name"] < len(values) else ""
+        if not name:
+            continue
+        rec = {"defect_name": name}
+        for field in FISHBONE_CAUSE_FIELDS:
+            i = col_map.get(field)
+            rec[field] = str(values[i]).strip() if (i is not None and i < len(values) and values[i] is not None) else ""
+        records.append(rec)
+    wb.close()
+    return records
+
+
+def _replace_fishbone_master(records, filename, imported_by):
+    """Replace the entire 6M Fishbone master table with a freshly-uploaded
+    set of records. This is a full reference-list refresh (not a merge),
+    matching the requirement that re-uploading the 6M master Excel should
+    fully refresh what the QCR dashboard shows — no separate 'sync' step
+    needed once the admin confirms the import."""
+    if not records:
+        raise ValueError("No defect rows were found in the uploaded file")
+    conn = get_conn()
+    seen = set()
+    rows = []
+    for r in records:
+        norm = _norm_defect_key(r["defect_name"])
+        if not norm or norm in seen:
+            continue
+        seen.add(norm)
+        rows.append((r["defect_name"], norm) + tuple(r.get(f, "") for f in FISHBONE_CAUSE_FIELDS))
+    conn.execute("DELETE FROM fishbone_master")
+    conn.executemany(
+        "INSERT INTO fishbone_master (defect_name,norm_name,man,machine,material,method,measurement,environment) VALUES (?,?,?,?,?,?,?,?)",
+        rows,
+    )
+    conn.execute(
+        "INSERT INTO fishbone_import_history (filename,detected,imported,imported_by) VALUES (?,?,?,?)",
+        (filename, len(records), len(rows), imported_by),
+    )
+    conn.commit()
+    conn.close()
+    FISHBONE_CACHE["rows"] = None
+    FISHBONE_CACHE["aliases"] = None
+    return {"detected": len(records), "imported": len(rows)}
+
+
+def _fishbone_master_rows(force=False):
+    if FISHBONE_CACHE["rows"] is None or force:
+        conn = get_conn()
+        rows = conn.execute(
+            "SELECT defect_name,norm_name,man,machine,material,method,measurement,environment,updated_at FROM fishbone_master"
+        ).fetchall()
+        conn.close()
+        FISHBONE_CACHE["rows"] = [dict(r) for r in rows]
+        FISHBONE_CACHE["loaded_at"] = time.time()
+    return FISHBONE_CACHE["rows"]
+
+
+def _fishbone_aliases(force=False):
+    if FISHBONE_CACHE["aliases"] is None or force:
+        conn = get_conn()
+        rows = conn.execute("SELECT norm_disposition_defect,master_defect FROM fishbone_alias").fetchall()
+        conn.close()
+        FISHBONE_CACHE["aliases"] = {r[0]: r[1] for r in rows}
+    return FISHBONE_CACHE["aliases"]
+
+
+def _fishbone_match(defect_name):
+    """Match a disposition main_defect value to a 6M Fishbone master row.
+    Order of precedence: manual admin alias -> exact normalized match ->
+    high-confidence fuzzy match -> no match."""
+    master = _fishbone_master_rows()
+    if not master:
+        return {"defect": defect_name, "matched": False, "match_type": "no_master", "matched_defect": None, "confidence": 0, "causes": None}
+    by_norm = {r["norm_name"]: r for r in master}
+    norm = _norm_defect_key(defect_name)
+    aliases = _fishbone_aliases()
+    if norm in aliases:
+        target_norm = _norm_defect_key(aliases[norm])
+        row = by_norm.get(target_norm)
+        if row:
+            return {"defect": defect_name, "matched": True, "match_type": "alias", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: row.get(f, "") for f in FISHBONE_CAUSE_FIELDS}}
+    if norm in by_norm:
+        row = by_norm[norm]
+        return {"defect": defect_name, "matched": True, "match_type": "exact", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: row.get(f, "") for f in FISHBONE_CAUSE_FIELDS}}
+    close = difflib.get_close_matches(norm, list(by_norm.keys()), n=1, cutoff=FISHBONE_FUZZY_CUTOFF)
+    if close:
+        row = by_norm[close[0]]
+        score = difflib.SequenceMatcher(None, norm, close[0]).ratio()
+        return {"defect": defect_name, "matched": True, "match_type": "fuzzy", "matched_defect": row["defect_name"], "confidence": round(score, 2), "causes": {f: row.get(f, "") for f in FISHBONE_CAUSE_FIELDS}}
+    return {"defect": defect_name, "matched": False, "match_type": "none", "matched_defect": None, "confidence": 0, "causes": None}
+
+
 def _ensure_admin_schema():
     conn = get_conn()
     if USE_POSTGRES:
@@ -1367,6 +1514,40 @@ def _ensure_admin_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, updated INTEGER DEFAULT 0,
             imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    # 6M Fishbone (Man/Machine/Material/Method/Measurement/Environment)
+    # master reference data — imported by an admin from the 6M Defect
+    # Master workbook, independent of the monthly disposition data import.
+    if USE_POSTGRES:
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_master (
+            id BIGSERIAL PRIMARY KEY, defect_name TEXT NOT NULL, norm_name TEXT NOT NULL UNIQUE,
+            man TEXT DEFAULT '', machine TEXT DEFAULT '', material TEXT DEFAULT '',
+            method TEXT DEFAULT '', measurement TEXT DEFAULT '', environment TEXT DEFAULT '',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_alias (
+            id BIGSERIAL PRIMARY KEY, disposition_defect TEXT NOT NULL, norm_disposition_defect TEXT NOT NULL UNIQUE,
+            master_defect TEXT NOT NULL, created_by TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_import_history (
+            id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, imported INTEGER DEFAULT 0,
+            imported_by TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+    else:
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_master (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, defect_name TEXT NOT NULL, norm_name TEXT NOT NULL UNIQUE,
+            man TEXT DEFAULT '', machine TEXT DEFAULT '', material TEXT DEFAULT '',
+            method TEXT DEFAULT '', measurement TEXT DEFAULT '', environment TEXT DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_alias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, disposition_defect TEXT NOT NULL, norm_disposition_defect TEXT NOT NULL UNIQUE,
+            master_defect TEXT NOT NULL, created_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_import_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, imported INTEGER DEFAULT 0,
+            imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+
     # Remove the legacy KPI target name so the public/admin target APIs are
     # fully consistent with the renamed First Pass Yield % (Prime%) KPI. This is idempotent and
     # also cleans existing deployed databases during startup.
@@ -2403,6 +2584,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"authenticated": False, "username":"", "display_name":"", "role":""})
         elif path == "/api/filters":
             self._send_json(get_filter_options())
+        elif path == "/api/fishbone":
+            try:
+                defects = [d for d in (qs.get("defects", "") or "").split("|") if d.strip()]
+                master = _fishbone_master_rows()
+                items = [_fishbone_match(d) for d in defects] if defects else []
+                self._send_json({
+                    "items": items,
+                    "master_count": len(master),
+                    "master_updated_at": master[0]["updated_at"] if master else None,
+                })
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=500)
         elif path == "/api/activity/live":
             try:
                 conn = get_conn()
@@ -2733,6 +2926,47 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     conn=get_conn(); rows=conn.execute("SELECT label,old_target,new_target,changed_by,effective_date,changed_at FROM kpi_target_history ORDER BY id DESC LIMIT 100").fetchall(); conn.close(); self._send_json({"rows":[dict(r) for r in rows]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/fishbone_master":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    rows = _fishbone_master_rows(force=True)
+                    self._send_json({"rows": rows, "count": len(rows)})
+                except Exception as e: self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/fishbone_history":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn = get_conn()
+                    rows = conn.execute("SELECT id,filename,detected,imported,imported_by,created_at FROM fishbone_import_history ORDER BY id DESC LIMIT 50").fetchall()
+                    conn.close(); self._send_json({"rows": [dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/fishbone_alias":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn = get_conn()
+                    rows = conn.execute("SELECT id,disposition_defect,master_defect,created_by,created_at FROM fishbone_alias ORDER BY id DESC").fetchall()
+                    conn.close(); self._send_json({"rows": [dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/fishbone_unmapped":
+            # Top defects (by qty, last 12 months of data) that do not have a
+            # confident 6M master match — helps the admin decide which manual
+            # alias mappings are worth adding.
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn = get_conn(); cur = conn.cursor()
+                    cur.execute("SELECT main_defect, COALESCE(SUM(output_weight),0) qty FROM disposition WHERE TRIM(COALESCE(main_defect,''))<>'' AND main_defect<>'NO DEFECT' GROUP BY main_defect ORDER BY qty DESC LIMIT 40")
+                    rows = cur.fetchall(); conn.close()
+                    master_names = [r["defect_name"] for r in _fishbone_master_rows()]
+                    out = []
+                    for r in rows:
+                        m = _fishbone_match(r[0])
+                        if not m["matched"] or m["match_type"] == "fuzzy":
+                            out.append({"defect": r[0], "qty": float(r[1] or 0), "match_type": m["match_type"], "suggested": m.get("matched_defect")})
+                    self._send_json({"rows": out, "master_defects": master_names})
+                except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/admin/kpi_targets":
             if not _is_admin(self): _auth_error(self)
             else:
@@ -3067,6 +3301,68 @@ class Handler(BaseHTTPRequestHandler):
                 result = _insert_records(records)
                 _audit(self,"direct_import",details={"filename":uploaded[0],"detected":len(records),"inserted":result.get("inserted",0),"updated":result.get("updated",0)})
                 self._send_json({"ok": True, "detected": len(records), **result})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/fishbone_import":
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
+            try:
+                ctype = self.headers.get("Content-Type", "")
+                length = int(self.headers.get("Content-Length", "0") or 0)
+                raw = self.rfile.read(length)
+                msg = BytesParser(policy=default).parsebytes((f"Content-Type: {ctype}\r\nMIME-Version: 1.0\r\n\r\n").encode() + raw)
+                uploaded = None
+                if msg.is_multipart():
+                    for part in msg.iter_parts():
+                        disp = part.get("Content-Disposition", "")
+                        if "filename=" in disp:
+                            uploaded = (part.get_filename() or "upload", part.get_payload(decode=True) or b"")
+                            break
+                if not uploaded:
+                    raise ValueError("No file was uploaded")
+                records = _parse_fishbone_file(uploaded[0], uploaded[1])
+                meta = _admin_meta(self) or {}
+                result = _replace_fishbone_master(records, uploaded[0], meta.get("username", "Admin"))
+                _audit(self, "fishbone_master_import", details={"filename": uploaded[0], "detected": result["detected"], "imported": result["imported"]})
+                self._send_json({"ok": True, "filename": uploaded[0], **result})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/fishbone_alias":
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
+            try:
+                body = _json_body(self)
+                disp_defect = str(body.get("disposition_defect", "")).strip()
+                master_defect = str(body.get("master_defect", "")).strip()
+                if not disp_defect or not master_defect:
+                    raise ValueError("Both a defect name and a 6M master defect are required")
+                norm = _norm_defect_key(disp_defect)
+                meta = _admin_meta(self) or {}
+                conn = get_conn()
+                conn.execute("DELETE FROM fishbone_alias WHERE norm_disposition_defect=?", (norm,))
+                conn.execute("INSERT INTO fishbone_alias (disposition_defect,norm_disposition_defect,master_defect,created_by) VALUES (?,?,?,?)",
+                             (disp_defect, norm, master_defect, meta.get("username", "Admin")))
+                conn.commit(); conn.close()
+                FISHBONE_CACHE["aliases"] = None
+                _audit(self, "fishbone_alias_set", details={"disposition_defect": disp_defect, "master_defect": master_defect})
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/fishbone_alias_delete":
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
+            try:
+                body = _json_body(self)
+                aid = int(body.get("id"))
+                conn = get_conn()
+                conn.execute("DELETE FROM fishbone_alias WHERE id=?", (aid,))
+                conn.commit(); conn.close()
+                FISHBONE_CACHE["aliases"] = None
+                _audit(self, "fishbone_alias_delete", record_id=aid)
+                self._send_json({"ok": True})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return

@@ -93,11 +93,16 @@
             <button class="qcr-tab-btn active" type="button" data-contrib-tab="defect">🎯 Defects</button>
             <button class="qcr-tab-btn" type="button" data-contrib-tab="wc">🏭 Work Centers</button>
             <button class="qcr-tab-btn" type="button" data-contrib-tab="grade">🧪 Grades</button>
+            <button class="qcr-tab-btn" type="button" data-contrib-tab="fishbone">🐟 6M Fishbone</button>
           </div>
           <div class="qcr-body">
             <div class="qcr-tab-panel-c qcr-list" id="qcrContribDefect" data-contrib-panel="defect"></div>
             <div class="qcr-tab-panel-c qcr-list qcr-hidden" id="qcrContribWc" data-contrib-panel="wc"></div>
             <div class="qcr-tab-panel-c qcr-list qcr-hidden" id="qcrContribGrade" data-contrib-panel="grade"></div>
+            <div class="qcr-tab-panel-c qcr-hidden" id="qcrContribFishbone" data-contrib-panel="fishbone">
+              <div class="qcr-fishbone-chips" id="qcrFishboneChips"></div>
+              <div class="qcr-fishbone-diagram" id="qcrFishboneDiagram"><div class="qcr-empty">Loading 6M fishbone analysis…</div></div>
+            </div>
             <div id="qcrContribFooter"></div>
           </div>
         </div>

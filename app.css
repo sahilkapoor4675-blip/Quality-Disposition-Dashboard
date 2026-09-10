@@ -640,6 +640,26 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-empty{padding:16px;text-align:center;color:#7b8d9d;font:600 14.5px Manrope,sans-serif;}
 .qcr-ranked-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #edf2f6;}
 .qcr-ranked-row:last-child{border-bottom:0;}
+.qcr-fishbone-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.qcr-fishbone-chip{border:1.5px solid #DCE6EF;background:#fff;color:#183A58;font:800 13px Manrope,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer;transition:all .15s ease;}
+.qcr-fishbone-chip:hover{border-color:#118DFF;color:#118DFF;}
+.qcr-fishbone-chip.active{background:#118DFF;border-color:#118DFF;color:#fff;}
+.qcr-fb-title{font:800 15px Sora,Manrope,sans-serif;color:#16324F;margin-bottom:8px;}
+.qcr-fb-note{font:600 12.5px Manrope,sans-serif;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.5;}
+.qcr-fb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.qcr-fb-branch{border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#F8FBFD;}
+.qcr-fb-man{border-left:4px solid #118DFF;}
+.qcr-fb-machine{border-left:4px solid #16A34A;}
+.qcr-fb-material{border-left:4px solid #D97706;}
+.qcr-fb-method{border-left:4px solid #7C3AED;}
+.qcr-fb-measurement{border-left:4px solid #DB2777;}
+.qcr-fb-environment{border-left:4px solid #0891B2;}
+.qcr-fb-head{font:800 12.5px Manrope,sans-serif;color:#16324F;text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;}
+.qcr-fb-text{font:600 13.5px Manrope,sans-serif;color:#3c4c5e;line-height:1.45;}
+.qcr-fb-spine{margin-top:14px;text-align:center;font:800 12.5px Manrope,sans-serif;color:#7b8d9d;padding-top:10px;border-top:2px dashed #DCE6EF;}
+.qcr-fb-spine span{background:#16324F;color:#fff;padding:4px 12px;border-radius:999px;}
+@media(max-width:900px){.qcr-fb-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:600px){.qcr-fb-grid{grid-template-columns:1fr;}}
 .qcr-ranked-main{min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start;}
 .qcr-ranked-main>b{font:750 14px Manrope,sans-serif;color:#263f54;overflow-wrap:anywhere;}
 .qcr-ranked-main>span{font:700 15.5px Manrope,sans-serif;color:#718496;}
