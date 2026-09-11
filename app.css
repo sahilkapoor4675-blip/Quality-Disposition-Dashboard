@@ -646,7 +646,7 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-empty{padding:16px;text-align:center;color:#7b8d9d;font:600 14.5px Manrope,sans-serif;}
 .qcr-ranked-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #edf2f6;}
 .qcr-ranked-row:last-child{border-bottom:0;}
-.qcr-fishbone-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.qcr-fishbone-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;justify-content:center;}
 .qcr-fishbone-chip{border:1.5px solid var(--red);background:#fff;color:#183A58;font:800 13px Manrope,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer;transition:all .15s ease;}
 .qcr-fishbone-chip:hover{border-color:var(--red);color:var(--red);}
 .qcr-fishbone-chip.active{background:var(--red);border-color:var(--red);color:#fff;}
