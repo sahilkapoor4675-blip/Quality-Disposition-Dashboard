@@ -171,6 +171,12 @@
   .filter-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid #dbe3ec;border-radius:8px;background:#fbfcfe;color:#24364b;font-size:14px;font-weight:600;cursor:pointer;text-align:left;transition:.16s ease;}
   .filter-trigger:hover,.filter-control.open .filter-trigger{border-color:#8bbcf2;box-shadow:0 8px 22px rgba(17,141,255,.13);background:#fff;}
   .filter-trigger .chevron{font-size:15px;color:#64748b;}
+  /* Highlight any filter that currently has a value applied (not "All"),
+     so it's obvious at a glance which filters are active. */
+  .filter-field.filter-active .filter-trigger{border-color:var(--accent);border-width:1.5px;background:#EAF4FF;box-shadow:0 0 0 3px rgba(17,141,255,.14);}
+  .filter-field.filter-active .filter-trigger span:first-child{color:var(--accent);font-weight:800;}
+  .filter-field.filter-active .filter-trigger .chevron{color:var(--accent);}
+  .filter-field.filter-active label{color:var(--accent);}
   .filter-menu{position:absolute;z-index:50;left:0;right:0;top:calc(100% + 6px);display:none;background:#fff;border:1px solid #dbe3ec;border-radius:9px;box-shadow:0 14px 34px rgba(15,42,74,.18);padding:8px;}
   .filter-control.open .filter-menu{display:block;animation:dropIn .14s ease-out;}
   @keyframes dropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
@@ -641,9 +647,9 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-ranked-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #edf2f6;}
 .qcr-ranked-row:last-child{border-bottom:0;}
 .qcr-fishbone-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
-.qcr-fishbone-chip{border:1.5px solid #DCE6EF;background:#fff;color:#183A58;font:800 13px Manrope,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer;transition:all .15s ease;}
-.qcr-fishbone-chip:hover{border-color:#118DFF;color:#118DFF;}
-.qcr-fishbone-chip.active{background:#118DFF;border-color:#118DFF;color:#fff;}
+.qcr-fishbone-chip{border:1.5px solid var(--red);background:#fff;color:#183A58;font:800 13px Manrope,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer;transition:all .15s ease;}
+.qcr-fishbone-chip:hover{border-color:var(--red);color:var(--red);}
+.qcr-fishbone-chip.active{background:var(--red);border-color:var(--red);color:#fff;}
 .qcr-fb-title{font:800 15px Sora,Manrope,sans-serif;color:#16324F;margin-bottom:8px;}
 .qcr-fb-note{font:600 12.5px Manrope,sans-serif;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.5;}
 .qcr-fb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}

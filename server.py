@@ -2261,12 +2261,20 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
             if a["qty"]>0 and b["qty"]<a["qty"]*.70:
                 improvements.append({"type":"defect","name":defect,"change_pct":pct_change(b["qty"],a["qty"]),"detail":f"{defect} reduced {abs(pct_change(b['qty'],a['qty'])):.0f}% in {b['month']} vs {a['month']}."})
     recurring.sort(key=lambda x:(x["period_count"],x["qty"]),reverse=True);recurring=recurring[:8]
-    # Attach the current dominant Work Center / Grade for each recurring defect.
-    if recurring and cur:
+    # Attach the dominant Work Center / Grade for each recurring defect,
+    # scoped to the SAME month later shown as its "period" (the last month
+    # in that defect's own recurring window) — not the page's currently
+    # selected month filter. Using a single shared month for every recurring
+    # defect meant the reported Work Center/Grade and the displayed period
+    # could refer to different months than the defect actually occurred in,
+    # so "Investigate" combined a mismatched Work Center+Grade+Month+Defect
+    # and returned zero records.
+    if recurring:
         conn=get_conn();c=conn.cursor()
         try:
-            pf=dict(filters);pf["month"]=cur.get("name");whx,px=build_where(pf)
             for rr in recurring:
+                period_month=rr["months"][-1]["month"]
+                pf=dict(filters);pf["month"]=period_month;whx,px=build_where(pf)
                 q=whx+((" AND " if whx else "WHERE ")+"main_defect = ?")
                 pp=px+[rr["defect"]]
                 c.execute(f"SELECT work_center,COUNT(DISTINCT {HEAT_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
@@ -2275,12 +2283,38 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
                 r=c.fetchone();rr["grade"]=r[0] if r else "—"
         finally:c.close();conn.close()
     new_issues.sort(key=lambda x:x["qty"],reverse=True);new_issues=new_issues[:8]
+    # Attach the dominant Work Center / Grade for each new-issue defect too,
+    # scoped to the month it actually first appeared in (same approach as the
+    # recurring-defect enrichment above). Without this, "Investigate" on a
+    # new-issue finding fell back to the single riskiest Work Center/Grade in
+    # the whole dataset, which usually has nothing to do with this defect and
+    # produced zero matching records.
+    if new_issues:
+        conn=get_conn();c=conn.cursor()
+        try:
+            for nn in new_issues:
+                pf=dict(filters);pf["month"]=nn.get("month");whx,px=build_where(pf)
+                q=whx+((" AND " if whx else "WHERE ")+"main_defect = ?")
+                pp=px+[nn["defect"]]
+                c.execute(f"SELECT work_center,COUNT(DISTINCT {HEAT_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
+                r=c.fetchone();nn["work_center"]=r[0] if r else "—"
+                c.execute(f"SELECT grade,COUNT(DISTINCT {HEAT_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
+                r=c.fetchone();nn["grade"]=r[0] if r else "—"
+        finally:c.close();conn.close()
 
     # Generic problem-finder.  Scores are intentionally transparent: severity,
     # deviation, quantity impact, recurrence and confidence all influence rank.
     problems=[]
     def add_problem(title,severity,change,driver,detail,score,typ,what,where=None,grade=None,defect=None,period=None,impact_qty=0,records=0,action="Investigate"):
-        problems.append({"title":title,"severity":severity,"change":change,"driver":driver,"detail":detail,"score":round(score,1),"type":typ,"what":what,"where":where or "—","grade":grade or "—","defect":defect or "—","period":period or "—","impact_qty":round(impact_qty,2),"records":int(records or 0),"confidence":conf(records),"action":action})
+        # "_*_locked" marks fields that were computed specifically FOR this
+        # finding (e.g. the recurring/new-issue Work Center+Grade queries
+        # above). Fields left as "—" get filled in below from independent,
+        # dataset-wide "dominant" rankings purely for a readable driver_path
+        # — those are not guaranteed to co-occur with each other, so they
+        # must stay droppable if the combination turns out to have zero
+        # matching records (see the verification pass below).
+        problems.append({"title":title,"severity":severity,"change":change,"driver":driver,"detail":detail,"score":round(score,1),"type":typ,"what":what,"where":where or "—","grade":grade or "—","defect":defect or "—","period":period or "—","impact_qty":round(impact_qty,2),"records":int(records or 0),"confidence":conf(records),"action":action,
+                         "_where_locked":bool(where),"_grade_locked":bool(grade),"_defect_locked":bool(defect)})
     # KPI target breaches
     for k in ranking:
         if k["status"]=="good":continue
@@ -2300,9 +2334,9 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
         add_problem("Defect-rate spike detected","Attention",f"{pct_change(defect_vals[-1],baseline_def):+.0f}% vs baseline","Recent baseline",f"Current Defect Rate {defect_vals[-1]*100:.2f}% is {defect_vals[-1]/baseline_def:.1f}× the recent baseline.",72,"spike","Defect Rate",records=cur.get("coils") if cur else 0)
     # Recurring/new defects
     for r in recurring[:3]:
-        add_problem(f"Recurring defect: {r['defect']}","Critical" if r["period_count"]>=4 else "Attention",f"{r['period_count']} periods","Recurrence",f"{r['defect']} has remained active across {r['period_count']} consecutive recent periods.",78+r["period_count"]*2,"recurrence","Defect",defect=r["defect"],period=r["months"][-1]["month"],impact_qty=r["qty"],records=r["coils"],action="Investigate recurring defect")
+        add_problem(f"Recurring defect: {r['defect']}","Critical" if r["period_count"]>=4 else "Attention",f"{r['period_count']} periods","Recurrence",f"{r['defect']} has remained active across {r['period_count']} consecutive recent periods.",78+r["period_count"]*2,"recurrence","Defect",where=r.get("work_center"),grade=r.get("grade"),defect=r["defect"],period=r["months"][-1]["month"],impact_qty=r["qty"],records=r["coils"],action="Investigate recurring defect")
     for n in new_issues[:2]:
-        add_problem(f"New quality issue: {n['defect']}","Critical",n["month"],"First appearance",f"{n['defect']} appeared after no prior recorded occurrence and is now {n['qty']:.2f} MT.",76,"new_issue","Defect",defect=n["defect"],period=n["month"],impact_qty=n["qty"],records=n["records"],action="Investigate first appearance")
+        add_problem(f"New quality issue: {n['defect']}","Critical",n["month"],"First appearance",f"{n['defect']} appeared after no prior recorded occurrence and is now {n['qty']:.2f} MT.",76,"new_issue","Defect",where=n.get("work_center"),grade=n.get("grade"),defect=n["defect"],period=n["month"],impact_qty=n["qty"],records=n["records"],action="Investigate first appearance")
     # Contribution: defect + work-center pair.
     if top_def_delta and top_def_delta["change_pp"]>5:
         topwc=next((x for x in risk["work_centers"] if x["risk"] in ("High","Medium")),None)
@@ -2341,6 +2375,49 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
         if pr["defect"]!="—" and pr["where"]!="—":
             pr["driver_path"]=f"{pr['defect']} at {pr['where']}"
         else: pr["driver_path"]=pr["driver"]
+
+    # Verify each finding's Where/Grade/Defect combination actually has
+    # matching records for its period. The dominant_wc/dominant_grade/
+    # dominant_def fallback above fills gaps from independent, dataset-wide
+    # rankings — they were never checked to co-occur, so a finding could end
+    # up pointing at a Work Center + Grade + Defect combination that never
+    # existed together, and "Investigate" would come back with zero
+    # records. Drop only the auto-filled (non-locked) dimensions, one at a
+    # time, until the combination resolves to real records.
+    conn=get_conn();c=conn.cursor()
+    try:
+        def _combo_has_records(pf_month,where_v,grade_v,defect_v):
+            pf=dict(filters);pf["month"]=pf_month
+            wh,pp=build_where(pf)
+            if where_v and where_v!="—": wh=wh+(" AND " if wh else "WHERE ")+"work_center = ?"; pp=pp+[where_v]
+            if grade_v and grade_v!="—": wh=wh+(" AND " if wh else "WHERE ")+"grade = ?"; pp=pp+[grade_v]
+            if defect_v and defect_v!="—": wh=wh+(" AND " if wh else "WHERE ")+"main_defect = ? AND main_defect<>'' AND main_defect<>'NO DEFECT'"; pp=pp+[defect_v]
+            c.execute(f"SELECT COUNT(*) FROM disposition {wh}",pp)
+            return (c.fetchone()[0] or 0)>0
+        for pr in problems:
+            month_val=pr["period"] if pr["period"] and pr["period"]!="—" else str(filters.get("month") or "All")
+            w,g,d=pr["where"],pr["grade"],pr["defect"]
+            if _combo_has_records(month_val,w,g,d): continue
+            if not pr.get("_defect_locked") and d!="—" and _combo_has_records(month_val,w,g,"—"):
+                pr["defect"]="—"
+            elif not pr.get("_grade_locked") and g!="—" and _combo_has_records(month_val,w,"—",d):
+                pr["grade"]="—"
+            elif not pr.get("_where_locked") and w!="—" and _combo_has_records(month_val,"—",g,d):
+                pr["where"]="—"
+            elif not pr.get("_defect_locked") and not pr.get("_grade_locked") and _combo_has_records(month_val,w,"—","—"):
+                pr["grade"]="—";pr["defect"]="—"
+            elif not pr.get("_defect_locked") and not pr.get("_where_locked") and _combo_has_records(month_val,"—",g,"—"):
+                pr["where"]="—";pr["defect"]="—"
+            elif not pr.get("_grade_locked") and not pr.get("_where_locked") and _combo_has_records(month_val,"—","—",d):
+                pr["where"]="—";pr["grade"]="—"
+            elif _combo_has_records(month_val,"—","—","—"):
+                pr["where"]="—";pr["grade"]="—";pr["defect"]="—"
+            pr["driver_path"]=f"{pr['defect']} at {pr['where']}" if pr["defect"]!="—" and pr["where"]!="—" else pr["driver"]
+    finally:
+        c.close();conn.close()
+    for pr in problems:
+        pr.pop("_where_locked",None);pr.pop("_grade_locked",None);pr.pop("_defect_locked",None)
+
     problems.sort(key=lambda x:(-x["score"], 0 if x["severity"]=="Critical" else 1 if x["severity"]=="Attention" else 2))
     # Deduplicate near-identical findings by title.
     seen=set();uniq=[]

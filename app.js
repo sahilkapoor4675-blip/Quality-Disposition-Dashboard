@@ -53,7 +53,7 @@ async function loadFilters(){
         const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
         opt.textContent=x.label;
         opt.addEventListener("click",()=>{
-          currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); updateActiveFilterBadge(); triggerFilterRefresh();
+          currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); field.classList.toggle("filter-active", x.value!=="All"); updateActiveFilterBadge(); triggerFilterRefresh();
         }); list.appendChild(opt);
       });
       if(!filtered.length) list.innerHTML='<div class="filter-empty">No matching options</div>';
@@ -61,8 +61,9 @@ async function loadFilters(){
     trigger.addEventListener("click",()=>{document.querySelectorAll('.filter-control.open').forEach(c=>{if(c!==control)c.classList.remove('open')}); control.classList.toggle('open'); if(control.classList.contains('open')){search.focus();renderOptions(search.value);}});
     search.addEventListener("input",()=>renderOptions(search.value));
     renderOptions();
+    field.classList.toggle("filter-active", currentFilters[f.key]!=="All");
   });
-  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); updateActiveFilterBadge(); triggerFilterRefresh();});
+  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); triggerFilterRefresh();});
   function exportDashboard(format){ const params=new URLSearchParams(currentFilters).toString(); window.location.href=`/api/export/${format}?${params}`; }
   document.getElementById("exportExcelBtn").addEventListener("click",()=>exportDashboard("excel"));
   document.getElementById("exportPdfBtn").addEventListener("click",()=>exportDashboard("pdf"));
@@ -288,7 +289,7 @@ function savedViews(){try{return JSON.parse(localStorage.getItem('qdash_saved_vi
 function renderSavedViews(){const sel=document.getElementById('savedViewSelect'); if(!sel)return; const views=savedViews(); sel.innerHTML='<option value="">Saved Views</option>'+Object.keys(views).sort().map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');}
 function saveCurrentView(){const name=prompt('Enter a name for this filter view:'); if(!name||!name.trim())return; const views=savedViews(); views[name.trim()]=Object.assign({},currentFilters); localStorage.setItem('qdash_saved_views',JSON.stringify(views)); renderSavedViews(); document.getElementById('savedViewSelect').value=name.trim();}
 function manageSavedViews(){const views=savedViews(); const names=Object.keys(views); if(!names.length){alert('No saved views yet.');return;} const name=prompt('Enter the exact saved view name to delete:\n\n'+names.join('\n')); if(name&&views[name]){delete views[name];localStorage.setItem('qdash_saved_views',JSON.stringify(views));renderSavedViews();}}
-function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); document.querySelectorAll('.filter-field').forEach(field=>{const key=field.dataset.filterKey; const val=currentFilters[key]||'All'; const span=field.querySelector('.filter-trigger span'); if(span){const opts=[...field.querySelectorAll('.filter-option')]; const match=opts.find(o=>o.dataset.value===val); span.textContent=match?match.textContent:val;}}); updateActiveFilterBadge(); triggerFilterRefresh();}
+function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); document.querySelectorAll('.filter-field').forEach(field=>{const key=field.dataset.filterKey; const val=currentFilters[key]||'All'; const span=field.querySelector('.filter-trigger span'); if(span){const opts=[...field.querySelectorAll('.filter-option')]; const match=opts.find(o=>o.dataset.value===val); span.textContent=match?match.textContent:val;} field.classList.toggle('filter-active', val!=='All');}); updateActiveFilterBadge(); triggerFilterRefresh();}
 function drilldownFiltersQuery(extra={}){const p=new URLSearchParams(currentFilters); Object.keys(extra).forEach(k=>p.set(k,extra[k])); return p.toString();}
 let drillState={metric:'',title:'',extra:{},page:1};
 function renderDrillPage(page=1){
@@ -1232,7 +1233,7 @@ function qcrRenderProblemFinder(intel){
   el.innerHTML=rows.map((x,i)=>{
     const sev=String(x.severity||'Observation').toUpperCase(); const conf=String(x.confidence||'MEDIUM').toUpperCase();
     const driver=x.driver_path||x.where||'—'; const change=x.change|| (x.impact_qty?`${Number(x.impact_qty).toFixed(2)} MT`:'—');
-    return `<div class="qcr-problem-row ${sev.toLowerCase()}"><div class="qcr-problem-rank">${i+1}</div><div class="qcr-problem-main"><b>${escQcr(x.title||x.what||'Quality issue')}</b><span>${escQcr(x.detail||'Material quality signal detected.')}</span><div class="qcr-problem-fields"><span><small>DRIVER</small>${escQcr(driver)}</span><span><small>CHANGE</small>${escQcr(change)}</span><span><small>CONFIDENCE</small>${conf} · ${Number(x.records||0).toLocaleString()} records</span></div></div><div class="qcr-problem-action"><em class="qcr-severity-pill ${sev.toLowerCase()}">${sev}</em><button class="qcr-investigate-btn" type="button" data-qcr-where="${escQcr(x.where||'')}" data-qcr-grade="${escQcr(x.grade||'')}" data-qcr-defect="${escQcr(x.defect||'')}">Investigate →</button></div></div>`;
+    return `<div class="qcr-problem-row ${sev.toLowerCase()}"><div class="qcr-problem-rank">${i+1}</div><div class="qcr-problem-main"><b>${escQcr(x.title||x.what||'Quality issue')}</b><span>${escQcr(x.detail||'Material quality signal detected.')}</span><div class="qcr-problem-fields"><span><small>DRIVER</small>${escQcr(driver)}</span><span><small>CHANGE</small>${escQcr(change)}</span><span><small>CONFIDENCE</small>${conf} · ${Number(x.records||0).toLocaleString()} records</span></div></div><div class="qcr-problem-action"><em class="qcr-severity-pill ${sev.toLowerCase()}">${sev}</em><button class="qcr-investigate-btn" type="button" data-qcr-where="${escQcr(x.where||'')}" data-qcr-grade="${escQcr(x.grade||'')}" data-qcr-defect="${escQcr(x.defect||'')}" data-qcr-period="${escQcr(x.period||'')}">Investigate →</button></div></div>`;
   }).join('');
 }
 
@@ -1261,14 +1262,31 @@ function qcrRenderWhyDecomposition(intel){
 }
 function qcrInvestigation(extra={}, title='QCR Investigation'){
   const p={};
-  Object.entries(extra||{}).forEach(([k,v])=>{if(v!==undefined&&v!==null&&String(v).trim()&&String(v).toLowerCase()!=='all'&&String(v)!=='—')p[k]=v;});
+  Object.entries(extra||{}).forEach(([k,v])=>{
+    if(v===undefined||v===null) return;
+    const s=String(v).trim();
+    if(!s || s==='—') return;
+    // "month" is allowed through even when explicitly "All" — What Needs
+    // Attention findings are computed independently of the currently
+    // selected month filter, so an explicit month override (including a
+    // reset to "All") must not be silently dropped, or the investigate
+    // drilldown ends up combining a finding's Work Center/Grade/Defect with
+    // an unrelated month and returns zero records.
+    if(k!=='month' && s.toLowerCase()==='all') return;
+    p[k]=v;
+  });
   openDrilldown('quality_investigation',title,p);
 }
 function qcrWireProblemActions(){
   document.getElementById('qcrProblemFinder')?.addEventListener('click',e=>{
     const b=e.target.closest('.qcr-investigate-btn'); if(!b)return;
-    const defect=b.dataset.qcrDefect, where=b.dataset.qcrWhere, grade=b.dataset.qcrGrade;
-    qcrInvestigation({work_center:where,grade,drill_value:defect},`QCR Investigation — ${defect&&defect!=='—'?defect:'Quality issue'}`);
+    const defect=b.dataset.qcrDefect, where=b.dataset.qcrWhere, grade=b.dataset.qcrGrade, period=b.dataset.qcrPeriod;
+    // Findings here are detected across the full trend history (independent
+    // of whichever month happens to be selected on the page), so the
+    // investigation must use the finding's own period rather than inherit
+    // the page's current month filter — otherwise the two can point to
+    // different months and the drilldown comes back empty.
+    qcrInvestigation({work_center:where,grade,drill_value:defect,month:(period&&period!=='—'?period:'All')},`QCR Investigation — ${defect&&defect!=='—'?defect:'Quality issue'}`);
   });
   // Top Contributors: tab switching + investigate/root-cause wiring (event
   // delegation, since each tab's rows are re-rendered on every load).
