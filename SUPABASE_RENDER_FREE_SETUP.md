@@ -27,7 +27,11 @@ So the first successful startup should result in approximately the same initial 
 ## 4) Verify
 Open `/admin` on the deployed dashboard.
 - Login as Admin.
-- Check Database Status: provider should say `PostgreSQL • persistent`.
+- Check Database Status: provider should say `PostgreSQL • persistent`. If it still
+  says `SQLite • local`, `DATABASE_URL` is not being picked up (recheck step 2) —
+  in that state, ALL admin-added data (disposition records, the 6M Fishbone
+  master, KPI targets, users) resets on every Render restart/redeploy, which is
+  the most common cause of "I have to re-upload the 6M Fishbone master every time".
 - Check Total Records.
 - Import a small test file if desired.
 - Return to the dashboard and confirm the KPI data updates.
@@ -39,6 +43,12 @@ GitHub remains the code source. Push dashboard changes to GitHub -> Render auto-
 Do NOT upload monthly data to GitHub. Instead:
 Admin -> Bulk Import -> Excel/TSV/CSV -> Import.
 The records are written directly to Supabase PostgreSQL and become available to the dashboard.
+
+This also applies to the 6M Fishbone master (Admin -> 6M Fishbone Master Import): it
+is a ONE-TIME, independent import. Once `DATABASE_URL` is set, it is written to the
+same Supabase PostgreSQL database and stays there — uploading new monthly
+disposition/QCR data afterwards does NOT clear it, and it does NOT need to be
+re-uploaded on future code deploys.
 
 ## 7) Free-plan database safety
 Supabase Free currently provides 500 MB database size per project and may pause projects after about 7 days of low activity. Monitor Database Status in Admin. Keep regular CSV backups using the **Download Backup** button because automatic backups are not included on the Free plan.
