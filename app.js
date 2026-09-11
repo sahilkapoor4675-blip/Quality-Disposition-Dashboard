@@ -979,62 +979,130 @@ function dashRenderFishboneChips(items){
 // True Ishikawa/fishbone skeleton (spine + 6 angled bones converging on the
 // defect "head"), built as one SVG — as opposed to the qcr-fb-grid card
 // layout used on the Quality Control Room tab. Same underlying causes data.
+// Design goals: show EVERY cause (no 5-item cap, no truncation) and never let
+// text collide — font-size auto-shrinks and wraps per label, and the whole
+// diagram's height auto-grows to fit however many causes a branch has.
 function fbList(v){ return Array.isArray(v) ? v.filter(x=>x!==null && x!==undefined && String(x).trim()!=='') : (v?[v]:[]); }
-function fbWrapTitle(s,maxChars){
-  s=String(s||'').trim();
-  if(s.length<=maxChars) return [s];
-  const words=s.split(/\s+/); let l1='',l2='';
-  for(const w of words){ if((l1+' '+w).trim().length<=maxChars && !l2) l1=(l1+' '+w).trim(); else l2=(l2+' '+w).trim(); }
-  if(l2.length>maxChars) l2=l2.slice(0,maxChars-1)+'…';
-  return l2 ? [l1,l2] : [l1];
+// Wrap `text` into at most `maxLines` lines of at most `maxChars` each
+// (word-based). Only the last resort truncates (with an ellipsis) if even
+// after the max number of lines the text still won't fit.
+function fbWrapGeneric(text,maxChars,maxLines){
+  const words=String(text||'').trim().split(/\s+/).filter(Boolean);
+  const lines=[]; let cur='';
+  for(const w of words){
+    if(!cur){ cur=w; continue; }
+    if((cur+' '+w).length<=maxChars) cur=cur+' '+w;
+    else { lines.push(cur); cur=w; }
+  }
+  if(cur) lines.push(cur);
+  if(!lines.length) lines.push('');
+  if(lines.length>maxLines){
+    const head=lines.slice(0,maxLines-1);
+    let rest=lines.slice(maxLines-1).join(' ');
+    if(rest.length>maxChars) rest=rest.slice(0,Math.max(1,maxChars-1))+'…';
+    head.push(rest);
+    return head;
+  }
+  return lines;
 }
-const FISHBONE_BRANCHES = [
-  {key:'man',         label:'Man',         icon:'👤', color:'#118DFF', anchorX:175, side:'top'},
-  {key:'machine',     label:'Machine',     icon:'⚙️', color:'#16A34A', anchorX:460, side:'top'},
-  {key:'material',    label:'Material',    icon:'🧱', color:'#D97706', anchorX:745, side:'top'},
-  {key:'method',      label:'Method',      icon:'📋', color:'#7C3AED', anchorX:175, side:'bottom'},
-  {key:'measurement', label:'Measurement', icon:'📏', color:'#DB2777', anchorX:460, side:'bottom'},
-  {key:'environment', label:'Environment', icon:'🌤️', color:'#0891B2', anchorX:745, side:'bottom'},
+// Fit `text` into a box of width `boxW`: try one line at decreasing font
+// sizes first, then wrap across up to `maxLines` lines at decreasing font
+// sizes, so the label auto-shrinks / auto-wraps instead of ever being cut.
+function fbFitBox(text, boxW, opts){
+  const o=Object.assign({pad:14, baseSize:13, minSize:9.5, maxLines:2, charW:0.66, lineH:1.2}, opts||{});
+  text=String(text||'').trim();
+  const avail=Math.max(24, boxW-o.pad);
+  for(let fs=o.baseSize; fs>=o.minSize; fs-=0.5){
+    if(text.length*fs*o.charW<=avail) return {fontSize:fs, lines:[text], lineHeight:fs*o.lineH};
+  }
+  for(let fs=o.baseSize; fs>=o.minSize; fs-=0.5){
+    const maxChars=Math.max(4,Math.floor(avail/(fs*o.charW)));
+    const lines=fbWrapGeneric(text,maxChars,o.maxLines);
+    if(lines.every(l=>l.length*fs*o.charW<=avail)) return {fontSize:fs, lines, lineHeight:fs*o.lineH};
+  }
+  const fs=o.minSize, maxChars=Math.max(4,Math.floor(avail/(fs*o.charW)));
+  return {fontSize:fs, lines:fbWrapGeneric(text,maxChars,o.maxLines), lineHeight:fs*o.lineH};
+}
+// Evenly spread n points along the usable middle span of a bone (leaving
+// a little clearance near the spine and near the category label box).
+function fbSpreadT(n){
+  if(n<=1) return [0.56];
+  const startFrac=0.14, endFrac=0.82, out=[];
+  for(let i=0;i<n;i++) out.push(startFrac + i*(endFrac-startFrac)/(n-1));
+  return out;
+}
+const FISHBONE_BRANCH_DEFS = [
+  {key:'man',         label:'Man',         icon:'👤', color:'#118DFF', side:'top',    lane:0},
+  {key:'machine',     label:'Machine',     icon:'⚙️', color:'#16A34A', side:'top',    lane:1},
+  {key:'material',    label:'Material',    icon:'🧱', color:'#D97706', side:'top',    lane:2},
+  {key:'method',      label:'Method',      icon:'📋', color:'#7C3AED', side:'bottom', lane:0},
+  {key:'measurement', label:'Measurement', icon:'📏', color:'#DB2777', side:'bottom', lane:1},
+  {key:'environment', label:'Environment', icon:'🌤️', color:'#0891B2', side:'bottom', lane:2},
 ];
 function buildFishboneSvg(item){
   const causes=item.causes||{};
-  const W=1050, H=486, spineY=248, spineX1=30, spineX2=858;
+  const LANE=380, TIP_DX=-160, ROW_GAP=40, BOX_H=32;
+  const anchors=[210, 210+LANE, 210+LANE*2];
+  const spineX1=30, spineX2=anchors[2]+260;
+  const headW=232;
+  const availCauseW=LANE-130; // horizontal room before the next lane / head box
+
+  // Pre-fit every cause label (per branch) so we know how tall each side
+  // of the diagram actually needs to be before we draw anything.
+  const branchData=FISHBONE_BRANCH_DEFS.map(b=>{
+    const list=fbList(causes[b.key]);
+    const items=(list.length?list:['No cause on file']).map(txt=>({
+      text:txt, missing:!list.length,
+      fit:fbFitBox(txt, availCauseW, {baseSize:12.5, minSize:8.5, maxLines:3, charW:0.64})
+    }));
+    return Object.assign({}, b, {anchorX:anchors[b.lane], items});
+  });
+  const nMax=side=>Math.max(1,...branchData.filter(b=>b.side===side).map(b=>b.items.length));
+  const tipDyFor=n=>Math.max(150, Math.round(ROW_GAP*(n-1)+90));
+  const TIP_DY_TOP=tipDyFor(nMax('top')), TIP_DY_BOT=tipDyFor(nMax('bottom'));
+
+  const spineY=TIP_DY_TOP+BOX_H+26;
+  const H=spineY+TIP_DY_BOT+BOX_H+26;
+  const W=spineX2+headW+30;
+
   let svg='';
-  // ---- spine + arrowhead into the head box ----
   svg+=`<line x1="${spineX1}" y1="${spineY}" x2="${spineX2}" y2="${spineY}" stroke="#243B53" stroke-width="3"/>`;
   svg+=`<polygon points="${spineX2},${spineY} ${spineX2-20},${spineY-13} ${spineX2-20},${spineY+13}" fill="#243B53"/>`;
+
   // ---- head box (the defect / effect) ----
-  const headX=spineX2, headW=172, headH=88, headY=spineY-headH/2;
-  svg+=`<rect x="${headX}" y="${headY}" width="${headW}" height="${headH}" rx="12" fill="#16324F"/>`;
-  const dLines=fbWrapTitle(item.defect,16);
-  svg+=dLines.map((ln,i)=>`<text x="${headX+headW/2}" y="${spineY - (dLines.length>1?9:0) + i*20 + 6}" font-size="15" font-weight="800" fill="#fff" text-anchor="middle">${escQcr(ln)}</text>`).join('');
-  // ---- 6 angled bones ----
-  const TIP_DX=-120, TIP_DY=150;
-  FISHBONE_BRANCHES.forEach(b=>{
+  const headFit=fbFitBox(item.defect, headW, {pad:22, baseSize:16, minSize:9, maxLines:4, charW:0.66, lineH:1.2});
+  const headH=Math.max(80, 30+headFit.lines.length*headFit.lineHeight+18);
+  const headY=spineY-headH/2;
+  svg+=`<rect x="${spineX2}" y="${headY}" width="${headW}" height="${headH}" rx="12" fill="#16324F"/>`;
+  const hMidOffset=(headFit.lines.length-1)*headFit.lineHeight/2;
+  svg+=headFit.lines.map((ln,i)=>`<text x="${spineX2+headW/2}" y="${spineY - hMidOffset + i*headFit.lineHeight + 5}" font-size="${headFit.fontSize}" font-weight="800" fill="#fff" text-anchor="middle">${escQcr(ln)}</text>`).join('');
+
+  // ---- 6 angled bones, each carrying every cause for that branch ----
+  branchData.forEach(b=>{
+    const TIP_DY = b.side==='top' ? TIP_DY_TOP : TIP_DY_BOT;
     const tipX=b.anchorX+TIP_DX, tipY = b.side==='top' ? spineY-TIP_DY : spineY+TIP_DY;
-    const dx=tipX-b.anchorX, dy=tipY-spineY, len=Math.sqrt(dx*dx+dy*dy)||1, ux=dx/len, uy=dy/len;
-    let px=-uy, py=ux; if(px<0){ px=uy; py=-ux; } // perpendicular that leans toward the head (right)
+    const dx=tipX-b.anchorX, dy=tipY-spineY;
+    const len=Math.sqrt(dx*dx+dy*dy)||1, ux=dx/len, uy=dy/len;
+    let px=-uy, py=ux; if(px<0){ px=uy; py=-ux; } // perpendicular leaning toward the head (right)
     svg+=`<line x1="${b.anchorX}" y1="${spineY}" x2="${tipX}" y2="${tipY}" stroke="${b.color}" stroke-width="2.5"/>`;
     svg+=`<circle cx="${b.anchorX}" cy="${spineY}" r="4" fill="${b.color}"/>`;
-    const full=fbList(causes[b.key]).slice(0,5);
-    const extra=fbList(causes[b.key]).length-full.length;
-    const items=full.length?full:['No cause on file'];
-    const n=items.length;
-    items.forEach((txt,i)=>{
-      const t=(i+1)/(n+1);
+    const ts=fbSpreadT(b.items.length);
+    b.items.forEach((it,i)=>{
+      const t=ts[i];
       const bx=b.anchorX+dx*t, by=spineY+dy*t;
-      const ex=bx+px*16, ey=by+py*16;
-      svg+=`<line x1="${bx}" y1="${by}" x2="${ex}" y2="${ey}" stroke="${full.length?b.color:'#c3cdd8'}" stroke-width="1.5"/>`;
+      const ex=bx+px*14, ey=by+py*14;
+      svg+=`<line x1="${bx}" y1="${by}" x2="${ex}" y2="${ey}" stroke="${it.missing?'#c3cdd8':b.color}" stroke-width="1.5"/>`;
       const anchor = px>=0 ? 'start':'end';
       const tx = ex + (px>=0?5:-5);
-      svg+=`<text x="${tx}" y="${ey+4}" font-size="12" font-weight="${full.length?'700':'600'}" font-style="${full.length?'normal':'italic'}" fill="${full.length?'#243B53':'#9aa7b4'}" text-anchor="${anchor}">${escQcr(truncateLabel(txt,24))}<title>${escQcr(txt)}</title></text>`;
+      const {fontSize,lines,lineHeight}=it.fit;
+      const midOffset=(lines.length-1)*lineHeight/2;
+      lines.forEach((ln,li)=>{
+        svg+=`<text x="${tx}" y="${ey - midOffset + li*lineHeight + 4}" font-size="${fontSize}" font-weight="${it.missing?'600':'700'}" font-style="${it.missing?'italic':'normal'}" fill="${it.missing?'#9aa7b4':'#243B53'}" text-anchor="${anchor}">${escQcr(ln)}</text>`;
+      });
     });
-    if(extra>0){
-      svg+=`<text x="${tipX}" y="${b.side==='top'?tipY-38:tipY+50}" font-size="11" font-weight="700" fill="${b.color}" text-anchor="middle">+${extra} more</text>`;
-    }
-    const boxW=150, boxH=30, boxX=tipX-boxW/2, boxY=b.side==='top'?tipY-boxH:tipY;
-    svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="8" fill="${b.color}"/>`;
-    svg+=`<text x="${tipX}" y="${boxY+boxH/2+5}" font-size="13" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
+    const boxW=150, boxX=tipX-boxW/2, boxY=b.side==='top'?tipY-BOX_H:tipY;
+    svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${BOX_H}" rx="8" fill="${b.color}"/>`;
+    svg+=`<text x="${tipX}" y="${boxY+BOX_H/2+5}" font-size="13" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
   });
   return `<svg class="chart-svg fishbone-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
 }
