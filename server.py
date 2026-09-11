@@ -1735,6 +1735,7 @@ def _chart_png(kind, title, labels, values, second=None, second_label=None, perc
     fig, ax = plt.subplots(figsize=(8.2, 3.65), dpi=150)
     fig.patch.set_facecolor("white"); ax.set_facecolor("white")
     navy="#0F2A4A"; blue="#118DFF"; red="#DC2626"; green="#16A34A"; orange="#D97706"; purple="#7C3AED"; grid="#DCE6EF"
+    palette=["#118DFF","#16A34A","#D97706","#DC2626","#7C3AED","#DB2777","#0891B2","#CA8A04","#4F46E5","#059669","#EA580C","#BE185D"]
     labels=[str(x) for x in labels]
     vals=[float(x or 0) for x in values]
     if kind == "pie":
@@ -1751,7 +1752,8 @@ def _chart_png(kind, title, labels, values, second=None, second_label=None, perc
             ax.legend(wedges, labs, loc="center left", bbox_to_anchor=(1.02,0.5), fontsize=8.5, frameon=False)
         ax.axis("equal")
     elif kind == "bar":
-        x=np.arange(len(labels)); ax.bar(x,vals,width=.62,color=blue,edgecolor="none")
+        x=np.arange(len(labels)); bar_colors=[palette[i%len(palette)] for i in range(len(labels))]
+        ax.bar(x,vals,width=.62,color=bar_colors,edgecolor="none")
         ax.set_xticks(x); ax.set_xticklabels(labels,rotation=35 if len(labels)>6 else 0,ha="right" if len(labels)>6 else "center",fontsize=7.5)
         for i,v in enumerate(vals): ax.text(i,v + (max(vals)*.018 if max(vals) else .02), f"{v:.2f}" if percent else f"{v:,.2f}",ha="center",va="bottom",fontsize=7,fontweight="bold")
     elif kind == "line":

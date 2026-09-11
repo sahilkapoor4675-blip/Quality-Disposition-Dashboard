@@ -1042,7 +1042,7 @@ const FISHBONE_BRANCH_DEFS = [
 ];
 function buildFishboneSvg(item){
   const causes=item.causes||{};
-  const LANE=380, TIP_DX=-160, ROW_GAP=40, BOX_H=32;
+  const LANE=380, TIP_DX=-160, ROW_GAP=40, BOX_H=42;
   const anchors=[210, 210+LANE, 210+LANE*2];
   const spineX1=30, spineX2=anchors[2]+260;
   const headW=232;
@@ -1101,9 +1101,9 @@ function buildFishboneSvg(item){
         svg+=`<text x="${tx}" y="${ey - midOffset + li*lineHeight + 4}" font-size="${fontSize}" font-weight="${it.missing?'600':'700'}" font-style="${it.missing?'italic':'normal'}" fill="${it.missing?'#9aa7b4':'#243B53'}" text-anchor="${anchor}">${escQcr(ln)}</text>`;
       });
     });
-    const boxW=150, boxX=tipX-boxW/2, boxY=b.side==='top'?tipY-BOX_H:tipY;
-    svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${BOX_H}" rx="8" fill="${b.color}"/>`;
-    svg+=`<text x="${tipX}" y="${boxY+BOX_H/2+5}" font-size="13" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
+    const boxW=176,boxX=tipX-boxW/2, boxY=b.side==='top'?tipY-BOX_H:tipY;
+    svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${BOX_H}" rx="10" fill="${b.color}"/>`;
+    svg+=`<text x="${tipX}" y="${boxY+BOX_H/2+6}" font-size="17" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
   });
   return `<svg class="chart-svg fishbone-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
 }
