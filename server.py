@@ -76,17 +76,31 @@ USE_POSTGRES = bool(DATABASE_URL)
 
 # IMPORTANT — data persistence: when running on SQLite (no DATABASE_URL), the live
 # database must NOT be the same file that ships inside the app bundle
-# (APP_DIR/quality.db). That file is part of the application code, so every time the
-# app itself is updated/redeployed it gets replaced by whatever quality.db happened
-# to be bundled in that release — silently wiping any data an admin uploaded since
-# (disposition imports, and the 6M Fishbone Master). Defaulting instead to a
-# `data/` folder that lives next to — but is never part of — the app's shipped
-# files means an app update only ever touches server.py/app.js/etc, never this
-# folder, so uploaded data survives every future update. The bundled quality.db is
-# used purely as a one-time seed the very first time the app runs with no existing
-# data folder yet.
+# (APP_DIR/quality.db), and ideally not even inside the app folder at all. This app
+# is typically updated by replacing the whole qcr_app folder with a freshly
+# extracted zip — which would wipe anything stored inside that folder, including a
+# `data/` subfolder. To survive that, the live database defaults to a folder that
+# lives OUTSIDE and alongside the app folder (a sibling directory), so replacing
+# qcr_app's contents never touches it. If that parent location isn't writable
+# (e.g. restrictive hosting permissions), it falls back to a `data/` folder inside
+# the app directory. The bundled quality.db is used purely as a one-time seed the
+# very first time the app runs with no existing persistent database yet.
 _BUNDLED_SEED_DB = os.path.join(APP_DIR, "quality.db")
-_DEFAULT_PERSISTENT_DB = os.path.join(APP_DIR, "data", "quality.db")
+
+def _pick_persistent_dir():
+    sibling = os.path.join(os.path.dirname(APP_DIR), "qcr_app_persistent_data")
+    try:
+        os.makedirs(sibling, exist_ok=True)
+        probe = os.path.join(sibling, ".write_test")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+        return sibling
+    except Exception:
+        return os.path.join(APP_DIR, "data")
+
+_PERSISTENT_DIR = _pick_persistent_dir()
+_DEFAULT_PERSISTENT_DB = os.path.join(_PERSISTENT_DIR, "quality.db")
 DB_PATH = os.environ.get("DB_PATH", _DEFAULT_PERSISTENT_DB)
 PG_POOL = None
 RESPONSE_CACHE = {}
@@ -125,6 +139,8 @@ def _ensure_database():
         if os.path.exists(_BUNDLED_SEED_DB):
             shutil.copy2(_BUNDLED_SEED_DB, DB_PATH)
             print(f"Seeded persistent database at {DB_PATH} from bundled quality.db (first run).")
+    else:
+        print(f"Using existing persistent database at {DB_PATH} (not re-seeded).")
 
 _ensure_database()
 
@@ -136,7 +152,7 @@ _ensure_database()
 # from a small JSON file — and the admin can also download/keep copies off-server at
 # no cost. Backups live next to the database (inside the persistent `data/` folder),
 # never inside the app's bundled files, and old ones are pruned automatically.
-BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH) if not USE_POSTGRES else os.path.join(APP_DIR, "data"), "backups")
+BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH) if not USE_POSTGRES else _PERSISTENT_DIR, "backups")
 BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "20"))
 try:
     os.makedirs(BACKUP_DIR, exist_ok=True)
