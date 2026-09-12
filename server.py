@@ -128,6 +128,21 @@ def _ensure_database():
 
 _ensure_database()
 
+# ---- Free, no-extra-service backup system -------------------------------------------
+# Since this app may run without a paid persistent disk or external database, backups
+# are the safety net: a point-in-time snapshot (disposition + 6M Fishbone Master +
+# aliases + KPI targets) is written automatically after every data-changing import, so
+# even if the live database is ever lost, the last known-good state can be restored
+# from a small JSON file — and the admin can also download/keep copies off-server at
+# no cost. Backups live next to the database (inside the persistent `data/` folder),
+# never inside the app's bundled files, and old ones are pruned automatically.
+BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH) if not USE_POSTGRES else os.path.join(APP_DIR, "data"), "backups")
+BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "20"))
+try:
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+except Exception:
+    pass
+
 FILTER_KEYS = [
     "month", "work_center", "grade", "quality_decision",
     "week", "quarter", "financial_year", "defect_intensity",
@@ -1380,6 +1395,7 @@ def _replace_fishbone_master(records, filename, imported_by):
     needed once the admin confirms the import."""
     if not records:
         raise ValueError("No defect rows were found in the uploaded file")
+    _write_backup_file("before_fishbone_import")  # safety snapshot of the outgoing data
     conn = get_conn()
     seen = set()
     rows = []
@@ -1402,7 +1418,126 @@ def _replace_fishbone_master(records, filename, imported_by):
     conn.close()
     FISHBONE_CACHE["rows"] = None
     FISHBONE_CACHE["aliases"] = None
+    _write_backup_file("after_fishbone_import")
     return {"detected": len(records), "imported": len(rows)}
+
+
+def _backup_snapshot_data():
+    """Gather everything a backup needs to fully restore the app's data: every
+    disposition row, the 6M Fishbone Master + aliases, and KPI targets."""
+    conn = get_conn()
+    try:
+        disposition = [dict(r) for r in conn.execute(
+            "SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition"
+        ).fetchall()]
+        fishbone_master = [dict(r) for r in conn.execute(
+            "SELECT defect_name,norm_name,man,machine,material,method,measurement,environment FROM fishbone_master"
+        ).fetchall()]
+        try:
+            fishbone_alias = [dict(r) for r in conn.execute("SELECT alias,defect_name FROM fishbone_alias").fetchall()]
+        except Exception:
+            fishbone_alias = []
+        try:
+            kpi_targets = [dict(r) for r in conn.execute("SELECT kpi_name,target FROM kpi_targets").fetchall()]
+        except Exception:
+            kpi_targets = []
+    finally:
+        conn.close()
+    return {
+        "backup_version": 1,
+        "created_at": datetime.now().isoformat(),
+        "counts": {"disposition": len(disposition), "fishbone_master": len(fishbone_master), "fishbone_alias": len(fishbone_alias), "kpi_targets": len(kpi_targets)},
+        "disposition": disposition,
+        "fishbone_master": fishbone_master,
+        "fishbone_alias": fishbone_alias,
+        "kpi_targets": kpi_targets,
+    }
+
+def _backup_prune():
+    try:
+        files = sorted(
+            (f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_") and f.endswith(".json.gz")),
+            key=lambda f: os.path.getmtime(os.path.join(BACKUP_DIR, f)),
+        )
+        while len(files) > BACKUP_KEEP:
+            os.remove(os.path.join(BACKUP_DIR, files.pop(0)))
+    except Exception:
+        pass
+
+def _write_backup_file(reason="manual"):
+    """Snapshot current data to a timestamped, gzip-compressed JSON file in
+    BACKUP_DIR. Never raises — a failed backup must not block the import that
+    triggered it."""
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        data = _backup_snapshot_data()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_reason = re.sub(r"[^a-zA-Z0-9_-]", "", reason)[:40] or "manual"
+        fname = f"backup_{ts}_{safe_reason}.json.gz"
+        fpath = os.path.join(BACKUP_DIR, fname)
+        with gzip.open(fpath, "wt", encoding="utf-8") as f:
+            json.dump(data, f)
+        _backup_prune()
+        return {"filename": fname, "counts": data["counts"], "created_at": data["created_at"]}
+    except Exception as e:
+        print(f"WARNING: backup failed ({reason}): {e}")
+        return None
+
+def _list_backups():
+    try:
+        out = []
+        for f in os.listdir(BACKUP_DIR):
+            if not (f.startswith("backup_") and f.endswith(".json.gz")):
+                continue
+            fp = os.path.join(BACKUP_DIR, f)
+            m = re.match(r"backup_(\d{8})_(\d{6})_(.+)\.json\.gz", f)
+            reason = m.group(3) if m else "unknown"
+            out.append({"filename": f, "reason": reason, "size_kb": round(os.path.getsize(fp)/1024, 1), "modified_at": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%b-%Y %H:%M:%S")})
+        out.sort(key=lambda x: x["filename"], reverse=True)
+        return out
+    except Exception:
+        return []
+
+def _restore_backup_data(data):
+    """Fully restore disposition + 6M Fishbone Master/alias + KPI targets from a
+    backup snapshot dict (as produced by _backup_snapshot_data)."""
+    conn = get_conn()
+    try:
+        disp_rows = data.get("disposition") or []
+        conn.execute("DELETE FROM disposition")
+        if disp_rows:
+            cols = ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
+            conn.executemany(
+                f"INSERT INTO disposition ({','.join(cols)}) VALUES ({','.join(['?']*len(cols))})",
+                [tuple(r.get(c, "") for c in cols) for r in disp_rows],
+            )
+        fb_rows = data.get("fishbone_master") or []
+        conn.execute("DELETE FROM fishbone_master")
+        if fb_rows:
+            conn.executemany(
+                "INSERT INTO fishbone_master (defect_name,norm_name,man,machine,material,method,measurement,environment) VALUES (?,?,?,?,?,?,?,?)",
+                [(r.get("defect_name",""), r.get("norm_name",""), r.get("man",""), r.get("machine",""), r.get("material",""), r.get("method",""), r.get("measurement",""), r.get("environment","")) for r in fb_rows],
+            )
+        alias_rows = data.get("fishbone_alias") or []
+        try:
+            conn.execute("DELETE FROM fishbone_alias")
+            if alias_rows:
+                conn.executemany("INSERT INTO fishbone_alias (alias,defect_name) VALUES (?,?)", [(r.get("alias",""), r.get("defect_name","")) for r in alias_rows])
+        except Exception:
+            pass
+        kpi_rows = data.get("kpi_targets") or []
+        try:
+            if kpi_rows:
+                for r in kpi_rows:
+                    conn.execute("INSERT INTO kpi_targets (kpi_name,target) VALUES (?,?) ON CONFLICT(kpi_name) DO UPDATE SET target=excluded.target" if USE_POSTGRES else "INSERT OR REPLACE INTO kpi_targets (kpi_name,target) VALUES (?,?)", (r.get("kpi_name",""), r.get("target")))
+        except Exception:
+            pass
+        conn.commit()
+    finally:
+        conn.close()
+    FISHBONE_CACHE["rows"] = None
+    FISHBONE_CACHE["aliases"] = None
+    return {"disposition": len(disp_rows), "fishbone_master": len(fb_rows), "fishbone_alias": len(alias_rows), "kpi_targets": len(kpi_rows)}
 
 
 def _fishbone_master_rows(force=False):
@@ -3350,6 +3485,34 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json(database_status())
                 except Exception as e:
                     self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/backup/list":
+            if not _is_admin(self):
+                _auth_error(self)
+            else:
+                try:
+                    self._send_json({"backups": _list_backups(), "backup_dir": BACKUP_DIR, "keep": BACKUP_KEEP})
+                except Exception as e:
+                    self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/backup/download":
+            if not _is_admin(self):
+                _auth_error(self)
+            else:
+                try:
+                    name = os.path.basename(str(qs.get("name", "")))
+                    fpath = os.path.join(BACKUP_DIR, name)
+                    if not name.startswith("backup_") or not name.endswith(".json.gz") or not os.path.isfile(fpath):
+                        raise ValueError("Backup file not found")
+                    with open(fpath, "rb") as f:
+                        data = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/gzip")
+                    self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(data)
+                except Exception as e:
+                    self._send_json({"error": str(e)}, status=404)
         elif path == "/api/admin/export_csv":
             if not _is_admin(self):
                 _auth_error(self)
@@ -3632,6 +3795,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not item or time.time()-item.get("created",0)>IMPORT_PREVIEW_TTL: IMPORT_PREVIEWS.pop(pid,None); raise ValueError("Import preview expired. Please upload the file again.")
                 result=_insert_records(item["records"]); meta=_admin_meta(self) or {};
                 conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]}); _audit(self,"data_import_confirm",details={"filename":item["filename"],"inserted":result["inserted"],"updated":result.get("updated",0)})
+                _write_backup_file("disposition_import")
                 self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"updated":result.get("updated",item["summary"].get("updated",0)),"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
@@ -3683,6 +3847,62 @@ class Handler(BaseHTTPRequestHandler):
                 result = _replace_fishbone_master(records, uploaded[0], meta.get("username", "Admin"))
                 _audit(self, "fishbone_master_import", details={"filename": uploaded[0], "detected": result["detected"], "imported": result["imported"]})
                 self._send_json({"ok": True, "filename": uploaded[0], **result})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/backup/create":
+            if not _require_role(self, "admin"): return
+            try:
+                result = _write_backup_file("manual")
+                if not result:
+                    raise ValueError("Backup could not be created — check server disk/permissions")
+                meta = _admin_meta(self) or {}
+                _audit(self, "backup_create", details=result)
+                self._send_json({"ok": True, **result})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/backup/restore":
+            if not _require_role(self, "admin"): return
+            try:
+                ctype = self.headers.get("Content-Type", "")
+                data = None
+                if "multipart/form-data" in ctype:
+                    length = int(self.headers.get("Content-Length", "0") or 0)
+                    raw = self.rfile.read(length)
+                    msg = BytesParser(policy=default).parsebytes((f"Content-Type: {ctype}\r\nMIME-Version: 1.0\r\n\r\n").encode() + raw)
+                    uploaded = None
+                    if msg.is_multipart():
+                        for part in msg.iter_parts():
+                            disp = part.get("Content-Disposition", "")
+                            if "filename=" in disp:
+                                uploaded = (part.get_filename() or "upload", part.get_payload(decode=True) or b"")
+                                break
+                    if not uploaded:
+                        raise ValueError("No backup file was uploaded")
+                    raw_bytes = uploaded[1]
+                    try:
+                        text = gzip.decompress(raw_bytes).decode("utf-8")
+                    except Exception:
+                        text = raw_bytes.decode("utf-8")  # allow an uncompressed .json too
+                    data = json.loads(text)
+                else:
+                    body = _json_body(self)
+                    name = os.path.basename(str(body.get("name", "")))
+                    fpath = os.path.join(BACKUP_DIR, name)
+                    if not name.startswith("backup_") or not name.endswith(".json.gz") or not os.path.isfile(fpath):
+                        raise ValueError("Backup file not found")
+                    with gzip.open(fpath, "rt", encoding="utf-8") as f:
+                        data = json.load(f)
+                if not isinstance(data, dict) or "disposition" not in data:
+                    raise ValueError("This doesn't look like a valid backup file")
+                _write_backup_file("before_restore")  # safety snapshot of whatever is about to be replaced
+                counts = _restore_backup_data(data)
+                meta = _admin_meta(self) or {}
+                _audit(self, "backup_restore", details=counts)
+                self._send_json({"ok": True, "restored": counts})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
