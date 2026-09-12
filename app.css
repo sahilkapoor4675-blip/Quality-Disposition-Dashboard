@@ -10,7 +10,7 @@
          box-shadow:0 4px 18px rgba(15,42,74,.18);border-bottom:1px solid rgba(255,255,255,.10);}
   .executive-brand{min-width:300px;}
   header h1{margin:0;font-size:25px;line-height:1.1;letter-spacing:1.3px;font-weight:800;}
-  .quality-intelligence-title{font-family:'Lucida Calligraphy','Lucida Handwriting',cursive!important;font-size:30px!important;font-weight:700!important;letter-spacing:.9px!important;line-height:1.08!important;display:flex;align-items:center;flex-wrap:wrap;gap:0;white-space:nowrap;}
+  .quality-intelligence-title{font-family:'Allura',cursive!important;font-size:42px!important;font-weight:700!important;letter-spacing:.9px!important;line-height:1.08!important;display:flex;align-items:center;flex-wrap:wrap;gap:0;white-space:nowrap;}
   .qi-quality,.qi-intelligence{display:inline-block;}
   .qi-quality{color:#c62828;text-shadow:1px 1px 0 rgba(139,0,0,.38),2px 2px 0 rgba(255,255,255,.72),0 4px 8px rgba(198,40,40,.14);}
   .qi-intelligence{color:#1565c0;text-shadow:1px 1px 0 rgba(10,55,110,.38),2px 2px 0 rgba(255,255,255,.78),0 4px 8px rgba(21,101,192,.14);}
@@ -27,7 +27,7 @@
   @media(max-width:600px){.live-users{font-size:12px;padding:7px 8px;}}
   .live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.16),0 0 10px rgba(34,197,94,.65);animation:livePulse 1.8s ease-in-out infinite;}
   @keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.86)}}
-  @media(max-width:700px){header{padding:16px 18px}.executive-meta{width:100%;margin-left:0;justify-content:space-between}.updated-block{text-align:left}.live-status{margin-left:auto}header h1{font-size:21px}.quality-intelligence-title{font-size:25px!important;letter-spacing:.45px!important}.qi-space{width:5px}}
+  @media(max-width:700px){header{padding:16px 18px}.executive-meta{width:100%;margin-left:0;justify-content:space-between}.updated-block{text-align:left}.live-status{margin-left:auto}header h1{font-size:21px}.quality-intelligence-title{font-size:32px!important;letter-spacing:.45px!important}.qi-space{width:5px}}
   .container{padding:20px;max-width:1400px;margin:0 auto;}
   .filters{background:var(--card);border:1px solid var(--border);border-radius:10px;
            padding:16px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
@@ -219,7 +219,7 @@
 /* Premium executive typography */
 html,body{font-family:'Manrope','Segoe UI','Helvetica Neue',Arial,sans-serif;}
 header h1,.section-title,.section-header,.panel h3,.tab-btn{font-family:'DM Sans','Manrope',sans-serif;}
-.quality-intelligence-title{font-family:'Lucida Calligraphy','Lucida Handwriting',cursive!important;}
+.quality-intelligence-title{font-family:'Allura',cursive!important;}
 header h1{font-weight:800;letter-spacing:1.1px;}
 .kpi-card .label,.kpi-status,.kpi-target,.kpi-target-item,.kpi-trendline,.filters,.filters .field label,button,select{font-family:'Space Grotesk',sans-serif;}
 .kpi-card .label{font-weight:800;letter-spacing:.42px;}

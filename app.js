@@ -1006,23 +1006,26 @@ function fbWrapGeneric(text,maxChars,maxLines){
   }
   return lines;
 }
-// Fit `text` into a box of width `boxW`: try one line at decreasing font
-// sizes first, then wrap across up to `maxLines` lines at decreasing font
-// sizes, so the label auto-shrinks / auto-wraps instead of ever being cut.
+// Fit `text` into a box of width `boxW`: keep a single, CONSISTENT font size
+// for every label (so no cause looks bigger/smaller than another) and wrap
+// across up to `maxLines` lines to make long text fit instead of shrinking
+// it. Only shrinks as a last resort, if even wrapping can't make it fit.
 function fbFitBox(text, boxW, opts){
   const o=Object.assign({pad:14, baseSize:13, minSize:9.5, maxLines:2, charW:0.66, lineH:1.2}, opts||{});
   text=String(text||'').trim();
   const avail=Math.max(24, boxW-o.pad);
-  for(let fs=o.baseSize; fs>=o.minSize; fs-=0.5){
-    if(text.length*fs*o.charW<=avail) return {fontSize:fs, lines:[text], lineHeight:fs*o.lineH};
+  const fs=o.baseSize;
+  if(text.length*fs*o.charW<=avail) return {fontSize:fs, lines:[text], lineHeight:fs*o.lineH};
+  const maxChars=Math.max(4,Math.floor(avail/(fs*o.charW)));
+  const lines=fbWrapGeneric(text,maxChars,o.maxLines);
+  if(lines.every(l=>l.length*fs*o.charW<=avail)) return {fontSize:fs, lines, lineHeight:fs*o.lineH};
+  for(let fs2=fs-0.5; fs2>=o.minSize; fs2-=0.5){
+    const maxChars2=Math.max(4,Math.floor(avail/(fs2*o.charW)));
+    const lines2=fbWrapGeneric(text,maxChars2,o.maxLines);
+    if(lines2.every(l=>l.length*fs2*o.charW<=avail)) return {fontSize:fs2, lines:lines2, lineHeight:fs2*o.lineH};
   }
-  for(let fs=o.baseSize; fs>=o.minSize; fs-=0.5){
-    const maxChars=Math.max(4,Math.floor(avail/(fs*o.charW)));
-    const lines=fbWrapGeneric(text,maxChars,o.maxLines);
-    if(lines.every(l=>l.length*fs*o.charW<=avail)) return {fontSize:fs, lines, lineHeight:fs*o.lineH};
-  }
-  const fs=o.minSize, maxChars=Math.max(4,Math.floor(avail/(fs*o.charW)));
-  return {fontSize:fs, lines:fbWrapGeneric(text,maxChars,o.maxLines), lineHeight:fs*o.lineH};
+  const fsMin=o.minSize, maxCharsMin=Math.max(4,Math.floor(avail/(fsMin*o.charW)));
+  return {fontSize:fsMin, lines:fbWrapGeneric(text,maxCharsMin,o.maxLines), lineHeight:fsMin*o.lineH};
 }
 // Evenly spread n points along the usable middle span of a bone (leaving
 // a little clearance near the spine and near the category label box).
@@ -1042,7 +1045,7 @@ const FISHBONE_BRANCH_DEFS = [
 ];
 function buildFishboneSvg(item){
   const causes=item.causes||{};
-  const LANE=380, TIP_DX=-160, ROW_GAP=40, BOX_H=42;
+  const LANE=380, TIP_DX=-160, ROW_GAP=48, BOX_H=42;
   const anchors=[210, 210+LANE, 210+LANE*2];
   const spineX1=30, spineX2=anchors[2]+260;
   const headW=232;
@@ -1105,7 +1108,8 @@ function buildFishboneSvg(item){
     svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${BOX_H}" rx="10" fill="${b.color}"/>`;
     svg+=`<text x="${tipX}" y="${boxY+BOX_H/2+6}" font-size="17" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
   });
-  return `<svg class="chart-svg fishbone-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
+  const SHIFT_X=70; // nudge the whole diagram right within its frame, per feedback
+  return `<svg class="chart-svg fishbone-svg" viewBox="0 0 ${W+SHIFT_X} ${H}" xmlns="http://www.w3.org/2000/svg"><g transform="translate(${SHIFT_X},0)">${svg}</g></svg>`;
 }
 function dashRenderFishboneDiagram(item){
   const el=document.getElementById('dashFishboneDiagram'); if(!el) return;
