@@ -30,6 +30,7 @@ import io
 import zipfile
 import shutil
 import time
+import threading
 from datetime import datetime
 from email.parser import BytesParser
 from email.policy import default
@@ -1524,6 +1525,43 @@ def _write_backup_file(reason="manual"):
     except Exception as e:
         print(f"WARNING: backup failed ({reason}): {e}")
         return None
+
+# How often a backup happens automatically even with no import activity at all
+# (imports already trigger their own backup — this is the safety net for the
+# gaps between them). Override with the BACKUP_SCHEDULE_HOURS env var; set to
+# "0" to disable.
+BACKUP_SCHEDULE_HOURS = float(os.environ.get("BACKUP_SCHEDULE_HOURS", "24") or "0")
+
+def _seconds_since_last_backup():
+    try:
+        files = [f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_") and f.endswith(".json.gz")]
+        if not files:
+            return None
+        newest = max(os.path.getmtime(os.path.join(BACKUP_DIR, f)) for f in files)
+        return time.time() - newest
+    except Exception:
+        return None
+
+def _scheduled_backup_loop():
+    """Background safety net: even if nobody imports data for a while, take a
+    periodic snapshot anyway (default every 24h) so a quiet stretch between
+    imports never becomes a gap in backup coverage. An import-triggered backup
+    counts too — this only fires once the configured interval has genuinely
+    elapsed since the most recent backup of any kind."""
+    if BACKUP_SCHEDULE_HOURS <= 0:
+        return
+    interval_seconds = BACKUP_SCHEDULE_HOURS * 3600
+    check_every = min(interval_seconds, 3600)  # re-check at least hourly
+    while True:
+        try:
+            age = _seconds_since_last_backup()
+            if age is None or age >= interval_seconds:
+                result = _write_backup_file("scheduled")
+                if result:
+                    print(f"Scheduled backup created: {result['filename']}")
+        except Exception as e:
+            print(f"WARNING: scheduled backup loop error: {e}")
+        time.sleep(check_every)
 
 def _list_backups():
     try:
@@ -4050,6 +4088,9 @@ def main():
     _ensure_admin_schema()
     _seed_postgres_if_empty()
     ensure_fast_indexes()
+    if BACKUP_SCHEDULE_HOURS > 0:
+        threading.Thread(target=_scheduled_backup_loop, daemon=True, name="scheduled-backup").start()
+        print(f"Scheduled backups enabled: every {BACKUP_SCHEDULE_HOURS:g}h (BACKUP_SCHEDULE_HOURS).")
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     if not (ADMIN_USERNAME and ADMIN_PASSWORD):
         print("INFO: ADMIN_USERNAME/ADMIN_PASSWORD are not set; administrator authentication will use the existing users table. Set both environment variables for first-time provisioning.")

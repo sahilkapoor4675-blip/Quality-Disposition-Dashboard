@@ -3,7 +3,7 @@
 from pathlib import Path
 import ast, re, sys
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parent
 errors=[]; warnings=[]
 
 for rel in ["server.py","app.js","app.css","index.html","admin.html"]:

@@ -8,8 +8,10 @@ _Last reviewed: 2026-09-13_
   redeploying the app's code files never touches it. See `server.py`'s
   `_pick_persistent_dir()`.
 - A full snapshot (disposition data + 6M Fishbone Master + aliases + KPI
-  targets) is saved automatically after every import, and on-demand from
-  Admin → Backups. Snapshots are gzip-compressed JSON, kept in
+  targets) is saved automatically after every import, on-demand from
+  Admin → Backups, **and on a schedule** (default every 24h, even with no
+  import activity at all — override with `BACKUP_SCHEDULE_HOURS`, or set it
+  to `0` to disable). Snapshots are gzip-compressed JSON, kept in
   `<persistent dir>/backups/`, auto-pruned to the last 20.
 - **Platform caveat**: none of the above survives a host that wipes the
   *entire* filesystem/container on every deploy (e.g. Render's free plan with
