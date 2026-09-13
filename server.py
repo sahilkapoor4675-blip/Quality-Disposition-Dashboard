@@ -27,6 +27,7 @@ import hashlib
 import hmac
 import csv
 import io
+import zipfile
 import shutil
 import time
 from datetime import datetime
@@ -974,6 +975,12 @@ IMPORT_PREVIEW_TTL = 30 * 60
 VIEWER_SESSION_TTL = 12 * 60 * 60
 LOGIN_WINDOW = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
+# Hard cap on any incoming request body (JSON or file upload). Without this, an
+# unauthenticated request (e.g. to /api/login, which has no auth check yet at the
+# point its body is read) with a large Content-Length could make the server try to
+# buffer the whole thing into memory — a simple, effective denial-of-service. This
+# is checked once, globally, before ANY handler touches the body.
+MAX_REQUEST_BYTES = 30 * 1024 * 1024  # 30 MB — comfortably covers xlsx/csv imports
 LOGIN_ATTEMPTS = {}
 CSRF_COOKIE = "qdash_csrf"
 
@@ -1274,6 +1281,23 @@ def _record_signature(r):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _reject_zip_bomb(data, max_ratio=200, max_uncompressed=300 * 1024 * 1024):
+    """Cheap pre-check against a decompression-bomb style .xlsx/.xlsm upload: xlsx
+    files are ZIP archives, so a tiny file can be crafted to expand to gigabytes in
+    memory once opened. This inspects the ZIP central directory (no decompression
+    needed) and rejects anything with an implausible compression ratio or a huge
+    declared uncompressed size, before openpyxl ever touches the content."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            total_uncompressed = sum(i.file_size for i in zf.infolist())
+            total_compressed = max(1, sum(i.compress_size for i in zf.infolist()))
+            if total_uncompressed > max_uncompressed:
+                raise ValueError("The uploaded file is too large once decompressed and was rejected.")
+            if total_uncompressed / total_compressed > max_ratio:
+                raise ValueError("The uploaded file's compression ratio is abnormally high and was rejected as a possible decompression bomb.")
+    except zipfile.BadZipFile:
+        raise ValueError("The uploaded file is not a valid Excel (.xlsx/.xlsm) file.")
+
 def _parse_uploaded_file(filename, data):
     ext = os.path.splitext(filename.lower())[1]
     rows = []
@@ -1282,6 +1306,7 @@ def _parse_uploaded_file(filename, data):
             import openpyxl
         except ImportError:
             raise ValueError("Excel import requires openpyxl. Please use TSV/CSV or install openpyxl.")
+        _reject_zip_bomb(data)
         wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
         ws = wb["Disposition Data"] if "Disposition Data" in wb.sheetnames else wb[wb.sheetnames[0]]
         iterator = ws.iter_rows(values_only=True)
@@ -1366,6 +1391,7 @@ def _parse_fishbone_file(filename, data):
         import openpyxl
     except ImportError:
         raise ValueError("Excel import requires openpyxl.")
+    _reject_zip_bomb(data)
     wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
     ws = wb["Master_Data"] if "Master_Data" in wb.sheetnames else wb[wb.sheetnames[0]]
     iterator = ws.iter_rows(values_only=True)
@@ -2978,6 +3004,10 @@ def compute_data_freshness(filters):
     }
 
 class Handler(BaseHTTPRequestHandler):
+    # Guards against a slow/stalled client (e.g. a slowloris-style attack) holding a
+    # connection — and its thread — open indefinitely.
+    timeout = 30
+
     def log_message(self, fmt, *args):
         pass  # keep console quiet
 
@@ -2995,16 +3025,32 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        # Restricts script/style/font/connect sources to this app and the Google
+        # Fonts CDN it uses; blocks framing and third-party base URIs. 'unsafe-inline'
+        # is required because the app's UI relies on inline <script>/<style> — this
+        # is not a full XSS mitigation on its own, but it still blocks an injected
+        # payload from loading an external attacker script, exfiltrating data to a
+        # third-party endpoint, or framing the app on another site.
+        self.send_header("Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
+            "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'")
+        if self.headers.get("X-Forwarded-Proto", "").lower() == "https":
+            self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+
     def _send_json(self, payload, status=200):
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_header("X-Request-ID", secrets.token_hex(8))
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self._security_headers()
         self._write_body(body)
 
     def _send_html(self, html, status=200):
@@ -3013,10 +3059,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Request-ID", secrets.token_hex(8))
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self._security_headers()
         self._write_body(body)
 
     def do_GET(self):
@@ -3080,7 +3123,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
             self.send_header("Pragma", "no-cache")
-            self.send_header("X-Content-Type-Options", "nosniff")
+            self._security_headers()
             self._write_body(body.encode("utf-8"))
         elif path == "/api/auth/status":
             meta = _viewer_meta(self)
@@ -3560,6 +3603,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        try:
+            declared_length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            declared_length = 0
+        if declared_length > MAX_REQUEST_BYTES:
+            self._send_json({"error": f"Request body too large (max {MAX_REQUEST_BYTES // (1024*1024)} MB)."}, status=413)
+            return
         if path.startswith("/api/admin/") and path not in ("/api/admin/login",):
             if not _admin_post_allowed(self):
                 return

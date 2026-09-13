@@ -1225,7 +1225,7 @@ function loadRootCause(defect){
 // consolidated intel endpoint (qcrRenderWhyDecomposition + the grade
 // concentration block in loadControlRoom) already provides a richer version
 // of the same insight, so the duplicate implementation was removed.
-function escQcr(v){return String(v??'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function escQcr(v){return String(v??'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function qcrRenderProblemFinder(intel){
   const el=document.getElementById('qcrProblemFinder'), count=document.getElementById('qcrProblemCount'); if(!el)return;
   const all=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
