@@ -1031,14 +1031,54 @@ function qcrRenderTopContributors(topDefects, defectTotalQty, worstWc, worstGr, 
 // current Top 5 Defects from /api/fishbone, which matches disposition
 // defect names against the admin-imported 6M Fishbone Master workbook.
 let qcrFishboneData = {items:[]};
+// 6M category style (icon + color), imported from the workbook's own "Icon
+// Color Coding" sheet via /api/fishbone. Falls back to these defaults until
+// the first successful fetch fills it in, so nothing breaks on first paint.
+let FISHBONE_STYLE = {
+  man:         {label:'Man',         icon:'👤', color:'#118DFF'},
+  machine:     {label:'Machine',     icon:'⚙️', color:'#16A34A'},
+  material:    {label:'Material',    icon:'📦', color:'#D97706'},
+  method:      {label:'Method',      icon:'📋', color:'#7C3AED'},
+  measurement: {label:'Measurement', icon:'📏', color:'#DB2777'},
+  environment: {label:'Environment', icon:'🌍', color:'#0891B2'},
+};
+function fbStyle(key){ return FISHBONE_STYLE[key] || {label:key,icon:'',color:'#64748B'}; }
 function qcrRenderFishboneChips(items){
   const chipsEl=document.getElementById('qcrFishboneChips'); if(!chipsEl) return;
   chipsEl.innerHTML = items.map((it,i)=>`<button class="qcr-fishbone-chip${i===0?' active':''}" type="button" data-idx="${i}">${escQcr(it.defect)}${it.matched?'':' ⚠'}</button>`).join('');
 }
-function qcrFishboneCard(field,label,icon,items){
+function qcrFishboneCard(field,items){
+  const st=fbStyle(field);
   const list=Array.isArray(items)?items:(items?[items]:[]);
   const body=list.length?`<ul class="qcr-fb-ul">${list.map(t=>`<li>${escQcr(t)}</li>`).join('')}</ul>`:'<div class="qcr-fb-empty">No cause on file</div>';
-  return `<div class="qcr-fb-branch qcr-fb-${field}"><div class="qcr-fb-head"><span class="qcr-fb-icon">${icon}</span>${label}<span class="qcr-fb-count">${list.length||''}</span></div>${body}</div>`;
+  return `<div class="qcr-fb-branch qcr-fb-${field}" style="--fb-color:${st.color}"><div class="qcr-fb-head"><span class="qcr-fb-icon">${st.icon}</span>${escQcr(st.label)}<span class="qcr-fb-count">${list.length||''}</span></div>${body}</div>`;
+}
+// Root Cause Analysis (5-Why + CAPA) table for whichever 6M categories have
+// RCA data on file for the selected defect — sits under the fishbone diagram
+// in both the QCR tab and the Dashboard tab (same underlying /api/fishbone data).
+function renderRcaPanel(item){
+  const rca = item && item.rca; if(!rca || !Object.keys(rca).length) return '';
+  const order=['man','machine','material','method','measurement','environment'];
+  const rows = order.filter(k=>rca[k]).map(k=>{
+    const st=fbStyle(k), r=rca[k];
+    const chain=(r.why_chain||[]).map(escQcr).join(' <span class="qcr-rca-arrow">→</span> ');
+    return `<tr>
+      <td><span class="qcr-rca-chip" style="background:${st.color}">${st.icon} ${escQcr(st.label)}</span></td>
+      <td class="qcr-rca-chain">${chain||'—'}</td>
+      <td><b>${escQcr(r.root_cause)}</b></td>
+      <td>${escQcr(r.action)}</td>
+      <td>${escQcr(r.preventive_action)}</td>
+      <td>${[r.role,r.responsibility].filter(Boolean).map(escQcr).join(' / ')||'—'}</td>
+    </tr>`;
+  }).join('');
+  if(!rows) return '';
+  return `<div class="qcr-rca-panel">
+    <div class="qcr-fb-title">🧭 Root Cause Analysis (RCA) — ${escQcr(item.defect)}</div>
+    <div class="qcr-rca-table-wrap"><table class="qcr-rca-table">
+      <thead><tr><th>6M Category</th><th>Why-Why Chain</th><th>Root Cause</th><th>Action</th><th>Preventive Action</th><th>Role / Responsibility</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
 }
 function qcrRenderFishboneDiagram(item){
   const el=document.getElementById('qcrFishboneDiagram'); if(!el) return;
@@ -1053,14 +1093,15 @@ function qcrRenderFishboneDiagram(item){
     <div class="qcr-fb-title">🐟 6M Fishbone — ${escQcr(item.defect)}</div>
     ${note}
     <div class="qcr-fb-grid">
-      ${qcrFishboneCard('man','Man','👤',c.man)}
-      ${qcrFishboneCard('machine','Machine','⚙️',c.machine)}
-      ${qcrFishboneCard('material','Material','🧱',c.material)}
-      ${qcrFishboneCard('method','Method','📋',c.method)}
-      ${qcrFishboneCard('measurement','Measurement','📏',c.measurement)}
-      ${qcrFishboneCard('environment','Environment','🌤️',c.environment)}
+      ${qcrFishboneCard('man',c.man)}
+      ${qcrFishboneCard('machine',c.machine)}
+      ${qcrFishboneCard('material',c.material)}
+      ${qcrFishboneCard('method',c.method)}
+      ${qcrFishboneCard('measurement',c.measurement)}
+      ${qcrFishboneCard('environment',c.environment)}
     </div>
-    <div class="qcr-fb-spine"><span>${escQcr(item.defect)}</span></div>`;
+    <div class="qcr-fb-spine"><span>${escQcr(item.defect)}</span></div>
+    ${renderRcaPanel(item)}`;
 }
 function qcrLoadFishbone(topDefects){
   const chipsEl=document.getElementById('qcrFishboneChips'), diagEl=document.getElementById('qcrFishboneDiagram');
@@ -1070,6 +1111,7 @@ function qcrLoadFishbone(topDefects){
   diagEl.innerHTML='<div class="qcr-empty">Loading 6M fishbone analysis…</div>';
   fetch('/api/fishbone?defects='+encodeURIComponent(names.join('|')),{cache:'no-store'}).then(r=>r.json()).then(d=>{
     if(d.error) throw new Error(d.error);
+    if(d.style) FISHBONE_STYLE=Object.assign({},FISHBONE_STYLE,d.style);
     qcrFishboneData=d;
     qcrRenderFishboneChips(d.items||[]);
     qcrRenderFishboneDiagram((d.items||[])[0]);
@@ -1148,13 +1190,19 @@ function fbSpreadT(n){
   return out;
 }
 const FISHBONE_BRANCH_DEFS = [
-  {key:'man',         label:'Man',         icon:'👤', color:'#118DFF', side:'top',    lane:0},
-  {key:'machine',     label:'Machine',     icon:'⚙️', color:'#16A34A', side:'top',    lane:1},
-  {key:'material',    label:'Material',    icon:'🧱', color:'#D97706', side:'top',    lane:2},
-  {key:'method',      label:'Method',      icon:'📋', color:'#7C3AED', side:'bottom', lane:0},
-  {key:'measurement', label:'Measurement', icon:'📏', color:'#DB2777', side:'bottom', lane:1},
-  {key:'environment', label:'Environment', icon:'🌤️', color:'#0891B2', side:'bottom', lane:2},
+  {key:'man',         side:'top',    lane:0},
+  {key:'machine',     side:'top',    lane:1},
+  {key:'material',    side:'top',    lane:2},
+  {key:'method',      side:'bottom', lane:0},
+  {key:'measurement', side:'bottom', lane:1},
+  {key:'environment', side:'bottom', lane:2},
 ];
+function fishboneBranchDefs(){
+  return FISHBONE_BRANCH_DEFS.map(b=>{
+    const st=fbStyle(b.key);
+    return Object.assign({},b,{label:st.label, icon:st.icon, color:st.color});
+  });
+}
 function buildFishboneSvg(item){
   const causes=item.causes||{};
   const LANE=380, TIP_DX=-160, ROW_GAP=48, BOX_H=42;
@@ -1165,7 +1213,7 @@ function buildFishboneSvg(item){
 
   // Pre-fit every cause label (per branch) so we know how tall each side
   // of the diagram actually needs to be before we draw anything.
-  const branchData=FISHBONE_BRANCH_DEFS.map(b=>{
+  const branchData=fishboneBranchDefs().map(b=>{
     const list=fbList(causes[b.key]);
     const items=(list.length?list:['No cause on file']).map(txt=>({
       text:txt, missing:!list.length,
@@ -1231,7 +1279,7 @@ function dashRenderFishboneDiagram(item){
     return;
   }
   const note = item.match_type==='fuzzy' ? `<div class="qcr-fb-note">Matched to master defect "${escQcr(item.matched_defect)}" (closest match, ${Math.round((item.confidence||0)*100)}% confidence). If this looks wrong, fix it in Admin → 6M Fishbone Analysis.</div>` : '';
-  el.innerHTML = `${note}${buildFishboneSvg(item)}`;
+  el.innerHTML = `${note}${buildFishboneSvg(item)}${renderRcaPanel(item)}`;
 }
 function dashLoadFishbone(topDefects){
   const chipsEl=document.getElementById('dashFishboneChips'), diagEl=document.getElementById('dashFishboneDiagram');
@@ -1241,6 +1289,7 @@ function dashLoadFishbone(topDefects){
   diagEl.innerHTML='<div class="qcr-empty">Loading 6M fishbone analysis…</div>';
   fetch('/api/fishbone?defects='+encodeURIComponent(names.join('|')),{cache:'no-store'}).then(r=>r.json()).then(d=>{
     if(d.error) throw new Error(d.error);
+    if(d.style) FISHBONE_STYLE=Object.assign({},FISHBONE_STYLE,d.style);
     dashFishboneData=d;
     dashRenderFishboneChips(d.items||[]);
     dashRenderFishboneDiagram((d.items||[])[0]);

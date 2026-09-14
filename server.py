@@ -115,6 +115,25 @@ FISHBONE_CACHE = {"rows": None, "aliases": None, "loaded_at": 0}
 FISHBONE_CAUSE_FIELDS = ["man", "machine", "material", "method", "measurement", "environment"]
 FISHBONE_FUZZY_CUTOFF = 0.80
 
+# RCA (Root Cause Analysis / Why-Why) library — imported from the 2nd sheet
+# ("RCA_RootCause_Library") of the same 6M Defect Master workbook, one row
+# per defect x 6M category. Cached the same way as the fishbone master.
+RCA_CACHE = {"rows": None, "loaded_at": 0}
+RCA_WHY_FIELDS = ["why1", "why2", "why3", "why4", "why5"]
+
+# 6M icon/color style — imported from the 3rd sheet ("Icon Color Coding") of
+# the same workbook. Falls back to these defaults (the diagram's original
+# look) until an admin imports a workbook that carries its own colors/icons.
+FISHBONE_STYLE_DEFAULTS = {
+    "man":         {"label": "Man",         "icon": "👤", "color": "#118DFF"},
+    "machine":     {"label": "Machine",     "icon": "⚙️", "color": "#16A34A"},
+    "material":    {"label": "Material",    "icon": "📦", "color": "#D97706"},
+    "method":      {"label": "Method",      "icon": "📋", "color": "#7C3AED"},
+    "measurement": {"label": "Measurement", "icon": "📏", "color": "#DB2777"},
+    "environment": {"label": "Environment", "icon": "🌍", "color": "#0891B2"},
+}
+FISHBONE_STYLE_CACHE = {"rows": None, "loaded_at": 0}
+
 
 def _ensure_database():
     """Create the persistent local SQLite DB from the bundled seed DB — but only the
@@ -1379,12 +1398,44 @@ def _norm_defect_key(s):
     return re.sub(r"[^A-Z0-9]+", "", str(s or "").upper())
 
 
+def _norm_category_key(s):
+    """Normalize a 6M category cell (e.g. '👤Man', '📋METHOD', '🌍Mother Nature')
+    down to one of our six canonical keys."""
+    key = re.sub(r"[^A-Za-z ]+", "", str(s or "")).strip().lower()
+    if "man" in key and "nature" not in key and "human" not in key:
+        return "man"
+    if "machine" in key:
+        return "machine"
+    if "material" in key:
+        return "material"
+    if "method" in key:
+        return "method"
+    if "measur" in key:
+        return "measurement"
+    if "mother nature" in key or "environment" in key or "nature" in key:
+        return "environment"
+    return None
+
+
+def _extract_leading_icon(s):
+    """Pull the leading emoji/symbol prefix off a category cell like '👤Man' or
+    '📋METHOD', so the workbook's own icon can be reused as-is on the dashboard."""
+    m = re.match(r"^([^A-Za-z0-9]+)", str(s or "").strip())
+    icon = (m.group(1).strip() if m else "").strip()
+    return icon or None
+
+
 def _parse_fishbone_file(filename, data):
-    """Parse an uploaded 6M Fishbone Defect Master workbook (.xlsx/.xlsm).
-    Expected columns (any order, case-insensitive, matched by keyword):
-    Defect List, Man Causes, Machine Causes, Material Causes, Method Causes,
-    Measurement Causes, Environment Causes. Uses the 'Master_Data' sheet
-    when present, otherwise the first sheet."""
+    """Parse an uploaded 6M Defect Master workbook (.xlsx/.xlsm). Returns a dict
+    with three parts, each optional except 'master':
+      - master: Defect List + 6M cause columns, from the 'Master_Data' sheet
+        (or the first sheet, for older single-sheet workbooks).
+      - rca: Defect List, CATEGORY (6M, with its own icon), WHY-1..WHY-5/Root
+        Cause, ACTION, PREVENTIVE ACTION, ROLE, RESPONSIBILITY — one row per
+        defect x category — from a sheet whose name contains 'RCA'.
+      - style: 6M category -> recommended color (+ icon carried over from the
+        RCA sheet) — from a sheet whose name contains 'Icon' and 'Color'.
+    """
     ext = os.path.splitext(filename.lower())[1]
     if ext not in (".xlsx", ".xlsm"):
         raise ValueError("6M Fishbone master must be uploaded as an .xlsx or .xlsm file")
@@ -1394,7 +1445,17 @@ def _parse_fishbone_file(filename, data):
         raise ValueError("Excel import requires openpyxl.")
     _reject_zip_bomb(data)
     wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
-    ws = wb["Master_Data"] if "Master_Data" in wb.sheetnames else wb[wb.sheetnames[0]]
+
+    def _find_sheet(*needles):
+        for name in wb.sheetnames:
+            key = name.strip().lower()
+            if all(n in key for n in needles):
+                return name
+        return None
+
+    # ---- 1) Master_Data: Defect List + 6M cause columns ----
+    master_sheet = "Master_Data" if "Master_Data" in wb.sheetnames else wb.sheetnames[0]
+    ws = wb[master_sheet]
     iterator = ws.iter_rows(values_only=True)
     try:
         headers = list(next(iterator))
@@ -1426,16 +1487,106 @@ def _parse_fishbone_file(filename, data):
             i = col_map.get(field)
             rec[field] = str(values[i]).strip() if (i is not None and i < len(values) and values[i] is not None) else ""
         records.append(rec)
+
+    # ---- 2) RCA_RootCause_Library: Defect List, CATEGORY, WHY-1..5, ACTION, ... ----
+    rca_records = []
+    icons_seen = {}
+    rca_sheet_name = _find_sheet("rca") or _find_sheet("root", "cause")
+    if rca_sheet_name:
+        rws = wb[rca_sheet_name]
+        rit = rws.iter_rows(values_only=True)
+        try:
+            rheaders = list(next(rit))
+        except StopIteration:
+            rheaders = []
+        rcol = {}
+        rkeyword_map = [
+            ("defect", "defect_name"), ("category", "category"),
+            ("why-1", "why1"), ("why1", "why1"), ("why 1", "why1"),
+            ("why-2", "why2"), ("why2", "why2"), ("why 2", "why2"),
+            ("why-3", "why3"), ("why3", "why3"), ("why 3", "why3"),
+            ("why-4", "why4"), ("why4", "why4"), ("why 4", "why4"),
+            ("why-5", "why5"), ("why5", "why5"), ("why 5", "why5"), ("root cause", "why5"),
+            ("preventive", "preventive_action"), ("action", "action"),
+            ("role", "role"), ("responsib", "responsibility"),
+        ]
+        for idx, h in enumerate(rheaders):
+            key = str(h or "").strip().lower()
+            if not key:
+                continue
+            for kw, field in rkeyword_map:
+                if kw in key and field not in rcol:
+                    rcol[field] = idx
+                    break
+        if "defect_name" in rcol and "category" in rcol:
+            for values in rit:
+                if not any(v not in (None, "") for v in values):
+                    continue
+                def _cell(field):
+                    i = rcol.get(field)
+                    return str(values[i]).strip() if (i is not None and i < len(values) and values[i] is not None) else ""
+                name = _cell("defect_name")
+                cat_raw = _cell("category")
+                if not name or not cat_raw:
+                    continue
+                cat_key = _norm_category_key(cat_raw)
+                if not cat_key:
+                    continue
+                icon = _extract_leading_icon(cat_raw)
+                if icon and cat_key not in icons_seen:
+                    icons_seen[cat_key] = icon
+                rec = {"defect_name": name, "category": cat_key}
+                for field in RCA_WHY_FIELDS + ["action", "preventive_action", "role", "responsibility"]:
+                    rec[field] = _cell(field)
+                # Skip categories left completely blank in the workbook (the
+                # sheet has a placeholder row for every 6M category even when
+                # only 1-2 actually have an RCA filled in).
+                if any(rec[f] for f in RCA_WHY_FIELDS + ["action", "preventive_action", "role", "responsibility"]):
+                    rca_records.append(rec)
+
+    # ---- 3) Icon Color Coding: 6M -> Recommended Color / HEX ----
+    style_records = []
+    style_sheet_name = _find_sheet("icon", "color") or _find_sheet("color", "coding")
+    if style_sheet_name:
+        sws = wb[style_sheet_name]
+        for row in sws.iter_rows(values_only=True):
+            vals = [v for v in row if v is not None]
+            if len(vals) < 2:
+                continue
+            cat_key = None
+            hexval = None
+            for v in row:
+                if v is None:
+                    continue
+                sv = str(v).strip()
+                if cat_key is None:
+                    k = _norm_category_key(sv)
+                    if k:
+                        cat_key = k
+                        continue
+                if re.match(r"^#?[0-9A-Fa-f]{6}$", sv):
+                    hexval = sv if sv.startswith("#") else "#" + sv
+            if cat_key and hexval:
+                style_records.append({"category": cat_key, "color": hexval, "icon": icons_seen.get(cat_key)})
+    # Even without a dedicated style sheet, carry over any icons discovered on
+    # the RCA sheet so the workbook's own symbols are used where possible.
+    for cat_key, icon in icons_seen.items():
+        if not any(s["category"] == cat_key for s in style_records):
+            style_records.append({"category": cat_key, "color": None, "icon": icon})
+
     wb.close()
-    return records
+    return {"master": records, "rca": rca_records, "style": style_records}
 
 
-def _replace_fishbone_master(records, filename, imported_by):
-    """Replace the entire 6M Fishbone master table with a freshly-uploaded
-    set of records. This is a full reference-list refresh (not a merge),
+def _replace_fishbone_master(bundle, filename, imported_by):
+    """Replace the 6M Fishbone master, RCA library and icon/color style tables
+    with a freshly-uploaded workbook's contents. This is a full reference-list
+    refresh (not a merge) for each part that was present in the workbook —
     matching the requirement that re-uploading the 6M master Excel should
-    fully refresh what the QCR dashboard shows — no separate 'sync' step
-    needed once the admin confirms the import."""
+    fully refresh what the QCR dashboard shows, no separate 'sync' step needed."""
+    records = bundle.get("master") or []
+    rca_records = bundle.get("rca") or []
+    style_records = bundle.get("style") or []
     if not records:
         raise ValueError("No defect rows were found in the uploaded file")
     _write_backup_file("before_fishbone_import")  # safety snapshot of the outgoing data
@@ -1453,16 +1604,58 @@ def _replace_fishbone_master(records, filename, imported_by):
         "INSERT INTO fishbone_master (defect_name,norm_name,man,machine,material,method,measurement,environment) VALUES (?,?,?,?,?,?,?,?)",
         rows,
     )
+
+    rca_rows = []
+    rseen = set()
+    for r in rca_records:
+        norm = _norm_defect_key(r["defect_name"])
+        cat = r.get("category")
+        if not norm or not cat:
+            continue
+        rkey = (norm, cat)
+        if rkey in rseen:
+            continue
+        rseen.add(rkey)
+        rca_rows.append((r["defect_name"], norm, cat) + tuple(r.get(f, "") for f in RCA_WHY_FIELDS + ["action", "preventive_action", "role", "responsibility"]))
+    if rca_records:
+        conn.execute("DELETE FROM rca_master")
+        conn.executemany(
+            "INSERT INTO rca_master (defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            rca_rows,
+        )
+
+    style_updated = 0
+    existing_cats = {r[0] for r in conn.execute("SELECT category FROM fishbone_style").fetchall()}
+    for s in style_records:
+        cat = s.get("category")
+        if not cat:
+            continue
+        defaults = FISHBONE_STYLE_DEFAULTS.get(cat, {})
+        color = s.get("color") or defaults.get("color")
+        icon = s.get("icon") or defaults.get("icon")
+        label = defaults.get("label", cat.title())
+        if cat in existing_cats:
+            conn.execute(
+                "UPDATE fishbone_style SET label=?, icon=COALESCE(?,icon), color=COALESCE(?,color), updated_at=CURRENT_TIMESTAMP WHERE category=?",
+                (label, icon, color, cat),
+            )
+        else:
+            conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, label, icon, color))
+            existing_cats.add(cat)
+        style_updated += 1
+
     conn.execute(
-        "INSERT INTO fishbone_import_history (filename,detected,imported,imported_by) VALUES (?,?,?,?)",
-        (filename, len(records), len(rows), imported_by),
+        "INSERT INTO fishbone_import_history (filename,detected,imported,imported_by,rca_detected,rca_imported,style_imported) VALUES (?,?,?,?,?,?,?)",
+        (filename, len(records), len(rows), imported_by, len(rca_records), len(rca_rows), style_updated),
     )
     conn.commit()
     conn.close()
     FISHBONE_CACHE["rows"] = None
     FISHBONE_CACHE["aliases"] = None
+    RCA_CACHE["rows"] = None
+    FISHBONE_STYLE_CACHE["rows"] = None
     _write_backup_file("after_fishbone_import")
-    return {"detected": len(records), "imported": len(rows)}
+    return {"detected": len(records), "imported": len(rows), "rca_detected": len(rca_records), "rca_imported": len(rca_rows), "style_imported": style_updated}
 
 
 def _backup_snapshot_data():
@@ -1484,16 +1677,28 @@ def _backup_snapshot_data():
             kpi_targets = [dict(r) for r in conn.execute("SELECT kpi_name,target FROM kpi_targets").fetchall()]
         except Exception:
             kpi_targets = []
+        try:
+            rca_master = [dict(r) for r in conn.execute(
+                "SELECT defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility FROM rca_master"
+            ).fetchall()]
+        except Exception:
+            rca_master = []
+        try:
+            fishbone_style = [dict(r) for r in conn.execute("SELECT category,label,icon,color FROM fishbone_style").fetchall()]
+        except Exception:
+            fishbone_style = []
     finally:
         conn.close()
     return {
-        "backup_version": 1,
+        "backup_version": 2,
         "created_at": datetime.now().isoformat(),
-        "counts": {"disposition": len(disposition), "fishbone_master": len(fishbone_master), "fishbone_alias": len(fishbone_alias), "kpi_targets": len(kpi_targets)},
+        "counts": {"disposition": len(disposition), "fishbone_master": len(fishbone_master), "fishbone_alias": len(fishbone_alias), "kpi_targets": len(kpi_targets), "rca_master": len(rca_master), "fishbone_style": len(fishbone_style)},
         "disposition": disposition,
         "fishbone_master": fishbone_master,
         "fishbone_alias": fishbone_alias,
         "kpi_targets": kpi_targets,
+        "rca_master": rca_master,
+        "fishbone_style": fishbone_style,
     }
 
 def _backup_prune():
@@ -1612,12 +1817,38 @@ def _restore_backup_data(data):
                     conn.execute("INSERT INTO kpi_targets (kpi_name,target) VALUES (?,?) ON CONFLICT(kpi_name) DO UPDATE SET target=excluded.target" if USE_POSTGRES else "INSERT OR REPLACE INTO kpi_targets (kpi_name,target) VALUES (?,?)", (r.get("kpi_name",""), r.get("target")))
         except Exception:
             pass
+        rca_rows = data.get("rca_master") or []
+        try:
+            conn.execute("DELETE FROM rca_master")
+            if rca_rows:
+                conn.executemany(
+                    "INSERT INTO rca_master (defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    [(r.get("defect_name",""), r.get("norm_name",""), r.get("category",""), r.get("why1",""), r.get("why2",""), r.get("why3",""), r.get("why4",""), r.get("why5",""), r.get("action",""), r.get("preventive_action",""), r.get("role",""), r.get("responsibility","")) for r in rca_rows],
+                )
+        except Exception:
+            rca_rows = []
+        style_rows = data.get("fishbone_style") or []
+        try:
+            existing_cats = {r[0] for r in conn.execute("SELECT category FROM fishbone_style").fetchall()}
+            for r in style_rows:
+                cat = r.get("category")
+                if not cat:
+                    continue
+                if cat in existing_cats:
+                    conn.execute("UPDATE fishbone_style SET label=?, icon=?, color=?, updated_at=CURRENT_TIMESTAMP WHERE category=?", (r.get("label",""), r.get("icon",""), r.get("color",""), cat))
+                else:
+                    conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, r.get("label",""), r.get("icon",""), r.get("color","")))
+                    existing_cats.add(cat)
+        except Exception:
+            style_rows = []
         conn.commit()
     finally:
         conn.close()
     FISHBONE_CACHE["rows"] = None
     FISHBONE_CACHE["aliases"] = None
-    return {"disposition": len(disp_rows), "fishbone_master": len(fb_rows), "fishbone_alias": len(alias_rows), "kpi_targets": len(kpi_rows)}
+    RCA_CACHE["rows"] = None
+    FISHBONE_STYLE_CACHE["rows"] = None
+    return {"disposition": len(disp_rows), "fishbone_master": len(fb_rows), "fishbone_alias": len(alias_rows), "kpi_targets": len(kpi_rows), "rca_master": len(rca_rows), "fishbone_style": len(style_rows)}
 
 
 def _fishbone_master_rows(force=False):
@@ -1639,6 +1870,63 @@ def _fishbone_aliases(force=False):
         conn.close()
         FISHBONE_CACHE["aliases"] = {r[0]: r[1] for r in rows}
     return FISHBONE_CACHE["aliases"]
+
+
+def _rca_master_rows(force=False):
+    if RCA_CACHE["rows"] is None or force:
+        conn = get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility,updated_at FROM rca_master"
+            ).fetchall()
+        except Exception:
+            rows = []
+        conn.close()
+        RCA_CACHE["rows"] = [dict(r) for r in rows]
+        RCA_CACHE["loaded_at"] = time.time()
+    return RCA_CACHE["rows"]
+
+
+def _fishbone_style(force=False):
+    """6M category -> {label, icon, color}, imported from the 'Icon Color
+    Coding' sheet (falls back to FISHBONE_STYLE_DEFAULTS for anything not
+    yet in the DB, e.g. a brand-new install)."""
+    if FISHBONE_STYLE_CACHE["rows"] is None or force:
+        conn = get_conn()
+        try:
+            rows = conn.execute("SELECT category,label,icon,color FROM fishbone_style").fetchall()
+        except Exception:
+            rows = []
+        conn.close()
+        style = {k: dict(v) for k, v in FISHBONE_STYLE_DEFAULTS.items()}
+        for r in rows:
+            d = dict(r)
+            cat = d.get("category")
+            if cat in style:
+                style[cat] = {"label": d.get("label") or style[cat]["label"], "icon": d.get("icon") or style[cat]["icon"], "color": d.get("color") or style[cat]["color"]}
+        FISHBONE_STYLE_CACHE["rows"] = style
+    return FISHBONE_STYLE_CACHE["rows"]
+
+
+def _rca_for_norm(norm_name):
+    """RCA rows (one per 6M category) for a matched master defect, keyed by
+    category, each with a 'chain' (only the filled Why steps, in order) and
+    the CAPA fields. Categories with nothing filled in the workbook are omitted."""
+    rows = [r for r in _rca_master_rows() if r["norm_name"] == norm_name]
+    out = {}
+    for r in rows:
+        chain = [r.get(f, "") for f in RCA_WHY_FIELDS if (r.get(f, "") or "").strip()]
+        if not chain and not (r.get("action") or r.get("preventive_action")):
+            continue
+        out[r["category"]] = {
+            "why_chain": chain,
+            "root_cause": chain[-1] if chain else "",
+            "action": r.get("action", ""),
+            "preventive_action": r.get("preventive_action", ""),
+            "role": r.get("role", ""),
+            "responsibility": r.get("responsibility", ""),
+        }
+    return out
 
 
 def _split_causes(text):
@@ -1663,12 +1951,23 @@ def _split_causes(text):
 
 
 def _fishbone_match(defect_name):
-    """Match a disposition main_defect value to a 6M Fishbone master row.
-    Order of precedence: manual admin alias -> exact normalized match ->
-    high-confidence fuzzy match -> no match."""
+    """Match a disposition main_defect value to a 6M Fishbone master row, and
+    attach the matching RCA (Why-Why/CAPA) data per 6M category, if any is on
+    file for that master defect. Order of precedence: manual admin alias ->
+    exact normalized match -> high-confidence fuzzy match -> no match."""
     master = _fishbone_master_rows()
+    no_match = {"defect": defect_name, "matched": False, "match_type": "no_master", "matched_defect": None, "confidence": 0, "causes": None, "rca": None}
     if not master:
-        return {"defect": defect_name, "matched": False, "match_type": "no_master", "matched_defect": None, "confidence": 0, "causes": None}
+        return no_match
+
+    def _build(row, match_type, confidence):
+        return {
+            "defect": defect_name, "matched": True, "match_type": match_type,
+            "matched_defect": row["defect_name"], "confidence": confidence,
+            "causes": {f: _split_causes(row.get(f, "")) for f in FISHBONE_CAUSE_FIELDS},
+            "rca": _rca_for_norm(row["norm_name"]),
+        }
+
     by_norm = {r["norm_name"]: r for r in master}
     norm = _norm_defect_key(defect_name)
     aliases = _fishbone_aliases()
@@ -1676,16 +1975,16 @@ def _fishbone_match(defect_name):
         target_norm = _norm_defect_key(aliases[norm])
         row = by_norm.get(target_norm)
         if row:
-            return {"defect": defect_name, "matched": True, "match_type": "alias", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: _split_causes(row.get(f, "")) for f in FISHBONE_CAUSE_FIELDS}}
+            return _build(row, "alias", 1.0)
     if norm in by_norm:
-        row = by_norm[norm]
-        return {"defect": defect_name, "matched": True, "match_type": "exact", "matched_defect": row["defect_name"], "confidence": 1.0, "causes": {f: _split_causes(row.get(f, "")) for f in FISHBONE_CAUSE_FIELDS}}
+        return _build(by_norm[norm], "exact", 1.0)
     close = difflib.get_close_matches(norm, list(by_norm.keys()), n=1, cutoff=FISHBONE_FUZZY_CUTOFF)
     if close:
         row = by_norm[close[0]]
         score = difflib.SequenceMatcher(None, norm, close[0]).ratio()
-        return {"defect": defect_name, "matched": True, "match_type": "fuzzy", "matched_defect": row["defect_name"], "confidence": round(score, 2), "causes": {f: _split_causes(row.get(f, "")) for f in FISHBONE_CAUSE_FIELDS}}
-    return {"defect": defect_name, "matched": False, "match_type": "none", "matched_defect": None, "confidence": 0, "causes": None}
+        return _build(row, "fuzzy", round(score, 2))
+    no_match["match_type"] = "none"
+    return no_match
 
 
 def _ensure_admin_schema():
@@ -1794,7 +2093,19 @@ def _ensure_admin_schema():
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_import_history (
             id BIGSERIAL PRIMARY KEY, filename TEXT, detected INTEGER DEFAULT 0, imported INTEGER DEFAULT 0,
-            imported_by TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            imported_by TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            rca_detected INTEGER DEFAULT 0, rca_imported INTEGER DEFAULT 0, style_imported INTEGER DEFAULT 0
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS rca_master (
+            id BIGSERIAL PRIMARY KEY, defect_name TEXT NOT NULL, norm_name TEXT NOT NULL, category TEXT NOT NULL,
+            why1 TEXT DEFAULT '', why2 TEXT DEFAULT '', why3 TEXT DEFAULT '', why4 TEXT DEFAULT '', why5 TEXT DEFAULT '',
+            action TEXT DEFAULT '', preventive_action TEXT DEFAULT '', role TEXT DEFAULT '', responsibility TEXT DEFAULT '',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(norm_name, category)
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_style (
+            category TEXT PRIMARY KEY, label TEXT DEFAULT '', icon TEXT DEFAULT '', color TEXT DEFAULT '',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     else:
         conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_master (
@@ -1809,8 +2120,43 @@ def _ensure_admin_schema():
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_import_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, imported INTEGER DEFAULT 0,
-            imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            rca_detected INTEGER DEFAULT 0, rca_imported INTEGER DEFAULT 0, style_imported INTEGER DEFAULT 0
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS rca_master (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, defect_name TEXT NOT NULL, norm_name TEXT NOT NULL, category TEXT NOT NULL,
+            why1 TEXT DEFAULT '', why2 TEXT DEFAULT '', why3 TEXT DEFAULT '', why4 TEXT DEFAULT '', why5 TEXT DEFAULT '',
+            action TEXT DEFAULT '', preventive_action TEXT DEFAULT '', role TEXT DEFAULT '', responsibility TEXT DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(norm_name, category)
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_style (
+            category TEXT PRIMARY KEY, label TEXT DEFAULT '', icon TEXT DEFAULT '', color TEXT DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+
+    # Older databases created before RCA/style support was added won't have
+    # these columns on fishbone_import_history yet — add them if missing.
+    for coldef in ("rca_detected INTEGER DEFAULT 0", "rca_imported INTEGER DEFAULT 0", "style_imported INTEGER DEFAULT 0"):
+        try:
+            if USE_POSTGRES:
+                conn.execute(f"ALTER TABLE fishbone_import_history ADD COLUMN IF NOT EXISTS {coldef}")
+            else:
+                conn.execute(f"ALTER TABLE fishbone_import_history ADD COLUMN {coldef}")
+        except Exception:
+            pass
+    # Seed fishbone_style with defaults so the API always has a full 6-category
+    # style config, even before any admin has imported an Icon Color Coding sheet.
+    try:
+        existing_style = {r[0] for r in conn.execute("SELECT category FROM fishbone_style").fetchall()}
+    except Exception:
+        existing_style = set()
+    for cat, cfg in FISHBONE_STYLE_DEFAULTS.items():
+        if cat not in existing_style:
+            try:
+                conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, cfg["label"], cfg["icon"], cfg["color"]))
+            except Exception:
+                pass
 
     # Remove the legacy KPI target name so the public/admin target APIs are
     # fully consistent with the renamed First Pass Yield % (Prime%) KPI. This is idempotent and
@@ -2031,10 +2377,14 @@ FISHBONE_BRANCHES = [
 ]
 def _fishbone_png(item):
     """Render the same 6M Ishikawa/fishbone diagram shown on the webapp (spine + 6 angled
-    bones converging on the defect) as a PNG, for embedding in Excel/PDF/PPT exports."""
+    bones converging on the defect) as a PNG, for embedding in Excel/PDF/PPT exports.
+    Colors/icons follow the imported Icon Color Coding sheet (fishbone_style);
+    when a branch has an RCA root cause on file, it's captioned under the cause list."""
     if plt is None or not item:
         return None
     causes = item.get("causes") or {}
+    rca = item.get("rca") or {}
+    style = _fishbone_style()
     defect_text = item.get("defect") or "Top Defect"
     fig, ax = plt.subplots(figsize=(12.4,6.8), dpi=150)
     fig.patch.set_facecolor("white")
@@ -2048,7 +2398,11 @@ def _fishbone_png(item):
     wrapped="\n".join(textwrap.wrap(str(defect_text),14)[:3])
     ax.text(spine_x2-0.05+head_w/2,0,wrapped,ha="center",va="center",color="white",fontsize=10.5,fontweight="bold")
     anchors=[1.9,4.35,6.8]
-    for i,(key,label,color,side) in enumerate(FISHBONE_BRANCHES):
+    for i,(key,label,_default_color,side) in enumerate(FISHBONE_BRANCHES):
+        st=style.get(key,{})
+        color=st.get("color") or _default_color
+        icon=st.get("icon") or ""
+        label=st.get("label") or label
         lane=i%3; anchor_x=anchors[lane]; sign=1 if side=="top" else -1
         tip_x=anchor_x-1.55; tip_y=sign*3.85
         ax.plot([anchor_x,tip_x],[0,tip_y],color=color,linewidth=2.2,solid_capstyle="round")
@@ -2056,7 +2410,7 @@ def _fishbone_png(item):
         box_w,box_h=1.85,0.5
         by=tip_y-box_h if side=="top" else tip_y
         ax.add_patch(FancyBboxPatch((tip_x-box_w/2,by),box_w,box_h,boxstyle="round,pad=0.02,rounding_size=0.09",linewidth=0,facecolor=color))
-        ax.text(tip_x,by+box_h/2,label,ha="center",va="center",color="white",fontsize=9.5,fontweight="bold")
+        ax.text(tip_x,by+box_h/2,f"{icon} {label}".strip(),ha="center",va="center",color="white",fontsize=9.5,fontweight="bold")
         items=[str(x) for x in (causes.get(key) or []) if str(x).strip()] or ["No cause on file"]
         n=min(len(items),5)
         for j,txt in enumerate(items[:5]):
@@ -2065,6 +2419,11 @@ def _fishbone_png(item):
             perp=0.16*sign
             txt_short="\n".join(textwrap.wrap(txt,20)[:2])
             ax.text(bx+0.08,byp+perp,txt_short,fontsize=6.6,color=("#9aa7b4" if items[0]=="No cause on file" else "#243B53"),ha="left",va="center",style=("italic" if items[0]=="No cause on file" else "normal"))
+        rc = (rca.get(key) or {}).get("root_cause") if isinstance(rca, dict) else None
+        if rc:
+            rc_short="\n".join(textwrap.wrap(f"RCA: {rc}",22)[:2])
+            rc_y = by-0.30 if side=="top" else by+box_h+0.30
+            ax.text(tip_x,rc_y,rc_short,fontsize=6.2,color=color,ha="center",va="center",fontweight="bold",style="italic")
     fig.tight_layout(pad=0.6)
     out=io.BytesIO(); fig.savefig(out,format="png",bbox_inches="tight",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
 
@@ -2217,6 +2576,18 @@ def _excel_report(payload):
             for cause in (fb.get("causes") or {}).get(key) or []:
                 fw.cell(row,1,label); fw.cell(row,2,cause); row+=1
         autofit(fw)
+        rca=fb.get("rca") or {}
+        if rca:
+            row+=2
+            fw.cell(row,1,"Root Cause Analysis (RCA)").font=Font(bold=True,color=navy); row+=1
+            header(fw,row,["6M Category","Why Chain","Root Cause","Action","Preventive Action","Role","Responsibility"]); row+=1
+            for key,label,_c,_s in FISHBONE_BRANCHES:
+                r=rca.get(key)
+                if not r: continue
+                fw.cell(row,1,label); fw.cell(row,2," → ".join(r.get("why_chain") or [])); fw.cell(row,3,r.get("root_cause",""))
+                fw.cell(row,4,r.get("action","")); fw.cell(row,5,r.get("preventive_action","")); fw.cell(row,6,r.get("role","")); fw.cell(row,7,r.get("responsibility",""))
+                row+=1
+            autofit(fw)
     else:
         fw["A2"]="No 6M Fishbone mapping found for the current #1 defect yet. Import/update the 6M Fishbone Master in Admin, or map this defect to a master cause set."
         fw["A2"].font=Font(italic=True,color="6B7C93")
@@ -2351,6 +2722,15 @@ def _pdf_report(payload):
             for cause in (fb.get("causes") or {}).get(key) or []:
                 cause_rows.append([label,cause])
         _pdf_section(story,styles,f"6M Fishbone Analysis — {fb.get('defect','')}",[fb_png] if fb_png else [],cause_rows,[130,600],chart_w=740,chart_h=390)
+        rca=fb.get("rca") or {}
+        if rca:
+            rca_rows=[["6M Category","Root Cause (5-Why)","Action","Preventive Action","Responsibility"]]
+            for key,label,_c,_s in FISHBONE_BRANCHES:
+                r=rca.get(key)
+                if not r: continue
+                rca_rows.append([label,r.get("root_cause",""),r.get("action",""),r.get("preventive_action",""),r.get("responsibility","") or r.get("role","")])
+            if len(rca_rows)>1:
+                _pdf_section(story,styles,f"Root Cause Analysis (RCA) — {fb.get('defect','')}",[],rca_rows,[90,180,180,180,110])
     else:
         story.append(Paragraph("6M Fishbone Analysis",styles["Heading2"]))
         story.append(Paragraph("No 6M Fishbone mapping found for the current #1 defect yet. Import/update the 6M Fishbone Master in Admin, or map this defect to a master cause set.",styles["Small"]))
@@ -3182,6 +3562,7 @@ class Handler(BaseHTTPRequestHandler):
                     "items": items,
                     "master_count": len(master),
                     "master_updated_at": master[0]["updated_at"] if master else None,
+                    "style": _fishbone_style(),
                 })
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
@@ -3946,10 +4327,10 @@ class Handler(BaseHTTPRequestHandler):
                             break
                 if not uploaded:
                     raise ValueError("No file was uploaded")
-                records = _parse_fishbone_file(uploaded[0], uploaded[1])
+                bundle = _parse_fishbone_file(uploaded[0], uploaded[1])
                 meta = _admin_meta(self) or {}
-                result = _replace_fishbone_master(records, uploaded[0], meta.get("username", "Admin"))
-                _audit(self, "fishbone_master_import", details={"filename": uploaded[0], "detected": result["detected"], "imported": result["imported"]})
+                result = _replace_fishbone_master(bundle, uploaded[0], meta.get("username", "Admin"))
+                _audit(self, "fishbone_master_import", details={"filename": uploaded[0], **result})
                 self._send_json({"ok": True, "filename": uploaded[0], **result})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
