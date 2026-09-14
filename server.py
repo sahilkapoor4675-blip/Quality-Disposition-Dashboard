@@ -495,13 +495,14 @@ def build_where(filters, exclude=None):
     return (f"WHERE {where}" if where else "", params)
 
 
-HEAT_KEY_SQL = "NULLIF(UPPER(TRIM(COALESCE(heat_no,''))), '')"
+BATCH_KEY_SQL = "NULLIF(UPPER(TRIM(COALESCE(batch_no,''))), '')"
 
 def _coil_count_sql(where_sql, params):
-    """Count coils by unique HEAT NO within the current filter scope.
-    Duplicate HEAT NO values are intentionally counted once, regardless of
-    how many source rows/batches exist for that heat."""
-    return f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {where_sql}", params
+    """Count coils by unique BATCH NO within the current filter scope.
+    Duplicate BATCH NO values are intentionally counted once, regardless of
+    how many source rows/heats exist for that batch — BATCH NO is the
+    unique coil identifier, whereas one HEAT NO can span several coils."""
+    return f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}) FROM disposition {where_sql}", params
 
 def kpi_threshold_color(label, value):
     status=_kpi_target_status(label,value)
@@ -513,14 +514,14 @@ def compute_kpis(filters, _skip_prev=False):
     where_sql, params = build_where(filters)
 
     # One aggregate scan for overall coils, defects and quantity.
-    dc_expr = "CASE WHEN main_defect <> '' AND main_defect <> 'NO DEFECT' THEN " + HEAT_KEY_SQL + " END"
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COUNT(DISTINCT {dc_expr}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
+    dc_expr = "CASE WHEN main_defect <> '' AND main_defect <> 'NO DEFECT' THEN " + BATCH_KEY_SQL + " END"
+    cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}), COUNT(DISTINCT {dc_expr}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
     total_coils, defect_coils, output_qty = cur.fetchone()
 
     # One grouped scan for all decision counts and quantities.
     decision_qty = {d: 0.0 for d in DECISION_ORDER}
     decision_coils = {d: 0 for d in DECISION_ORDER}
-    cur.execute(f"SELECT quality_decision, COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY quality_decision", params)
+    cur.execute(f"SELECT quality_decision, COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY quality_decision", params)
     for r in cur.fetchall():
         d = r[0]
         if d in decision_qty:
@@ -597,7 +598,7 @@ def compute_kpis(filters, _skip_prev=False):
 
     # Defect intensity breakdown
     intensity_map = {}
-    cur.execute(f"SELECT CASE WHEN TRIM(COALESCE(defect_intensity,''))='' THEN 'WITHOUT INTENSITY' ELSE defect_intensity END, COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY 1", params)
+    cur.execute(f"SELECT CASE WHEN TRIM(COALESCE(defect_intensity,''))='' THEN 'WITHOUT INTENSITY' ELSE defect_intensity END, COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY 1", params)
     for r in cur.fetchall(): intensity_map[str(r[0])] = (int(r[1] or 0), float(r[2] or 0))
     intensity_table = []
     for level in ["LIGHT", "MEDIUM", "DEEP", "WITHOUT INTENSITY"]:
@@ -738,11 +739,11 @@ def _group_metrics(cur, where_sql, params, group_col, group_val):
     w2 = where_sql + (" AND " if where_sql else "WHERE ") + extra
     p2 = params + [group_val]
 
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
+    cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}", p2)
     coils, qty = cur.fetchone()
 
     dw = w2 + " AND main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {dw}", p2)
+    cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}) FROM disposition {dw}", p2)
     defect_coils = cur.fetchone()[0]
 
     rw = w2 + " AND quality_decision = ?"
@@ -793,11 +794,11 @@ def _overall_metrics_total(cur, where_sql, params, name="Grand Total"):
     This intentionally does not sum displayed groups, because grouped tables
     may omit blank dimension values; direct aggregation keeps totals tied to
     the exact filter scope."""
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}", params)
     coils, qty = cur.fetchone()
 
     dw = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}) FROM disposition {dw}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}) FROM disposition {dw}", params)
     defect_coils = cur.fetchone()[0]
 
     rw = where_sql + (" AND " if where_sql else "WHERE ") + "quality_decision = ?"
@@ -857,7 +858,7 @@ def compute_defect_analysis(filters):
 
     dw = where_sql + (" AND " if where_sql else "WHERE ") + \
         "main_defect <> '' AND main_defect <> 'NO DEFECT'"
-    cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {dw}", params)
+    cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {dw}", params)
     total_defect_records, total_defect_qty = cur.fetchone()
 
     # Include canonical defect names plus any new defect names present in the
@@ -870,7 +871,7 @@ def compute_defect_analysis(filters):
     register = []
     for defect in all_defects:
         w2 = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect = ?"
-        cur.execute(f"SELECT COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}",
+        cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}",
                     params + [defect])
         cnt, qty = cur.fetchone()
         register.append({
@@ -912,9 +913,9 @@ def compute_defect_analysis(filters):
 def compute_monthly_trend(filters):
     """Trend across months (ignores the Month filter itself, applies the
     other filters). The table Grand Total is calculated directly from the
-    filtered source population: coils are DISTINCT HEAT NOs, while quantity
+    filtered source population: coils are DISTINCT BATCH NOs, while quantity
     measures are summed from source rows. This prevents the Grand Total from
-    double-counting a heat that appears in more than one monthly group."""
+    double-counting a batch that appears in more than one monthly group."""
     conn = get_conn()
     cur = conn.cursor()
     where_sql, params = build_where(filters, exclude={"month"})
@@ -924,8 +925,8 @@ def compute_monthly_trend(filters):
 
     rows = [_group_metrics(cur, where_sql, params, "month", m) for m in months]
 
-    # IMPORTANT: do not sum monthly coil counts. A HEAT NO can occur in more
-    # than one month; the WebApp definition of a coil is one unique HEAT NO.
+    # IMPORTANT: do not sum monthly coil counts. A BATCH NO can occur in more
+    # than one month; the WebApp definition of a coil is one unique BATCH NO.
     # Calculate the Grand Total from the exact filtered source population.
     total = _overall_metrics_total(cur, where_sql, params, name="Grand Total")
 
@@ -1365,28 +1366,32 @@ def _parse_uploaded_file(filename, data):
 
 
 def _insert_records(records):
+    """BATCH NO is the unique coil identifier: one row per BATCH NO. A row
+    whose BATCH NO already exists is treated as an update to that batch
+    (or a no-op duplicate if nothing actually changed), never a new insert —
+    regardless of whether its HEAT NO matches or differs from what's on file."""
     conn = get_conn(); cur = conn.cursor()
     existing = {}
     cur.execute("SELECT id,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition")
     cols=["id","heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
     for row in cur.fetchall():
-        d=dict(zip(cols,row)); existing[(str(d.get("heat_no") or "").strip().upper(),str(d.get("batch_no") or "").strip().upper())]=d
+        d=dict(zip(cols,row)); existing[str(d.get("batch_no") or "").strip().upper()]=d
     inserted=0; updated=0; duplicates=0; errors=[]; seen=set(); good=[]; updates=[]
-    fields=["work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
+    fields=["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
     for idx,r in enumerate(records,start=2):
-        err=_validate_record(r); pair=(str(r.get("heat_no","")).strip().upper(),str(r.get("batch_no","")).strip().upper())
+        err=_validate_record(r); key=str(r.get("batch_no","")).strip().upper()
         if err: errors.append({"row":idx,"error":err}); continue
-        if pair in seen: duplicates+=1; continue
-        seen.add(pair); old=existing.get(pair)
+        if key in seen: duplicates+=1; continue
+        seen.add(key); old=existing.get(key)
         if old:
             changed=any(str(old.get(k) if old.get(k) is not None else "") != str(r.get(k) if r.get(k) is not None else "") for k in fields)
             if changed: updates.append((r,old["id"])); updated+=1
             else: duplicates+=1
         else: good.append(r)
     if good:
-        cur.executemany("""INSERT INTO disposition (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r[k] for k in ["heat_no","batch_no"]+fields) for r in good]); inserted=len(good)
+        cur.executemany("""INSERT INTO disposition (batch_no,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r[k] for k in ["batch_no"]+fields) for r in good]); inserted=len(good)
     for r,rid in updates:
-        cur.execute("""UPDATE disposition SET work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
+        cur.execute("""UPDATE disposition SET heat_no=?,work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
     conn.commit(); conn.close(); RESPONSE_CACHE.clear(); return {"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
 
 
@@ -3030,10 +3035,10 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
         conn=get_conn();c=conn.cursor()
         try:
             wh,pp=build_where(filters,exclude={dim})
-            c.execute(f"SELECT {key}, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}{key}<>'' GROUP BY {key} ORDER BY reject_qty DESC, qty DESC LIMIT 30",pp)
+            c.execute(f"SELECT {key}, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}{key}<>'' GROUP BY {key} ORDER BY reject_qty DESC, qty DESC LIMIT 30",pp)
             base=c.fetchall(); names=[r[0] for r in base]
             wh2,pp2=build_where(filters,exclude={dim,"month"})
-            c.execute(f"SELECT {key}, month, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh2}{' AND ' if wh2 else 'WHERE '}{key}<>'' AND month<>'' GROUP BY {key}, month ORDER BY month",pp2)
+            c.execute(f"SELECT {key}, month, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh2}{' AND ' if wh2 else 'WHERE '}{key}<>'' AND month<>'' GROUP BY {key}, month ORDER BY month",pp2)
             hist={n:[] for n in names}
             for r in c.fetchall():
                 q=num(r[3]);rq=num(r[4]);hist.setdefault(r[0],[]).append({"month":r[1],"coils":int(r[2] or 0),"qty":q,"reject":rq/q if q else 0})
@@ -3058,11 +3063,11 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     defect_hist={}; wc_hist={}; grade_hist={}
     try:
         wh,pp=build_where(filters,exclude={"month"})
-        c.execute(f"SELECT month, main_defect, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}month<>'' AND main_defect<>'' AND main_defect<>'NO DEFECT' GROUP BY month,main_defect ORDER BY month",pp)
+        c.execute(f"SELECT month, main_defect, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}month<>'' AND main_defect<>'' AND main_defect<>'NO DEFECT' GROUP BY month,main_defect ORDER BY month",pp)
         for r in c.fetchall():defect_hist.setdefault(r[1],[]).append({"month":r[0],"coils":int(r[2] or 0),"qty":num(r[3])})
-        c.execute(f"SELECT month, work_center, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}month<>'' AND work_center<>'' GROUP BY month,work_center ORDER BY month",pp)
+        c.execute(f"SELECT month, work_center, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}month<>'' AND work_center<>'' GROUP BY month,work_center ORDER BY month",pp)
         for r in c.fetchall():wc_hist.setdefault(r[1],[]).append({"month":r[0],"coils":int(r[2] or 0),"qty":num(r[3]),"reject":num(r[4])})
-        c.execute(f"SELECT month, grade, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}month<>'' AND grade<>'' GROUP BY month,grade ORDER BY month",pp)
+        c.execute(f"SELECT month, grade, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}month<>'' AND grade<>'' GROUP BY month,grade ORDER BY month",pp)
         for r in c.fetchall():grade_hist.setdefault(r[1],[]).append({"month":r[0],"coils":int(r[2] or 0),"qty":num(r[3]),"reject":num(r[4])})
     finally:c.close();conn.close()
 
@@ -3131,9 +3136,9 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
                 pf=dict(filters);pf["month"]=period_month;whx,px=build_where(pf)
                 q=whx+((" AND " if whx else "WHERE ")+"main_defect = ?")
                 pp=px+[rr["defect"]]
-                c.execute(f"SELECT work_center,COUNT(DISTINCT {HEAT_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT work_center,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
                 r=c.fetchone();rr["work_center"]=r[0] if r else "—"
-                c.execute(f"SELECT grade,COUNT(DISTINCT {HEAT_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
                 r=c.fetchone();rr["grade"]=r[0] if r else "—"
         finally:c.close();conn.close()
     new_issues.sort(key=lambda x:x["qty"],reverse=True);new_issues=new_issues[:8]
@@ -3150,9 +3155,9 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
                 pf=dict(filters);pf["month"]=nn.get("month");whx,px=build_where(pf)
                 q=whx+((" AND " if whx else "WHERE ")+"main_defect = ?")
                 pp=px+[nn["defect"]]
-                c.execute(f"SELECT work_center,COUNT(DISTINCT {HEAT_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT work_center,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
                 r=c.fetchone();nn["work_center"]=r[0] if r else "—"
-                c.execute(f"SELECT grade,COUNT(DISTINCT {HEAT_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
                 r=c.fetchone();nn["grade"]=r[0] if r else "—"
         finally:c.close();conn.close()
 
@@ -3596,7 +3601,7 @@ class Handler(BaseHTTPRequestHandler):
                     if grade and grade.lower()!='all': clauses.append('grade = ?'); extra.append(grade)
                     if defect and defect.lower() not in {'all','—','-'}: clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(defect)
                 if clauses: where_sql=where_sql+(' AND ' if where_sql else 'WHERE ')+' AND '.join(clauses); base_params+=extra
-                conn=get_conn(); cur=conn.cursor(); cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT {HEAT_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}",base_params); total_rows,total_coils,total_weight=cur.fetchone(); conn.close()
+                conn=get_conn(); cur=conn.cursor(); cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}",base_params); total_rows,total_coils,total_weight=cur.fetchone(); conn.close()
                 rows=_drilldown_rows(filters, metric, drill_value, limit=page_size, offset=offset)
                 self._send_json({'count':int(total_coils or 0),'row_count':int(total_rows or 0),'total_weight':float(total_weight or 0),'rows':rows,'scope':_filter_summary(filters),'page':page,'page_size':page_size,'total_pages':max(1,(int(total_rows or 0)+page_size-1)//page_size)})
             except Exception as e:
@@ -3683,7 +3688,7 @@ class Handler(BaseHTTPRequestHandler):
                 where, params = build_where(filters)
                 conn=get_conn(); cur=conn.cursor(); extra=(where + (" AND " if where else "WHERE ") + "main_defect = ?")
                 p=params+[defect]
-                cur.execute(f"SELECT grade, work_center, COUNT(DISTINCT {HEAT_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty FROM disposition {extra} GROUP BY grade,work_center ORDER BY qty DESC LIMIT 10",p)
+                cur.execute(f"SELECT grade, work_center, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty FROM disposition {extra} GROUP BY grade,work_center ORDER BY qty DESC LIMIT 10",p)
                 paths=[{"grade":r[0] or "—","work_center":r[1] or "—","coils":int(r[2] or 0),"qty":float(r[3] or 0)} for r in cur.fetchall()]
                 cur.execute(f"SELECT heat_no,batch_no,grade,work_center,COALESCE(SUM(output_weight),0) qty,COUNT(*) rows FROM disposition {extra} GROUP BY heat_no,batch_no,grade,work_center ORDER BY qty DESC LIMIT 20",p)
                 records=[{"heat_no":r[0] or "","batch_no":r[1] or "","grade":r[2] or "—","work_center":r[3] or "—","qty":float(r[4] or 0),"rows":int(r[5] or 0)} for r in cur.fetchall()]
@@ -3852,8 +3857,8 @@ class Handler(BaseHTTPRequestHandler):
                     rows=conn.execute("SELECT id,heat_no,batch_no,grade,quality_decision,output_weight,insp_lot_date,defect_intensity,work_center,main_defect FROM disposition").fetchall()
                     conn.close()
                     valid_decisions={"PRIME","FOR NEXT PROCESS","SALVAGE","HOLD FOR DECISION","REJECT","RE-WORK","DIVERT"}
-                    counts={k:0 for k in ["missing_heat_no","duplicate_heat_batch","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values"]}
-                    bad_ids=set(); pairs={}
+                    counts={k:0 for k in ["missing_heat_no","duplicate_batch","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values"]}
+                    bad_ids=set(); batches={}
                     for r in rows:
                         d=dict(r); rid=d.get("id")
                         heat=str(d.get("heat_no") or "").strip(); batch=str(d.get("batch_no") or "").strip()
@@ -3873,16 +3878,16 @@ class Handler(BaseHTTPRequestHandler):
                         if invalid_date: counts["invalid_dates"]+=1; bad_ids.add(rid)
                         if not str(d.get("defect_intensity") or "").strip(): counts["missing_intensity"]+=1; bad_ids.add(rid)
                         if not str(d.get("work_center") or "").strip() or (not str(d.get("main_defect") or "").strip()): counts["invalid_values"]+=1; bad_ids.add(rid)
-                        if heat and batch: pairs.setdefault((heat.upper(),batch.upper()),[]).append(rid)
+                        if batch: batches.setdefault(batch.upper(),[]).append(rid)  # BATCH NO must be unique — one coil, one batch
                     dup_groups=[]
-                    for key,ids in pairs.items():
+                    for key,ids in batches.items():
                         if len(ids)>1:
-                            counts["duplicate_heat_batch"] += len(ids)-1
-                            bad_ids.update(ids[1:]); dup_groups.append({"heat_no":key[0],"batch_no":key[1],"count":len(ids)})
+                            counts["duplicate_batch"] += len(ids)-1
+                            bad_ids.update(ids[1:]); dup_groups.append({"batch_no":key,"count":len(ids)})
                     total=len(rows); corrections=len(bad_ids)
                     issue_total=sum(counts.values())
                     score=round(max(0,100*(1-(corrections/max(total,1)))),1)
-                    self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_heat":[*sorted(dup_groups,key=lambda x:x["count"],reverse=True)[:20]]})
+                    self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_batch_rows":[*sorted(dup_groups,key=lambda x:x["count"],reverse=True)[:20]]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/import_history":
             if not _is_admin(self): _auth_error(self)
@@ -4221,7 +4226,7 @@ class Handler(BaseHTTPRequestHandler):
             if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
                 body = _json_body(self)
-                r = _record_from_values([body.get(k, "") for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]], {k:i for i,k in enumerate(["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"])})
+                r = _record_from_values([body.get(k, "") for k in ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]], {k:i for i,k in enumerate(["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"])})
                 result = _insert_records([r])
                 if result["errors"]:
                     self._send_json({"error": result["errors"][0]["error"]}, status=400)
@@ -4244,7 +4249,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not uploaded: raise ValueError("No file was uploaded")
                 records=_parse_uploaded_file(uploaded[0],uploaded[1])
                 if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
-                conn=get_conn(); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={(str(r[0] or "").strip().upper(),str(r[1] or "").strip().upper()):r for r in existing_rows}; existing_pairs=set(existing_map);
+                conn=get_conn(); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={str(r[1] or "").strip().upper():r for r in existing_rows};
                 wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()
                 valid=[]; errors=[]; duplicates=0; updated=0; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
                 for idx,r in enumerate(records,start=2):
@@ -4256,14 +4261,14 @@ class Handler(BaseHTTPRequestHandler):
                     if not str(r.get("defect_intensity","")).strip(): missing_intensity+=1
                     if wcs and str(r.get("work_center","")).strip() and str(r.get("work_center")).strip() not in wcs: unknown_wc+=1
                     if grades and str(r.get("grade","")).strip() and str(r.get("grade")).strip() not in grades: unknown_grade+=1
-                    pair=(str(r.get("heat_no","")).strip().upper(), str(r.get("batch_no","")).strip().upper())
-                    if pair in seen: duplicates+=1
+                    key=str(r.get("batch_no","")).strip().upper()  # BATCH NO is the unique coil key
+                    if key in seen: duplicates+=1
                     elif err: errors.append({"row":idx,"error":err})
                     else:
-                        seen.add(pair)
-                        if pair in existing_map:
-                            oldrow=existing_map[pair]; newvals=[r.get(k,"") for k in ["work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]]
-                            oldvals=list(oldrow[2:])
+                        seen.add(key)
+                        if key in existing_map:
+                            oldrow=existing_map[key]; newvals=[r.get(k,"") for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]]
+                            oldvals=[oldrow[0]]+list(oldrow[2:])
                             if any(str(a if a is not None else "") != str(b if b is not None else "") for a,b in zip(oldvals,newvals)):
                                 updated+=1; valid.append(r)
                             else: duplicates+=1
