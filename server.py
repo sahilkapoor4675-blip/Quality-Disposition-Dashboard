@@ -2580,7 +2580,7 @@ def _excel_report(payload):
         if rca:
             row+=2
             fw.cell(row,1,"Root Cause Analysis (RCA)").font=Font(bold=True,color=navy); row+=1
-            header(fw,row,["6M Category","Why Chain","Root Cause","Action","Preventive Action","Role","Responsibility"]); row+=1
+            header(fw,row,["6M Category","5-Why Chain","Root Cause","Action","Preventive Action","Role","Responsibility"]); row+=1
             for key,label,_c,_s in FISHBONE_BRANCHES:
                 r=rca.get(key)
                 if not r: continue

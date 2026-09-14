@@ -1075,7 +1075,7 @@ function renderRcaPanel(item){
   return `<div class="qcr-rca-panel">
     <div class="qcr-fb-title">🧭 Root Cause Analysis (RCA) — ${escQcr(item.defect)}</div>
     <div class="qcr-rca-table-wrap"><table class="qcr-rca-table">
-      <thead><tr><th>6M Category</th><th>Why-Why Chain</th><th>Root Cause</th><th>Action</th><th>Preventive Action</th><th>Role / Responsibility</th></tr></thead>
+      <thead><tr><th>6M Category</th><th>5-Why Chain</th><th>Root Cause</th><th>Action</th><th>Preventive Action</th><th>Role / Responsibility</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </div>`;
