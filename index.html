@@ -15,7 +15,18 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&family=Allura&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css?v=28.6.0">
-<style id="main-header-font-v18">.quality-intelligence-title{font-family:'Lucida Calligraphy','Lucida Handwriting',cursive!important;}</style>
+<script>
+// Apply the saved (or system-preferred) theme before first paint, so there's
+// no flash of the wrong theme. The toggle button in the header (wired in
+// app.js) flips this and persists the choice.
+(function(){
+  try{
+    var saved=localStorage.getItem('qdash_theme');
+    var theme=saved||(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    if(theme==='dark')document.documentElement.setAttribute('data-theme','dark');
+  }catch(e){}
+})();
+</script>
 </head>
 <body>
 <header>
@@ -36,12 +47,17 @@
     <div class="header-actions">
       <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
       <div class="live-users" title="Dashboard users active within the last 75 seconds"><span class="live-users-dot"></span><span>NOW ACTIVE</span><strong id="liveUsersCount">0</strong></div>
+      <button class="theme-toggle-btn" id="themeToggleBtn" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
       <a class="admin-link" href="/admin">🔐 Admin</a>
     </div>
   </div>
 </header>
 
 <div class="container">
+  <div class="global-search-wrap" id="globalSearchWrap">
+    <input type="text" id="globalSearchInput" class="global-search-input" placeholder="🔎 Search any defect, grade, or work center…" autocomplete="off">
+    <div class="global-search-results" id="globalSearchResults"></div>
+  </div>
   <div class="filters" id="filters"></div>
 <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
 <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div></div></div>

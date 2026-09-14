@@ -1,5 +1,26 @@
+# Secrets — never commit real credentials or connection strings.
+.env
+.env.*
+*.pem
+*.key
+
+# Local/persistent application data — this app stores its live database and
+# backups in a sibling folder outside qcr_app by default (see server.py), so
+# they normally aren't even inside this repo. This is a safety net for the
+# rare case DB_PATH/BACKUP_KEEP are pointed back inside the repo — it must NOT
+# catch the bundled seed database (quality.db) that ships with the app.
+/data/
+/backups/
+qcr_app_persistent_data/
+*.sqlite
+*.sqlite3
+
+# Python
 __pycache__/
 *.pyc
-*.log
-.env
+.venv/
+venv/
+
+# OS/editor noise
 .DS_Store
+Thumbs.db
