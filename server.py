@@ -3548,7 +3548,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
     def _send_json(self, payload, status=200):
-        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        # default=str: Postgres returns TIMESTAMPTZ columns as native Python
+        # datetime objects (SQLite returned them as plain TEXT strings, so
+        # this never came up there). json.dumps can't serialize a datetime
+        # on its own — it needs an explicit fallback, or the whole response
+        # throws "Object of type datetime is not JSON serializable" and the
+        # endpoint returns nothing. This affects any endpoint that touches a
+        # timestamp column (KPI targets, fishbone/RCA data, disposition
+        # rows, etc.), so fixing it here once covers all of them.
+        body = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("X-Request-ID", secrets.token_hex(8))
         self.send_header("Content-Type", "application/json; charset=utf-8")
