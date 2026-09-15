@@ -449,7 +449,8 @@ async function loadKpis(signal){
   renderDecisionTable(data.decision_table, data.decision_total);
   renderDefectTable(data.top_defects, data.top_defects_total);
   renderIntensityTable(data.intensity_table, data.intensity_total);
-  dashLoadFishbone(data.top_defects);
+  // NOTE: 6M Fishbone + RCA panel intentionally lives only in the Quality
+  // Control Room tab now (see qcrLoadFishbone) so it isn't duplicated here.
 
   const decisionRows = data.decision_table.filter(r => r.qty > 0);
   makePieChart(document.getElementById("decisionPie"), decisionRows, "qty", "decision",
@@ -670,7 +671,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const y = padT + i * rowH + rowH*0.2;
     const barH = rowH * 0.6;
     const barColor = opts.color || CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
+    bars += `<rect${opts.drillKind?` data-drill-category="${d[labelKey]}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${d[labelKey]}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="#334155">${truncateLabel(d[labelKey], 26)}<title>${d[labelKey]}</title></text>`;
   });
@@ -772,7 +773,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const barH = Math.max(0, (val / maxV) * (h - padT - padB));
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
-      bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="decision" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
+      bars += `<rect data-drill-category="${d[labelKey]}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${s.label} — ${d[labelKey]}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${truncateLabel(d[labelKey], truncLen)}<title>${d[labelKey]}</title></text>`;
@@ -882,7 +883,18 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
 
 function wireChartDrilldown(containerId, kind){
   const c=document.getElementById(containerId); if(!c||c.dataset.drillWired)return; c.dataset.drillWired='1'; c.classList.add('drillable-chart');
-  c.addEventListener('click',e=>{const el=e.target.closest('[data-drill-category]'); if(!el)return; const cat=el.getAttribute('data-drill-category'); if(kind==='decision')openDrilldown('decision_category',`Quality Decision: ${cat} — Underlying Records`,{drill_value:cat}); else if(kind==='defect')openDrilldown('defect_category',`Defect: ${cat} — Underlying Records`,{drill_value:cat});});
+  c.addEventListener('click',e=>{
+    const el=e.target.closest('[data-drill-category]'); if(!el)return;
+    const cat=el.getAttribute('data-drill-category');
+    if(kind==='decision')openDrilldown('decision_category',`Quality Decision: ${cat} — Underlying Records`,{drill_value:cat});
+    else if(kind==='defect')openDrilldown('defect_category',`Defect: ${cat} — Underlying Records`,{drill_value:cat});
+    // Work Center / Grade bars reuse the already-proven "quality_investigation"
+    // filter (same one used by the QCR investigate buttons) instead of a
+    // fake decision/defect match, so the totals shown are guaranteed correct.
+    else if(kind==='work_center')openDrilldown('quality_investigation',`Work Center: ${cat} — Underlying Records`,{work_center:cat});
+    else if(kind==='grade')openDrilldown('quality_investigation',`Grade: ${cat} — Underlying Records`,{grade:cat});
+    else if(kind==='month')openDrilldown('month_category',`Month: ${cat} — Underlying Records`,{drill_value:cat});
+  });
 }
 
 // ---------- Tab: Work Center & Grade ----------
@@ -892,10 +904,12 @@ async function loadWcGrade(signal){
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
   makeHBarChart(document.getElementById("wcChart"), data.by_work_center, "reject_pct_qty", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Work Center"});
+    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Work Center", drillKind:"work_center"});
+  wireChartDrilldown("wcChart","work_center");
   renderMetricsTable("wcTable", [...data.by_work_center].sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)), data.total_work_center, true);
   makeHBarChart(document.getElementById("gradeChart"), data.by_grade, "reject_pct_qty", "name",
-    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Grade"});
+    {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Grade", drillKind:"grade"});
+  wireChartDrilldown("gradeChart","grade");
   renderMetricsTable("gradeTable", [...data.by_grade].sort((a,b)=>Number(b.reject_pct_qty||0)-Number(a.reject_pct_qty||0)), data.total_grade, true); markChartsReady();
 }
 
@@ -907,6 +921,7 @@ async function loadDefectAnalysis(signal){
   if(data.error){ console.error(data.error); return; }
   makeComboChart(document.getElementById("paretoChart"), data.pareto, "defect", "qty", "cum_pct",
     {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Main Defect", colorful: true, barAxisLabel: "Qty (MT)", lineAxisLabel: "Cumulative %", barLegend: "Qty (MT)", lineLegend: "Cumulative %"});
+  wireChartDrilldown("paretoChart","defect");
   const tbody = document.querySelector("#registerTable tbody");
   tbody.innerHTML = "";
   data.register.forEach(r => {
@@ -941,7 +956,8 @@ async function loadMonthlyTrend(signal){
   makeGroupedBarChart(document.getElementById("monthlyBarChart"), data.rows, "name", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"output_qty", label:"Output Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(0)},
-  ], {yLabel: "Coils / Qty (MT)", xLabel: "Month", axisFmt: v => v.toFixed(0)});
+  ], {yLabel: "Coils / Qty (MT)", xLabel: "Month", axisFmt: v => v.toFixed(0), drillKind:"month"});
+  wireChartDrilldown("monthlyBarChart","month");
   renderMetricsTable("monthlyTable", data.rows, data.total); markChartsReady();
 }
 
@@ -1059,10 +1075,12 @@ function qcrFishboneCard(field,items){
 function renderRcaPanel(item){
   const rca = item && item.rca; if(!rca || !Object.keys(rca).length) return '';
   const order=['man','machine','material','method','measurement','environment'];
-  const rows = order.filter(k=>rca[k]).map(k=>{
+  const available = order.filter(k=>rca[k]);
+  if(!available.length) return '';
+  const rows = available.map(k=>{
     const st=fbStyle(k), r=rca[k];
     const chain=(r.why_chain||[]).map(escQcr).join(' <span class="qcr-rca-arrow">→</span> ');
-    return `<tr>
+    return `<tr data-cause="${k}">
       <td><span class="qcr-rca-chip" style="background:${st.color}">${st.icon} ${escQcr(st.label)}</span></td>
       <td class="qcr-rca-chain">${chain||'—'}</td>
       <td><b>${escQcr(r.root_cause)}</b></td>
@@ -1072,14 +1090,36 @@ function renderRcaPanel(item){
     </tr>`;
   }).join('');
   if(!rows) return '';
+  // Each 6M category (Man/Machine/Material/...) can carry its own distinct
+  // root cause + action + preventive action, so a Cause filter lets the user
+  // isolate just one category's RCA row instead of scanning the full table.
+  const causeOptions = ['<option value="all">All Causes</option>'].concat(
+    available.map(k=>{const st=fbStyle(k); return `<option value="${k}">${st.icon} ${escQcr(st.label)}</option>`;})
+  ).join('');
   return `<div class="qcr-rca-panel">
-    <div class="qcr-fb-title">🧭 Root Cause Analysis (RCA) — ${escQcr(item.defect)}</div>
+    <div class="qcr-rca-head-row">
+      <div class="qcr-fb-title">🧭 Root Cause Analysis (RCA) — ${escQcr(item.defect)}</div>
+      <label class="qcr-rca-filter-label">Filter by Cause:
+        <select class="qcr-rca-cause-filter" aria-label="Filter RCA by 6M cause category">${causeOptions}</select>
+      </label>
+    </div>
     <div class="qcr-rca-table-wrap"><table class="qcr-rca-table">
       <thead><tr><th>6M Category</th><th>5-Why Chain</th><th>Root Cause</th><th>Action</th><th>Preventive Action</th><th>Role / Responsibility</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </div>`;
 }
+// Delegated listener: filtering by cause only ever hides/shows <tr> rows
+// already rendered above, so it works no matter how many times the RCA
+// panel gets re-rendered (new defect selected, filters changed, etc.).
+document.addEventListener('change', e=>{
+  const sel = e.target.closest('.qcr-rca-cause-filter'); if(!sel) return;
+  const panel = sel.closest('.qcr-rca-panel'); if(!panel) return;
+  const val = sel.value;
+  panel.querySelectorAll('tbody tr[data-cause]').forEach(tr=>{
+    tr.style.display = (val==='all' || tr.dataset.cause===val) ? '' : 'none';
+  });
+});
 function qcrRenderFishboneDiagram(item){
   const el=document.getElementById('qcrFishboneDiagram'); if(!el) return;
   if(!item){ el.innerHTML='<div class="qcr-empty">No defect selected.</div>'; return; }

@@ -476,10 +476,11 @@ body.drill-modal-open .filters{z-index:1;}
 .drill-modal{position:fixed;inset:0;z-index:200000;background:rgba(15,35,55,.38);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:22px;}
 .drill-modal.open{display:flex;}
 .drill-dialog{width:min(1280px,96vw);height:min(780px,92vh);background:#fff;border-radius:15px;box-shadow:0 24px 70px rgba(12,34,55,.28);display:flex;flex-direction:column;overflow:hidden;border:1px solid #d7e2eb;}
-.drill-head{display:flex;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid #e2eaf0;background:linear-gradient(135deg,#fff,#f5f9fc);}
+.drill-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid #e2eaf0;background:linear-gradient(135deg,#fff,#f5f9fc);}
+.drill-head>div:first-child{grid-column:2;text-align:center;}
 .drill-head h3{margin:0;font:800 16px Manrope,sans-serif;color:var(--heading);}
 .drill-sub{font:600 15.5px Manrope,sans-serif;color:var(--muted);}
-.drill-head-actions{margin-left:auto;display:flex;gap:8px;}
+.drill-head-actions{grid-column:3;justify-self:end;margin-left:0;display:flex;gap:8px;}
 .drill-head button,.drill-export{font:700 14px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:7px 10px;color:#31516b;cursor:pointer;text-decoration:none;}
 .drill-export{background:#edf7ff;border-color:#abd0ea;color:#12669d;}
 .drill-body{padding:12px 15px;overflow:auto;flex:1;min-height:0;}
@@ -668,6 +669,11 @@ body.drill-modal-open .filters{z-index:1;}
 @media(max-width:900px){.qcr-fb-grid{grid-template-columns:1fr 1fr;}}
 @media(max-width:600px){.qcr-fb-grid{grid-template-columns:1fr;}}
 .qcr-rca-panel{margin-top:18px;}
+.qcr-rca-head-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:8px;}
+.qcr-rca-head-row .qcr-fb-title{margin-bottom:0;}
+.qcr-rca-filter-label{font:700 12.5px Manrope,sans-serif;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.qcr-rca-cause-filter{font:700 12.5px Manrope,sans-serif;color:var(--heading);border:1px solid #E2E8F0;border-radius:8px;padding:5px 9px;background:#fff;cursor:pointer;}
+html[data-theme="dark"] .qcr-rca-cause-filter{background:#141B2C;border-color:#2A3B54;color:var(--text);}
 .qcr-rca-table-wrap{overflow-x:auto;border:1px solid #E2E8F0;border-radius:12px;}
 .qcr-rca-table{width:100%;border-collapse:collapse;font:600 12.5px Manrope,sans-serif;min-width:760px;}
 .qcr-rca-table thead th{background:#16324F;color:#fff;font:800 11.5px Manrope,sans-serif;text-transform:uppercase;letter-spacing:.3px;padding:9px 10px;text-align:center;white-space:nowrap;}
@@ -772,6 +778,13 @@ html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B
 
 /* ---- Quality Health Score: stabilized, self-contained layout ---- */
 .qcr-health{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 0 10px;}
+/* Work Center & Grade tab tables: Rank column stays centered (matches the
+   sheet-wide default), but the Work Center / Grade name column reads better
+   left-aligned since it's text, not a number. */
+#wcTable th:nth-child(1),#wcTable td:nth-child(1),
+#gradeTable th:nth-child(1),#gradeTable td:nth-child(1){text-align:center;}
+#wcTable th:nth-child(2),#wcTable td:nth-child(2),
+#gradeTable th:nth-child(2),#gradeTable td:nth-child(2){text-align:left;}
 .qcr-health-score{font:900 40px 'Space Grotesk',sans-serif;line-height:1;}
 .qcr-health-score.good{color:#15803d;}
 .qcr-health-score.amber{color:#a16207;}
@@ -1032,6 +1045,16 @@ html[data-theme="dark"] th,
 html[data-theme="dark"] td{border-color:#2A3B54;}
 html[data-theme="dark"] thead th{background:#101827;color:#E8EDF6;}
 html[data-theme="dark"] tbody tr:nth-child(even){background:#101827;}
+
+/* The drill-down table's sticky header (and its grand-total row) hard-code a
+   light background with !important for the light theme's sticky-header
+   shadow trick. Those two rules out-rank the generic "thead th" dark
+   override above, so without this the header text (light-colored in dark
+   mode) was landing on a light background — i.e. invisible/"grey" fields.
+   Matching selector specificity + !important here restores contrast. */
+html[data-theme="dark"] .drill-table th,
+html[data-theme="dark"] .drill-body #drillContent .drill-table thead th{background:#101827!important;color:#E8EDF6!important;box-shadow:0 1px 0 #2A3B54,0 3px 8px rgba(0,0,0,.35)!important;}
+html[data-theme="dark"] .drill-table .grand-total-row td{background:#1B2740!important;color:#E8EDF6!important;border-top-color:#2A3B54!important;}
 
 /* Charts/diagrams intentionally KEPT LIGHT in dark mode (see note above) —
    their own text/line colors assume a white card, so the card must stay

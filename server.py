@@ -3373,6 +3373,8 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000, offset=0):
         clauses.append("quality_decision = ?"); extra.append(drill_value or '')
     elif metric == 'defect_category':
         clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(drill_value or '')
+    elif metric == 'month_category':
+        clauses.append("month = ?"); extra.append(drill_value or '')
     elif metric == 'heat_detail':
         clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
     elif metric == 'quality_investigation':
@@ -3592,8 +3594,12 @@ class Handler(BaseHTTPRequestHandler):
                 elif metric in {'First Pass Yield % (Prime%)'}: clauses.append("quality_decision = ?"); extra.append('PRIME')
                 elif metric in {'Hold for Decision % Qty','Hold For Decision Qty (MT)'}: clauses.append("quality_decision = ?"); extra.append('HOLD FOR DECISION')
                 elif metric in {'Reject Qty (MT)','Reject % Qty'}: clauses.append("quality_decision = ?"); extra.append('REJECT')
+                elif metric in {'Salvage % Qty'}: clauses.append("quality_decision = ?"); extra.append('SALVAGE')
+                elif metric in {'Salvage + Divert Qty (MT)'}: clauses.append("quality_decision IN (?,?)"); extra.extend(['SALVAGE','DIVERT'])
+                elif metric in {'Rework % Qty'}: clauses.append("quality_decision = ?"); extra.append('RE-WORK')
                 elif metric == 'decision_category': clauses.append("quality_decision = ?"); extra.append(drill_value or '')
                 elif metric == 'defect_category': clauses.append("main_defect = ?"); extra.append(drill_value or '')
+                elif metric == 'month_category': clauses.append("month = ?"); extra.append(drill_value or '')
                 elif metric == 'heat_detail': clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
                 elif metric == 'quality_investigation':
                     wc=str(qs.get('work_center','All') or 'All').strip(); grade=str(qs.get('grade','All') or 'All').strip(); defect=str(drill_value or '').strip()
