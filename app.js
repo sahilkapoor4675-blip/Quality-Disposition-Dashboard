@@ -449,8 +449,7 @@ async function loadKpis(signal){
   renderDecisionTable(data.decision_table, data.decision_total);
   renderDefectTable(data.top_defects, data.top_defects_total);
   renderIntensityTable(data.intensity_table, data.intensity_total);
-  // NOTE: 6M Fishbone + RCA panel intentionally lives only in the Quality
-  // Control Room tab now (see qcrLoadFishbone) so it isn't duplicated here.
+  dashLoadFishbone(data.top_defects);
 
   const decisionRows = data.decision_table.filter(r => r.qty > 0);
   makePieChart(document.getElementById("decisionPie"), decisionRows, "qty", "decision",
@@ -1319,7 +1318,9 @@ function dashRenderFishboneDiagram(item){
     return;
   }
   const note = item.match_type==='fuzzy' ? `<div class="qcr-fb-note">Matched to master defect "${escQcr(item.matched_defect)}" (closest match, ${Math.round((item.confidence||0)*100)}% confidence). If this looks wrong, fix it in Admin → 6M Fishbone Analysis.</div>` : '';
-  el.innerHTML = `${note}${buildFishboneSvg(item)}${renderRcaPanel(item)}`;
+  // Dashboard tab shows the fishbone diagram only — the detailed RCA
+  // (5-Why / root cause / action) table stays exclusive to the QCR tab.
+  el.innerHTML = `${note}${buildFishboneSvg(item)}`;
 }
 function dashLoadFishbone(topDefects){
   const chipsEl=document.getElementById('dashFishboneChips'), diagEl=document.getElementById('dashFishboneDiagram');
