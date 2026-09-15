@@ -396,8 +396,25 @@ class _PGConn:
     def rollback(self): self.conn.rollback()
     def close(self):
         if self.pooled and PG_POOL is not None:
+            # If the last statement on this connection raised (bad SQL, a
+            # lock_timeout, a dropped network link, etc.), Postgres leaves the
+            # session in "current transaction is aborted" state. Returning
+            # that connection to the pool as-is means the NEXT unrelated
+            # request to borrow it fails immediately too — one transient
+            # error then quietly cascades into random, hard-to-reproduce
+            # failures anywhere else in the app (exactly the kind of "works
+            # here, breaks there" mismatch this was causing). Roll back
+            # before returning it so every connection goes back to the pool
+            # clean.
+            try: self.conn.rollback()
+            except Exception:
+                try: self.conn.close()
+                except Exception: pass
+                return
             try: PG_POOL.putconn(self.conn)
-            except Exception: self.conn.close()
+            except Exception:
+                try: self.conn.close()
+                except Exception: pass
         else: self.conn.close()
 
 def get_conn():

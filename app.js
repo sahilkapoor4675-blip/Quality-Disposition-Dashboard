@@ -1527,7 +1527,7 @@ function qcrRenderTargetHistory(rows,target){
   el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • % Target Achieved shows how much of the target was reached each period (100% = target fully met)</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>% Target Achieved</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=att>=0.97?'good':att>=0.90?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
 }
 
-function qcrRenderExecutive(intel, critical, comparisonRows){
+function qcrRenderExecutive(intel, critical, comparisonRows, intelError){
   const health=intel?.health_score||{}; const h=Number(health.score||0); const pf=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
   const crit=pf.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
   const att=pf.filter(x=>String(x.severity||'').toLowerCase()==='attention').length;
@@ -1536,7 +1536,25 @@ function qcrRenderExecutive(intel, critical, comparisonRows){
   let trend='●', trendText='Stable', trendClass='neutral';
   if(prev&&cur){const a=Number(prev.fpy||prev.fpy_pct||0),b=Number(cur.fpy||cur.fpy_pct||0);if(b<a){trend='▼';trendText='Quality declining';trendClass='bad';}else if(b>a){trend='▲';trendText='Quality improving';trendClass='good';}}
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  set('qcrExecHealth',`${h.toFixed(0)}/100`);set('qcrExecHealthState',health.status==='good'?'Healthy':health.status==='bad'?'Critical':'Attention');set('qcrExecCritical',crit);set('qcrExecBreaches',critical.filter(k=>qcrStatus(k.label,k.value)!=='good').length);set('qcrExecProblem',top?.title||'No material issue');set('qcrExecDriver',top?.driver_path||top?.where||'Continue monitoring');set('qcrExecTrend',trend);set('qcrExecTrendText',trendText);
+  const breaches=critical.filter(k=>qcrStatus(k.label,k.value)!=='good').length;
+  // When the intelligence engine (health score / problem finder) failed to
+  // compute for this request — e.g. a transient DB connection error — the
+  // server still returns a well-formed but FAKE health_score of {score:0,
+  // status:"amber"} and an empty problem_finder, purely so the rest of the
+  // payload isn't blanked. Rendering that as-is looks like a real, confident
+  // "0/100, Attention, No material issue" result, which directly contradicts
+  // the Target Breaches count (computed independently from real KPI data)
+  // sitting right next to it. Surface the failure honestly instead of
+  // presenting fabricated numbers as if they were a real analysis.
+  if(intelError){
+    set('qcrExecHealth','—/100');set('qcrExecHealthState','Unavailable');
+    set('qcrExecCritical','—');set('qcrExecBreaches',breaches);
+    set('qcrExecProblem','Analysis unavailable');set('qcrExecDriver','Temporary error — refresh to retry');
+    set('qcrExecTrend','●');set('qcrExecTrendText','Unavailable');
+    const trendEl=document.getElementById('qcrExecTrend'); if(trendEl)trendEl.className='qcr-trend-symbol neutral';
+    return;
+  }
+  set('qcrExecHealth',`${h.toFixed(0)}/100`);set('qcrExecHealthState',health.status==='good'?'Healthy':health.status==='bad'?'Critical':'Attention');set('qcrExecCritical',crit);set('qcrExecBreaches',breaches);set('qcrExecProblem',top?.title||'No material issue');set('qcrExecDriver',top?.driver_path||top?.where||'Continue monitoring');set('qcrExecTrend',trend);set('qcrExecTrendText',trendText);
   const trendEl=document.getElementById('qcrExecTrend'); if(trendEl)trendEl.className='qcr-trend-symbol '+trendClass;
 }
 async function loadControlRoom(signal){
@@ -1585,7 +1603,7 @@ async function loadControlRoom(signal){
     // All QCR intelligence is now returned by the consolidated endpoint so these
     // sections never depend on a chain of secondary browser requests.
     qcrRenderComparison((m&&m.rows)||[]);
-    qcrRenderExecutive(data?.intel||{},critical,(m&&m.rows)||[]);
+    qcrRenderExecutive(data?.intel||{},critical,(m&&m.rows)||[],data?.intel_error||'');
     qcrRenderTrendPrediction((m&&m.rows)||[],d,w);
     fetch('/api/qcr_target_history?'+params,{signal}).then(r=>r.json()).then(th=>{if(!th.error){qcrRenderTargetHistory(th.rows||[],th.target); scheduleQcrLayout();}}).catch(()=>{});
     const intel=data?.intel||{};
