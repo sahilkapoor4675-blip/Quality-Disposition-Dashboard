@@ -1416,15 +1416,24 @@ function qcrRenderTrendPrediction(rows,d,w){
     el.innerHTML=`<div class="qcr-intel-status ${cls}">${status}</div><div class="qcr-intel-main">FPY ${ (fpy[fpy.length-1]*100).toFixed(2)}% <span>→ projected ${(next*100).toFixed(2)}%</span></div><div class="qcr-intel-meta">Last ${recent.length} months: ${recent.map(r=>r.name).join(' → ')}</div><div class="qcr-intel-meta">${sf<0?'FPY is trending down.':'FPY is not declining.'} ${sr>0?'Reject % is increasing.':'Reject % is not increasing.'}</div>`;
   }catch(e){console.error('QCR trend intelligence',e);el.innerHTML='<div class="qcr-empty">Trend intelligence unavailable.</div>';}
 }
-document.getElementById('qcrRootCause')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-root-link');if(!b)return; const p=new URLSearchParams(currentFilters);p.set('grade',b.dataset.rootGrade||'All');p.set('work_center',b.dataset.rootWc||'All');openDrilldown('defect_category',`Root Cause: ${b.dataset.rootGrade||'—'} → ${b.dataset.rootWc||'—'}`,{drill_value:document.querySelector('.qcr-defect-btn')?.dataset.defect||'',grade:b.dataset.rootGrade||'All',work_center:b.dataset.rootWc||'All'});});
+document.getElementById('qcrRootCause')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-root-link');if(!b)return; const container=document.getElementById('qcrRootCause'); const defect=container?.dataset.defect||''; openDrilldown('defect_category',`Root Cause: ${b.dataset.rootGrade||'—'} → ${b.dataset.rootWc||'—'}`,{drill_value:defect,grade:b.dataset.rootGrade||'All',work_center:b.dataset.rootWc||'All'});});
 function loadRootCause(defect){
   const el=document.getElementById('qcrRootCause'); if(!el||!defect)return Promise.resolve(); el.innerHTML='<div class="qcr-empty">Loading root-cause path…</div>';
+  // The defect this panel is currently showing has to be recoverable later
+  // when a path button is clicked (see the click handler below) — stash it
+  // on the container itself instead of relying on a CSS class that was
+  // never actually present in the rendered markup.
+  el.dataset.defect=defect;
   const p=new URLSearchParams(currentFilters);p.set('defect',defect); return fetch('/api/root_cause?'+p.toString(),{cache:'no-store'}).then(r=>r.json()).then(d=>{
     if(d.error)throw new Error(d.error); const paths=d.paths||[]; const rec=d.records||[];
     const top=paths[0]; let html=`<div class="qcr-root-title">${defect}</div>`;
     if(top) html+=`<div class="qcr-root-path"><span>Defect<br><b>${defect}</b></span><i>→</i><span>Grade<br><b>${top.grade}</b></span><i>→</i><span>Work Center<br><b>${top.work_center}</b></span><i>→</i><span>Heat / Batch<br><b>${rec[0]?.heat_no||'—'} / ${rec[0]?.batch_no||'—'}</b></span></div>`;
     html+=`<div class="qcr-root-meta">Top contributing combinations — click to investigate records</div><div class="qcr-root-list">${paths.slice(0,6).map((x,i)=>`<button class="qcr-root-link" data-root-grade="${escQcr(x.grade)}" data-root-wc="${escQcr(x.work_center)}"><b>#${i+1} ${escQcr(x.grade)}</b><span>${escQcr(x.work_center)} • ${x.qty.toFixed(2)} MT • ${x.coils.toLocaleString()} coils</span></button>`).join('')}</div>`;
     el.innerHTML=html;
+    // innerHTML replacement above wipes any dataset previously set on `el`
+    // itself? No — dataset lives on the element node, not its innerHTML, so
+    // it survives. Kept here as a defensive re-set in case that ever changes.
+    el.dataset.defect=defect;
   }).catch(e=>{el.innerHTML='<div class="qcr-empty">Root-cause data unavailable.</div>';});
 }
 // NOTE: Grade Concentration and "Why changed?" used to also be computed here
