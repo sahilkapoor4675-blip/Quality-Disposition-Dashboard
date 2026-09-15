@@ -391,6 +391,7 @@ class _PGConn:
     def execute(self, sql, params=None):
         c=self.cursor(); c.execute(sql, params); return c
     def commit(self): self.conn.commit()
+    def rollback(self): self.conn.rollback()
     def close(self):
         if self.pooled and PG_POOL is not None:
             try: PG_POOL.putconn(self.conn)
@@ -2066,7 +2067,12 @@ def _ensure_admin_schema():
             if "updated" not in cols_ih:
                 conn.execute("ALTER TABLE import_history ADD COLUMN updated INTEGER DEFAULT 0")
     except Exception:
-        pass
+        # On Postgres a failed statement poisons the rest of the transaction
+        # (every later command errors with "current transaction is aborted")
+        # until a ROLLBACK is issued — so every caught error in this startup
+        # routine must roll back before continuing, or later, unrelated
+        # CREATE TABLE statements start failing too.
+        conn.rollback()
     if USE_POSTGRES:
         conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
             id BIGSERIAL PRIMARY KEY, label TEXT UNIQUE NOT NULL, target DOUBLE PRECISION, warning DOUBLE PRECISION, critical DOUBLE PRECISION, direction TEXT NOT NULL DEFAULT 'higher', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -2159,19 +2165,20 @@ def _ensure_admin_schema():
             else:
                 conn.execute(f"ALTER TABLE fishbone_import_history ADD COLUMN {coldef}")
         except Exception:
-            pass
+            conn.rollback()
     # Seed fishbone_style with defaults so the API always has a full 6-category
     # style config, even before any admin has imported an Icon Color Coding sheet.
     try:
         existing_style = {r[0] for r in conn.execute("SELECT category FROM fishbone_style").fetchall()}
     except Exception:
+        conn.rollback()
         existing_style = set()
     for cat, cfg in FISHBONE_STYLE_DEFAULTS.items():
         if cat not in existing_style:
             try:
                 conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, cfg["label"], cfg["icon"], cfg["color"]))
             except Exception:
-                pass
+                conn.rollback()
 
     # Remove the legacy KPI target name so the public/admin target APIs are
     # fully consistent with the renamed First Pass Yield % (Prime%) KPI. This is idempotent and
@@ -2179,12 +2186,12 @@ def _ensure_admin_schema():
     try:
         conn.execute("DELETE FROM kpi_targets WHERE label IN (?, ?)", ("First Pass Yield %", "Prime %"))
     except Exception:
-        pass
+        conn.rollback()
     for label,cfg in DEFAULT_KPI_TARGETS.items():
         try:
             conn.execute("INSERT INTO kpi_targets (label,target,warning,critical,direction) VALUES (?,?,?,?,?)",(label,cfg["target"],cfg["warning"],cfg["critical"],cfg["direction"]))
         except Exception:
-            pass
+            conn.rollback()
     # Backward-compatible activity schema migration for existing databases.
     try:
         if USE_POSTGRES:
@@ -2196,7 +2203,7 @@ def _ensure_admin_schema():
                 conn.execute("ALTER TABLE activity_log ADD COLUMN ip_address TEXT DEFAULT ''")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_ip_time ON activity_log (ip_address, created_at)")
     except Exception:
-        pass
+        conn.rollback()
 
     # Migrate rca_master off its old UNIQUE(norm_name, category) constraint.
     # A defect can legitimately have MORE THAN ONE Why-Why/root-cause entry
@@ -2222,7 +2229,7 @@ def _ensure_admin_schema():
                     SELECT id,defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility,updated_at FROM rca_master_old""")
                 conn.execute("DROP TABLE rca_master_old")
     except Exception:
-        pass
+        conn.rollback()
 
     # V27.1: NEVER delete or reset the users table during startup.
     # If deployment credentials are explicitly supplied, provision the named
@@ -2237,7 +2244,7 @@ def _ensure_admin_schema():
                     (ADMIN_USERNAME, "Administrator", _hash_password(ADMIN_PASSWORD), "admin", True)
                 )
         except Exception:
-            pass
+            conn.rollback()
     conn.commit()
     conn.close()
 
