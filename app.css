@@ -908,9 +908,25 @@ html[data-theme="dark"]{
   --bg:#0B1220; --card:#141B2C; --text:#E8EDF6; --muted:#9AABC2; --border:#2A3B54; --heading:#F0F4FA;
   color-scheme: dark;
 }
-html[data-theme="dark"] body{background:#0B1220;color:var(--text);}
+html[data-theme="dark"] body{background:#0B1220 !important;color:var(--text);}
+html[data-theme="dark"]{background:#0B1220;}
 html[data-theme="dark"] body::before{opacity:.05;filter:invert(1) brightness(1.6);}
 html[data-theme="dark"] .container{background:transparent;}
+
+/* Dark-mode text-contrast fixes: these elements only had a dark navy/slate
+   text color tuned for a white card. Now that the page background is
+   correctly dark everywhere (see body fix above), these need their own
+   light-on-dark color or they render as near-invisible text. */
+html[data-theme="dark"] .qcr-zone-heading h3{color:#E8EDF6;}
+html[data-theme="dark"] .qcr-zone-heading p{color:#9AABC2;}
+html[data-theme="dark"] .qcr-ranked-main>b{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-problem-rank{color:#8EC8FF;}
+html[data-theme="dark"] .qcr-story-label{color:#8EC8FF;}
+html[data-theme="dark"] .qcr-story-text{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-improving-line{color:#9AABC2;}
+html[data-theme="dark"] .qcr-improving-line b{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-root-path{background:#1B2740;border-color:#2A3B54;}
+html[data-theme="dark"] .qcr-root-path b{color:#DCE6F5;}
 
 /* Header */
 html[data-theme="dark"] header{background:linear-gradient(135deg,#0B1220 0%,#141F33 100%);border-bottom-color:rgba(255,255,255,.08);box-shadow:0 6px 22px rgba(0,0,0,.4);}
