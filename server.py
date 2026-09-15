@@ -382,6 +382,9 @@ class _PGCursor:
         return self.cur.executemany(sql, seq)
     def fetchone(self): return self.cur.fetchone()
     def fetchall(self): return self.cur.fetchall()
+    def close(self):
+        try: self.cur.close()
+        except Exception: pass
     @property
     def rowcount(self): return self.cur.rowcount
 
