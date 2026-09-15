@@ -2022,8 +2022,21 @@ def _ensure_admin_schema():
         if "ud_date" not in cols:
             conn.execute("ALTER TABLE disposition ADD COLUMN ud_date TEXT DEFAULT ''")
     if USE_POSTGRES:
-        conn.execute("ALTER TABLE disposition ADD COLUMN IF NOT EXISTS batch_no TEXT DEFAULT ''")
-        conn.execute("ALTER TABLE disposition ADD COLUMN IF NOT EXISTS ud_date TEXT DEFAULT ''")
+        # Guarded: these two ADD COLUMN IF NOT EXISTS calls are idempotent
+        # and (going by earlier successful deploys) have very likely already
+        # run before. If a stray locked/orphaned session on Supabase is
+        # still holding a lock on `disposition` (leftover from an earlier
+        # crashed deploy attempt), this statement can hang until Postgres's
+        # own statement_timeout cancels it — which used to crash the whole
+        # app before it ever got to start. Skipping past a timeout here
+        # (columns almost certainly already exist) lets startup continue
+        # instead of dying on what is, at worst, a no-op.
+        try:
+            conn.execute("ALTER TABLE disposition ADD COLUMN IF NOT EXISTS batch_no TEXT DEFAULT ''")
+            conn.execute("ALTER TABLE disposition ADD COLUMN IF NOT EXISTS ud_date TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            conn.rollback()
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL,
             password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'viewer', active BOOLEAN NOT NULL DEFAULT TRUE,
