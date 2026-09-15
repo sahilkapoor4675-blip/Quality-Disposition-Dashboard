@@ -3900,7 +3900,7 @@ class Handler(BaseHTTPRequestHandler):
             _activity_event(self,"activity_view")
             try:
                 conn=get_conn()
-                total_users=conn.execute("SELECT COUNT(*) FROM users WHERE active=1").fetchone()[0]
+                total_users=conn.execute("SELECT COUNT(*) FROM users WHERE active=TRUE").fetchone()[0]
                 if USE_POSTGRES:
                     active_today=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> '' AND created_at >= CURRENT_DATE").fetchone()[0]
                     opens_today=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open' AND created_at >= CURRENT_DATE").fetchone()[0]
@@ -3945,7 +3945,7 @@ class Handler(BaseHTTPRequestHandler):
                     conn=get_conn()
                     total=conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
                     last=conn.execute("SELECT MAX(created_at) FROM import_history").fetchone()[0] or conn.execute("SELECT MAX(insp_lot_date) FROM disposition WHERE insp_lot_date <> ''").fetchone()[0]
-                    admins=conn.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='admin'").fetchone()[0]
+                    admins=conn.execute("SELECT COUNT(*) FROM users WHERE active=TRUE AND role='admin'").fetchone()[0]
                     last_login=conn.execute("SELECT MAX(created_at) FROM activity_log WHERE event_type='admin_login'").fetchone()[0]
                     failed=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='admin_login_failed'").fetchone()[0]
                     views=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open'").fetchone()[0]
@@ -4220,7 +4220,7 @@ class Handler(BaseHTTPRequestHandler):
                 row=conn.execute("SELECT id,username,role,active FROM users WHERE id=?",(uid,)).fetchone()
                 if not row: conn.close(); self._send_json({"error":"User not found"},status=404); return
                 if not active and row[2] == "admin":
-                    admins=conn.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1").fetchone()[0]
+                    admins=conn.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=TRUE").fetchone()[0]
                     if admins <= 1: conn.close(); self._send_json({"error":"At least one active administrator must remain."},status=400); return
                 current_token=_cookie_value(self.headers.get("Cookie",""),"qdash_admin"); current_meta=SESSIONS.get(current_token,{})
                 if not active and row[1] == current_meta.get("username"):
