@@ -2053,12 +2053,20 @@ def _ensure_admin_schema():
         cols_al={r[1] for r in conn.execute("PRAGMA table_info(activity_log)").fetchall()}
         if "visitor_id" not in cols_al:
             conn.execute("ALTER TABLE activity_log ADD COLUMN visitor_id TEXT DEFAULT ''")
-    if USE_POSTGRES:
-        conn.execute("ALTER TABLE import_history ADD COLUMN IF NOT EXISTS updated INTEGER DEFAULT 0")
-    else:
-        cols_ih={r[1] for r in conn.execute("PRAGMA table_info(import_history)").fetchall()}
-        if "updated" not in cols_ih:
-            conn.execute("ALTER TABLE import_history ADD COLUMN updated INTEGER DEFAULT 0")
+    # Guarded with try/except: on a brand-new database (first-ever connection
+    # to a fresh Postgres instance, e.g. a just-created Supabase project) the
+    # import_history table doesn't exist yet at this point in startup — it
+    # only gets created a few lines below. Without the guard this ALTER
+    # crashes the whole app before it ever reaches that CREATE TABLE.
+    try:
+        if USE_POSTGRES:
+            conn.execute("ALTER TABLE import_history ADD COLUMN IF NOT EXISTS updated INTEGER DEFAULT 0")
+        else:
+            cols_ih={r[1] for r in conn.execute("PRAGMA table_info(import_history)").fetchall()}
+            if "updated" not in cols_ih:
+                conn.execute("ALTER TABLE import_history ADD COLUMN updated INTEGER DEFAULT 0")
+    except Exception:
+        pass
     if USE_POSTGRES:
         conn.execute("""CREATE TABLE IF NOT EXISTS kpi_targets (
             id BIGSERIAL PRIMARY KEY, label TEXT UNIQUE NOT NULL, target DOUBLE PRECISION, warning DOUBLE PRECISION, critical DOUBLE PRECISION, direction TEXT NOT NULL DEFAULT 'higher', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
