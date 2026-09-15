@@ -2176,6 +2176,7 @@ def _ensure_admin_schema():
                 conn.execute(f"ALTER TABLE fishbone_import_history ADD COLUMN IF NOT EXISTS {coldef}")
             else:
                 conn.execute(f"ALTER TABLE fishbone_import_history ADD COLUMN {coldef}")
+            conn.commit()
         except Exception:
             conn.rollback()
     # Seed fishbone_style with defaults so the API always has a full 6-category
@@ -2189,6 +2190,7 @@ def _ensure_admin_schema():
         if cat not in existing_style:
             try:
                 conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, cfg["label"], cfg["icon"], cfg["color"]))
+                conn.commit()
             except Exception:
                 conn.rollback()
 
@@ -2202,7 +2204,20 @@ def _ensure_admin_schema():
         conn.rollback()
     for label,cfg in DEFAULT_KPI_TARGETS.items():
         try:
-            conn.execute("INSERT INTO kpi_targets (label,target,warning,critical,direction) VALUES (?,?,?,?,?)",(label,cfg["target"],cfg["warning"],cfg["critical"],cfg["direction"]))
+            # ON CONFLICT DO NOTHING / OR IGNORE instead of a bare INSERT:
+            # this loop reruns on every app restart, and once a label already
+            # exists a plain INSERT raises a duplicate-key error — which,
+            # combined with the transaction-wide rollback() below, was
+            # wiping out OTHER labels inserted earlier in this same loop on
+            # that run (Postgres rolls back everything since the last
+            # commit, not just the failing statement). Committing after each
+            # row, plus skipping duplicates instead of erroring on them,
+            # makes every target independent of the others.
+            if USE_POSTGRES:
+                conn.execute("INSERT INTO kpi_targets (label,target,warning,critical,direction) VALUES (?,?,?,?,?) ON CONFLICT (label) DO NOTHING",(label,cfg["target"],cfg["warning"],cfg["critical"],cfg["direction"]))
+            else:
+                conn.execute("INSERT OR IGNORE INTO kpi_targets (label,target,warning,critical,direction) VALUES (?,?,?,?,?)",(label,cfg["target"],cfg["warning"],cfg["critical"],cfg["direction"]))
+            conn.commit()
         except Exception:
             conn.rollback()
     # Backward-compatible activity schema migration for existing databases.
