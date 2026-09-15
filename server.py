@@ -408,7 +408,12 @@ def get_conn():
         if PG_POOL is None:
             minconn = max(1, int(os.environ.get("PG_POOL_MIN", "1")))
             maxconn = max(minconn, int(os.environ.get("PG_POOL_MAX", "8")))
-            PG_POOL = SimpleConnectionPool(minconn, maxconn, DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require"), application_name="quality-disposition-dashboard")
+            # lock_timeout: if some other (e.g. leftover/orphaned) session is
+            # still holding a lock on a table, fail fast with a clear error
+            # instead of hanging until Supabase's own, much longer, statement
+            # timeout kicks in — that's what made a stuck lock look like a
+            # multi-minute hang instead of an immediate, diagnosable error.
+            PG_POOL = SimpleConnectionPool(minconn, maxconn, DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require"), application_name="quality-disposition-dashboard", options="-c lock_timeout=8000")
         return _PGConn(PG_POOL.getconn(), pooled=True)
     conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
     conn.row_factory = sqlite3.Row
