@@ -390,6 +390,8 @@ class _PGConn:
     def cursor(self): return _PGCursor(self.conn.cursor(cursor_factory=DictCursor))
     def execute(self, sql, params=None):
         c=self.cursor(); c.execute(sql, params); return c
+    def executemany(self, sql, seq):
+        c=self.cursor(); c.executemany(sql, seq); return c
     def commit(self): self.conn.commit()
     def rollback(self): self.conn.rollback()
     def close(self):
