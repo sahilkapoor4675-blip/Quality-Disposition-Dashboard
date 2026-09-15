@@ -2054,6 +2054,12 @@ def _ensure_admin_schema():
         cols_al={r[1] for r in conn.execute("PRAGMA table_info(activity_log)").fetchall()}
         if "visitor_id" not in cols_al:
             conn.execute("ALTER TABLE activity_log ADD COLUMN visitor_id TEXT DEFAULT ''")
+    # Commit here: disposition/users/activity_log/audit_trail are now safely
+    # created. Everything below this point runs its own try/except with a
+    # conn.rollback() on failure — without committing first, that rollback
+    # would silently undo these CREATE TABLEs too (Postgres rolls back
+    # everything since the last commit, not just the failing statement).
+    conn.commit()
     # Guarded with try/except: on a brand-new database (first-ever connection
     # to a fresh Postgres instance, e.g. a just-created Supabase project) the
     # import_history table doesn't exist yet at this point in startup — it
@@ -2156,6 +2162,10 @@ def _ensure_admin_schema():
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
 
+    # Commit the kpi_targets/import_history/fishbone_*/rca_master CREATE
+    # TABLEs before the guarded migration blocks below (same reasoning as
+    # above — a later rollback must never be able to undo a CREATE TABLE).
+    conn.commit()
     # Older databases created before RCA/style support was added won't have
     # these columns on fishbone_import_history yet — add them if missing.
     for coldef in ("rca_detected INTEGER DEFAULT 0", "rca_imported INTEGER DEFAULT 0", "style_imported INTEGER DEFAULT 0"):
@@ -2183,6 +2193,7 @@ def _ensure_admin_schema():
     # Remove the legacy KPI target name so the public/admin target APIs are
     # fully consistent with the renamed First Pass Yield % (Prime%) KPI. This is idempotent and
     # also cleans existing deployed databases during startup.
+    conn.commit()
     try:
         conn.execute("DELETE FROM kpi_targets WHERE label IN (?, ?)", ("First Pass Yield %", "Prime %"))
     except Exception:
@@ -2193,6 +2204,7 @@ def _ensure_admin_schema():
         except Exception:
             conn.rollback()
     # Backward-compatible activity schema migration for existing databases.
+    conn.commit()
     try:
         if USE_POSTGRES:
             conn.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS ip_address TEXT DEFAULT ''")
@@ -2211,6 +2223,7 @@ def _ensure_admin_schema():
     # defect) — the old constraint silently dropped every row after the
     # first one imported for a given (defect, category) pair. This runs on
     # every startup but is a no-op once a database has already been migrated.
+    conn.commit()
     try:
         if USE_POSTGRES:
             conn.execute("ALTER TABLE rca_master DROP CONSTRAINT IF EXISTS rca_master_norm_name_category_key")
@@ -2236,6 +2249,7 @@ def _ensure_admin_schema():
     # administrator only when that username does not already exist. Existing
     # users, passwords, roles and viewer accounts remain untouched.
     if ADMIN_USERNAME and ADMIN_PASSWORD:
+        conn.commit()
         try:
             existing = conn.execute("SELECT id FROM users WHERE username=?", (ADMIN_USERNAME,)).fetchone()
             if not existing:
