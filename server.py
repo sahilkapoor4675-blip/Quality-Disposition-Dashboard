@@ -1611,16 +1611,15 @@ def _replace_fishbone_master(bundle, filename, imported_by):
     )
 
     rca_rows = []
-    rseen = set()
     for r in rca_records:
         norm = _norm_defect_key(r["defect_name"])
         cat = r.get("category")
         if not norm or not cat:
             continue
-        rkey = (norm, cat)
-        if rkey in rseen:
-            continue
-        rseen.add(rkey)
+        # A defect can have MULTIPLE Why-Why/root-cause rows under the same
+        # 6M category (e.g. two separate "Man" causes) — every one of them
+        # must survive the import, so no de-duplication by (norm, category)
+        # here anymore (that used to silently keep only the first).
         rca_rows.append((r["defect_name"], norm, cat) + tuple(r.get(f, "") for f in RCA_WHY_FIELDS + ["action", "preventive_action", "role", "responsibility"]))
     if rca_records:
         conn.execute("DELETE FROM rca_master")
@@ -1914,16 +1913,20 @@ def _fishbone_style(force=False):
 
 
 def _rca_for_norm(norm_name):
-    """RCA rows (one per 6M category) for a matched master defect, keyed by
-    category, each with a 'chain' (only the filled Why steps, in order) and
-    the CAPA fields. Categories with nothing filled in the workbook are omitted."""
+    """RCA rows for a matched master defect, keyed by 6M category. Each
+    category maps to a LIST of entries (not a single one) because a defect
+    can legitimately have more than one Why-Why/root-cause/action recorded
+    under the same category (e.g. two different "Man" causes) — every entry
+    imported for that category must show up, not just the last one read.
+    Each entry has a 'chain' (only the filled Why steps, in order) and the
+    CAPA fields. Categories with nothing filled in the workbook are omitted."""
     rows = [r for r in _rca_master_rows() if r["norm_name"] == norm_name]
     out = {}
     for r in rows:
         chain = [r.get(f, "") for f in RCA_WHY_FIELDS if (r.get(f, "") or "").strip()]
         if not chain and not (r.get("action") or r.get("preventive_action")):
             continue
-        out[r["category"]] = {
+        entry = {
             "why_chain": chain,
             "root_cause": chain[-1] if chain else "",
             "action": r.get("action", ""),
@@ -1931,6 +1934,7 @@ def _rca_for_norm(norm_name):
             "role": r.get("role", ""),
             "responsibility": r.get("responsibility", ""),
         }
+        out.setdefault(r["category"], []).append(entry)
     return out
 
 
@@ -2105,8 +2109,7 @@ def _ensure_admin_schema():
             id BIGSERIAL PRIMARY KEY, defect_name TEXT NOT NULL, norm_name TEXT NOT NULL, category TEXT NOT NULL,
             why1 TEXT DEFAULT '', why2 TEXT DEFAULT '', why3 TEXT DEFAULT '', why4 TEXT DEFAULT '', why5 TEXT DEFAULT '',
             action TEXT DEFAULT '', preventive_action TEXT DEFAULT '', role TEXT DEFAULT '', responsibility TEXT DEFAULT '',
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(norm_name, category)
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_style (
             category TEXT PRIMARY KEY, label TEXT DEFAULT '', icon TEXT DEFAULT '', color TEXT DEFAULT '',
@@ -2132,8 +2135,7 @@ def _ensure_admin_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT, defect_name TEXT NOT NULL, norm_name TEXT NOT NULL, category TEXT NOT NULL,
             why1 TEXT DEFAULT '', why2 TEXT DEFAULT '', why3 TEXT DEFAULT '', why4 TEXT DEFAULT '', why5 TEXT DEFAULT '',
             action TEXT DEFAULT '', preventive_action TEXT DEFAULT '', role TEXT DEFAULT '', responsibility TEXT DEFAULT '',
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(norm_name, category)
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS fishbone_style (
             category TEXT PRIMARY KEY, label TEXT DEFAULT '', icon TEXT DEFAULT '', color TEXT DEFAULT '',
@@ -2185,6 +2187,32 @@ def _ensure_admin_schema():
             if "ip_address" not in cols:
                 conn.execute("ALTER TABLE activity_log ADD COLUMN ip_address TEXT DEFAULT ''")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_ip_time ON activity_log (ip_address, created_at)")
+    except Exception:
+        pass
+
+    # Migrate rca_master off its old UNIQUE(norm_name, category) constraint.
+    # A defect can legitimately have MORE THAN ONE Why-Why/root-cause entry
+    # under the same 6M category (e.g. two different "Man" causes for one
+    # defect) — the old constraint silently dropped every row after the
+    # first one imported for a given (defect, category) pair. This runs on
+    # every startup but is a no-op once a database has already been migrated.
+    try:
+        if USE_POSTGRES:
+            conn.execute("ALTER TABLE rca_master DROP CONSTRAINT IF EXISTS rca_master_norm_name_category_key")
+        else:
+            ddl_row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='rca_master'").fetchone()
+            ddl = ddl_row[0] if ddl_row else ""
+            if ddl and "UNIQUE(norm_name, category)" in ddl:
+                conn.execute("ALTER TABLE rca_master RENAME TO rca_master_old")
+                conn.execute("""CREATE TABLE rca_master (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, defect_name TEXT NOT NULL, norm_name TEXT NOT NULL, category TEXT NOT NULL,
+                    why1 TEXT DEFAULT '', why2 TEXT DEFAULT '', why3 TEXT DEFAULT '', why4 TEXT DEFAULT '', why5 TEXT DEFAULT '',
+                    action TEXT DEFAULT '', preventive_action TEXT DEFAULT '', role TEXT DEFAULT '', responsibility TEXT DEFAULT '',
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )""")
+                conn.execute("""INSERT INTO rca_master (id,defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility,updated_at)
+                    SELECT id,defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility,updated_at FROM rca_master_old""")
+                conn.execute("DROP TABLE rca_master_old")
     except Exception:
         pass
 
@@ -2424,7 +2452,8 @@ def _fishbone_png(item):
             perp=0.16*sign
             txt_short="\n".join(textwrap.wrap(txt,20)[:2])
             ax.text(bx+0.08,byp+perp,txt_short,fontsize=6.6,color=("#9aa7b4" if items[0]=="No cause on file" else "#243B53"),ha="left",va="center",style=("italic" if items[0]=="No cause on file" else "normal"))
-        rc = (rca.get(key) or {}).get("root_cause") if isinstance(rca, dict) else None
+        rca_list = rca.get(key) if isinstance(rca, dict) else None
+        rc = (rca_list[0].get("root_cause") if rca_list else None)
         if rc:
             rc_short="\n".join(textwrap.wrap(f"RCA: {rc}",22)[:2])
             rc_y = by-0.30 if side=="top" else by+box_h+0.30
@@ -2587,11 +2616,10 @@ def _excel_report(payload):
             fw.cell(row,1,"Root Cause Analysis (RCA)").font=Font(bold=True,color=navy); row+=1
             header(fw,row,["6M Category","5-Why Chain","Root Cause","Action","Preventive Action","Role","Responsibility"]); row+=1
             for key,label,_c,_s in FISHBONE_BRANCHES:
-                r=rca.get(key)
-                if not r: continue
-                fw.cell(row,1,label); fw.cell(row,2," → ".join(r.get("why_chain") or [])); fw.cell(row,3,r.get("root_cause",""))
-                fw.cell(row,4,r.get("action","")); fw.cell(row,5,r.get("preventive_action","")); fw.cell(row,6,r.get("role","")); fw.cell(row,7,r.get("responsibility",""))
-                row+=1
+                for r in (rca.get(key) or []):
+                    fw.cell(row,1,label); fw.cell(row,2," → ".join(r.get("why_chain") or [])); fw.cell(row,3,r.get("root_cause",""))
+                    fw.cell(row,4,r.get("action","")); fw.cell(row,5,r.get("preventive_action","")); fw.cell(row,6,r.get("role","")); fw.cell(row,7,r.get("responsibility",""))
+                    row+=1
             autofit(fw)
     else:
         fw["A2"]="No 6M Fishbone mapping found for the current #1 defect yet. Import/update the 6M Fishbone Master in Admin, or map this defect to a master cause set."
@@ -2731,9 +2759,8 @@ def _pdf_report(payload):
         if rca:
             rca_rows=[["6M Category","Root Cause (5-Why)","Action","Preventive Action","Responsibility"]]
             for key,label,_c,_s in FISHBONE_BRANCHES:
-                r=rca.get(key)
-                if not r: continue
-                rca_rows.append([label,r.get("root_cause",""),r.get("action",""),r.get("preventive_action",""),r.get("responsibility","") or r.get("role","")])
+                for r in (rca.get(key) or []):
+                    rca_rows.append([label,r.get("root_cause",""),r.get("action",""),r.get("preventive_action",""),r.get("responsibility","") or r.get("role","")])
             if len(rca_rows)>1:
                 _pdf_section(story,styles,f"Root Cause Analysis (RCA) — {fb.get('defect','')}",[],rca_rows,[90,180,180,180,110])
     else:

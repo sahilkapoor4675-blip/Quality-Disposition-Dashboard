@@ -673,6 +673,7 @@ body.drill-modal-open .filters{z-index:1;}
 .qcr-rca-head-row .qcr-fb-title{margin-bottom:0;}
 .qcr-rca-filter-label{font:700 12.5px Manrope,sans-serif;color:var(--muted);display:flex;align-items:center;gap:6px;}
 .qcr-rca-cause-filter{font:700 12.5px Manrope,sans-serif;color:var(--heading);border:1px solid #E2E8F0;border-radius:8px;padding:5px 9px;background:#fff;cursor:pointer;}
+.qcr-rca-count{font:700 10.5px Manrope,sans-serif;color:var(--muted);margin-top:4px;text-align:center;}
 html[data-theme="dark"] .qcr-rca-cause-filter{background:#141B2C;border-color:#2A3B54;color:var(--text);}
 .qcr-rca-table-wrap{overflow-x:auto;border:1px solid #E2E8F0;border-radius:12px;}
 .qcr-rca-table{width:100%;border-collapse:collapse;font:600 12.5px Manrope,sans-serif;min-width:760px;}

@@ -1074,26 +1074,31 @@ function qcrFishboneCard(field,items){
 function renderRcaPanel(item){
   const rca = item && item.rca; if(!rca || !Object.keys(rca).length) return '';
   const order=['man','machine','material','method','measurement','environment'];
-  const available = order.filter(k=>rca[k]);
+  const available = order.filter(k=>Array.isArray(rca[k]) && rca[k].length);
   if(!available.length) return '';
+  // Each 6M category (Man/Machine/Material/...) can carry MORE THAN ONE
+  // Why-Why/root-cause entry (e.g. two separate "Man" causes for the same
+  // defect) — every entry imported for that category is rendered as its
+  // own row, with the category chip row-spanned across them so it's clear
+  // they all belong to the same 6M bucket.
   const rows = available.map(k=>{
-    const st=fbStyle(k), r=rca[k];
-    const chain=(r.why_chain||[]).map(escQcr).join(' <span class="qcr-rca-arrow">→</span> ');
-    return `<tr data-cause="${k}">
-      <td><span class="qcr-rca-chip" style="background:${st.color}">${st.icon} ${escQcr(st.label)}</span></td>
-      <td class="qcr-rca-chain">${chain||'—'}</td>
-      <td><b>${escQcr(r.root_cause)}</b></td>
-      <td>${escQcr(r.action)}</td>
-      <td>${escQcr(r.preventive_action)}</td>
-      <td>${[r.role,r.responsibility].filter(Boolean).map(escQcr).join(' / ')||'—'}</td>
-    </tr>`;
+    const st=fbStyle(k), entries=rca[k];
+    return entries.map((r,i)=>{
+      const chain=(r.why_chain||[]).map(escQcr).join(' <span class="qcr-rca-arrow">→</span> ');
+      const catCell = i===0 ? `<td rowspan="${entries.length}"><span class="qcr-rca-chip" style="background:${st.color}">${st.icon} ${escQcr(st.label)}</span>${entries.length>1?`<div class="qcr-rca-count">${entries.length} causes</div>`:''}</td>` : '';
+      return `<tr data-cause="${k}">
+        ${catCell}
+        <td class="qcr-rca-chain">${chain||'—'}</td>
+        <td><b>${escQcr(r.root_cause)}</b></td>
+        <td>${escQcr(r.action)}</td>
+        <td>${escQcr(r.preventive_action)}</td>
+        <td>${[r.role,r.responsibility].filter(Boolean).map(escQcr).join(' / ')||'—'}</td>
+      </tr>`;
+    }).join('');
   }).join('');
   if(!rows) return '';
-  // Each 6M category (Man/Machine/Material/...) can carry its own distinct
-  // root cause + action + preventive action, so a Cause filter lets the user
-  // isolate just one category's RCA row instead of scanning the full table.
   const causeOptions = ['<option value="all">All Causes</option>'].concat(
-    available.map(k=>{const st=fbStyle(k); return `<option value="${k}">${st.icon} ${escQcr(st.label)}</option>`;})
+    available.map(k=>{const st=fbStyle(k); return `<option value="${k}">${st.icon} ${escQcr(st.label)} (${rca[k].length})</option>`;})
   ).join('');
   return `<div class="qcr-rca-panel">
     <div class="qcr-rca-head-row">
