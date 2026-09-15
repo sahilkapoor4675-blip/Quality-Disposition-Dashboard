@@ -3066,6 +3066,28 @@ def _pptx_report(payload):
 
 
 def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
+    """Owns a single DB connection for the whole intelligence computation.
+
+    The function below (_compute_qcr_intelligence) used to open and close a
+    fresh connection ~8 separate times per call (once per internal query
+    block). On a hosted Postgres connection pool this made QCR intelligence
+    by far the most connection-hungry code path in the app: under any real
+    concurrent load it was the first thing to hit "connection pool
+    exhausted" — an error the caller catches and silently replaces with a
+    fake 0/100 health score + empty problem list, which is why the Quality
+    Health / Biggest Problem cards would intermittently show a contradictory
+    "no issue" result while Target Breaches (computed elsewhere, on its own
+    connection) kept showing real data. One shared connection, opened once
+    and reused for every query in this function, removes that failure mode.
+    """
+    conn = get_conn()
+    try:
+        return _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis)
+    finally:
+        conn.close()
+
+
+def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
     """QCR intelligence engine.
 
     Deterministic, auditable quality problem detection.  It combines target
@@ -3140,7 +3162,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     # Dimension helpers.  Each dimension is evaluated against the same filtered
     # population while excluding its own filter, so risk is not circular.
     def dimension_rows(dim,key):
-        conn=get_conn();c=conn.cursor()
+        c=conn.cursor()
         try:
             wh,pp=build_where(filters,exclude={dim})
             c.execute(f"SELECT {key}, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}{key}<>'' GROUP BY {key} ORDER BY reject_qty DESC, qty DESC LIMIT 30",pp)
@@ -3163,11 +3185,11 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
                 risk="High" if score>=65 else ("Medium" if score>=35 else "Low")
                 out.append({"name":name,"coils":coils,"qty":qty,"reject_qty":rej,"reject_pct":rp,"trend":trend,"recurrence":recurrence,"score":score,"risk":risk,"confidence":conf(coils)})
             out.sort(key=lambda x:x["score"],reverse=True);return out
-        finally:c.close();conn.close()
+        finally:c.close()
     risk={"work_centers":dimension_rows("work_center","work_center"),"grades":dimension_rows("grade","grade")}
 
     # Defect history used for top contributors, recurrence, first appearance and improvements.
-    conn=get_conn();c=conn.cursor()
+    c=conn.cursor()
     defect_hist={}; wc_hist={}; grade_hist={}
     try:
         wh,pp=build_where(filters,exclude={"month"})
@@ -3177,20 +3199,20 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
         for r in c.fetchall():wc_hist.setdefault(r[1],[]).append({"month":r[0],"coils":int(r[2] or 0),"qty":num(r[3]),"reject":num(r[4])})
         c.execute(f"SELECT month, grade, COUNT(DISTINCT {BATCH_KEY_SQL}) coils, COALESCE(SUM(output_weight),0) qty, COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) reject_qty FROM disposition {wh}{' AND ' if wh else 'WHERE '}month<>'' AND grade<>'' GROUP BY month,grade ORDER BY month",pp)
         for r in c.fetchall():grade_hist.setdefault(r[1],[]).append({"month":r[0],"coils":int(r[2] or 0),"qty":num(r[3]),"reject":num(r[4])})
-    finally:c.close();conn.close()
+    finally:c.close()
 
     # Current vs previous defect contribution.  The decomposition uses share of
     # total output for the defect and reject quantity for work-centre contribution.
     cur_def=[];prev_def=[]
     if cur:
-        conn=get_conn();c=conn.cursor()
+        c=conn.cursor()
         try:
             for period,out in [(cur,"cur"),(prev,"prev")]:
                 if not period: continue
                 pf=dict(filters);pf["month"]=period.get("name");whx,px=build_where(pf)
                 c.execute(f"SELECT main_defect,COALESCE(SUM(output_weight),0) qty FROM disposition {whx}{' AND ' if whx else 'WHERE '}main_defect<>'' AND main_defect<>'NO DEFECT' GROUP BY main_defect ORDER BY qty DESC",px)
                 (cur_def if out=="cur" else prev_def).extend([{"name":r[0],"qty":num(r[1])} for r in c.fetchall()])
-        finally:c.close();conn.close()
+        finally:c.close()
     def top_delta(now,old):
         oldmap={x["name"]:x["qty"] for x in old};totn=sum(x["qty"] for x in now);toto=sum(x["qty"] for x in old)
         arr=[]
@@ -3237,7 +3259,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     # so "Investigate" combined a mismatched Work Center+Grade+Month+Defect
     # and returned zero records.
     if recurring:
-        conn=get_conn();c=conn.cursor()
+        c=conn.cursor()
         try:
             for rr in recurring:
                 period_month=rr["months"][-1]["month"]
@@ -3248,7 +3270,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
                 r=c.fetchone();rr["work_center"]=r[0] if r else "—"
                 c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
                 r=c.fetchone();rr["grade"]=r[0] if r else "—"
-        finally:c.close();conn.close()
+        finally:c.close()
     new_issues.sort(key=lambda x:x["qty"],reverse=True);new_issues=new_issues[:8]
     # Attach the dominant Work Center / Grade for each new-issue defect too,
     # scoped to the month it actually first appeared in (same approach as the
@@ -3257,7 +3279,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     # the whole dataset, which usually has nothing to do with this defect and
     # produced zero matching records.
     if new_issues:
-        conn=get_conn();c=conn.cursor()
+        c=conn.cursor()
         try:
             for nn in new_issues:
                 pf=dict(filters);pf["month"]=nn.get("month");whx,px=build_where(pf)
@@ -3267,7 +3289,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
                 r=c.fetchone();nn["work_center"]=r[0] if r else "—"
                 c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
                 r=c.fetchone();nn["grade"]=r[0] if r else "—"
-        finally:c.close();conn.close()
+        finally:c.close()
 
     # Generic problem-finder.  Scores are intentionally transparent: severity,
     # deviation, quantity impact, recurrence and confidence all influence rank.
@@ -3313,11 +3335,11 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     # intentionally a QCR finding because missing classification weakens defect
     # intelligence even when the production KPIs themselves look healthy.
     try:
-        conn=get_conn();c=conn.cursor(); whq,pq=build_where(filters)
+        c=conn.cursor(); whq,pq=build_where(filters)
         c.execute(f"SELECT COUNT(*), SUM(CASE WHEN TRIM(COALESCE(defect_intensity,''))='' THEN 1 ELSE 0 END) FROM disposition {whq}",pq)
         dq_total,dq_missing=c.fetchone(); dq_total=int(dq_total or 0);dq_missing=int(dq_missing or 0)
     finally:
-        try:c.close();conn.close()
+        try:c.close()
         except Exception:pass
     dq_pct=(dq_missing/dq_total) if dq_total else 0
     if dq_total and dq_pct>=0.10:
@@ -3351,7 +3373,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
     # existed together, and "Investigate" would come back with zero
     # records. Drop only the auto-filled (non-locked) dimensions, one at a
     # time, until the combination resolves to real records.
-    conn=get_conn();c=conn.cursor()
+    c=conn.cursor()
     try:
         def _combo_has_records(pf_month,where_v,grade_v,defect_v):
             pf=dict(filters);pf["month"]=pf_month
@@ -3381,7 +3403,7 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
                 pr["where"]="—";pr["grade"]="—";pr["defect"]="—"
             pr["driver_path"]=f"{pr['defect']} at {pr['where']}" if pr["defect"]!="—" and pr["where"]!="—" else pr["driver"]
     finally:
-        c.close();conn.close()
+        c.close()
     for pr in problems:
         pr.pop("_where_locked",None);pr.pop("_grade_locked",None);pr.pop("_defect_locked",None)
 
@@ -3400,13 +3422,13 @@ def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
         rejd=(num(cur.get("reject_pct_qty"))-num(prev.get("reject_pct_qty")))*100
         # Work center change by reject contribution.
         def wc_contributors():
-            conn=get_conn();c=conn.cursor();arr=[]
+            c=conn.cursor();arr=[]
             try:
                 for period in (cur,prev):
                     pf=dict(filters);pf["month"]=period.get("name");whx,px=build_where(pf)
                     c.execute(f"SELECT work_center,COALESCE(SUM(output_weight),0) qty,COALESCE(SUM(CASE WHEN quality_decision='REJECT' THEN output_weight ELSE 0 END),0) rej FROM disposition {whx}{' AND ' if whx else 'WHERE '}work_center<>'' GROUP BY work_center",px)
                     arr.append({r[0]:num(r[2]) for r in c.fetchall()})
-            finally:c.close();conn.close()
+            finally:c.close()
             a,b=arr[0],arr[1];ta=sum(a.values());tb=sum(b.values());out=[]
             for n,v in a.items():out.append({"name":n,"share":v/ta if ta else 0,"change_pp":((v/ta if ta else 0)-(b.get(n,0)/tb if tb else 0))*100,"qty_change":v-b.get(n,0)})
             inc=sum(max(0,x["qty_change"]) for x in out)

@@ -1442,8 +1442,18 @@ function loadRootCause(defect){
 // concentration block in loadControlRoom) already provides a richer version
 // of the same insight, so the duplicate implementation was removed.
 function escQcr(v){return String(v??'—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function qcrRenderProblemFinder(intel){
+function qcrRenderProblemFinder(intel, intelError){
   const el=document.getElementById('qcrProblemFinder'), count=document.getElementById('qcrProblemCount'); if(!el)return;
+  // An intel_error means the engine that finds problems never actually ran
+  // for this request — so there is no confirmed "no issues" result to
+  // report. Saying "0 issues / ✓ No material quality problem detected" here
+  // reads as a completed, reassuring analysis and directly contradicts the
+  // Biggest Problem card showing "Analysis unavailable" right above it.
+  if(intelError){
+    if(count){count.textContent='Unavailable';}
+    el.innerHTML='<div class="qcr-empty">⚠ Quality analysis could not run for this request (temporary error) — this is not a confirmed zero-issue result. Refresh to retry.</div>';
+    return;
+  }
   const all=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
   const rows=all.slice(0,5);
   const critCount=all.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
@@ -1457,11 +1467,19 @@ function qcrRenderProblemFinder(intel){
   }).join('');
 }
 
-function qcrRenderQualityStory(intel){
+function qcrRenderQualityStory(intel, intelError){
   // Where/Grade/Defect/Confidence used to repeat here as pill tags, but that's
   // the exact same info already shown in the "What Needs Attention" row right
   // above this card — dropped to avoid saying the same thing twice.
-  const el=document.getElementById('qcrQualityStory');if(!el)return; const story=String(intel?.quality_story||'No quality story available.');
+  const el=document.getElementById('qcrQualityStory');if(!el)return;
+  if(intelError){
+    // Surface the actual server-side error (truncated server-side to 240
+    // chars already) instead of a generic message, so a recurring failure
+    // is diagnosable from the page itself rather than requiring server logs.
+    el.innerHTML=`<div class="qcr-story-label">📋 Quality Story</div><div class="qcr-story-text">Unavailable — the analysis engine hit a temporary error and will retry automatically on next refresh.</div><div class="qcr-story-text" style="margin-top:6px;font-family:monospace;font-size:11px;opacity:.65;">${escQcr(intelError)}</div>`;
+    return;
+  }
+  const story=String(intel?.quality_story||'No quality story available.');
   el.innerHTML=`<div class="qcr-story-label">📋 Quality Story</div><div class="qcr-story-text">${escQcr(story)}</div>`;
 }
 function qcrRenderQualityImprovements(intel){
@@ -1558,7 +1576,7 @@ function qcrRenderExecutive(intel, critical, comparisonRows, intelError){
   if(intelError){
     set('qcrExecHealth','—/100');set('qcrExecHealthState','Unavailable');
     set('qcrExecCritical','—');set('qcrExecBreaches',breaches);
-    set('qcrExecProblem','Analysis unavailable');set('qcrExecDriver','Temporary error — refresh to retry');
+    set('qcrExecProblem','Analysis unavailable');set('qcrExecDriver',(String(intelError).slice(0,90))||'Temporary error — refresh to retry');
     set('qcrExecTrend','●');set('qcrExecTrendText','Unavailable');
     const trendEl=document.getElementById('qcrExecTrend'); if(trendEl)trendEl.className='qcr-trend-symbol neutral';
     return;
@@ -1615,9 +1633,9 @@ async function loadControlRoom(signal){
     qcrRenderExecutive(data?.intel||{},critical,(m&&m.rows)||[],data?.intel_error||'');
     qcrRenderTrendPrediction((m&&m.rows)||[],d,w);
     fetch('/api/qcr_target_history?'+params,{signal}).then(r=>r.json()).then(th=>{if(!th.error){qcrRenderTargetHistory(th.rows||[],th.target); scheduleQcrLayout();}}).catch(()=>{});
-    const intel=data?.intel||{};
-    qcrRenderProblemFinder(intel);
-    qcrRenderQualityStory(intel);
+    const intel=data?.intel||{}; const intelErr=data?.intel_error||'';
+    qcrRenderProblemFinder(intel,intelErr);
+    qcrRenderQualityStory(intel,intelErr);
     qcrRenderQualityImprovements(intel);
     qcrRenderWhyDecomposition(intel);
     qcrRenderHealthReasons(intel);
