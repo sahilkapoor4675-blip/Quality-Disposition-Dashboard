@@ -37,11 +37,10 @@
   #introScreen .intro-motion-line{position:absolute;z-index:2;left:-20%;width:140%;height:1px;top:48%;background:linear-gradient(90deg,transparent,rgba(222,132,67,.18),rgba(70,190,235,.22),transparent);box-shadow:0 0 24px rgba(70,190,235,.12);animation:introSweep 6s linear infinite;pointer-events:none}
   #introScreen .intro-hit{position:absolute;z-index:5;left:50%;top:calc(610 / 720 * 100%);width:250px;height:52px;transform:translateX(-50%);border:0;background:transparent;cursor:pointer;border-radius:18px;outline:none}
   #introScreen .intro-hit:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,.9),0 0 0 6px rgba(222,132,67,.7)}
-  #introScreen .intro-hint{position:absolute;z-index:4;left:50%;bottom:28px;transform:translateX(-50%);font:600 11px/1.2 DM Sans,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:rgba(235,242,247,.60);pointer-events:none;animation:introHint 2.4s ease-in-out infinite}
+  #introScreen .intro-hint{position:absolute;z-index:4;left:50%;bottom:28px;transform:translateX(-50%);font:600 11px/1.2 DM Sans,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:rgba(235,242,247,.68);pointer-events:none;opacity:.75}
   @keyframes introAmbient{0%{transform:translate3d(-2%,1%,0) scale(1)}50%{transform:translate3d(3%,-2%,0) scale(1.06)}100%{transform:translate3d(-1%,3%,0) scale(1.02)}}
   @keyframes introSweep{0%{transform:translateX(-18%);opacity:.15}50%{opacity:.5}100%{transform:translateX(18%);opacity:.15}}
-  @keyframes introHint{0%,100%{opacity:.45;transform:translate(-50%,0)}50%{opacity:.82;transform:translate(-50%,-3px)}}
-  @media (prefers-reduced-motion:reduce){#introScreen .intro-live-bg,#introScreen .intro-motion-line,#introScreen .intro-hint{animation:none!important}}
+  @media (prefers-reduced-motion:reduce){#introScreen .intro-live-bg,#introScreen .intro-motion-line{animation:none!important}}
 </style>
 </head>
 <body>
@@ -60,14 +59,13 @@
   root.classList.add('intro-active');
   // Intro is intentionally light-only. The dashboard theme still follows the system/saved theme.
   video.src='/quality_nonferrous_intro_light.mp4';
-  video.loop=false;
+  // The intro screen (video + ambient background motion) must never stop on
+  // its own — it keeps playing/looping in a stable loop until the person
+  // clicks Enter Dashboard. Looping the video means it seeks back to the
+  // start automatically, so no 'ended' handler is needed at all.
+  video.loop=true;
   video.controls=false;
   video.muted=false;
-  video.addEventListener('ended',function(){
-    video.pause();
-    try{video.currentTime=Math.max(0,video.duration-0.04)}catch(e){}
-    screen.classList.add('intro-ended');
-  },{once:true});
   // Autoplay with sound is browser-policy dependent. Prefer sound; if blocked, start muted.
   var play=video.play();
   if(play&&play.catch){play.catch(function(){video.muted=true;return video.play();}).catch(function(){});}
