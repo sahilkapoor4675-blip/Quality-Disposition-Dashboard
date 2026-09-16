@@ -1135,3 +1135,34 @@ html[data-theme="dark"] .gsr-item-label mark{background:#7A5C00;color:#FFE9A8;}
   .kpi-grid{grid-template-columns:1fr!important;}
   .qcr-kpi-grid{grid-template-columns:1fr!important;}
 }
+
+/* ================================================================
+   HEADER WIDTH FIX — the header previously stretched edge-to-edge
+   (100% of viewport) while every other section is capped by
+   .container's max-width, so on wide screens the header looked far
+   wider/heavier than the content below it. Capping it to the same
+   max-width and centering it lines it up with the rest of the page.
+   ================================================================ */
+header{max-width:1480px;margin:0 auto;width:100%;box-sizing:border-box;}
+
+/* ================================================================
+   FREEZE FILTERS + TABS TOGETHER AT THE TOP
+   Filters, the filter-summary bar, and the tab strip are wrapped in
+   #stickyControls (see index.html) so they scroll together as one
+   sticky block pinned under the header — no more scrolling back up
+   to change a filter or switch tabs. Nested position:sticky rules
+   still present on .filters/.tabs individually are harmless (they
+   just keep them where the wrapper already holds them).
+   ================================================================ */
+.sticky-controls{
+  position:-webkit-sticky;position:sticky;top:0;z-index:1000;
+  background:var(--bg);
+  padding-top:6px;padding-bottom:4px;
+  box-shadow:0 12px 20px -14px rgba(15,42,74,.28);
+}
+.sticky-controls .filters{margin-bottom:12px;}
+.sticky-controls .filter-summary-bar{margin-bottom:12px;}
+.sticky-controls .tabs{margin-bottom:0;}
+@media (max-width:600px){
+  .sticky-controls{position:static;top:auto;box-shadow:none;}
+}
