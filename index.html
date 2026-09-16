@@ -32,24 +32,38 @@
   html.intro-active, html.intro-active body { overflow: hidden !important; }
   #introScreen{position:fixed;inset:0;z-index:99999;background:#F7FAFC;display:grid;place-items:center;overflow:hidden;transition:opacity .65s ease,visibility .65s ease}
   #introScreen.intro-hidden{opacity:0;visibility:hidden;pointer-events:none}
+  /* The stage is locked to the video's own 16:9 aspect ratio and fitted
+     inside the viewport with min(), so on any screen size/zoom the video
+     is shown *whole* (never cropped) — wide screens letterbox left/right
+     to the fixed #introScreen background instead of chopping the video. */
+  #introScreen .intro-stage{position:relative;width:min(100vw,177.7778vh);height:min(100vh,56.25vw);overflow:hidden}
   #introScreen .intro-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#F7FAFC}
   #introScreen .intro-live-bg{position:absolute;inset:-18%;z-index:2;pointer-events:none;opacity:.42;mix-blend-mode:screen;background:radial-gradient(circle at 18% 78%,rgba(45,185,235,.20),transparent 28%),radial-gradient(circle at 82% 28%,rgba(220,125,52,.16),transparent 27%),radial-gradient(circle at 50% 55%,rgba(175,88,215,.10),transparent 32%);filter:blur(14px);animation:introAmbient 11s ease-in-out infinite alternate}
   #introScreen .intro-motion-line{position:absolute;z-index:2;left:-20%;width:140%;height:1px;top:48%;background:linear-gradient(90deg,transparent,rgba(222,132,67,.18),rgba(70,190,235,.22),transparent);box-shadow:0 0 24px rgba(70,190,235,.12);animation:introSweep 6s linear infinite;pointer-events:none}
   #introScreen .intro-hit{position:absolute;z-index:5;left:50%;top:calc(610 / 720 * 100%);width:250px;height:52px;transform:translateX(-50%);border:0;background:transparent;cursor:pointer;border-radius:18px;outline:none}
   #introScreen .intro-hit:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,.9),0 0 0 6px rgba(222,132,67,.7)}
-  #introScreen .intro-hint{position:absolute;z-index:4;left:50%;bottom:28px;transform:translateX(-50%);font:600 11px/1.2 DM Sans,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:rgba(235,242,247,.68);pointer-events:none;opacity:.75}
+  /* Once the video has played through once, it freezes on its last frame
+     and this glow starts pulsing on the CTA so the person's eye still has
+     something moving to draw it toward "Enter Dashboard". */
+  #introScreen.intro-video-ended .intro-hit{animation:introBtnGlow 1.7s ease-in-out infinite}
+  #introScreen .intro-hint{position:absolute;z-index:4;left:50%;bottom:28px;transform:translateX(-50%);font:600 11px/1.2 DM Sans,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:rgba(235,242,247,.68);pointer-events:none;opacity:.75;transition:color .4s ease,text-shadow .4s ease}
+  #introScreen.intro-video-ended .intro-hint{color:#fff;text-shadow:0 0 10px rgba(70,190,235,.85),0 0 18px rgba(222,132,67,.55);animation:introHintPulse 1.7s ease-in-out infinite}
   @keyframes introAmbient{0%{transform:translate3d(-2%,1%,0) scale(1)}50%{transform:translate3d(3%,-2%,0) scale(1.06)}100%{transform:translate3d(-1%,3%,0) scale(1.02)}}
   @keyframes introSweep{0%{transform:translateX(-18%);opacity:.15}50%{opacity:.5}100%{transform:translateX(18%);opacity:.15}}
-  @media (prefers-reduced-motion:reduce){#introScreen .intro-live-bg,#introScreen .intro-motion-line{animation:none!important}}
+  @keyframes introBtnGlow{0%,100%{box-shadow:0 0 0 0 rgba(70,190,235,0),0 0 0 0 rgba(222,132,67,0)}50%{box-shadow:0 0 22px 8px rgba(70,190,235,.45),0 0 38px 14px rgba(222,132,67,.25)}}
+  @keyframes introHintPulse{0%,100%{opacity:.75}50%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){#introScreen .intro-live-bg,#introScreen .intro-motion-line,#introScreen.intro-video-ended .intro-hit,#introScreen.intro-video-ended .intro-hint{animation:none!important}}
 </style>
 </head>
 <body>
 
 <div id="introScreen" aria-label="Quality Intelligence introduction">
-  <video id="introVideo" class="intro-video" playsinline preload="auto" autoplay></video>
   <div class="intro-live-bg" aria-hidden="true"></div>
   <div class="intro-motion-line" aria-hidden="true"></div>
-  <button id="introDashboardBtn" class="intro-hit" type="button" aria-label="Enter Dashboard" title="Enter Dashboard"></button>
+  <div class="intro-stage">
+    <video id="introVideo" class="intro-video" playsinline preload="auto" autoplay></video>
+    <button id="introDashboardBtn" class="intro-hit" type="button" aria-label="Enter Dashboard" title="Enter Dashboard"></button>
+  </div>
   <div class="intro-hint">Click Enter Dashboard to continue</div>
 </div>
 <script>
@@ -59,13 +73,16 @@
   root.classList.add('intro-active');
   // Intro is intentionally light-only. The dashboard theme still follows the system/saved theme.
   video.src='/quality_nonferrous_intro_light.mp4';
-  // The intro screen (video + ambient background motion) must never stop on
-  // its own — it keeps playing/looping in a stable loop until the person
-  // clicks Enter Dashboard. Looping the video means it seeks back to the
-  // start automatically, so no 'ended' handler is needed at all.
-  video.loop=true;
+  // Plays through exactly once, then stops (freezing on its last frame) —
+  // it does NOT loop back to the start. The ambient background glow/sweep
+  // keep animating on their own (separate CSS animations, untouched by the
+  // video ending) and the "Enter Dashboard" hotspot starts a gentle glow
+  // once the video has stopped, so there's still something inviting the
+  // click even though the video itself has gone still.
+  video.loop=false;
   video.controls=false;
   video.muted=false;
+  video.addEventListener('ended',function(){ screen.classList.add('intro-video-ended'); });
   // Autoplay with sound is browser-policy dependent. Prefer sound; if blocked, start muted.
   var play=video.play();
   if(play&&play.catch){play.catch(function(){video.muted=true;return video.play();}).catch(function(){});}
