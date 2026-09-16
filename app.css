@@ -9,14 +9,20 @@
          display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:18px;
          box-shadow:0 4px 18px rgba(15,42,74,.18);border-bottom:1px solid rgba(255,255,255,.10);}
   .executive-brand{min-width:300px;}
-  header h1{margin:0;font-size:25px;line-height:1.1;letter-spacing:1.3px;font-weight:800;}
-  .quality-intelligence-title{font-family:'Allura',cursive!important;font-size:42px!important;font-weight:700!important;letter-spacing:.9px!important;line-height:1.08!important;display:flex;align-items:center;flex-wrap:wrap;gap:0;white-space:nowrap;}
+  header h1{margin:0 0 9px;font-size:25px;line-height:1.1;letter-spacing:1.3px;font-weight:800;}
+  /* Allura is a flowing script font whose capital swashes and descenders
+     (the tail on "Q", the loop under "y") sit well below the baseline —
+     at line-height:1.08 they were dipping down into the kicker line
+     underneath. The taller line-height plus the h1's own bottom margin
+     above give that flourish room to breathe without touching the text
+     below it. */
+  .quality-intelligence-title{font-family:'Allura',cursive!important;font-size:42px!important;font-weight:700!important;letter-spacing:.9px!important;line-height:1.42!important;padding-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:0;white-space:nowrap;}
   .qi-quality,.qi-intelligence{display:inline-block;}
   .qi-quality{color:#c62828;text-shadow:1px 1px 0 rgba(139,0,0,.38),2px 2px 0 rgba(255,255,255,.72),0 4px 8px rgba(198,40,40,.14);}
   .qi-intelligence{color:#1565c0;text-shadow:1px 1px 0 rgba(10,55,110,.38),2px 2px 0 rgba(255,255,255,.78),0 4px 8px rgba(21,101,192,.14);}
   .qi-space{width:8px;}
   header .sub{font-size:14px;opacity:.86;}
-  .executive-kicker{font-size:13.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#b9d9ff;margin-top:6px;}
+  .executive-kicker{font-size:13.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#b9d9ff;margin-top:11px;}
   .executive-meta{display:flex;align-items:center;gap:14px;margin-left:auto;}
   .updated-block{text-align:right;min-width:150px;}
   .updated-label{font-size:13px;text-transform:uppercase;letter-spacing:1px;font-weight:800;opacity:.68;margin-bottom:3px;}
@@ -211,7 +217,7 @@
   .chart-refreshing{opacity:.35;transform:translateY(4px);}
   .chart-ready{opacity:1;transform:translateY(0);}
   .section-title{font-size:16px!important;}
-  .plant-name{font-size:15px;font-weight:700;letter-spacing:.35px;margin-top:4px;color:#0f766e;}
+  .plant-name{font-size:15px;font-weight:700;letter-spacing:.35px;margin-top:6px;color:#0f766e;}
   .chart-scroll{font-family:'Manrope',sans-serif;}
   @media(max-width:600px){.kpi-card .value{font-size:27px}.kpi-card{min-height:138px}}
 
