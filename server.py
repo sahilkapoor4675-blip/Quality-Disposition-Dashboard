@@ -3657,6 +3657,18 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         qs = {k: v[0] for k, v in parse_qs(parsed.query).items()}
 
+        # Health probe. Deliberately the first thing checked and it touches
+        # nothing — no database, no auth, no disk — so it answers immediately
+        # even while background initialisation is still running.
+        if path in {"/healthz", "/readyz"}:
+            self._send_json({
+                "ok": True,
+                "ready": STARTUP_READY,
+                "startup_error": STARTUP_ERROR or None,
+                "backend": "postgres" if USE_POSTGRES else "sqlite",
+            })
+            return
+
         # Versioned static CSS/JS: aggressively cached by browsers.
         if path in {"/app.css", "/app.js"}:
             asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
@@ -4985,22 +4997,63 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"error": "not found"}, status=404)
 
 
+# Set to True once schema/seed/index startup work has finished. /healthz and
+# /readyz report it so a slow first boot is diagnosable from the outside.
+STARTUP_READY = False
+STARTUP_ERROR = ""
+
+
+def _run_startup_tasks():
+    """Schema creation, first-run seeding and index creation.
+
+    Runs on a BACKGROUND thread, never on the startup path. On a cold deploy
+    against an external Postgres (Supabase/Neon) this can take minutes — an
+    empty-database seed inserts every historical row, and CREATE INDEX on a
+    populated table is not instant. Doing it before binding the socket is what
+    made the platform's port scan time out and cancel the deploy: the process
+    was alive and working, but nothing was ever listening.
+    """
+    global STARTUP_READY, STARTUP_ERROR
+    for label, fn in (("admin schema", _ensure_admin_schema),
+                      ("initial seed", _seed_postgres_if_empty),
+                      ("query indexes", ensure_fast_indexes)):
+        started = time.time()
+        try:
+            fn()
+            print(f"Startup: {label} ready in {time.time() - started:.1f}s", flush=True)
+        except Exception as exc:
+            STARTUP_ERROR = (STARTUP_ERROR + "; " if STARTUP_ERROR else "") + f"{label}: {exc}"
+            print(f"Startup WARNING: {label} failed after "
+                  f"{time.time() - started:.1f}s — {exc}", flush=True)
+    STARTUP_READY = True
+    print("Startup: all initialisation complete.", flush=True)
+
+
 def main():
     import sys
+    # Render/Railway/Heroku buffer stdout, so without this the startup log is
+    # empty and a hung boot looks identical to a silent one.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except Exception:
+        pass
     # Cloud hosts (Render, Railway, etc.) provide the port via the PORT
     # environment variable. Fall back to a CLI arg, then default 8000
     # for local use.
     port = int(os.environ.get("PORT", sys.argv[1] if len(sys.argv) > 1 else 8000))
-    _ensure_admin_schema()
-    _seed_postgres_if_empty()
-    ensure_fast_indexes()
+
+    # Bind FIRST. The host's health check only needs an open port; everything
+    # below is allowed to take as long as it needs without risking the deploy.
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    print(f"Quality Disposition Dashboard listening on 0.0.0.0:{port}", flush=True)
+    if not (ADMIN_USERNAME and ADMIN_PASSWORD):
+        print("INFO: ADMIN_USERNAME/ADMIN_PASSWORD are not set; administrator authentication will use the existing users table. Set both environment variables for first-time provisioning.", flush=True)
+
+    threading.Thread(target=_run_startup_tasks, daemon=True, name="startup").start()
     if BACKUP_SCHEDULE_HOURS > 0:
         threading.Thread(target=_scheduled_backup_loop, daemon=True, name="scheduled-backup").start()
-        print(f"Scheduled backups enabled: every {BACKUP_SCHEDULE_HOURS:g}h (BACKUP_SCHEDULE_HOURS).")
-    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    if not (ADMIN_USERNAME and ADMIN_PASSWORD):
-        print("INFO: ADMIN_USERNAME/ADMIN_PASSWORD are not set; administrator authentication will use the existing users table. Set both environment variables for first-time provisioning.")
-    print(f"Quality Disposition Dashboard running on port {port}")
+        print(f"Scheduled backups enabled: every {BACKUP_SCHEDULE_HOURS:g}h (BACKUP_SCHEDULE_HOURS).", flush=True)
     server.serve_forever()
 
 

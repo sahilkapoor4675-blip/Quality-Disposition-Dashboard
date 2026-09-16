@@ -3,8 +3,16 @@ services:
     name: quality-disposition-dashboard
     env: python
     plan: free
+    buildCommand: pip install -r requirements.txt
     startCommand: python3 server.py
+    # Answers instantly and touches no database, so a slow first-run schema
+    # build or seed can never cause the deploy to be marked unhealthy.
+    healthCheckPath: /healthz
     envVars:
+      # Without this, Python buffers stdout and the startup log stays empty,
+      # which makes a slow boot indistinguishable from a silent hang.
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: DATABASE_URL
         sync: false
       - key: ADMIN_USERNAME

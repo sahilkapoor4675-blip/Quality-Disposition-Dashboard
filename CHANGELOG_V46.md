@@ -52,3 +52,39 @@ dark slate, shifting to brand orange with a soft pulse once the video has stoppe
 - `quality_nonferrous_intro_endcard.png` (new)
 - `index.html` (intro styles, end-card markup, freeze logic)
 - `server.py` (end-card added to the static asset allow-list)
+
+---
+
+# V46.1 — Deploy fix: port scan timeout
+
+The build succeeded but the deploy was cancelled with
+`Port scan timeout reached, no open ports detected`. The process was alive the whole
+time — it just never got as far as binding a socket.
+
+`main()` ran `_ensure_admin_schema()`, `_seed_postgres_if_empty()` and
+`ensure_fast_indexes()` **before** constructing the server. Against an external Postgres
+on a cold database that is not quick work: the seed inserts every historical row and
+`CREATE INDEX` on a populated table takes real time. The host gave up waiting for a
+listening port and cancelled the deploy long before any of it finished.
+
+Changes:
+
+- `main()` now binds and starts serving first. All schema/seed/index work moved into
+  `_run_startup_tasks()`, which runs on a background thread. The port opens in about a
+  second regardless of how slow the database is. Verified locally: healthy response at
+  +2s on SQLite, and with a deliberately unreachable `DATABASE_URL` the port still opens
+  immediately and the failure is logged instead of blocking the boot.
+- Each startup task is individually wrapped, timed and logged, so a failure in one no
+  longer stops the other two and the log shows exactly which step is slow.
+- New `/healthz` (and `/readyz`) endpoint — first route checked, touches no database, no
+  auth, no disk. Returns `{ok, ready, startup_error, backend}`. Wired up as Render's
+  `healthCheckPath`.
+- Startup logging is line-buffered and `PYTHONUNBUFFERED=1` is set in `render.yaml`.
+  Previously stdout was buffered, which is why the failed deploy log showed no output
+  from the app at all and a slow boot looked identical to a silent one.
+- `render.yaml` gains an explicit `buildCommand`.
+
+Note: the build log shows cp314 wheels, so the host is using Python 3.14 and ignoring
+`runtime.txt` (which asks for 3.11.9). Everything installed and parses fine on 3.14, so
+this is informational — but if you want the pinned version, set it in the service's
+environment settings rather than `runtime.txt`.
