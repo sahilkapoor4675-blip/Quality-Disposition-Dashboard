@@ -1161,8 +1161,11 @@ header{max-width:1480px;margin:0 auto;width:100%;box-sizing:border-box;}
   box-shadow:0 12px 20px -14px rgba(15,42,74,.28);
 }
 .sticky-controls .filters{margin-bottom:12px;}
-.sticky-controls .filter-summary-bar{margin-bottom:12px;}
 .sticky-controls .tabs{margin-bottom:0;}
+/* filter-summary-bar ("Selection: …") now lives outside .sticky-controls
+   (see index.html) so it scrolls away normally instead of freezing
+   with the filters + tabs block. */
+#filterSummaryBar{margin-bottom:14px;}
 @media (max-width:600px){
   .sticky-controls{position:static;top:auto;box-shadow:none;}
 }
