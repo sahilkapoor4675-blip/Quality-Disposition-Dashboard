@@ -2092,8 +2092,28 @@ def _ensure_admin_schema():
             record_id INTEGER, details TEXT DEFAULT '{}', ip_address TEXT DEFAULT '', user_agent TEXT DEFAULT '',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    # Commit before attempting the guarded ALTER below: if that ALTER times
+    # out and gets rolled back, the rollback must not also wipe out the
+    # CREATE TABLE IF NOT EXISTS statements for users/activity_log/audit_trail
+    # above (Postgres rolls back everything since the last commit, not just
+    # the failing statement) — same reasoning as the "Commit here" comment
+    # a few lines down.
+    conn.commit()
     if USE_POSTGRES:
-        conn.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS visitor_id TEXT DEFAULT ''")
+        # Guarded like the disposition/ip_address migrations above: this
+        # column has very likely already been added by an earlier deploy.
+        # activity_log is written to on every dashboard visit/action, so
+        # under concurrent writes this ALTER can sit waiting for a table
+        # lock until Postgres's own statement_timeout cancels it — which
+        # used to crash the whole app before it ever finished starting.
+        # Skipping past a timeout here (the column almost certainly
+        # already exists) lets startup continue instead of dying on what
+        # is, at worst, a no-op.
+        try:
+            conn.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS visitor_id TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            conn.rollback()
     else:
         cols_al={r[1] for r in conn.execute("PRAGMA table_info(activity_log)").fetchall()}
         if "visitor_id" not in cols_al:
