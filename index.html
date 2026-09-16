@@ -36,8 +36,17 @@
      inside the viewport with min(), so on any screen size/zoom the video
      is shown *whole* (never cropped) — wide screens letterbox left/right
      to the fixed #introScreen background instead of chopping the video. */
-  #introScreen .intro-stage{position:relative;width:min(100vw,177.7778vh);height:min(100vh,56.25vw);overflow:hidden}
+  /* isolate:isolate keeps the video + end-card in their own stacking context
+     underneath the ambient glow/sweep/particle layers, so those keep animating
+     over the frozen end-card instead of being covered by it. */
+  #introScreen .intro-stage{position:relative;width:min(100vw,177.7778vh);height:min(100vh,56.25vw);overflow:hidden;z-index:1;isolation:isolate}
   #introScreen .intro-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#F7FAFC}
+  /* Static end-card: a pixel-exact copy of the video's final composed frame.
+     It sits directly on top of the <video> and fades in the instant playback
+     stops, so the finished intro can NEVER go blank/black — even on browsers
+     that drop the last decoded frame when a video is paused or ends. */
+  #introScreen .intro-endcard{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;opacity:0;visibility:hidden;transition:opacity .35s ease;pointer-events:none}
+  #introScreen.intro-video-ended .intro-endcard{opacity:1;visibility:visible}
   #introScreen .intro-live-bg{position:absolute;inset:-18%;z-index:2;pointer-events:none;opacity:.42;mix-blend-mode:screen;background:radial-gradient(circle at 18% 78%,rgba(45,185,235,.20),transparent 28%),radial-gradient(circle at 82% 28%,rgba(220,125,52,.16),transparent 27%),radial-gradient(circle at 50% 55%,rgba(175,88,215,.10),transparent 32%);filter:blur(14px);animation:introAmbient 11s ease-in-out infinite alternate}
   #introScreen .intro-motion-line{position:absolute;z-index:2;left:-20%;width:140%;height:1px;top:48%;background:linear-gradient(90deg,transparent,rgba(222,132,67,.18),rgba(70,190,235,.22),transparent);box-shadow:0 0 24px rgba(70,190,235,.12);animation:introSweep 6s linear infinite;pointer-events:none}
   #introScreen .intro-hit{position:absolute;z-index:5;left:50%;top:calc(610 / 720 * 100%);width:250px;height:52px;transform:translateX(-50%);border:0;background:transparent;cursor:pointer;border-radius:18px;outline:none}
@@ -47,8 +56,10 @@
      the CTA so the person's eye still has something moving to draw it
      toward "Enter Dashboard". */
   #introScreen.intro-video-ended .intro-hit{animation:introBtnGlow 1.7s ease-in-out infinite}
-  #introScreen .intro-hint{position:absolute;z-index:4;left:50%;bottom:28px;transform:translateX(-50%);font:600 11px/1.2 DM Sans,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:rgba(235,242,247,.68);pointer-events:none;opacity:.75;transition:color .4s ease,text-shadow .4s ease}
-  #introScreen.intro-video-ended .intro-hint{color:#fff;text-shadow:0 0 10px rgba(70,190,235,.85),0 0 18px rgba(222,132,67,.55);animation:introHintPulse 1.7s ease-in-out infinite}
+  /* The intro is a LIGHT composition, so the hint has to be dark to be
+     readable — the old near-white colour was invisible against #F7FAFC. */
+  #introScreen .intro-hint{position:absolute;z-index:6;left:50%;bottom:28px;transform:translateX(-50%);font:600 11px/1.2 DM Sans,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:rgba(61,79,92,.62);pointer-events:none;opacity:.85;transition:color .4s ease,text-shadow .4s ease}
+  #introScreen.intro-video-ended .intro-hint{color:#c96a22;text-shadow:0 0 12px rgba(222,132,67,.35);animation:introHintPulse 1.7s ease-in-out infinite}
   @keyframes introAmbient{0%{transform:translate3d(-3%,2%,0) scale(1) rotate(0deg)}25%{transform:translate3d(2%,-3%,0) scale(1.08) rotate(1deg)}50%{transform:translate3d(4%,1%,0) scale(1.03) rotate(-1deg)}75%{transform:translate3d(-2%,-2%,0) scale(1.09) rotate(.5deg)}100%{transform:translate3d(-3%,2%,0) scale(1) rotate(0deg)}}
   @keyframes introSweep{0%{transform:translateX(-18%);opacity:.15}50%{opacity:.5}100%{transform:translateX(18%);opacity:.15}}
   @keyframes introSweep2{0%{transform:translateX(18%);opacity:.12}50%{opacity:.4}100%{transform:translateX(-18%);opacity:.12}}
@@ -79,7 +90,8 @@
   <div class="intro-motion-line-2" aria-hidden="true"></div>
   <div class="intro-particles" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
   <div class="intro-stage">
-    <video id="introVideo" class="intro-video" playsinline preload="auto" autoplay></video>
+    <video id="introVideo" class="intro-video" playsinline preload="auto" autoplay poster="/quality_nonferrous_intro_endcard.png"></video>
+    <img id="introEndcard" class="intro-endcard" src="/quality_nonferrous_intro_endcard.png" alt="" aria-hidden="true" decoding="async">
     <button id="introDashboardBtn" class="intro-hit" type="button" aria-label="Enter Dashboard" title="Enter Dashboard"></button>
   </div>
   <div class="intro-hint">Click Enter Dashboard to continue</div>
@@ -105,19 +117,36 @@
   video.loop=false;
   video.controls=false;
   video.muted=false;
+  // Freezing is done with a STATIC image, not with the paused <video>.
+  // The old approach relied on the video's own last frame, which is why the
+  // screen went blank: browsers are free to drop the final decoded frame on
+  // pause/ended, and the source clip used to wash out to white then black at
+  // the very end. Now #introEndcard — a pixel-exact copy of the final composed
+  // frame — fades in the moment playback stops, so every piece of text stays
+  // on screen indefinitely. The video plays through exactly once and never
+  // restarts. The ambient glow / sweep lines / particles are separate CSS
+  // animations layered ABOVE the end-card, so the background keeps moving.
   var frozen=false;
-  function freeze(){ if(frozen)return; frozen=true; screen.classList.add('intro-video-ended'); }
+  function freeze(){
+    if(frozen)return;
+    frozen=true;
+    screen.classList.add('intro-video-ended');
+    try{ video.pause(); }catch(e){}
+  }
   video.addEventListener('timeupdate',function(){
-    if(video.duration&&isFinite(video.duration)&&video.currentTime>=video.duration-0.12){
-      video.pause();
-      freeze();
-    }
+    // Stop a hair early — by this point the end-card is already fading in
+    // over the video, so there is nothing to see underneath it either way.
+    if(video.duration&&isFinite(video.duration)&&video.currentTime>=video.duration-0.08) freeze();
   });
-  video.addEventListener('ended',function(){
-    try{ video.currentTime=Math.max(0,video.duration-0.05); }catch(e){}
-    video.pause();
-    freeze();
+  video.addEventListener('ended',freeze);
+  video.addEventListener('pause',function(){ if(video.currentTime>0.5) freeze(); });
+  video.addEventListener('error',freeze);
+  // Last-resort guard: if the clip stalls or never fires the events above,
+  // show the end-card anyway rather than leaving a dead screen.
+  video.addEventListener('loadedmetadata',function(){
+    if(video.duration&&isFinite(video.duration)) setTimeout(freeze,(video.duration+1.2)*1000);
   });
+  setTimeout(freeze,20000);
   // Autoplay with sound is browser-policy dependent. Prefer sound; if blocked, start muted.
   var play=video.play();
   if(play&&play.catch){play.catch(function(){video.muted=true;return video.play();}).catch(function(){});}

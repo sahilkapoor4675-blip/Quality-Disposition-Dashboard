@@ -3729,7 +3729,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in {"/favicon.ico", "/favicon-16.png", "/favicon-32.png", "/favicon-48.png",
                     "/favicon-64.png", "/favicon-128.png", "/favicon-180.png",
                     "/favicon-192.png", "/favicon-256.png", "/favicon-512.png",
-                    "/site.webmanifest", "/jsl-header-logo.png", "/jsl-watermark.png"}:
+                    "/site.webmanifest", "/jsl-header-logo.png", "/jsl-watermark.png",
+                    "/quality_nonferrous_intro_endcard.png"}:
             asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
             if os.path.isfile(asset):
                 mime = "application/octet-stream"
