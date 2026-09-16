@@ -3652,6 +3652,57 @@ class Handler(BaseHTTPRequestHandler):
                 return
             else:
                 self.send_error(404)
+        # Intro video (dashboard splash screen). Served with HTTP Range support
+        # so browsers/mobile Safari can seek and start playback immediately;
+        # without Range support some browsers refuse to play the file at all.
+        # This was previously missing entirely, which made every request for
+        # the video 404 and left the intro screen blank/black.
+        if path == "/quality_nonferrous_intro_light.mp4":
+            asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
+            if os.path.isfile(asset):
+                file_size = os.path.getsize(asset)
+                range_header = self.headers.get("Range")
+                if range_header:
+                    try:
+                        units, _, rng = range_header.partition("=")
+                        start_s, _, end_s = rng.partition("-")
+                        start = int(start_s) if start_s else 0
+                        end = int(end_s) if end_s else file_size - 1
+                        end = min(end, file_size - 1)
+                        if start > end or start >= file_size:
+                            self.send_response(416)
+                            self.send_header("Content-Range", f"bytes */{file_size}")
+                            self.end_headers()
+                            return
+                        with open(asset, "rb") as f:
+                            f.seek(start)
+                            chunk = f.read(end - start + 1)
+                        self.send_response(206)
+                        self.send_header("Content-Type", "video/mp4")
+                        self.send_header("Accept-Ranges", "bytes")
+                        self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+                        self.send_header("Content-Length", str(len(chunk)))
+                        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                        self.send_header("X-Content-Type-Options", "nosniff")
+                        self.end_headers()
+                        self.wfile.write(chunk)
+                        return
+                    except (ValueError, IndexError):
+                        pass
+                with open(asset, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "video/mp4")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            else:
+                self.send_error(404)
+                return
         # Static browser identity assets (favicon / PWA manifest).
         # These must be served by the Python server; otherwise browser requests
         # for /favicon.ico and /favicon-*.png would fall through to a 404.
