@@ -10,6 +10,7 @@ import json
 import math
 import gzip
 import os
+import sys
 import re
 import difflib
 import sqlite3
@@ -36,6 +37,9 @@ from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
+
+SERVER_STARTED_AT = time.time()
+ADMIN_BUILD_VERSION = "V39"
 
 try:
     from openpyxl import Workbook
@@ -3980,6 +3984,165 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"targets": get_kpi_targets()})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/service_health":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                conn=None
+                try:
+                    started=time.perf_counter(); conn=get_conn(); conn.execute("SELECT 1").fetchone(); db_ms=round((time.perf_counter()-started)*1000,2)
+                    total=int(conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0] or 0)
+                    latest_import=None
+                    try:
+                        latest_import=conn.execute("SELECT MAX(created_at) FROM import_history").fetchone()[0]
+                    except Exception:
+                        conn.rollback()
+                    latest_activity=None
+                    try:
+                        latest_activity=conn.execute("SELECT MAX(created_at) FROM activity_log").fetchone()[0]
+                    except Exception:
+                        conn.rollback()
+                    conn.close(); conn=None
+                    backups=_list_backups()
+                    session_ok=bool(_cookie_value(self.headers.get("Cookie",""),"qdash_admin"))
+                    checks=[
+                        {"key":"database","label":"Database","status":"healthy","detail":f"{total:,} live records · {db_ms} ms"},
+                        {"key":"authentication","label":"Authentication","status":"healthy" if session_ok else "warning","detail":"Admin session active" if session_ok else "Session check unavailable"},
+                        {"key":"backup","label":"Backup","status":"healthy" if backups else "warning","detail":f"{len(backups)} snapshot(s) available" if backups else "No snapshot available"},
+                        {"key":"monitoring","label":"Monitoring","status":"healthy","detail":"Read-only checks active"},
+                    ]
+                    latest_candidates=[x for x in (latest_import, latest_activity) if x]
+                    latest_dt=max(latest_candidates) if latest_candidates else None
+                    freshness_status="unknown"; freshness_age_hours=None
+                    if latest_dt:
+                        try:
+                            txt=str(latest_dt).replace("Z","+00:00")
+                            dt=_dt.datetime.fromisoformat(txt)
+                            if dt.tzinfo is None: dt=dt.replace(tzinfo=_dt.timezone.utc)
+                            freshness_age_hours=round(max(0,(_dt.datetime.now(_dt.timezone.utc)-dt.astimezone(_dt.timezone.utc)).total_seconds()/3600),1)
+                            freshness_status="fresh" if freshness_age_hours < 24 else ("stale" if freshness_age_hours < 72 else "very_stale")
+                        except Exception:
+                            freshness_status="unknown"
+                    freshness_detail=(f"Last activity {freshness_age_hours:.1f}h ago" if freshness_age_hours is not None else "No import/activity timestamp")
+                    if freshness_status in ("stale","very_stale"): freshness_detail += " · review freshness"
+                    checks.append({"key":"freshness","label":"Data freshness","status":"healthy" if freshness_status in ("fresh","unknown") else "warning","detail":freshness_detail})
+                    self._send_json({"ok":True,"provider":"PostgreSQL" if USE_POSTGRES else "SQLite","checks":checks,"record_count":total,"db_latency_ms":db_ms,"latest_import":str(latest_import) if latest_import is not None else "","latest_activity":str(latest_activity) if latest_activity is not None else "","freshness_status":freshness_status,"freshness_age_hours":freshness_age_hours,"checked_at":datetime.now().strftime("%d-%b-%Y %H:%M:%S")})
+                except Exception as e:
+                    try:
+                        if conn: conn.close()
+                    except Exception: pass
+                    self._send_json({"ok":False,"error":str(e)[:180]},status=503)
+        elif path == "/api/admin/production_health":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                started=time.perf_counter(); conn=None
+                try:
+                    conn=get_conn()
+                    conn.execute("SELECT 1").fetchone()
+                    latency=round((time.perf_counter()-started)*1000,1)
+                    provider="PostgreSQL" if USE_POSTGRES else "SQLite"
+                    version=""
+                    if USE_POSTGRES:
+                        row=conn.execute("SELECT current_database(), version()").fetchone()
+                        version=str(row[1]).split(',')[0] if row else ""
+                    else:
+                        row=conn.execute("SELECT sqlite_version()").fetchone(); version="SQLite "+str(row[0]) if row else ""
+                    self._send_json({"ok":True,"provider":provider,"latency_ms":latency,"status":"healthy" if latency<500 else ("warning" if latency<1500 else "slow"),"version":version,"render_service":os.environ.get("RENDER_SERVICE_NAME", ""),"git_commit":os.environ.get("RENDER_GIT_COMMIT", os.environ.get("RENDER_GIT_COMMIT_SHORT", "")),"deploy_id":os.environ.get("RENDER_INSTANCE_ID", "")})
+                except Exception as e:
+                    self._send_json({"ok":False,"status":"unavailable","error":str(e)[:300]},status=503)
+                finally:
+                    if conn is not None:
+                        try: conn.close()
+                        except Exception: pass
+        elif path == "/api/admin/db_performance":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                conn=None
+                try:
+                    conn=get_conn()
+                    lat=[]
+                    provider="PostgreSQL" if USE_POSTGRES else "SQLite"
+                    for _ in range(2):
+                        started=time.perf_counter()
+                        conn.execute("SELECT 1").fetchone()
+                        lat.append(round((time.perf_counter()-started)*1000,1))
+                    avg=round(sum(lat)/len(lat),1)
+                    status="healthy" if avg<250 else ("warning" if avg<1000 else "slow")
+                    self._send_json({"ok":True,"provider":provider,"latency_ms":lat[0],"second_latency_ms":lat[1],"avg_latency_ms":avg,"status":status,"checked_at":_dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00","Z")})
+                except Exception as e:
+                    self._send_json({"ok":False,"error":str(e)[:300]},status=503)
+                finally:
+                    if conn is not None:
+                        try: conn.close()
+                        except Exception: pass
+        elif path == "/api/admin/data_integrity":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                conn=None
+                try:
+                    conn=get_conn()
+                    def q1(sql):
+                        r=conn.execute(sql).fetchone(); return int(r[0] or 0) if r else 0
+                    total=q1("SELECT COUNT(*) FROM disposition")
+                    missing_heat=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(heat_no,''))='' ")
+                    missing_batch=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(batch_no,''))='' ")
+                    missing_grade=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(grade,''))='' ")
+                    missing_decision=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(quality_decision,''))='' ")
+                    missing_date=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))='' ")
+                    duplicate_batch_groups=q1("SELECT COUNT(*) FROM (SELECT TRIM(batch_no) b, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY TRIM(batch_no) HAVING COUNT(*)>1) x")
+                    if USE_POSTGRES:
+                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight::text,''))<>'' AND (TRIM(COALESCE(output_weight::text,'')) !~ '^[+-]?[0-9]+([.][0-9]+)?$|^[+-]?[.][0-9]+$' OR CAST(output_weight AS DOUBLE PRECISION)<0)")
+                    else:
+                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight,''))<>'' AND CAST(output_weight AS REAL)<0")
+                    issue_total=missing_heat+missing_batch+missing_grade+missing_decision+missing_date+duplicate_batch_groups+invalid_weight
+                    self._send_json({"ok":True,"records":total,"issues":issue_total,"checks":{"missing_heat":missing_heat,"missing_batch":missing_batch,"missing_grade":missing_grade,"missing_decision":missing_decision,"missing_date":missing_date,"duplicate_batch_groups":duplicate_batch_groups,"invalid_negative_weight":invalid_weight}})
+                except Exception as e:
+                    self._send_json({"ok":False,"error":str(e)[:300]},status=500)
+                finally:
+                    if conn is not None:
+                        try: conn.close()
+                        except Exception: pass
+
+        elif path == "/api/admin/deployment_health":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    now=time.time()
+                    commit=os.environ.get("RENDER_GIT_COMMIT", os.environ.get("RENDER_GIT_COMMIT_SHORT", ""))
+                    service=os.environ.get("RENDER_SERVICE_NAME", "")
+                    instance=os.environ.get("RENDER_INSTANCE_ID", "")
+                    env_name=os.environ.get("RENDER_SERVICE_TYPE", "") or ("render" if service or commit or instance else "local")
+                    deploy_ts=os.environ.get("RENDER_DEPLOY_TIMESTAMP", os.environ.get("DEPLOY_TIMESTAMP", ""))
+                    self._send_json({"ok":True,"app_version":ADMIN_BUILD_VERSION,"environment":env_name,"service":service,"commit":commit,"commit_short":commit[:10] if commit else "","instance":instance,"deploy_timestamp":deploy_ts,"uptime_seconds":round(max(0,now-SERVER_STARTED_AT)),"python_version":sys.version.split()[0],"pid":os.getpid()})
+                except Exception as e:
+                    self._send_json({"ok":False,"error":str(e)[:240]},status=500)
+        elif path == "/api/admin/error_monitor":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                conn=None
+                try:
+                    conn=get_conn()
+                    # Read-only operational signals. Do not add tables, mutate rows, or alter schema.
+                    patterns=("%error%","%fail%","%exception%")
+                    clauses=[]; params=[]
+                    for pat in patterns:
+                        clauses.append("LOWER(event_type) LIKE %s" if USE_POSTGRES else "LOWER(event_type) LIKE ?"); params.append(pat)
+                    where=" OR ".join(clauses)
+                    recent_sql=f"SELECT event_type,created_at,tab FROM activity_log WHERE ({where}) ORDER BY created_at DESC LIMIT 25"
+                    recent=conn.execute(recent_sql,tuple(params)).fetchall()
+                    import_errors=conn.execute("SELECT COUNT(*) FROM import_history WHERE COALESCE(errors,0)>0").fetchone()[0]
+                    import_recent=conn.execute("SELECT filename,errors,updated,imported,created_at FROM import_history WHERE COALESCE(errors,0)>0 ORDER BY created_at DESC LIMIT 10").fetchall()
+                    if USE_POSTGRES:
+                        last24=conn.execute("SELECT COUNT(*) FROM activity_log WHERE (LOWER(event_type) LIKE %s OR LOWER(event_type) LIKE %s OR LOWER(event_type) LIKE %s) AND created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'",patterns).fetchone()[0]
+                    else:
+                        last24=conn.execute("SELECT COUNT(*) FROM activity_log WHERE (LOWER(event_type) LIKE ? OR LOWER(event_type) LIKE ? OR LOWER(event_type) LIKE ?) AND datetime(created_at) >= datetime('now','-24 hours')",patterns).fetchone()[0]
+                    conn.close(); conn=None
+                    self._send_json({"ok":True,"last_24h":int(last24 or 0),"recent":[dict(r) for r in recent],"import_error_events":int(import_errors or 0),"import_recent":[dict(r) for r in import_recent]})
+                except Exception as e:
+                    self._send_json({"ok":False,"error":str(e)[:300]},status=500)
+                finally:
+                    if conn is not None:
+                        try: conn.close()
+                        except Exception: pass
         elif path == "/api/admin/home":
             if not _is_admin(self): _auth_error(self)
             else:
@@ -3995,6 +4158,55 @@ class Handler(BaseHTTPRequestHandler):
                     conn.close()
                     ds=database_status()
                     self._send_json({"total_records":total,"last_data_update":last or "—","database_size_mb":ds.get("used_mb",0),"active_admins":admins,"dashboard_views":views,"last_login":last_login or "—","failed_login_attempts":failed,"imports":imports})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/audit_analytics":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn=get_conn()
+                    total=conn.execute("SELECT COUNT(*) FROM audit_trail").fetchone()[0]
+                    actions=conn.execute("SELECT action,COUNT(*) c FROM audit_trail GROUP BY action ORDER BY c DESC LIMIT 12").fetchall()
+                    users=conn.execute("SELECT COALESCE(username,'Unknown') username,COUNT(*) c FROM audit_trail GROUP BY username ORDER BY c DESC LIMIT 10").fetchall()
+                    recent=conn.execute("SELECT COUNT(*) FROM audit_trail WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'").fetchone()[0] if USE_POSTGRES else conn.execute("SELECT COUNT(*) FROM audit_trail WHERE datetime(created_at) >= datetime('now','-24 hours')").fetchone()[0]
+                    conn.close()
+                    self._send_json({"total":total,"last_24h":recent,"actions":[dict(r) for r in actions],"users":[dict(r) for r in users]})
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/backup/verify":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    name=os.path.basename(str(qs.get("name",""))); fpath=os.path.join(BACKUP_DIR,name)
+                    if not name.startswith("backup_") or not name.endswith(".json.gz") or not os.path.isfile(fpath): raise ValueError("Backup file not found")
+                    with gzip.open(fpath,"rt",encoding="utf-8") as f: data=json.load(f)
+                    counts=data.get("counts",{}) or {}; required=("disposition","fishbone_master","fishbone_alias","kpi_targets","rca_master","fishbone_style")
+                    valid=all(k in counts for k in required) and isinstance(data.get("backup_version"),int)
+                    self._send_json({"valid":bool(valid),"filename":name,"counts":counts,"backup_version":data.get("backup_version"),"size_bytes":os.path.getsize(fpath)})
+                except Exception as e: self._send_json({"valid":False,"error":str(e)},status=400)
+        elif path == "/api/admin/validation_rules":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                self._send_json({"rules":[
+                    {"id":"required_heat","name":"Heat No required","severity":"High","field":"heat_no","description":"Every disposition record should contain a Heat No."},
+                    {"id":"unique_batch","name":"Batch No unique","severity":"High","field":"batch_no","description":"A Batch No should map to one disposition record."},
+                    {"id":"valid_grade","name":"Grade required","severity":"Medium","field":"grade","description":"Grade must be populated."},
+                    {"id":"valid_decision","name":"Decision controlled","severity":"High","field":"quality_decision","description":"Decision must use an approved disposition value."},
+                    {"id":"valid_weight","name":"Weight non-negative","severity":"Medium","field":"output_weight","description":"Output weight must be present and non-negative."},
+                    {"id":"valid_date","name":"Inspection date valid","severity":"High","field":"insp_lot_date","description":"Inspection date must be present and YYYY-MM-DD compatible."},
+                    {"id":"defect_intensity","name":"Defect intensity required","severity":"Medium","field":"defect_intensity","description":"Defect intensity should be populated for traceability."},
+                    {"id":"workcenter_defect","name":"Work Center + Defect required","severity":"Medium","field":"work_center/main_defect","description":"Work Center and Main Defect should be populated."}
+                ]})
+        elif path == "/api/admin/security_status":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    _cleanup_sessions()
+                    now=time.time(); current=_cookie_value(self.headers.get("Cookie",""),"qdash_admin")
+                    sessions=[]
+                    for tok,meta in list(SESSIONS.items()):
+                        if meta.get("expires",0)>now and meta.get("role") in ("admin","qa_engineer","importer","auditor"):
+                            sessions.append({"current":tok==current,"username":meta.get("username",""),"display_name":meta.get("display_name","") or meta.get("username",""),"role":meta.get("role",""),"expires_in":max(0,int(meta.get("expires",0)-now))})
+                    sessions.sort(key=lambda x:(not x["current"],x["username"]))
+                    self._send_json({"active_sessions":len(sessions),"sessions":sessions[:50],"session_ttl_hours":SESSION_TTL/3600,"login_max_attempts":LOGIN_MAX_ATTEMPTS})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/data_quality":
             if not _is_admin(self): _auth_error(self)
@@ -4209,6 +4421,19 @@ class Handler(BaseHTTPRequestHandler):
             if meta: _activity_event(self,"logout")
             SESSIONS.pop(token,None); self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Set-Cookie","qdash_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); self.end_headers(); self.wfile.write(b'{"authenticated":false}'); return
 
+        if path == "/api/admin/revoke_session":
+            if not _require_role(self,"admin"): return
+            try:
+                body=_json_body(self); target=str(body.get("username","")).strip(); current=_cookie_value(self.headers.get("Cookie",""),"qdash_admin")
+                removed=0
+                for tok,meta in list(SESSIONS.items()):
+                    if tok!=current and meta.get("username")==target:
+                        SESSIONS.pop(tok,None); removed+=1
+                _audit(self,"session_revoked",details={"username":target,"count":removed})
+                self._send_json({"ok":True,"removed":removed})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
         if path == "/api/admin/change_password":
             if not _is_admin(self): _auth_error(self); return
             try:
@@ -4398,7 +4623,7 @@ class Handler(BaseHTTPRequestHandler):
                 if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
                 conn=get_conn(); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={str(r[1] or "").strip().upper():r for r in existing_rows};
                 wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()
-                valid=[]; errors=[]; duplicates=0; updated=0; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
+                valid=[]; errors=[]; duplicates=0; updated=0; updated_details=[]; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
                 for idx,r in enumerate(records,start=2):
                     err=_validate_record(r); d=str(r.get("insp_lot_date","")).strip()
                     if d:
@@ -4416,12 +4641,18 @@ class Handler(BaseHTTPRequestHandler):
                         if key in existing_map:
                             oldrow=existing_map[key]; newvals=[r.get(k,"") for k in ["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]]
                             oldvals=[oldrow[0]]+list(oldrow[2:])
-                            if any(str(a if a is not None else "") != str(b if b is not None else "") for a,b in zip(oldvals,newvals)):
+                            changed_fields=[]
+                            for field, oldv, newv in zip(["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"], oldvals, newvals):
+                                if str(oldv if oldv is not None else "") != str(newv if newv is not None else ""):
+                                    changed_fields.append({"field":field,"old":oldv if oldv is not None else "","new":newv if newv is not None else ""})
+                            if changed_fields:
                                 updated+=1; valid.append(r)
+                                if len(updated_details)<25:
+                                    updated_details.append({"batch_no":r.get("batch_no",""),"heat_no":r.get("heat_no",""),"changes":changed_fields})
                             else: duplicates+=1
                         else: valid.append(r)
                 token=secrets.token_urlsafe(24); IMPORT_PREVIEWS[token]={"created":time.time(),"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"updated":updated,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
-                self._send_json({"ok":True,"preview_id":token,"filename":uploaded[0],**IMPORT_PREVIEWS[token]["summary"],"sample":[{k:r.get(k,"") for k in ["insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision"]} for r in valid[:25]]})
+                self._send_json({"ok":True,"preview_id":token,"filename":uploaded[0],**IMPORT_PREVIEWS[token]["summary"],"updated_details":updated_details,"sample":[{k:r.get(k,"") for k in ["insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision"]} for r in valid[:25]]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -4585,13 +4816,83 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body = _json_body(self)
                 limit = min(max(int(body.get("limit", 100)), 1), 500)
+                query = str(body.get("q", "")).strip()
+                requested_ids = body.get("ids") or []
+                if requested_ids:
+                    if not isinstance(requested_ids, list):
+                        raise ValueError("ids must be a list")
+                    # Exact-ID export/search path: avoids the old latest-500 limitation
+                    # when an admin selects records from a large PostgreSQL dataset.
+                    ids=[]
+                    for raw_id in requested_ids:
+                        try: ids.append(int(raw_id))
+                        except Exception: continue
+                    ids=list(dict.fromkeys(ids))[:500]
+                    if not ids:
+                        self._send_json({"rows": [], "total": 0, "query": query})
+                        return
+                    conn = get_conn()
+                    base = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
+                    placeholders=','.join(['?']*len(ids))
+                    rows=[dict(r) for r in conn.execute(base + " WHERE id IN ("+placeholders+") ORDER BY id DESC", tuple(ids)).fetchall()]
+                    conn.close()
+                    self._send_json({"rows": rows, "total": len(rows), "query": query})
+                    return
                 conn = get_conn()
-                rows = [dict(r) for r in conn.execute("SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
-                total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                base = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
+                if query:
+                    like = f"%{query}%"
+                    where = " WHERE CAST(id AS TEXT) LIKE ? OR insp_lot_date LIKE ? OR heat_no LIKE ? OR batch_no LIKE ? OR work_center LIKE ? OR grade LIKE ? OR main_defect LIKE ? OR quality_decision LIKE ? OR month LIKE ? OR week LIKE ? OR quarter LIKE ? OR financial_year LIKE ?"
+                    params = (like,like,like,like,like,like,like,like,like,like,like,like)
+                    rows = [dict(r) for r in conn.execute(base + where + " ORDER BY id DESC LIMIT ?", params + (limit,)).fetchall()]
+                    total = conn.execute("SELECT COUNT(*) FROM disposition" + where, params).fetchone()[0]
+                else:
+                    rows = [dict(r) for r in conn.execute(base + " ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+                    total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
                 conn.close()
-                self._send_json({"rows": rows, "total": total})
+                self._send_json({"rows": rows, "total": total, "query": query})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/quality_records":
+            if not _is_admin(self):
+                _auth_error(self)
+                return
+            try:
+                body = _json_body(self)
+                issue = str(body.get("issue", "")).strip()
+                limit = min(max(int(body.get("limit", 100)), 1), 500)
+                valid_decisions = ["PRIME","FOR NEXT PROCESS","SALVAGE","HOLD FOR DECISION","REJECT","RE-WORK","DIVERT"]
+                conn = get_conn()
+                select = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
+                clauses=[]; params=[]
+                if issue == "missing_heat_no": clauses.append("TRIM(COALESCE(heat_no,''))=''")
+                elif issue == "missing_grade": clauses.append("TRIM(COALESCE(grade,''))=''")
+                elif issue == "missing_decision": clauses.append("TRIM(COALESCE(quality_decision,''))=''")
+                elif issue == "invalid_weights": clauses.append("output_weight IS NULL OR output_weight < 0")
+                elif issue == "invalid_dates":
+                    all_rows=[dict(r) for r in conn.execute(select).fetchall()]
+                    bad=[]
+                    for r in all_rows:
+                        dv=str(r.get("insp_lot_date") or "").strip()
+                        try: datetime.strptime(dv[:10], "%Y-%m-%d") if dv else (_ for _ in ()).throw(ValueError())
+                        except Exception: bad.append(r)
+                    conn.close(); self._send_json({"rows":bad[:limit],"total":len(bad),"issue":issue}); return
+                elif issue == "missing_intensity": clauses.append("TRIM(COALESCE(defect_intensity,''))=''")
+                elif issue == "invalid_values": clauses.append("TRIM(COALESCE(work_center,''))='' OR TRIM(COALESCE(main_defect,''))='' OR (TRIM(COALESCE(quality_decision,''))<>'' AND UPPER(TRIM(quality_decision)) NOT IN (%s))" % ','.join('?'*len(valid_decisions))); params.extend(valid_decisions)
+                elif issue == "duplicate_batch":
+                    rows = [dict(r) for r in conn.execute(select + " WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT UPPER(TRIM(batch_no)) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1) ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+                    total = conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT UPPER(TRIM(batch_no)) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1)").fetchone()[0]
+                    conn.close(); self._send_json({"rows":rows,"total":total,"issue":issue}); return
+                else:
+                    conn.close(); self._send_json({"error":"Unknown quality issue"},status=400); return
+                where=' WHERE '+ ' AND '.join(clauses) if clauses else ''
+                rows=[dict(r) for r in conn.execute(select+where+" ORDER BY id DESC LIMIT ?", tuple(params)+(limit,)).fetchall()]
+                total=conn.execute("SELECT COUNT(*) FROM disposition"+where,tuple(params)).fetchone()[0]
+                conn.close(); self._send_json({"rows":rows,"total":total,"issue":issue})
+            except Exception as e:
+                self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/admin/delete":

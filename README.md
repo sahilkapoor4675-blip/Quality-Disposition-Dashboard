@@ -8,7 +8,7 @@ Everything runs locally, no internet connection required after setup.
 ## Contents
 - `server.py` — the web server (routes + KPI calculation engine)
 - `index.html` — the dashboard frontend (vanilla HTML/CSS/JS)
-- `quality.db` — SQLite database (4,936 records imported from your workbook)
+- `quality.db` — SQLite database (the bundled disposition dataset imported from your workbook)
 - `build_db.py` — script used to (re)build `quality.db` from the original .xlsm
 
 ## How to run
@@ -35,7 +35,7 @@ This rebuilds `quality.db` from the .xlsm file. Then restart `server.py`.
 ## What's included
 - ✅ Exactly 16 KPI cards, colored exactly like the original workbook (green=good, red=bad, amber=caution, purple, slate — extracted directly from the workbook's cell font colors)
 - ✅ **Previous-period comparison on every KPI card** — "Prev: X" + ▲/▼ trend arrow + %/pts change, exactly replicating the "KPI Comparison" sheet engine (auto-detects Month/Week/Quarter/FY comparison mode based on which single filter is active)
-- ✅ 4,820/4,936 records imported, all with Output Weight
+- ✅ 4,820/the bundled disposition dataset imported, all with Output Weight
 - ✅ 8 live filters: Month, Work Center, Grade, Quality Decision, Week, Quarter, Financial Year, Defect Intensity
 - ✅ Real charts matching the original workbook's embedded Excel charts:
   - Pie chart — Quality Decision Mix (Qty MT)
@@ -131,7 +131,7 @@ dashboard, a paid tier (~$7/month) removes the sleep delay.
 
 
 ### Data update included
-- Sep-2026 data from the workbook's **Disposition Data** sheet has been imported (116 records), bringing the database to 4,936 records.
+- Sep-2026 data from the workbook's **Disposition Data** sheet has been imported (116 records), bringing the database to the bundled disposition dataset.
 - All existing filters are database-driven, so Sep-2026 values automatically appear in Month, Week, Quarter, Financial Year, Work Center, Grade, Quality Decision and Defect Intensity filters and in all dashboard/trend views.
 
 
@@ -187,3 +187,15 @@ The Admin Panel now includes:
 - Exportable Admin Audit Log (up to the latest 5,000 activity entries).
 - KPI Target History with old/new target values, effective date, changed-by and timestamp.
 - Role-aware administration: Super Admin, Data Admin, Quality Manager and Viewer. Backend permissions restrict sensitive actions by role.
+
+
+## V29 improvements
+
+V29 adds decision-support UI improvements to Admin and the main dashboard. These are read-only presentation/workflow enhancements; the bundled `quality.db` seed is unchanged.
+
+## V40 Intro Screen
+- 10-second Quality Intelligence intro for Non-Ferrous / Cupronickel Division.
+- Dark/light asset selected from the dashboard theme/system preference.
+- Intro ends on the final frame and waits for **ENTER DASHBOARD**.
+- A lightweight CSS ambient layer continues moving while the final frame is held.
+- Existing dashboard, admin, API and data files are preserved; no data records are modified by this UI change.
