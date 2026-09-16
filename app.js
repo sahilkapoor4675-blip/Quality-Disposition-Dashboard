@@ -143,7 +143,13 @@ async function loadFilters(){
   const res = await fetch("/api/filters");
   const options = await res.json();
   const container = document.getElementById("filters");
-  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+  const toolbarHost = document.getElementById("headerFilterToolbar");
+  if (toolbarHost) {
+    toolbarHost.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+    container.innerHTML = "";
+  } else {
+    container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+  }
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
     const label = document.createElement("label"); label.textContent = f.label;

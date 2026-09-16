@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&family=Allura&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=28.6.0">
+<link rel="stylesheet" href="/app.css?v=28.8.0">
 <script>
 // Apply the saved (or system-preferred) theme before first paint, so there's
 // no flash of the wrong theme. The toggle button in the header (wired in
@@ -285,27 +285,30 @@
 </script>
 
 <header>
-  <div class="executive-header-inner">
-    <img class="header-logo" src="jsl-header-logo.png" alt="Jindal Stainless">
-  <div class="executive-brand">
-    <h1 class="quality-intelligence-title"><span class="qi-quality">QUALITY</span><span class="qi-space"> </span><span class="qi-intelligence">INTELLIGENCE</span></h1>
-    <div class="executive-kicker">Disposition &amp; Defect Analytics</div>
-    <div class="plant-name">Cupronickel (Non-Ferrous) Division</div>
-    <div class="sub">Plant Quality Performance Monitoring</div>
-  </div>
-  </div>
-  <div class="executive-meta">
-    <div class="updated-block">
-      <div class="updated-label">Last Updated</div>
-      <div class="updated-time" id="refreshed">07 Sep 2026 • --:--</div>
+  <div class="header-top-row">
+    <div class="executive-header-inner">
+      <img class="header-logo" src="jsl-header-logo.png" alt="Jindal Stainless">
+    <div class="executive-brand">
+      <h1 class="quality-intelligence-title"><span class="qi-quality">QUALITY</span><span class="qi-space"> </span><span class="qi-intelligence">INTELLIGENCE</span></h1>
+      <div class="executive-kicker">Disposition &amp; Defect Analytics</div>
+      <div class="plant-name">Cupronickel (Non-Ferrous) Division</div>
+      <div class="sub">Plant Quality Performance Monitoring</div>
     </div>
-    <div class="header-actions">
-      <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
-      <div class="live-users" title="Dashboard users active within the last 75 seconds"><span class="live-users-dot"></span><span>NOW ACTIVE</span><strong id="liveUsersCount">0</strong></div>
-      <button class="theme-toggle-btn" id="themeToggleBtn" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
-      <a class="admin-link" href="/admin">🔐 Admin</a>
+    </div>
+    <div class="executive-meta">
+      <div class="updated-block">
+        <div class="updated-label">Last Updated</div>
+        <div class="updated-time" id="refreshed">07 Sep 2026 • --:--</div>
+      </div>
+      <div class="header-actions">
+        <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
+        <div class="live-users" title="Dashboard users active within the last 75 seconds"><span class="live-users-dot"></span><span>NOW ACTIVE</span><strong id="liveUsersCount">0</strong></div>
+        <button class="theme-toggle-btn" id="themeToggleBtn" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+        <a class="admin-link" href="/admin">🔐 Admin</a>
+      </div>
     </div>
   </div>
+  <div class="header-toolbar-row" id="headerFilterToolbar"></div>
 </header>
 
 <div class="container">
@@ -316,8 +319,8 @@
   <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div></div></div>
 
   <div class="sticky-controls" id="stickyControls">
-    <div class="filters" id="filters"></div>
     <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
+    <div class="filters" id="filters"></div>
     <div class="tabs" id="tabs">
       <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
       <button class="tab-btn" data-tab="controlroom">🚨 Quality Control Room</button>
@@ -558,6 +561,6 @@
   <div class="footer-note">Data source: Disposition Data (live database) &nbsp;•&nbsp; Hosted live database connection (PostgreSQL when configured)</div>
 </div>
 
-<script src="/app.js?v=28.6.0" defer></script>
+<script src="/app.js?v=28.8.0" defer></script>
 </body>
 </html>
