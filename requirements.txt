@@ -1,8 +1,9 @@
-openpyxl>=3.1.5
-psycopg2-binary>=2.9.9
-
-reportlab>=4.2.0
-
-matplotlib>=3.8.0
-
-python-pptx>=1.0.2
+# Pinned with the compatible-release operator (~=): this allows patch-level
+# upgrades (bug/security fixes) but blocks minor/major version jumps that
+# could silently change behavior on a redeploy. Bump these deliberately and
+# re-test the app when you want a newer minor/major version.
+openpyxl~=3.1.5
+psycopg2-binary~=2.9.9
+reportlab~=4.2.0
+matplotlib~=3.8.0
+python-pptx~=1.0.2
