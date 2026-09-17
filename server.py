@@ -1345,12 +1345,24 @@ def _record_from_values(values, mapping):
     quarter = str(get("quarter") or derived_quarter).strip()
     fy = str(get("financial_year") or derived_fy).strip()
     try:
-        weight_raw = get("output_weight", 0)
+        weight_raw = get("output_weight", "")
+        # A coil always has some real output weight in practice — a blank
+        # cell is missing data, not a genuine zero. Flag it the same way as
+        # non-numeric garbage (below) so _validate_record reports it as a
+        # per-row "required" error instead of silently recording it as 0,
+        # which would quietly understate weight-based KPIs.
+        blank = (weight_raw is None) or (isinstance(weight_raw, str) and weight_raw.strip() == "")
         if isinstance(weight_raw, str):
             weight_raw = weight_raw.replace(",", "").strip()
-        weight = float(weight_raw or 0)
+        weight = None if blank else float(weight_raw)
     except (TypeError, ValueError):
-        raise ValueError("Output Weight must be numeric")
+        # Don't raise here: one row with garbage in this column (a stray "N/A",
+        # a typo) used to abort the ENTIRE import with a generic error and no
+        # row number, discarding every other valid row in the file too. Flag
+        # it as None instead so _validate_record reports it as a per-row
+        # error — same as a missing BATCH NO or HEAT NO — and every other row
+        # still imports normally.
+        weight = None
 
     return {
         "heat_no": str(get("heat_no") or "").strip(),
@@ -1377,8 +1389,10 @@ def _validate_record(r):
         return "BATCH NO is required"
     if not r["quality_decision"]:
         return "QUALITY DECISION is required"
-    if r["output_weight"] < 0:
-        return "Output Weight cannot be negative"
+    if r["output_weight"] is None:
+        return "Output Weight is required and must be numeric"
+    if r["output_weight"] <= 0:
+        return "Output Weight must be greater than zero"
     if r["quality_decision"] not in DECISION_ORDER:
         return "Unknown QUALITY DECISION: " + r["quality_decision"]
     return ""
@@ -1850,6 +1864,17 @@ def _scheduled_backup_loop():
         return
     interval_seconds = BACKUP_SCHEDULE_HOURS * 3600
     check_every = min(interval_seconds, 3600)  # re-check at least hourly
+    # This runs on its own thread, started at the same time as (not after)
+    # _run_startup_tasks — on a fresh database the tables this backs up may
+    # not exist yet for the first second or two. Wait for schema setup to
+    # finish (or bail out after a generous ceiling, so a genuinely stuck
+    # schema step can't wedge this loop forever) before the first snapshot
+    # attempt, instead of racing it and logging a spurious "no such table"
+    # warning on every cold start.
+    waited = 0
+    while not STARTUP_READY and waited < 300:
+        time.sleep(1)
+        waited += 1
     while True:
         try:
             age = _seconds_since_last_backup()
@@ -3600,9 +3625,9 @@ class Handler(BaseHTTPRequestHandler):
                     missing_date=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))='' ")
                     duplicate_batch_groups=q1("SELECT COUNT(*) FROM (SELECT TRIM(batch_no) b, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY TRIM(batch_no) HAVING COUNT(*)>1) x")
                     if USE_POSTGRES:
-                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight::text,''))<>'' AND (TRIM(COALESCE(output_weight::text,'')) !~ '^[+-]?[0-9]+([.][0-9]+)?$|^[+-]?[.][0-9]+$' OR CAST(output_weight AS DOUBLE PRECISION)<0)")
+                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight::text,''))<>'' AND (TRIM(COALESCE(output_weight::text,'')) !~ '^[+-]?[0-9]+([.][0-9]+)?$|^[+-]?[.][0-9]+$' OR CAST(output_weight AS DOUBLE PRECISION)<=0)")
                     else:
-                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight,''))<>'' AND CAST(output_weight AS REAL)<0")
+                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight,''))<>'' AND CAST(output_weight AS REAL)<=0")
                     issue_total=missing_heat+missing_batch+missing_grade+missing_decision+missing_date+duplicate_batch_groups+invalid_weight
                     self._send_json({"ok":True,"records":total,"issues":issue_total,"checks":{"missing_heat":missing_heat,"missing_batch":missing_batch,"missing_grade":missing_grade,"missing_decision":missing_decision,"missing_date":missing_date,"duplicate_batch_groups":duplicate_batch_groups,"invalid_negative_weight":invalid_weight}})
                 except Exception as e:
@@ -3700,7 +3725,7 @@ class Handler(BaseHTTPRequestHandler):
                     {"id":"unique_batch","name":"Batch No unique","severity":"High","field":"batch_no","description":"A Batch No should map to one disposition record."},
                     {"id":"valid_grade","name":"Grade required","severity":"Medium","field":"grade","description":"Grade must be populated."},
                     {"id":"valid_decision","name":"Decision controlled","severity":"High","field":"quality_decision","description":"Decision must use an approved disposition value."},
-                    {"id":"valid_weight","name":"Weight non-negative","severity":"Medium","field":"output_weight","description":"Output weight must be present and non-negative."},
+                    {"id":"valid_weight","name":"Weight greater than zero","severity":"Medium","field":"output_weight","description":"Output weight must be present and greater than zero."},
                     {"id":"valid_date","name":"Inspection date valid","severity":"High","field":"insp_lot_date","description":"Inspection date must be present and YYYY-MM-DD compatible."},
                     {"id":"defect_intensity","name":"Defect intensity required","severity":"Medium","field":"defect_intensity","description":"Defect intensity should be populated for traceability."},
                     {"id":"workcenter_defect","name":"Work Center + Defect required","severity":"Medium","field":"work_center/main_defect","description":"Work Center and Main Defect should be populated."}
@@ -4409,7 +4434,7 @@ class Handler(BaseHTTPRequestHandler):
                 if issue == "missing_heat_no": clauses.append("TRIM(COALESCE(heat_no,''))=''")
                 elif issue == "missing_grade": clauses.append("TRIM(COALESCE(grade,''))=''")
                 elif issue == "missing_decision": clauses.append("TRIM(COALESCE(quality_decision,''))=''")
-                elif issue == "invalid_weights": clauses.append("output_weight IS NULL OR output_weight < 0")
+                elif issue == "invalid_weights": clauses.append("output_weight IS NULL OR output_weight <= 0")
                 elif issue == "invalid_dates":
                     all_rows=[dict(r) for r in conn.execute(select).fetchall()]
                     bad=[]
