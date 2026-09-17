@@ -62,7 +62,15 @@ def _send_bytes(self, data, content_type, filename):
     self.send_header("Content-Length", str(len(data)))
     self.send_header("Cache-Control", "no-store")
     self.end_headers()
-    self.wfile.write(data)
+    try:
+        self.wfile.write(data)
+    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+        # A large export (Excel/PDF/PPTX) is exactly the kind of download a
+        # flaky connection or a cancelled browser download interrupts
+        # mid-stream. The file was already fully generated in memory before
+        # this call, so there's no partial state to clean up -- just don't
+        # let a normal client-side cancel look like a server crash.
+        pass
 
 def _kpi_rows(kpis):
     rows=[]

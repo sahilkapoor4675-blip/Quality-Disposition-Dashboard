@@ -426,6 +426,49 @@ class _PGConn:
                 except Exception: pass
         else: self.conn.close()
 
+class _SafeSQLiteCursor(sqlite3.Cursor):
+    """A cursor that rolls back its connection the moment a statement fails.
+
+    Without this, a single failed write (a UNIQUE-constraint violation, a bad
+    value, anything) leaves SQLite's implicit transaction open but neither
+    committed nor rolled back. Every write everywhere else in the app then
+    fails with "database is locked" until the process restarts -- a single
+    bad request can take down writes for every user until a redeploy. The
+    Postgres path already guards against the equivalent failure mode (see
+    _PGConn.close() above); this gives SQLite the same guarantee."""
+    def execute(self, sql, params=()):
+        try:
+            return super().execute(sql, params)
+        except Exception:
+            try: self.connection.rollback()
+            except Exception: pass
+            raise
+    def executemany(self, sql, seq):
+        try:
+            return super().executemany(sql, seq)
+        except Exception:
+            try: self.connection.rollback()
+            except Exception: pass
+            raise
+
+class _SafeSQLiteConnection(sqlite3.Connection):
+    def cursor(self, *a, **kw):
+        return super().cursor(_SafeSQLiteCursor)
+    def execute(self, sql, params=()):
+        try:
+            return super().execute(sql, params)
+        except Exception:
+            try: self.rollback()
+            except Exception: pass
+            raise
+    def executemany(self, sql, seq):
+        try:
+            return super().executemany(sql, seq)
+        except Exception:
+            try: self.rollback()
+            except Exception: pass
+            raise
+
 def get_conn():
     global PG_POOL
     if USE_POSTGRES:
@@ -441,7 +484,7 @@ def get_conn():
             # multi-minute hang instead of an immediate, diagnosable error.
             PG_POOL = SimpleConnectionPool(minconn, maxconn, DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require"), application_name="quality-disposition-dashboard", options="-c lock_timeout=8000")
         return _PGConn(PG_POOL.getconn(), pooled=True)
-    conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False, factory=_SafeSQLiteConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=3000")
     conn.execute("PRAGMA temp_store=MEMORY")
@@ -1720,11 +1763,11 @@ def _backup_snapshot_data():
             "SELECT defect_name,norm_name,man,machine,material,method,measurement,environment FROM fishbone_master"
         ).fetchall()]
         try:
-            fishbone_alias = [dict(r) for r in conn.execute("SELECT alias,defect_name FROM fishbone_alias").fetchall()]
+            fishbone_alias = [dict(r) for r in conn.execute("SELECT disposition_defect,master_defect,created_by FROM fishbone_alias").fetchall()]
         except Exception:
             fishbone_alias = []
         try:
-            kpi_targets = [dict(r) for r in conn.execute("SELECT kpi_name,target FROM kpi_targets").fetchall()]
+            kpi_targets = [dict(r) for r in conn.execute("SELECT label,target,warning,critical,direction FROM kpi_targets").fetchall()]
         except Exception:
             kpi_targets = []
         try:
@@ -1857,14 +1900,19 @@ def _restore_backup_data(data):
         try:
             conn.execute("DELETE FROM fishbone_alias")
             if alias_rows:
-                conn.executemany("INSERT INTO fishbone_alias (alias,defect_name) VALUES (?,?)", [(r.get("alias",""), r.get("defect_name","")) for r in alias_rows])
+                conn.executemany(
+                    "INSERT INTO fishbone_alias (disposition_defect,norm_disposition_defect,master_defect,created_by) VALUES (?,?,?,?)",
+                    [(r.get("disposition_defect",""), _norm_defect_key(r.get("disposition_defect","")), r.get("master_defect",""), r.get("created_by","")) for r in alias_rows],
+                )
         except Exception:
             pass
         kpi_rows = data.get("kpi_targets") or []
         try:
-            if kpi_rows:
-                for r in kpi_rows:
-                    conn.execute("INSERT INTO kpi_targets (kpi_name,target) VALUES (?,?) ON CONFLICT(kpi_name) DO UPDATE SET target=excluded.target" if USE_POSTGRES else "INSERT OR REPLACE INTO kpi_targets (kpi_name,target) VALUES (?,?)", (r.get("kpi_name",""), r.get("target")))
+            for r in kpi_rows:
+                conn.execute(
+                    "INSERT INTO kpi_targets(label,target,warning,critical,direction) VALUES(?,?,?,?,?) ON CONFLICT(label) DO UPDATE SET target=excluded.target,warning=excluded.warning,critical=excluded.critical,direction=excluded.direction,updated_at=CURRENT_TIMESTAMP",
+                    (r.get("label",""), r.get("target"), r.get("warning"), r.get("critical"), r.get("direction","higher")),
+                )
         except Exception:
             pass
         rca_rows = data.get("rca_master") or []
@@ -2972,7 +3020,17 @@ class Handler(BaseHTTPRequestHandler):
                 body = encoded
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # The client (a flaky mobile connection, a closed browser tab, a
+            # cancelled export download) disconnected before we finished
+            # writing. The response is already computed and any DB
+            # connection used to build it was already closed above this
+            # call, so there's nothing left to clean up or roll back --
+            # just don't let it explode into a per-request traceback in
+            # the server log.
+            pass
 
     def _security_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
