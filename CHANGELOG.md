@@ -1,6 +1,134 @@
 # Quality Disposition Dashboard — Changelog
 
-Consolidated release/fix history for the current V62 release.
+Consolidated release/fix history for the current V62 release. Everything lives in
+this one file now instead of separate `CHANGELOG_V*.md` files, to keep the repo
+from accumulating a changelog file per release.
+
+## V27.1
+
+# V27.1 — Stability & Security Maintenance Release
+
+## Preserved exactly
+- Existing `quality.db` data (4,936 disposition records)
+- Existing filter keys and filter calculations
+- Existing KPI calculations and 16 KPI cards
+- Existing five dashboard tabs and their read-only data flows
+- Existing QCR rendering and drill-down behavior
+
+## Fixed / hardened
+- Removed the hard-coded administrator password from `server.py`.
+- Startup no longer deletes/resets the entire `users` table.
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` are now environment-backed for new provisioning.
+- Existing users, roles and passwords are preserved on startup.
+- Fixed README credential documentation to match the V27.1 security model.
+- Bumped frontend asset versions to `27.1` to prevent stale browser cache after deployment.
+- Added a non-destructive smoke-test suite covering health, filters, 16 KPIs, QCR, core analysis endpoints and data-count integrity.
+
+## Intentionally deferred
+- Large backend/frontend module split (deferred to a separate refactor so current data/filter behavior remains untouched).
+- Major CSS rewrite/design changes.
+- New analytics/AI features.
+- Database migration or schema redesign.
+
+---
+
+## V27.2
+
+# V27.2 — Engineering Hardening
+
+## Preserved
+- Existing 4,936 disposition records.
+- Existing KPI calculations and filter behavior.
+- Existing 5-tab navigation and QCR payload logic.
+- Existing import/export/admin workflows.
+
+## Added
+- Non-destructive HTTP regression suite covering core API endpoints and a real filter request.
+- Data fingerprint check before/after regression tests to detect accidental mutation.
+- Lightweight code-health gate for syntax, credential-pattern detection and CSS duplicate reporting.
+- `X-Request-ID` response header for easier production troubleshooting.
+- Security baseline documentation.
+
+## Intentionally not changed
+- Database schema/data model.
+- KPI formulas.
+- Filter/query semantics.
+- QCR calculation logic.
+- CSS cascade. Duplicate CSS selectors are reported for the next controlled cleanup rather than aggressively rewritten.
+
+---
+
+## V27.3
+
+# V27.3 — RCA (Root Cause Analysis) + 6M Icon/Color Coding
+
+## Added
+- **RCA import**: the same "Import 6M Fishbone Master" upload in Admin now also reads two more
+  sheets from the workbook, both optional:
+  - `RCA_RootCause_Library` — Defect List, 6M Category, WHY-1 → WHY-5/Root Cause, Action,
+    Preventive Action, Role, Responsibility (one row per defect × 6M category).
+  - `Icon Color Coding` — 6M category → recommended color (icon is carried over from whatever
+    emoji prefixes the category cell in the RCA sheet, e.g. "👤Man").
+- **RCA panel**: a new "Root Cause Analysis (RCA)" table renders under the 6M Fishbone diagram
+  on both the Quality Control Room tab and the Dashboard tab, for whichever of the Top 5 Defects
+  is selected. Shows the Why-Why chain, root cause, action, preventive action and role/
+  responsibility for every 6M category that has RCA data on file for that defect.
+- **Dynamic icon/color coding**: the fishbone diagram (card grid, Ishikawa SVG, and the PNG used
+  in Excel/PDF exports) now takes its 6M category colors and icons from the imported
+  `fishbone_style` table instead of a fixed palette. Falls back to the original look until an
+  admin imports a workbook that carries an Icon Color Coding sheet.
+- Excel and PDF exports include a new RCA table alongside the existing 6M cause list for the
+  current #1 defect.
+- Backups/restore now include the RCA library and style config alongside the existing 6M
+  Fishbone Master, aliases, disposition data and KPI targets.
+
+## Preserved
+- Existing 6M Fishbone Master import behavior for workbooks that only have `Master_Data` —
+  RCA and style sheets are optional; nothing breaks if they're absent.
+- Existing fishbone matching (manual alias → exact → fuzzy) is unchanged; RCA is attached to
+  whatever the match already resolves to.
+- Existing disposition data, KPI calculations, and 5-tab navigation.
+
+## Data model
+- New tables: `rca_master` (defect × 6M category → why1..why5, action, preventive_action, role,
+  responsibility) and `fishbone_style` (6M category → label, icon, color). Both are created
+  automatically on server startup for existing databases (no manual migration needed).
+
+---
+
+## V27.4
+
+# V27.4 — Production Reliability & Performance
+
+## What changed
+- Added composite database indexes for the dashboard's most common multi-filter/grouping combinations.
+- Applied the composite indexes consistently to SQLite and PostgreSQL paths.
+- Added GitHub Actions CI to automatically run compile, code-health, smoke, and regression checks on pushes/PRs to `main`/`master`.
+- Preserved the existing dataset, filters, KPI calculations, QCR calculations, UI behavior, and import/export logic.
+
+## Data safety
+The bundled `quality.db` remains unchanged at the row/data level. Index creation only changes database access structures.
+
+## Export Optimization Update
+- Added dedicated Export Center tab with filtered Excel, PDF and PowerPoint actions.
+- Added PowerPoint (16:9) management deck export with KPI scorecard, charts, trends, QCR intelligence and root-cause slides.
+- Enhanced Excel export with complete filtered row-level data plus dashboard/QCR analysis.
+- Enhanced PDF export with complete trend, work-center, grade and QCR intelligence summary tables.
+
+---
+
+## V40
+
+# V40 Final Clean Update
+
+- Restored admin header to a clean white background with subtle border/shadow.
+- Removed page-level horizontal overflow; responsive admin sections now fit the viewport.
+- Preserved internal scrolling only for genuinely wide data tables.
+- Switched the intro to the light visual only and removed the dark intro asset.
+- Kept the existing intro CTA gate/background animation behavior.
+- No application data or database records were changed.
+
+---
 
 ## CHANGELOG_V46
 
@@ -374,5 +502,32 @@ Heavy report exports default to one-at-a-time on small hosts. The global Python 
 - PowerPoint: complete tables paginate, and the matching chart(s) are repeated on every continuation slide, so every table chunk stays paired with its chart.
 - No source rows are silently dropped from report tables.
 - Raw CSV remains complete and unchanged.
+
+---
+
+## V62.1
+
+# V62.1 — Header / Filter Toolbar Reorganization
+
+## What changed
+- **Reset All** moved out of the header and into the Dashboard Filters panel
+  (`#filters`), next to the "Dashboard Filters" title and the active-filter
+  count badge — it's a filter action, so it now lives with the filters.
+- **Export buttons** (Quality Report • Excel / PDF / PPT, Raw Data • CSV) stay
+  in the header, now right-aligned in the header toolbar row instead of being
+  mixed in with the title/badge/reset button.
+
+## Files touched
+- `app.js` — `loadFilters()` now renders export buttons into
+  `#headerFilterToolbar` and the title/badge/Reset All into `#filters`,
+  instead of putting everything into the header. Element IDs and event
+  listeners are unchanged.
+- `app.css` — `.header-toolbar-row .filter-toolbar` switched from
+  `justify-content:space-between` to `flex-end` (only the export actions live
+  there now, so they should sit on the right).
+
+## Preserved
+- All export/reset functionality and behavior — only the markup location and
+  alignment changed, not the IDs, handlers, or filter/export logic.
 
 ---

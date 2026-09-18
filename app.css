@@ -1191,21 +1191,22 @@ header .sub{font-size:12px !important;}
 }
 
 /* ================================================================
-   HEADER TOOLBAR ROW — the "Quality Report • Excel/PDF/PPT / Raw
-   Data CSV / Reset All" bar used to be the first row inside the
-   Filters panel; it now lives in the header as a second row right
-   below the branding + live-status row. #headerFilterToolbar is
-   filled by loadFilters() in app.js.
+   HEADER TOOLBAR ROW — only the export buttons ("Quality Report •
+   Excel/PDF/PPT / Raw Data CSV") live here now, right-aligned, as a
+   second row right below the branding + live-status row. The
+   "Dashboard Filters" title, active-filter badge and Reset All
+   button live inside the Filters panel instead (#filters, filled by
+   loadFilters() in app.js).
    ================================================================ */
 header{display:flex !important;flex-direction:column !important;align-items:stretch !important;justify-content:flex-start !important;gap:4px !important;}
 .header-top-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:18px;width:100%;}
 .header-toolbar-row{width:100%;}
 .header-toolbar-row:empty{display:none;}
-.header-toolbar-row .filter-toolbar{grid-column:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 0 0;margin-top:2px;border-top:1px solid rgba(255,255,255,.16);}
+.header-toolbar-row .filter-toolbar{grid-column:auto;display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;padding:8px 0 0;margin-top:2px;border-top:1px solid rgba(255,255,255,.16);}
 .header-toolbar-row .filter-toolbar-title{color:rgba(255,255,255,.85) !important;font-size:12.5px !important;}
 .header-toolbar-row .active-filter-badge{background:rgba(255,255,255,.14);color:#fff;}
 @media(max-width:700px){
-  .header-toolbar-row .filter-toolbar{flex-direction:column;align-items:flex-start;gap:8px;}
+  .header-toolbar-row .filter-toolbar{flex-direction:column;align-items:flex-end;gap:8px;}
 }
 html[data-theme="dark"] .header-toolbar-row .filter-toolbar{border-top-color:rgba(255,255,255,.10);}
 
