@@ -44,6 +44,21 @@ except (ValueError, RuntimeError):
     pass
 if sys.getrecursionlimit() < 10000:
     sys.setrecursionlimit(10000)
+
+# Export concurrency guard: Excel/PDF/PPTX generation is the heaviest thing
+# this process does per request -- it holds a DB connection through ~9
+# sequential queries, renders several matplotlib figures, and (for PDF/PPTX)
+# builds the whole document in memory, all inside a thread that has reserved
+# 64 MiB of real stack (see above). On a memory-constrained host, letting an
+# unbounded number of these run at once is exactly what turns "one export,
+# alone" (fine) into "one export while other people are using the dashboard"
+# (RecursionError / OOM-flavored failures) -- the failure mode this was
+# actually reported as. Cap how many heavy report builds run at the same
+# time; extra requests wait briefly for a slot instead of piling on.
+EXPORT_CONCURRENCY = max(1, int(os.environ.get("EXPORT_CONCURRENCY", "2")))
+EXPORT_WAIT_TIMEOUT_S = float(os.environ.get("EXPORT_WAIT_TIMEOUT_S", "20"))
+_EXPORT_SEMAPHORE = threading.BoundedSemaphore(EXPORT_CONCURRENCY)
+
 import sqlite3
 
 try:
@@ -1048,13 +1063,39 @@ def compute_defect_analysis(filters):
     # Include canonical defect names plus any new defect names present in the
     # live database (e.g. newly added monthly data), so new categories never
     # disappear from the register/charts.
+    #
+    # Manually-entered free text is inconsistent in casing/spacing ("Scab",
+    # "SCAB ", " scab") -- comparing on TRIM alone let every spelling variant
+    # of the same defect count as its own row, so an otherwise small defect
+    # list could balloon into thousands of near-duplicate register rows on
+    # the full (unfiltered) dataset specifically -- one row per query below,
+    # and one more oversized table in every export that includes this
+    # register. Normalize on (upper+trim) so variants of the same defect
+    # collapse to a single canonical row, keeping the register's size tied
+    # to the number of REAL defect categories rather than to typos.
     cur.execute("SELECT DISTINCT main_defect FROM disposition WHERE TRIM(COALESCE(main_defect,'')) <> '' AND UPPER(TRIM(main_defect)) <> 'NO DEFECT'")
-    db_defects = {r[0].strip() for r in cur.fetchall() if r[0]}
-    all_defects = sorted(set(MAIN_DEFECTS_FULL_LIST) | db_defects)
+    seen_norm = {}
+    for r in cur.fetchall():
+        raw = r[0]
+        if not raw:
+            continue
+        norm = raw.strip().upper()
+        # Prefer a nicely-cased spelling for display, first one wins.
+        seen_norm.setdefault(norm, raw.strip())
+    canonical_norm = {d.strip().upper(): d for d in MAIN_DEFECTS_FULL_LIST}
+    merged = dict(canonical_norm)
+    merged.update(seen_norm)  # DB spelling wins for display if it differs in case only
+    for norm, display in canonical_norm.items():
+        merged[norm] = display  # ...but keep the canonical label itself authoritative
+    all_defects = sorted(merged.values())
 
     register = []
     for defect in all_defects:
-        w2 = where_sql + (" AND " if where_sql else "WHERE ") + "main_defect = ?"
+        # Match case/whitespace-insensitively (see normalization above) so a
+        # canonical defect's count includes every raw spelling variant on
+        # file, instead of only the one exact string this loop happens to be
+        # holding.
+        w2 = where_sql + (" AND " if where_sql else "WHERE ") + "UPPER(TRIM(main_defect)) = UPPER(TRIM(?))"
         cur.execute(f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {w2}",
                     params + [defect])
         cnt, qty = cur.fetchone()
@@ -3104,11 +3145,56 @@ def _export_recursion_response(kind, exc):
             "This has been logged for diagnosis. Please try again with a narrower filter "
             "(e.g. a single month) — if it still fails, contact support with the time of this attempt.")
 
+
+def _capped_export_payload(payload, register_limit=150, list_limit=50):
+    """Best-effort shrink of the biggest optional lists in an export payload.
+    Used as an automatic one-time retry after a RecursionError so a full/
+    unfiltered report still comes back to the user -- with its largest,
+    least-essential lists capped -- instead of failing outright. The
+    defect register in particular has no natural upper bound: it grows with
+    the number of distinct defect labels on file, which normally tracks a
+    fixed set of defect categories but can balloon on messy data."""
+    capped = dict(payload)
+    defects = payload.get("defects") or {}
+    register = defects.get("register") or []
+    if len(register) > register_limit:
+        defects = dict(defects)
+        defects["register"] = register[:register_limit]  # already sorted by qty desc
+        defects["register_truncated_from"] = len(register)
+        capped["defects"] = defects
+    intel = payload.get("intel") or {}
+    trimmed_intel = None
+    for key in ("recurring_patterns", "early_warnings", "kpi_ranking", "problem_finder"):
+        vals = intel.get(key)
+        if isinstance(vals, list) and len(vals) > list_limit:
+            if trimmed_intel is None:
+                trimmed_intel = dict(intel)
+            trimmed_intel[key] = vals[:list_limit]
+    if trimmed_intel is not None:
+        capped["intel"] = trimmed_intel
+    return capped
+
+
+def _build_export_with_retry(kind, builder, payload):
+    """Build one export format. If the first attempt hits the recursion
+    safety valve, retry exactly once with a capped payload (see
+    _capped_export_payload) before giving up -- so a full/unfiltered report
+    still comes back to the user in the common case where an oversized list
+    was the actual cause, rather than an outright failure. Diagnostic
+    logging (deepest/most-repeated frames) is left to the caller's final
+    RecursionError handler, so it reflects whichever attempt actually fails."""
+    try:
+        return builder(payload)
+    except RecursionError:
+        print(f"EXPORT {kind}: hit the recursion safety valve on the first attempt — "
+              f"retrying once with a capped payload before giving up.", flush=True)
+        return builder(_capped_export_payload(payload))
+
 def _report_root_cause(filters, defect):
     if not defect: return []
     where_sql,params=build_where(filters); params=list(params)+[defect]
     conn=get_conn();
-    rows=conn.execute(f"SELECT grade,work_center,heat_no,batch_no,output_weight FROM disposition {where_sql + (' AND ' if where_sql else 'WHERE ')}main_defect = ? ORDER BY output_weight DESC LIMIT 30",params).fetchall(); conn.close()
+    rows=conn.execute(f"SELECT grade,work_center,heat_no,batch_no,output_weight FROM disposition {where_sql + (' AND ' if where_sql else 'WHERE ')}UPPER(TRIM(main_defect)) = UPPER(TRIM(?)) ORDER BY output_weight DESC LIMIT 30",params).fetchall(); conn.close()
     return [dict(r) for r in rows]
 
 def _export_data(filters):
@@ -4058,33 +4144,60 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/export/excel":
             try:
                 payload = _export_data(_export_filters(qs))
+            except Exception as e:
+                print("EXPORT excel FAILED (assembling data) —", flush=True); traceback.print_exc()
+                self._send_json({"error": str(e)}, status=500); return
+            if not _EXPORT_SEMAPHORE.acquire(timeout=EXPORT_WAIT_TIMEOUT_S):
+                self._send_json({"error": f"The server is already generating {EXPORT_CONCURRENCY} other report(s). Please retry in a few seconds."}, status=503); return
+            try:
+                data = _build_export_with_retry("excel", _excel_report, payload)
                 _activity_event(self, "export_excel", filters=payload["filters"])
-                _send_bytes(self, _excel_report(payload), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _safe_filename(payload["filters"], ".xlsx"))
+                _send_bytes(self, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _safe_filename(payload["filters"], ".xlsx"))
             except RecursionError as e:
                 self._send_json({"error": _export_recursion_response("excel", e)}, status=500)
             except Exception as e:
                 print("EXPORT excel FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
+            finally:
+                _EXPORT_SEMAPHORE.release()
         elif path == "/api/export/pdf":
             try:
                 payload = _export_data(_export_filters(qs))
+            except Exception as e:
+                print("EXPORT pdf FAILED (assembling data) —", flush=True); traceback.print_exc()
+                self._send_json({"error": str(e)}, status=500); return
+            if not _EXPORT_SEMAPHORE.acquire(timeout=EXPORT_WAIT_TIMEOUT_S):
+                self._send_json({"error": f"The server is already generating {EXPORT_CONCURRENCY} other report(s). Please retry in a few seconds."}, status=503); return
+            try:
+                data = _build_export_with_retry("pdf", _pdf_report, payload)
                 _activity_event(self, "export_pdf", filters=payload["filters"])
-                _send_bytes(self, _pdf_report(payload), "application/pdf", _safe_filename(payload["filters"], ".pdf"))
+                _send_bytes(self, data, "application/pdf", _safe_filename(payload["filters"], ".pdf"))
             except RecursionError as e:
                 self._send_json({"error": _export_recursion_response("pdf", e)}, status=500)
             except Exception as e:
                 print("EXPORT pdf FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
+            finally:
+                _EXPORT_SEMAPHORE.release()
         elif path == "/api/export/pptx":
             try:
                 payload = _export_data(_export_filters(qs))
+            except Exception as e:
+                print("EXPORT pptx FAILED (assembling data) —", flush=True); traceback.print_exc()
+                self._send_json({"error": str(e)}, status=500); return
+            if not _EXPORT_SEMAPHORE.acquire(timeout=EXPORT_WAIT_TIMEOUT_S):
+                self._send_json({"error": f"The server is already generating {EXPORT_CONCURRENCY} other report(s). Please retry in a few seconds."}, status=503); return
+            try:
+                data = _build_export_with_retry("pptx", _pptx_report, payload)
                 _activity_event(self, "export_pptx", filters=payload["filters"])
-                _send_bytes(self, _pptx_report(payload), "application/vnd.openxmlformats-officedocument.presentationml.presentation", _safe_filename(payload["filters"], ".pptx"))
+                _send_bytes(self, data, "application/vnd.openxmlformats-officedocument.presentationml.presentation", _safe_filename(payload["filters"], ".pptx"))
             except RecursionError as e:
                 self._send_json({"error": _export_recursion_response("pptx", e)}, status=500)
             except Exception as e:
                 print("EXPORT pptx FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
+            finally:
+                _EXPORT_SEMAPHORE.release()
         elif path == "/api/export/csv":
             try:
                 filters = _export_filters(qs); where_sql, params = build_where(filters)

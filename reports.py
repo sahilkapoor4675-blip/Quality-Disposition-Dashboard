@@ -497,8 +497,19 @@ def _pdf_report(payload):
     story.append(PageBreak())
 
     # ---- Defect Analysis: table + its Pareto / Intensity charts, same page. ----
-    d=payload["defects"]; rows=[["Rank","Defect","Records","Qty MT","% Records"]]+[[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in d["register"]]+[["","Total",d["register_total"]["records"],f'{d["register_total"]["qty"]:.3f}',f'{d["register_total"]["pct_records"]*100:.2f}%']]
-    _pdf_section(story,styles,"Defect Analysis",[charts_dict.get("Defect Pareto"),charts_dict.get("Defect Intensity")],rows,[45,300,70,80,80],chart_w=375,chart_h=167)
+    # The register normally tracks a fixed set of defect categories, but a
+    # printed/PDF table of an unusually large register (e.g. from messy
+    # source data) is neither readable nor useful -- cap what's shown here
+    # to the highest-quantity rows and note the omission; the full,
+    # uncapped register is always available in the Excel export.
+    d=payload["defects"]; register=d["register"]
+    _PDF_REGISTER_CAP=300
+    reg_note=None
+    if len(register)>_PDF_REGISTER_CAP:
+        reg_note=f"Showing top {_PDF_REGISTER_CAP} of {len(register)} defect categories by quantity — see the Excel export for the complete register."
+        register=register[:_PDF_REGISTER_CAP]
+    rows=[["Rank","Defect","Records","Qty MT","% Records"]]+[[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in register]+[["","Total",d["register_total"]["records"],f'{d["register_total"]["qty"]:.3f}',f'{d["register_total"]["pct_records"]*100:.2f}%']]
+    _pdf_section(story,styles,"Defect Analysis",[charts_dict.get("Defect Pareto"),charts_dict.get("Defect Intensity")],rows,[45,300,70,80,80],chart_w=375,chart_h=167,note=reg_note)
 
     # ---- Work Center / Grade: table + matching bar chart, same page. ----
     wc=payload["wcg"]["by_work_center"]; wtot=payload["wcg"]["total_work_center"]
@@ -693,11 +704,20 @@ def _pptx_report(payload):
         s.shapes.add_picture(io.BytesIO(charts_dict["Decision Distribution"]),left,top,width=pic_w,height=pic_h)
 
     # ---- Defect Analysis: table + its Pareto / Intensity charts, same slide. ----
-    d=payload["defects"]
+    # A slide deck that paginates the full register would mean one slide per
+    # ~14 rows -- hundreds of slides for an unusually large (e.g. messy-data)
+    # register. Cap it the same way the PDF export does; the complete
+    # register is always available in the Excel export.
+    d=payload["defects"]; _pptx_register=d.get("register",[])
+    _PPTX_REGISTER_CAP=150
+    _pptx_reg_sub=None
+    if len(_pptx_register)>_PPTX_REGISTER_CAP:
+        _pptx_reg_sub=f"Top {_PPTX_REGISTER_CAP} of {len(_pptx_register)} defect categories by quantity — see the Excel export for the complete register."
+        _pptx_register=_pptx_register[:_PPTX_REGISTER_CAP]
     add_chart_table_slide("Defect Analysis",[charts_dict.get("Defect Pareto"),charts_dict.get("Defect Intensity")],
         ["Rank","Defect","Records","Qty (MT)","% Records"],
-        [[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in d.get("register",[])],
-        col_weights=[0.6,3.0,1.1,1.2,1.2])
+        [[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in _pptx_register],
+        col_weights=[0.6,3.0,1.1,1.2,1.2], sub=_pptx_reg_sub)
 
     # ---- Work Center / Grade: table + matching bar chart, same slide. ----
     wcg_headers=["Name","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty"]
