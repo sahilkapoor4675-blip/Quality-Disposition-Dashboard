@@ -17,13 +17,45 @@ import difflib
 import traceback
 import threading
 
-# Report/export generation is bounded in reports.py. Avoid globally raising the
-# Python recursion limit or per-thread native stack: on a memory-constrained
-# Render instance that can turn one export into a process-wide memory risk.
+# Safety valve: report/export generation (compute_qcr_intelligence + chart
+# rendering + reportlab/openpyxl/python-pptx building) can legitimately need
+# a deeper call stack than Python's default 1000-frame limit once several of
+# these layers are nested together on a request with a lot of distinct
+# grades/work-centers/defects. Raising the ceiling costs nothing on the happy
+# path and avoids a spurious "maximum recursion depth exceeded" on otherwise
+# well-formed exports.
+#
+# Raising sys.setrecursionlimit() on its own is not enough to make this safe:
+# each Python stack frame also consumes real OS thread-stack memory, and this
+# app serves every request on its own thread (ThreadingHTTPServer). If a
+# thread's native stack runs out before the higher Python-level limit is
+# reached, the interpreter can crash with a hard segfault instead of raising
+# a catchable RecursionError -- silently, with no log line and no JSON error
+# for the browser to show. threading.stack_size() must be set (BEFORE any
+# thread is created) to give every request thread enough real stack headroom
+# to safely support the higher recursionlimit below. 64 MiB comfortably
+# covers a 10,000-frame Python stack.
+try:
+    threading.stack_size(64 * 1024 * 1024)
+except (ValueError, RuntimeError):
+    # Some platforms (or a thread already started before this runs) reject
+    # an explicit stack size -- fall back to the platform default rather
+    # than crash startup over it.
+    pass
+if sys.getrecursionlimit() < 10000:
+    sys.setrecursionlimit(10000)
 
-# Heavy report exports are serialized by default; dashboard/API requests remain
-# concurrent. This keeps Excel/PDF/PPTX memory usage predictable on small hosts.
-EXPORT_CONCURRENCY = max(1, int(os.environ.get("EXPORT_CONCURRENCY", "1")))
+# Export concurrency guard: Excel/PDF/PPTX generation is the heaviest thing
+# this process does per request -- it holds a DB connection through ~9
+# sequential queries, renders several matplotlib figures, and (for PDF/PPTX)
+# builds the whole document in memory, all inside a thread that has reserved
+# 64 MiB of real stack (see above). On a memory-constrained host, letting an
+# unbounded number of these run at once is exactly what turns "one export,
+# alone" (fine) into "one export while other people are using the dashboard"
+# (RecursionError / OOM-flavored failures) -- the failure mode this was
+# actually reported as. Cap how many heavy report builds run at the same
+# time; extra requests wait briefly for a slot instead of piling on.
+EXPORT_CONCURRENCY = max(1, int(os.environ.get("EXPORT_CONCURRENCY", "2")))
 EXPORT_WAIT_TIMEOUT_S = float(os.environ.get("EXPORT_WAIT_TIMEOUT_S", "20"))
 _EXPORT_SEMAPHORE = threading.BoundedSemaphore(EXPORT_CONCURRENCY)
 
@@ -71,7 +103,7 @@ def _csv_safe_value(value):
 
 
 SERVER_STARTED_AT = time.time()
-APP_VERSION = os.environ.get("APP_VERSION", "V62.0")
+APP_VERSION = os.environ.get("APP_VERSION", "V60.0")
 ADMIN_BUILD_VERSION = APP_VERSION
 
 try:
@@ -3088,13 +3120,14 @@ def _export_filters(qs):
 def _export_recursion_response(kind, exc):
     """Handle a RecursionError that made it all the way out of an export
     endpoint (i.e. survived the recursion-limit increase + real stack-size
-    increase applied at startup). Rather than surface the bare, undiagnosable
-    "maximum recursion depth exceeded" straight to the browser, log exactly
+    increase applied at startup, and the capped-payload retry). Log exactly
     which function was recursing -- the deepest frames plus a count of the
     most-repeated (file, function) pair across the whole stack, which is
-    almost always the actual runaway call -- so a recurrence can be root-
-    caused from the server logs instead of guessed at again. Returns a
-    friendlier, actionable message for the client."""
+    almost always the actual runaway call -- to the server logs. That same
+    summary is also appended to the message returned to the browser: on
+    hosts where server logs aren't easily reachable, the on-screen error
+    itself is enough to root-cause a recurrence instead of guessing again."""
+    diag = ""
     try:
         frames = traceback.extract_tb(exc.__traceback__)
         print(f"EXPORT {kind} FAILED — RecursionError (limit={sys.getrecursionlimit()}, stack depth={len(frames)})", flush=True)
@@ -3103,15 +3136,22 @@ def _export_recursion_response(kind, exc):
             for f in frames[-10:]:
                 print(f"  {f.filename}:{f.lineno} in {f.name}", flush=True)
             from collections import Counter
-            counts = Counter((f.filename, f.name) for f in frames)
+            counts = Counter((os.path.basename(f.filename), f.name) for f in frames)
             print(f"RECURSION {kind}: most-repeated frames across full stack —", flush=True)
             for (fn, name), c in counts.most_common(5):
                 print(f"  {name} ({fn}) — {c} occurrences", flush=True)
+            top_fn, top_name = counts.most_common(1)[0][0]
+            top_count = counts.most_common(1)[0][1]
+            deepest = frames[-1]
+            diag = (f" [diagnostic: stack depth {len(frames)}; deepest frame "
+                    f"{os.path.basename(deepest.filename)}:{deepest.lineno} in {deepest.name}(); "
+                    f"most-repeated frame {top_name}() in {top_fn} — {top_count} occurrences]")
     except Exception:
         traceback.print_exc()
-    return ("This report hit an unexpectedly deep processing limit and could not be generated. "
-            "This has been logged for diagnosis. Please try again with a narrower filter "
-            "(e.g. a single month) — if it still fails, contact support with the time of this attempt.")
+    return ("This report hit an unexpectedly deep processing limit and could not be generated "
+            "even after an automatic retry with a reduced dataset. This has been logged for "
+            "diagnosis. Please try again with a narrower filter (e.g. a single month) — if it "
+            "still fails, contact support with the time of this attempt." + diag)
 
 
 def _capped_export_payload(payload, register_limit=150, list_limit=50):
