@@ -3904,7 +3904,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # Versioned static CSS/JS: aggressively cached by browsers.
-        if path in {"/app.css", "/app.js"}:
+        if path in {"/app.css", "/app.js", "/sfx.js"}:
             asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
             if os.path.isfile(asset):
                 mime = "text/css; charset=utf-8" if path.endswith(".css") else "application/javascript; charset=utf-8"

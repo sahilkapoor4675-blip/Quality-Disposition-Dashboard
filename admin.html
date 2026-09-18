@@ -171,6 +171,7 @@ html[data-theme="dark"] .theme-toggle-btn{
 }
 .theme-toggle-btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(30,65,95,.12)}
 html[data-theme="dark"] .theme-toggle-btn:hover{background:#1B2A40;border-color:#4A6380;box-shadow:0 7px 18px rgba(0,0,0,.24)}
+.theme-toggle-btn.muted{opacity:.55}
 html[data-theme="dark"] ::selection{background:#2563EB;color:#fff}
 html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.78)}
 @media(max-width:600px){
@@ -202,6 +203,7 @@ body > *{position:relative;z-index:1;}
 @media(max-width:900px){body::before{background-size:min(82vw,650px) auto;opacity:.09;}}
 @media(max-width:600px){body::before{background-size:min(94vw,520px) auto;opacity:.075;}}
 </style>
+<script src="/sfx.js?v=1.0" defer></script>
 <script>
 function escJs(value){
   return String(value ?? "")
@@ -343,7 +345,7 @@ body{min-width:0;}
 </style>
 </head>
 <body>
-<div class="top"><div class="top-brand"><img class="top-logo" src="/jsl-header-logo.png" alt="Jindal Stainless"><div class="brand"><h1><span class="admin-title-main"><span class="admin-quality">QUALITY</span><span style="display:inline-block;width:8px"></span><span class="admin-intelligence">INTELLIGENCE</span></span><span class="admin-title-sub"><span class="admin-admin">ADMIN</span></span></h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div></div><div class="actions"><span class="secure">● SECURE ADMIN</span><span class="security-badge">CSRF • RATE LIMIT • SESSION PROTECTED</span><span class="live-db-badge" id="liveDbBadge" title="Active database connection">🟢 LIVE DB · checking</span><button class="theme-toggle-btn" id="adminThemeToggleBtn" type="button" title="Switch to dark mode" aria-label="Switch to dark mode">☾</button><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
+<div class="top"><div class="top-brand"><img class="top-logo" src="/jsl-header-logo.png" alt="Jindal Stainless"><div class="brand"><h1><span class="admin-title-main"><span class="admin-quality">QUALITY</span><span style="display:inline-block;width:8px"></span><span class="admin-intelligence">INTELLIGENCE</span></span><span class="admin-title-sub"><span class="admin-admin">ADMIN</span></span></h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div></div><div class="actions"><span class="secure">● SECURE ADMIN</span><span class="security-badge">CSRF • RATE LIMIT • SESSION PROTECTED</span><span class="live-db-badge" id="liveDbBadge" title="Active database connection">🟢 LIVE DB · checking</span><button class="theme-toggle-btn" id="adminThemeToggleBtn" type="button" title="Switch to dark mode" aria-label="Switch to dark mode">☾</button><button class="theme-toggle-btn sfx-toggle-btn" type="button" title="Mute sound effects" aria-label="Mute sound effects">🔊</button><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
 <div class="wrap">
   <section class="login" id="loginBox">
     <h2>🔐 Admin Login</h2><p class="hint">Only the authorized administrator can add, import or delete data. Viewer access to the dashboard remains read-only.</p>
@@ -550,7 +552,7 @@ const $=id=>document.getElementById(id);
 function csrfToken(){const m=document.cookie.match(/(?:^|; )qdash_csrf=([^;]+)/);return m?decodeURIComponent(m[1]):''}
 async function api(url,opts={}){opts=opts||{};if((opts.method||'GET').toUpperCase()!=='GET' && url.startsWith('/api/admin/')){opts.headers=Object.assign({},opts.headers||{}, {'X-CSRF-Token':csrfToken()});}const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{};if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
 async function status(){try{return await api('/api/auth/status')}catch{return {authenticated:false}}}
-function setMsg(id,text,kind=''){const e=$(id);e.textContent=text;e.className='msg '+kind}
+function setMsg(id,text,kind=''){const e=$(id);e.textContent=text;e.className='msg '+kind;if(window.SFX){if(kind==='err')SFX.play('error');else if(kind==='ok')SFX.play('success');}}
 async function connectionStatus(){const dot=document.querySelector('#loginConnection .connection-dot');const txt=$('loginConnectionText');dot.className='connection-dot checking';txt.textContent='Checking connection…';try{const d=await api('/api/connection_status');dot.className='connection-dot connected';txt.textContent=`${d.provider} • Connected • ${d.latency_ms} ms • ${d.checked_at}`;return true}catch(e){let msg='Database unavailable';try{const r=await fetch('/api/connection_status');const d=await r.json();if(d.error)msg=d.error}catch{}dot.className='connection-dot failed';txt.textContent=msg;return false}}
 async function loadUsers(){try{const d=await api('/api/admin/users');$('usersBody').innerHTML=d.rows.map(r=>`<tr><td>${esc(r.username)}</td><td>${esc(r.display_name)}</td><td>${esc(r.role)}</td><td>${r.active?'Active':'Disabled'}${r.must_reset_password?' <small style="color:#B45309;font-weight:800">• reset pending</small>':''}</td><td>${esc(r.created_at||'')}</td><td style="white-space:nowrap">${r.username==='admin'?'':`<button class="btn" style="margin-right:6px" onclick="resetUserPassword(${r.id},'${escAttrJs(r.username)}')">🔑 Reset Password</button>`}${r.username==='admin'?'—':`<button class="delete" onclick="toggleUser(${r.id},${!r.active})">${r.active?'Disable':'Enable'}</button>`}</td></tr>`).join('')}catch(e){setMsg('userMsg',e.message,'err')}}
 async function toggleUser(id,active){try{await api('/api/admin/user_toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,active})});loadUsers()}catch(e){alert(e.message)}}

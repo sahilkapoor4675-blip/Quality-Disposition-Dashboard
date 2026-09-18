@@ -1090,6 +1090,7 @@ html[data-theme="dark"] #qcrFishboneDiagram{background:#fff!important;border-col
 .theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:9px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;font-size:17px;transition:background .15s ease;}
 .theme-toggle-btn:hover{background:rgba(255,255,255,.16);}
 html[data-theme="dark"] .theme-toggle-btn{border-color:#2A3B54;background:#141B2C;}
+.theme-toggle-btn.muted{opacity:.55;}
 
 /* ================================================================
    GLOBAL SEARCH — find any defect / grade / work center quickly.
