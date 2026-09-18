@@ -3120,16 +3120,21 @@ def _export_filters(qs):
 def _export_recursion_response(kind, exc):
     """Handle a RecursionError that made it all the way out of an export
     endpoint (i.e. survived the recursion-limit increase + real stack-size
-    increase applied at startup, and the capped-payload retry). Log exactly
-    which function was recursing -- the deepest frames plus a count of the
-    most-repeated (file, function) pair across the whole stack, which is
-    almost always the actual runaway call -- to the server logs. That same
-    summary is also appended to the message returned to the browser: on
-    hosts where server logs aren't easily reachable, the on-screen error
-    itself is enough to root-cause a recurrence instead of guessing again."""
+    increase applied at startup, and the capped-payload retry). Logs, and
+    also returns to the browser:
+      - the deepest frames + the most-repeated (file, function) pair,
+      - the last frame of OUR OWN code (server.py/reports.py) before the
+        library call chain took over -- i.e. the actual call site responsible,
+      - a live sample of the real object being copied at the point of
+        failure, read directly off the still-attached traceback frames
+        (tb_frame.f_locals persist for every frame that was on the stack,
+        even though the stack itself has since unwound) -- its type and a
+        short repr, which identifies the actual runaway data structure
+        instead of just the library function name."""
     diag = ""
     try:
-        frames = traceback.extract_tb(exc.__traceback__)
+        tb = exc.__traceback__
+        frames = traceback.extract_tb(tb)
         print(f"EXPORT {kind} FAILED — RecursionError (limit={sys.getrecursionlimit()}, stack depth={len(frames)})", flush=True)
         if frames:
             print(f"RECURSION {kind}: deepest frames —", flush=True)
@@ -3143,9 +3148,58 @@ def _export_recursion_response(kind, exc):
             top_fn, top_name = counts.most_common(1)[0][0]
             top_count = counts.most_common(1)[0][1]
             deepest = frames[-1]
+
+            # Last frame that's OUR code (not a library) -- the actual call site.
+            our_frame = None
+            for f in frames:
+                if f.filename.endswith(("server.py", "reports.py")):
+                    our_frame = f
+            our_site = f"{os.path.basename(our_frame.filename)}:{our_frame.lineno} in {our_frame.name}()" if our_frame else "not found in traceback"
+            print(f"RECURSION {kind}: last call site in our own code — {our_site}", flush=True)
+
+            # Sample the real object at the point of failure straight off the live frames.
+            # Describe it SHALLOWLY (keys/length only, never a full repr) -- repr() on a
+            # deeply-nested dict/list recurses through every value and can itself hit the
+            # same recursion limit while we're trying to diagnose it.
+            def _shallow_describe(v):
+                try:
+                    if isinstance(v, dict):
+                        return f"dict(len={len(v)}, keys={list(v.keys())[:8]})"
+                    if isinstance(v, (list, tuple, set)):
+                        first = next(iter(v)) if v else None
+                        return f"{type(v).__name__}(len={len(v)}, first_elem_type={type(first).__name__ if first is not None else None})"
+                    r = repr(v)
+                    return r if len(r) <= 200 else r[:200] + "…"
+                except RecursionError:
+                    return f"<{type(v).__name__}: too deep to repr>"
+                except Exception:
+                    return f"<{type(v).__name__}: unreprable>"
+            sample_info = ""
+            try:
+                nodes = []
+                node = tb
+                while node is not None:
+                    nodes.append(node); node = node.tb_next
+                for node in reversed(nodes[-8:]):
+                    fr = node.tb_frame
+                    loc = fr.f_locals
+                    for key in ("x", "self", "obj", "y", "d", "a", "n"):
+                        if key in loc:
+                            v = loc[key]
+                            desc = _shallow_describe(v)
+                            line = f"  sample local in {fr.f_code.co_name} ({os.path.basename(fr.f_code.co_filename)}:{fr.f_lineno}): {key} = {type(v).__name__}: {desc}"
+                            print(line, flush=True)
+                            if not sample_info:
+                                sample_info = f"{type(v).__name__}: {desc}"
+                            break
+            except Exception:
+                traceback.print_exc()
+
             diag = (f" [diagnostic: stack depth {len(frames)}; deepest frame "
                     f"{os.path.basename(deepest.filename)}:{deepest.lineno} in {deepest.name}(); "
-                    f"most-repeated frame {top_name}() in {top_fn} — {top_count} occurrences]")
+                    f"most-repeated frame {top_name}() in {top_fn} — {top_count} occurrences; "
+                    f"our call site — {our_site}"
+                    + (f"; sample object — {sample_info}" if sample_info else "") + "]")
     except Exception:
         traceback.print_exc()
     return ("This report hit an unexpectedly deep processing limit and could not be generated "
