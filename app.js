@@ -1255,7 +1255,7 @@ function fishboneBranchDefs(){
 }
 function buildFishboneSvg(item){
   const causes=item.causes||{};
-  const LANE=380, TIP_DX=-160, ROW_GAP=48, BOX_H=42;
+  const LANE=380, TIP_DX=-160, ROW_GAP=56, BOX_H=42;
   const anchors=[210, 210+LANE, 210+LANE*2];
   const spineX1=30, spineX2=anchors[2]+260;
   const headW=232;
@@ -1267,7 +1267,7 @@ function buildFishboneSvg(item){
     const list=fbList(causes[b.key]);
     const items=(list.length?list:['No cause on file']).map(txt=>({
       text:txt, missing:!list.length,
-      fit:fbFitBox(txt, availCauseW, {baseSize:12.5, minSize:8.5, maxLines:3, charW:0.64})
+      fit:fbFitBox(txt, availCauseW, {baseSize:14, minSize:9.5, maxLines:3, charW:0.64})
     }));
     return Object.assign({}, b, {anchorX:anchors[b.lane], items});
   });
