@@ -107,7 +107,22 @@ def _excel_number_format(fmt):
     return {"pct":"0.000%", "int":"#,##0", "num2":"#,##0.000", "num3":"0.000"}.get(fmt, "General")
 
 def _chart_png(kind, title, labels, values, second=None, second_label=None, percent=False):
-    """Create dashboard-style chart PNGs for Office/PDF exports. Returns bytes or None."""
+    """Create dashboard-style chart PNGs for Office/PDF exports. Returns bytes or None.
+
+    NOTE ON THE RECURSIONERROR THAT USED TO HAPPEN HERE: every "unexpectedly deep
+    processing limit" export failure traced back to this function's "pareto" branch,
+    always at the final savefig() call. The real cause was combining ax.twinx() (used
+    for the dual Qty/Cumulative-% axis) with fig.savefig(..., bbox_inches="tight").
+    bbox_inches="tight" makes Matplotlib walk get_tightbbox() across every artist,
+    and when a twinned axis is in the mix that walk revisits the twin pair's shared
+    locators/formatters once per x-tick label -- so the recursion depth scales with
+    the number of distinct defect labels on the chart. A handful of labels stayed
+    under the recursion ceiling; a broad/unfiltered report with a long defect list
+    (or many grades/work-centers/months elsewhere) did not. fig.tight_layout() below
+    already lays the figure out correctly on its own, so bbox_inches="tight" was
+    redundant on top of it -- dropping it removes the trigger entirely rather than
+    just delaying it with a higher recursion limit or a smaller payload.
+    """
     if plt is None:
         return None
     import numpy as np
@@ -154,7 +169,9 @@ def _chart_png(kind, title, labels, values, second=None, second_label=None, perc
     ax.spines["left"].set_color(grid); ax.spines["bottom"].set_color(grid)
     ax.tick_params(axis="y",labelsize=7.5)
     fig.tight_layout(pad=1.25)
-    out=io.BytesIO(); fig.savefig(out,format="png",bbox_inches="tight",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
+    # No bbox_inches="tight" here -- see the note at the top of this function. fig.tight_layout()
+    # already sized everything correctly; re-tightening at savefig() time is what recursed.
+    out=io.BytesIO(); fig.savefig(out,format="png",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
 
 FISHBONE_BRANCHES = [
     ("man","Man","#118DFF","top"),
@@ -217,7 +234,10 @@ def _fishbone_png(item, style=None):
             rc_y = by-0.30 if side=="top" else by+box_h+0.30
             ax.text(tip_x,rc_y,rc_short,fontsize=6.2,color=color,ha="center",va="center",fontweight="bold",style="italic")
     fig.tight_layout(pad=0.6)
-    out=io.BytesIO(); fig.savefig(out,format="png",bbox_inches="tight",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
+    # Same fix as _chart_png() above: rely on tight_layout() alone, don't also pass
+    # bbox_inches="tight" to savefig() -- that combination is what caused the
+    # RecursionError, not this diagram's own artist count.
+    out=io.BytesIO(); fig.savefig(out,format="png",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
 
 def _export_charts(payload):
     """Build the same set of dashboard charts shown in the webapp, as PNGs, for Excel/PDF/PPT exports.

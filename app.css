@@ -1177,17 +1177,25 @@ header{max-width:1480px;margin:0 auto;width:100%;box-sizing:border-box;}
    cut that down a lot while keeping the branding legible. Uses
    !important only where needed to beat the earlier !important
    rules on .quality-intelligence-title.
+
+   BRANDING SCALE-UP — the tightened sizes above left the logo and
+   text looking small/lost inside the header's own footprint. Scaled
+   the logo and every title/subtitle line back up together (not just
+   the header padding) so the branding fills the header the way it
+   did before the height reduction, without the header itself
+   growing tall again.
    ================================================================ */
-header{padding:11px 28px !important;}
-header h1.quality-intelligence-title{margin:0 0 2px !important;}
-.quality-intelligence-title{font-size:28px !important;line-height:1.15 !important;padding-bottom:0 !important;}
-.executive-kicker{margin-top:3px !important;font-size:11.5px !important;}
-.plant-name{margin-top:2px !important;font-size:13px !important;}
-header .sub{font-size:12px !important;}
-.header-logo{height:38px !important;}
+header{padding:16px 28px !important;}
+header h1.quality-intelligence-title{margin:0 0 3px !important;}
+.quality-intelligence-title{font-size:38px !important;line-height:1.15 !important;padding-bottom:0 !important;}
+.executive-kicker{margin-top:4px !important;font-size:14px !important;}
+.plant-name{margin-top:3px !important;font-size:16px !important;}
+header .sub{font-size:14px !important;}
+.header-logo{height:58px !important;}
 @media(max-width:700px){
-  header{padding:9px 18px !important;}
-  .quality-intelligence-title{font-size:20px !important;}
+  header{padding:12px 18px !important;}
+  .quality-intelligence-title{font-size:26px !important;}
+  .header-logo{height:42px !important;}
 }
 
 /* ================================================================
