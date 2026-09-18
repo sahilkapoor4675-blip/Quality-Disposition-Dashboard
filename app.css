@@ -167,8 +167,13 @@
   .filter-toolbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:2px;}
   .filter-toolbar-title{font-size:14px;font-weight:800;color:var(--navy);letter-spacing:.4px;text-transform:uppercase;}
   .filter-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
-  .active-filter-badge{display:none;padding:5px 9px;border-radius:999px;background:#e8f3ff;color:#0369a1;font-size:13.5px;font-weight:800;}
-  .active-filter-badge.show{display:inline-flex;}
+  /* Reserve this badge's layout space at all times (visibility, not display) so the
+     export buttons next to it — anchored to the right edge of .filter-toolbar via
+     justify-content:space-between — don't shift left the moment a filter is applied
+     and the badge pops into the flex row. min-width keeps it stable across "0 Active"
+     vs any other single/double-digit count too. */
+  .active-filter-badge{display:inline-flex;visibility:hidden;padding:5px 9px;min-width:64px;justify-content:center;border-radius:999px;background:#e8f3ff;color:#0369a1;font-size:13.5px;font-weight:800;}
+  .active-filter-badge.show{visibility:visible;}
   .export-btn{border:1px solid #cfe0fb;background:#fff;color:#0f2a4a;border-radius:7px;padding:7px 10px;font-size:13.5px;font-weight:800;cursor:pointer}.export-btn:hover{background:#eef4ff}.reset-all{border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:7px;padding:6px 10px;font-size:13.5px;font-weight:700;cursor:pointer;}
   .reset-all:hover{box-shadow:0 5px 14px rgba(15,42,74,.10);border-color:#94a3b8;}
   .filters-reset-row{grid-column:1/-1;display:flex;justify-content:flex-end;margin-top:2px;}

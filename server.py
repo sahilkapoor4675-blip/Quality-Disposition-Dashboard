@@ -15,6 +15,7 @@ import sys
 import re
 import difflib
 import traceback
+import threading
 
 # Safety valve: report/export generation (compute_qcr_intelligence + chart
 # rendering + reportlab/openpyxl/python-pptx building) can legitimately need
@@ -23,8 +24,26 @@ import traceback
 # grades/work-centers/defects. Raising the ceiling costs nothing on the happy
 # path and avoids a spurious "maximum recursion depth exceeded" on otherwise
 # well-formed exports.
-if sys.getrecursionlimit() < 4000:
-    sys.setrecursionlimit(4000)
+#
+# Raising sys.setrecursionlimit() on its own is not enough to make this safe:
+# each Python stack frame also consumes real OS thread-stack memory, and this
+# app serves every request on its own thread (ThreadingHTTPServer). If a
+# thread's native stack runs out before the higher Python-level limit is
+# reached, the interpreter can crash with a hard segfault instead of raising
+# a catchable RecursionError -- silently, with no log line and no JSON error
+# for the browser to show. threading.stack_size() must be set (BEFORE any
+# thread is created) to give every request thread enough real stack headroom
+# to safely support the higher recursionlimit below. 64 MiB comfortably
+# covers a 10,000-frame Python stack.
+try:
+    threading.stack_size(64 * 1024 * 1024)
+except (ValueError, RuntimeError):
+    # Some platforms (or a thread already started before this runs) reject
+    # an explicit stack size -- fall back to the platform default rather
+    # than crash startup over it.
+    pass
+if sys.getrecursionlimit() < 10000:
+    sys.setrecursionlimit(10000)
 import sqlite3
 
 try:
@@ -3056,6 +3075,35 @@ def database_status():
 def _export_filters(qs):
     return {k: qs.get(k, "All") for k in FILTER_KEYS}
 
+
+def _export_recursion_response(kind, exc):
+    """Handle a RecursionError that made it all the way out of an export
+    endpoint (i.e. survived the recursion-limit increase + real stack-size
+    increase applied at startup). Rather than surface the bare, undiagnosable
+    "maximum recursion depth exceeded" straight to the browser, log exactly
+    which function was recursing -- the deepest frames plus a count of the
+    most-repeated (file, function) pair across the whole stack, which is
+    almost always the actual runaway call -- so a recurrence can be root-
+    caused from the server logs instead of guessed at again. Returns a
+    friendlier, actionable message for the client."""
+    try:
+        frames = traceback.extract_tb(exc.__traceback__)
+        print(f"EXPORT {kind} FAILED — RecursionError (limit={sys.getrecursionlimit()}, stack depth={len(frames)})", flush=True)
+        if frames:
+            print(f"RECURSION {kind}: deepest frames —", flush=True)
+            for f in frames[-10:]:
+                print(f"  {f.filename}:{f.lineno} in {f.name}", flush=True)
+            from collections import Counter
+            counts = Counter((f.filename, f.name) for f in frames)
+            print(f"RECURSION {kind}: most-repeated frames across full stack —", flush=True)
+            for (fn, name), c in counts.most_common(5):
+                print(f"  {name} ({fn}) — {c} occurrences", flush=True)
+    except Exception:
+        traceback.print_exc()
+    return ("This report hit an unexpectedly deep processing limit and could not be generated. "
+            "This has been logged for diagnosis. Please try again with a narrower filter "
+            "(e.g. a single month) — if it still fails, contact support with the time of this attempt.")
+
 def _report_root_cause(filters, defect):
     if not defect: return []
     where_sql,params=build_where(filters); params=list(params)+[defect]
@@ -4012,6 +4060,8 @@ class Handler(BaseHTTPRequestHandler):
                 payload = _export_data(_export_filters(qs))
                 _activity_event(self, "export_excel", filters=payload["filters"])
                 _send_bytes(self, _excel_report(payload), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _safe_filename(payload["filters"], ".xlsx"))
+            except RecursionError as e:
+                self._send_json({"error": _export_recursion_response("excel", e)}, status=500)
             except Exception as e:
                 print("EXPORT excel FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
@@ -4020,6 +4070,8 @@ class Handler(BaseHTTPRequestHandler):
                 payload = _export_data(_export_filters(qs))
                 _activity_event(self, "export_pdf", filters=payload["filters"])
                 _send_bytes(self, _pdf_report(payload), "application/pdf", _safe_filename(payload["filters"], ".pdf"))
+            except RecursionError as e:
+                self._send_json({"error": _export_recursion_response("pdf", e)}, status=500)
             except Exception as e:
                 print("EXPORT pdf FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
@@ -4028,6 +4080,8 @@ class Handler(BaseHTTPRequestHandler):
                 payload = _export_data(_export_filters(qs))
                 _activity_event(self, "export_pptx", filters=payload["filters"])
                 _send_bytes(self, _pptx_report(payload), "application/vnd.openxmlformats-officedocument.presentationml.presentation", _safe_filename(payload["filters"], ".pptx"))
+            except RecursionError as e:
+                self._send_json({"error": _export_recursion_response("pptx", e)}, status=500)
             except Exception as e:
                 print("EXPORT pptx FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
