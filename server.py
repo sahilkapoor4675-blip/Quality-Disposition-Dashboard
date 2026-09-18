@@ -14,6 +14,17 @@ import os
 import sys
 import re
 import difflib
+import traceback
+
+# Safety valve: report/export generation (compute_qcr_intelligence + chart
+# rendering + reportlab/openpyxl/python-pptx building) can legitimately need
+# a deeper call stack than Python's default 1000-frame limit once several of
+# these layers are nested together on a request with a lot of distinct
+# grades/work-centers/defects. Raising the ceiling costs nothing on the happy
+# path and avoids a spurious "maximum recursion depth exceeded" on otherwise
+# well-formed exports.
+if sys.getrecursionlimit() < 4000:
+    sys.setrecursionlimit(4000)
 import sqlite3
 
 try:
@@ -3061,7 +3072,23 @@ def _export_data(filters):
     period = compute_period_trend(filters)
     quarterly = compute_quarterly_trend(filters)
     yearly = compute_yearly_trend(filters)
-    intel = compute_qcr_intelligence(filters, monthly, defects, wcg, kpis)
+    # Intelligence is the most complex/optional part of the report (deep,
+    # closure-heavy analysis over every grade/work-center/defect combo). A
+    # failure here — including a runaway RecursionError on an unusual data
+    # shape — must never block the rest of the export, which is otherwise
+    # perfectly good data the viewer is waiting on. Isolate it the same way
+    # /api/qcr already isolates it for the live dashboard, and log the real
+    # traceback server-side so a recurrence is actually diagnosable instead
+    # of surfacing only a bare "maximum recursion depth exceeded" string.
+    try:
+        intel = compute_qcr_intelligence(filters, monthly, defects, wcg, kpis)
+    except Exception:
+        print("EXPORT: intelligence section degraded —", flush=True)
+        traceback.print_exc()
+        intel = {"comparison":{"current":None,"previous":None,"rows":[]},"why_changed":None,
+                 "forecast":{},"early_warnings":[],"kpi_ranking":[],
+                 "health_score":{"score":0,"status":"amber","reasons":[],"components":[]},
+                 "risk_matrix":{"work_centers":[],"grades":[]},"recurring_patterns":[]}
     top_defect=(defects.get("register") or [{}])[0].get("defect","") if defects.get("register") else ""
     root_cause=_report_root_cause(filters,top_defect)
     fishbone = _fishbone_match(top_defect) if top_defect else None
@@ -3986,6 +4013,7 @@ class Handler(BaseHTTPRequestHandler):
                 _activity_event(self, "export_excel", filters=payload["filters"])
                 _send_bytes(self, _excel_report(payload), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", _safe_filename(payload["filters"], ".xlsx"))
             except Exception as e:
+                print("EXPORT excel FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/export/pdf":
             try:
@@ -3993,6 +4021,7 @@ class Handler(BaseHTTPRequestHandler):
                 _activity_event(self, "export_pdf", filters=payload["filters"])
                 _send_bytes(self, _pdf_report(payload), "application/pdf", _safe_filename(payload["filters"], ".pdf"))
             except Exception as e:
+                print("EXPORT pdf FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/export/pptx":
             try:
@@ -4000,6 +4029,7 @@ class Handler(BaseHTTPRequestHandler):
                 _activity_event(self, "export_pptx", filters=payload["filters"])
                 _send_bytes(self, _pptx_report(payload), "application/vnd.openxmlformats-officedocument.presentationml.presentation", _safe_filename(payload["filters"], ".pptx"))
             except Exception as e:
+                print("EXPORT pptx FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/export/csv":
             try:
@@ -4009,6 +4039,7 @@ class Handler(BaseHTTPRequestHandler):
                 _activity_event(self, "export_csv", filters=filters)
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),"text/csv; charset=utf-8",_safe_filename(filters,".csv"))
             except Exception as e:
+                print("EXPORT csv FAILED —", flush=True); traceback.print_exc()
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":
             self._send_json({"status": "ok", "database": database_status()})
