@@ -11,6 +11,7 @@ risk of a circular import.
 """
 
 import io
+import re
 from datetime import datetime
 
 try:
@@ -51,9 +52,22 @@ def _filter_summary(filters):
 
 
 def _safe_filename(filters, ext):
-    active = [str(v).replace("/", "-").replace(" ", "_") for v in filters.values() if v and v != "All"]
-    suffix = ("_" + "_".join(active[:3])) if active else "_All_Data"
-    return "Quality_Disposition_Report" + suffix + ext
+    # Content-Disposition is an HTTP header: strip control characters and
+    # header-sensitive delimiters before the filename reaches _send_bytes().
+    safe_parts = []
+    for value in filters.values():
+        if not value or value == "All":
+            continue
+        text = str(value)
+        text = re.sub(r"[\\x00-\\x1f\\x7f]", "-", text)
+        text = text.replace("\\", "-").replace("/", "-").replace('"', "-")
+        text = re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("._- ")
+        if text:
+            safe_parts.append(text[:80])
+    suffix = ("_" + "_".join(safe_parts[:3])) if safe_parts else "_All_Data"
+    clean_ext = str(ext or ".xlsx")
+    clean_ext = "." + re.sub(r"[^A-Za-z0-9]+", "", clean_ext.lstrip("."))[:8]
+    return "Quality_Disposition_Report" + suffix + clean_ext
 
 def _send_bytes(self, data, content_type, filename):
     self.send_response(200)
@@ -420,7 +434,25 @@ def _excel_report(payload):
                 wrap = sheet.title == "Quality Control Room" and c.column in (2,3,4)
                 c.alignment=Alignment(horizontal=horiz, vertical="center", wrap_text=wrap)
         sheet.sheet_view.showGridLines=False
-    bio=io.BytesIO(); wb.save(bio); return bio.getvalue()
+
+    # Neutralize spreadsheet formulas in text cells while preserving numeric cells.
+    def _safe_excel_text(value):
+        if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+            return "'" + value
+        return value
+
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell.value, str):
+                    cell.value = _safe_excel_text(cell.value)
+
+    bio=io.BytesIO()
+    wb.save(bio)
+    data=bio.getvalue()
+    if not data:
+        raise RuntimeError("Excel export produced an empty workbook")
+    return data
 
 def _pdf_section(story, styles, title_text, chart_imgs, table_rows, table_widths, table_header_bg="#118DFF", chart_w=520, chart_h=230, note=None):
     """One report section: heading, its chart(s) side-by-side, then its data table —

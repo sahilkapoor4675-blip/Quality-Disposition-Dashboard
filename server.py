@@ -1,3 +1,4 @@
+import uuid
 #!/usr/bin/env python3
 """
 Quality Disposition Control Dashboard
@@ -18,11 +19,11 @@ import sqlite3
 try:
     import psycopg2
     from psycopg2.extras import DictCursor
-    from psycopg2.pool import SimpleConnectionPool
+    from psycopg2.pool import ThreadedConnectionPool
 except ImportError:
     psycopg2 = None
     DictCursor = None
-    SimpleConnectionPool = None
+    ThreadedConnectionPool = None
 import secrets
 import hashlib
 import hmac
@@ -32,6 +33,7 @@ import zipfile
 import shutil
 import time
 import threading
+PG_POOL_INIT_LOCK = threading.RLock()
 from datetime import datetime
 from email.parser import BytesParser
 from email.policy import default
@@ -40,8 +42,24 @@ from urllib.parse import urlparse, parse_qs
 
 from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report
 
+def _safe_header_filename(value):
+    text = str(value or "download").replace("\r", " ").replace("\n", " ")
+    text = re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("._-")
+    return text[:160] or "download"
+
+def _csv_safe_value(value):
+    """Return CSV text that spreadsheet programs treat as literal text.
+    Numeric values remain numeric; externally supplied strings beginning with
+    formula/control prefixes are prefixed with an apostrophe.
+    """
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
+
+
 SERVER_STARTED_AT = time.time()
-ADMIN_BUILD_VERSION = "V39"
+APP_VERSION = os.environ.get("APP_VERSION", "V60.0")
+ADMIN_BUILD_VERSION = APP_VERSION
 
 try:
     from openpyxl import Workbook
@@ -81,6 +99,8 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 # back to SQLite for local use and development.
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_POSTGRES = bool(DATABASE_URL)
+if os.environ.get("RENDER") and not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required on Render; refusing silent SQLite fallback")
 
 # IMPORTANT — data persistence: when running on SQLite (no DATABASE_URL), the live
 # database must NOT be the same file that ships inside the app bundle
@@ -113,6 +133,24 @@ DB_PATH = os.environ.get("DB_PATH", _DEFAULT_PERSISTENT_DB)
 PG_POOL = None
 RESPONSE_CACHE = {}
 RESPONSE_CACHE_TTL = 10
+RESPONSE_CACHE_MAX_ENTRIES = 100
+RESPONSE_CACHE_MAX_BYTES = 2 * 1024 * 1024
+RESPONSE_CACHE_BYTES = 0
+RESPONSE_CACHE_LOCK = threading.RLock()
+SESSION_LOCK = threading.RLock()
+LOGIN_LOCK = threading.RLock()
+ACTIVITY_RATE_LOCK = threading.RLock()
+ACTIVITY_RATE = {}
+IMPORT_PREVIEW_LOCK = threading.RLock()
+DISPOSITION_WRITE_LOCK = threading.RLock()
+ACTIVITY_CLEANUP_LOCK = threading.RLock()
+ACTIVITY_CLEANUP_LAST = 0.0
+BACKUP_WRITE_LOCK = threading.RLock()
+AUDIT_CLEANUP_LOCK = threading.RLock()
+AUDIT_CLEANUP_LAST = 0.0
+MAX_SESSIONS = 5000
+MAX_LOGIN_TRACKED_IPS = 10000
+MAX_IMPORT_PREVIEWS = 100
 
 # 6M Fishbone (Man/Machine/Material/Method/Measurement/Environment) master
 # data cache. The master list only changes when an admin re-imports the
@@ -288,6 +326,8 @@ def compute_prev_filters(filters):
         pf["week"] = "All"; pf["quarter"] = "All"; pf["financial_year"] = "All"
         return pf
     if filters.get("quarter", "All") != "All":
+        if filters.get("financial_year", "All") == "All":
+            return None
         pf = dict(filters)
         prev_q, prev_fy = _prev_quarter_label(filters["quarter"], filters.get("financial_year", "All"))
         pf["quarter"] = prev_q; pf["financial_year"] = prev_fy
@@ -343,6 +383,35 @@ def get_kpi_targets():
     for label,r in rows.items():
         out.setdefault(label,r)
     return out
+
+def _period_end_date(period_name):
+    try:
+        dt=_dt.datetime.strptime(str(period_name), "%b-%Y")
+        return (_dt.date(dt.year + 1, 1, 1) if dt.month == 12 else _dt.date(dt.year, dt.month + 1, 1)) - _dt.timedelta(days=1)
+    except Exception:
+        return None
+
+def _historical_kpi_target(label, period_name):
+    cfg=get_kpi_targets().get(label) or {}
+    default=float(cfg.get("target") or 0)
+    end_date=_period_end_date(period_name)
+    if not end_date:
+        return default
+    conn=get_conn()
+    try:
+        rows=conn.execute("SELECT new_target,effective_date,changed_at,id FROM kpi_target_history WHERE label=? ORDER BY id ASC",(label,)).fetchall()
+    finally:
+        conn.close()
+    best=None
+    for row in rows:
+        raw=str(row[1] or '').strip() or str(row[2] or '')[:10]
+        try:
+            changed=_dt.date.fromisoformat(raw[:10])
+        except Exception:
+            continue
+        if changed <= end_date and row[0] is not None:
+            best=float(row[0])
+    return default if best is None else best
 
 def _kpi_target_status(label,value):
     cfg=get_kpi_targets().get(label)
@@ -472,17 +541,23 @@ class _SafeSQLiteConnection(sqlite3.Connection):
 def get_conn():
     global PG_POOL
     if USE_POSTGRES:
-        if psycopg2 is None or SimpleConnectionPool is None:
+        if psycopg2 is None or ThreadedConnectionPool is None:
             raise RuntimeError("PostgreSQL support requires psycopg2-binary.")
-        if PG_POOL is None:
-            minconn = max(1, int(os.environ.get("PG_POOL_MIN", "1")))
-            maxconn = max(minconn, int(os.environ.get("PG_POOL_MAX", "8")))
-            # lock_timeout: if some other (e.g. leftover/orphaned) session is
-            # still holding a lock on a table, fail fast with a clear error
-            # instead of hanging until Supabase's own, much longer, statement
-            # timeout kicks in — that's what made a stuck lock look like a
-            # multi-minute hang instead of an immediate, diagnosable error.
-            PG_POOL = SimpleConnectionPool(minconn, maxconn, DATABASE_URL, connect_timeout=10, sslmode=os.environ.get("PGSSLMODE", "require"), application_name="quality-disposition-dashboard", options="-c lock_timeout=8000")
+        # The HTTP server is multi-threaded. psycopg2's SimpleConnectionPool is
+        # explicitly single-threaded; use the thread-safe pool and serialize
+        # lazy initialization so two first requests cannot create competing
+        # pools. This is a connection-layer fix only; it does not alter any
+        # existing data.
+        with PG_POOL_INIT_LOCK:
+            if PG_POOL is None:
+                minconn = max(1, int(os.environ.get("PG_POOL_MIN", "1")))
+                maxconn = max(minconn, int(os.environ.get("PG_POOL_MAX", "8")))
+                PG_POOL = ThreadedConnectionPool(
+                    minconn, maxconn, DATABASE_URL, connect_timeout=10,
+                    sslmode=os.environ.get("PGSSLMODE", "require"),
+                    application_name="quality-disposition-dashboard",
+                    options="-c lock_timeout=8000"
+                )
         return _PGConn(PG_POOL.getconn(), pooled=True)
     conn = sqlite3.connect(DB_PATH, timeout=5, check_same_thread=False, factory=_SafeSQLiteConnection)
     conn.row_factory = sqlite3.Row
@@ -563,8 +638,8 @@ def build_where(filters, exclude=None):
         val = filters.get(key, "All")
         if not val or val == "All":
             continue
-        if key == "defect_intensity" and val == "NONE":
-            clauses.append("TRIM(COALESCE(defect_intensity,'')) = ''")
+        if key == "defect_intensity" and str(val).strip().upper() == "NONE":
+            clauses.append("TRIM(COALESCE(defect_intensity,'')) IN ('', 'NONE')")
         else:
             clauses.append(f"{key} = ?")
             params.append(val)
@@ -791,6 +866,7 @@ def get_filter_options():
     for key in FILTER_KEYS:
         cur.execute(f"SELECT DISTINCT {key} FROM disposition WHERE {key} <> ''")
         vals = [r[0] for r in cur.fetchall()]
+        vals = list(dict.fromkeys(vals))
         if key == "month":
             vals.sort(key=_month_sort_key)
         elif key == "week":
@@ -798,7 +874,8 @@ def get_filter_options():
         else:
             vals.sort()
         if key == "defect_intensity":
-            vals = vals + ["NONE"]
+            vals = [v for v in vals if str(v or "").strip().upper() != "NONE"] + ["NONE"]
+            vals = list(dict.fromkeys(vals))
         if key == "week":
             options[key] = [{"value":"All", "label":"All"}] + [
                 {"value": v, "label": _week_display_label(v)} for v in vals
@@ -997,7 +1074,8 @@ def compute_monthly_trend(filters):
     cur = conn.cursor()
     where_sql, params = build_where(filters, exclude={"month"})
 
-    cur.execute("SELECT DISTINCT month FROM disposition WHERE month <> ''")
+    month_clause = where_sql + (" AND " if where_sql else "WHERE ") + "TRIM(COALESCE(month,'')) <> ''"
+    cur.execute(f"SELECT DISTINCT month FROM disposition {month_clause}", params)
     months = sorted([r[0] for r in cur.fetchall()], key=_month_sort_key)
 
     rows = [_group_metrics(cur, where_sql, params, "month", m) for m in months]
@@ -1018,7 +1096,8 @@ def compute_period_trend(filters):
     cur = conn.cursor()
     where_sql, params = build_where(filters, exclude={"week"})
 
-    cur.execute("SELECT DISTINCT week FROM disposition WHERE week <> ''")
+    week_clause = where_sql + (" AND " if where_sql else "WHERE ") + "TRIM(COALESCE(week,'')) <> ''"
+    cur.execute(f"SELECT DISTINCT week FROM disposition {week_clause}", params)
     weeks = sorted([r[0] for r in cur.fetchall()], key=_week_sort_key)
 
     rows = [_group_metrics(cur, where_sql, params, "week", w) for w in weeks]
@@ -1035,7 +1114,8 @@ def compute_quarterly_trend(filters):
     cur = conn.cursor()
     where_sql, params = build_where(filters, exclude={"quarter"})
 
-    cur.execute("SELECT DISTINCT quarter FROM disposition WHERE quarter <> '' ORDER BY 1")
+    quarter_clause = where_sql + (" AND " if where_sql else "WHERE ") + "TRIM(COALESCE(quarter,'')) <> ''"
+    cur.execute(f"SELECT DISTINCT quarter FROM disposition {quarter_clause} ORDER BY 1", params)
     quarters = [r[0] for r in cur.fetchall()]
     rows = [_group_metrics(cur, where_sql, params, "quarter", q) for q in quarters]
     total = _overall_metrics_total(cur, where_sql, params)
@@ -1049,7 +1129,8 @@ def compute_yearly_trend(filters):
     cur = conn.cursor()
     where_sql, params = build_where(filters, exclude={"financial_year"})
 
-    cur.execute("SELECT DISTINCT financial_year FROM disposition WHERE financial_year <> '' ORDER BY 1")
+    fy_clause = where_sql + (" AND " if where_sql else "WHERE ") + "TRIM(COALESCE(financial_year,'')) <> ''"
+    cur.execute(f"SELECT DISTINCT financial_year FROM disposition {fy_clause} ORDER BY 1", params)
     fys = [r[0] for r in cur.fetchall()]
     rows = [_group_metrics(cur, where_sql, params, "financial_year", fy) for fy in fys]
     total = _overall_metrics_total(cur, where_sql, params)
@@ -1118,33 +1199,63 @@ def _verify_password(password, stored):
     except Exception:
         return False
 
+def _activity_allowed(ip, limit=120):
+    now = time.time()
+    with ACTIVITY_RATE_LOCK:
+        rec = ACTIVITY_RATE.get(ip)
+        if not rec or now - rec[0] >= 60:
+            ACTIVITY_RATE[ip] = [now, 1]
+            if len(ACTIVITY_RATE) > 10000:
+                victims = sorted(ACTIVITY_RATE.items(), key=lambda kv: kv[1][0])[:2000]
+                for k, _ in victims:
+                    ACTIVITY_RATE.pop(k, None)
+            return True
+        rec[1] += 1
+        return rec[1] <= limit
+
 def _cleanup_sessions():
     now = _dt.datetime.now().timestamp()
-    for token, meta in list(SESSIONS.items()):
-        if meta.get("expires", 0) < now:
-            SESSIONS.pop(token, None)
+    with SESSION_LOCK:
+        for token, meta in list(SESSIONS.items()):
+            if meta.get("expires", 0) < now:
+                SESSIONS.pop(token, None)
+        # Hard cap protects a long-lived process from unbounded anonymous/session
+        # growth. Prefer removing the oldest-expiring entries; never touch live
+        # sessions unless the configured cap is actually exceeded.
+        if len(SESSIONS) > MAX_SESSIONS:
+            excess = len(SESSIONS) - MAX_SESSIONS
+            victims = sorted(SESSIONS.items(), key=lambda kv: kv[1].get("expires", 0))[:excess]
+            for token, _ in victims:
+                SESSIONS.pop(token, None)
 
 def _login_allowed(ip):
     now = time.time()
-    rec = LOGIN_ATTEMPTS.get(ip, {"count": 0, "window": now})
-    if now - rec.get("window", now) >= LOGIN_WINDOW:
-        rec = {"count": 0, "window": now}
-    if rec.get("count", 0) >= LOGIN_MAX_ATTEMPTS:
+    with LOGIN_LOCK:
+        rec = LOGIN_ATTEMPTS.get(ip, {"count": 0, "window": now})
+        if now - rec.get("window", now) >= LOGIN_WINDOW:
+            rec = {"count": 0, "window": now}
+        if rec.get("count", 0) >= LOGIN_MAX_ATTEMPTS:
+            LOGIN_ATTEMPTS[ip] = rec
+            return False, int(max(1, LOGIN_WINDOW - (now - rec.get("window", now))))
         LOGIN_ATTEMPTS[ip] = rec
-        return False, int(max(1, LOGIN_WINDOW - (now - rec.get("window", now))))
-    LOGIN_ATTEMPTS[ip] = rec
-    return True, 0
+        if len(LOGIN_ATTEMPTS) > MAX_LOGIN_TRACKED_IPS:
+            oldest = sorted(LOGIN_ATTEMPTS.items(), key=lambda kv: kv[1].get("window", now))[:len(LOGIN_ATTEMPTS)-MAX_LOGIN_TRACKED_IPS]
+            for key, _ in oldest:
+                LOGIN_ATTEMPTS.pop(key, None)
+        return True, 0
 
 def _record_login_failure(ip):
     now = time.time()
-    rec = LOGIN_ATTEMPTS.get(ip, {"count": 0, "window": now})
-    if now - rec.get("window", now) >= LOGIN_WINDOW:
-        rec = {"count": 0, "window": now}
-    rec["count"] = rec.get("count", 0) + 1
-    LOGIN_ATTEMPTS[ip] = rec
+    with LOGIN_LOCK:
+        rec = LOGIN_ATTEMPTS.get(ip, {"count": 0, "window": now})
+        if now - rec.get("window", now) >= LOGIN_WINDOW:
+            rec = {"count": 0, "window": now}
+        rec["count"] = rec.get("count", 0) + 1
+        LOGIN_ATTEMPTS[ip] = rec
 
 def _clear_login_failures(ip):
-    LOGIN_ATTEMPTS.pop(ip, None)
+    with LOGIN_LOCK:
+        LOGIN_ATTEMPTS.pop(ip, None)
 
 def _csrf_value(handler):
     return _cookie_value(handler.headers.get("Cookie", ""), CSRF_COOKIE)
@@ -1174,20 +1285,60 @@ def _cookie_value(cookie_header, name):
 def _admin_meta(handler):
     _cleanup_sessions()
     token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_admin")
-    meta = SESSIONS.get(token)
-    if not meta:
-        return None
-    now = _dt.datetime.now().timestamp()
-    if meta.get("expires", 0) < now:
-        SESSIONS.pop(token, None)
-        return None
-    meta["expires"] = now + SESSION_TTL
-    if meta.get("role") not in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") or not bool(meta.get("active", True)):
-        return None
-    return meta
+    with SESSION_LOCK:
+        meta = SESSIONS.get(token)
+        if not meta:
+            return None
+        now = _dt.datetime.now().timestamp()
+        if meta.get("expires", 0) < now:
+            SESSIONS.pop(token, None)
+            return None
+        meta["expires"] = now + SESSION_TTL
+        if meta.get("role") not in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") or not bool(meta.get("active", True)):
+            return None
+        return dict(meta)
 
 def _is_admin(handler):
     return _admin_meta(handler) is not None
+
+def _cleanup_activity_log(conn, keep=10000):
+    """Bound activity history without allowing retention cleanup to break writes."""
+    try:
+        limit_n = max(100, min(int(keep), 1000000))
+        conn.execute(
+            f"DELETE FROM activity_log WHERE id NOT IN "
+            f"(SELECT id FROM activity_log ORDER BY id DESC LIMIT {limit_n})"
+        )
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+def _cleanup_audit_trail(keep=None):
+    global AUDIT_CLEANUP_LAST
+    keep_n = max(1000, min(int(keep or os.environ.get("AUDIT_RETENTION_MAX", "100000")), 1000000))
+    now = time.time()
+    with AUDIT_CLEANUP_LOCK:
+        if now - AUDIT_CLEANUP_LAST < 300:
+            return
+        AUDIT_CLEANUP_LAST = now
+    conn = None
+    try:
+        conn = get_conn()
+        conn.execute("DELETE FROM audit_trail WHERE id NOT IN (SELECT id FROM audit_trail ORDER BY id DESC LIMIT ?)", (keep_n,))
+        conn.commit()
+    except Exception:
+        try:
+            if conn is not None: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception:
+            pass
 
 def _audit(handler, action, record_id=None, details=None):
     """Immutable-style sensitive-action audit record with user, time, IP and optional record."""
@@ -1197,6 +1348,7 @@ def _audit(handler, action, record_id=None, details=None):
         conn.execute("INSERT INTO audit_trail (user_id,username,role,action,record_id,details,ip_address,user_agent) VALUES (?,?,?,?,?,?,?,?)",
                      (meta.get("user_id"),meta.get("username","Anonymous"),meta.get("role",""),str(action),record_id,json.dumps(details or {},ensure_ascii=False),_client_ip(handler),handler.headers.get("User-Agent","")[:500]))
         conn.commit(); conn.close()
+        _cleanup_audit_trail()
     except Exception:
         pass
 
@@ -1218,13 +1370,14 @@ def _require_role(handler, *roles):
 def _viewer_meta(handler):
     _cleanup_sessions()
     token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_user")
-    meta = SESSIONS.get(token)
-    if not meta or meta.get("role") not in ("viewer", "admin", "qa_manager", "qa_engineer", "importer", "auditor"):
-        return None
-    if meta.get("expires", 0) < _dt.datetime.now().timestamp():
-        SESSIONS.pop(token, None)
-        return None
-    return meta
+    with SESSION_LOCK:
+        meta = SESSIONS.get(token)
+        if not meta or meta.get("role") not in ("viewer", "admin", "qa_manager", "qa_engineer", "importer", "auditor"):
+            return None
+        if meta.get("expires", 0) < _dt.datetime.now().timestamp():
+            SESSIONS.pop(token, None)
+            return None
+        return dict(meta)
 
 def _is_viewer(handler):
     # Viewer authentication is currently disabled by design. The dashboard is
@@ -1232,18 +1385,22 @@ def _is_viewer(handler):
     return True
 
 def _client_ip(handler):
-    """Return the best available client IP behind Render/reverse proxies."""
-    forwarded = handler.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:80]
-    real = handler.headers.get("X-Real-IP", "")
-    if real:
-        return real.strip()[:80]
+    """Return the client IP. Forwarded headers are trusted only when the app
+    is configured behind a trusted reverse proxy (Render by default)."""
+    trust_proxy = str(os.environ.get("TRUST_PROXY_HEADERS", "false")).lower() in ("1","true","yes","on")
+    if trust_proxy:
+        forwarded = handler.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()[:80]
+        real = handler.headers.get("X-Real-IP", "")
+        if real:
+            return real.strip()[:80]
     return (handler.client_address[0] if handler.client_address else "")[:80]
 
 def _activity_event(handler, event_type, tab="", filters=None, visitor_id=""):
     # Activity is anonymous. visitor_id is a browser-generated random identifier
     # used only to count currently active dashboard users without requiring login.
+    global ACTIVITY_CLEANUP_LAST
     try:
         conn = get_conn()
         meta = _viewer_meta(handler)
@@ -1252,6 +1409,20 @@ def _activity_event(handler, event_type, tab="", filters=None, visitor_id=""):
                      (user_id, event_type, tab or "", json.dumps(filters or {}, separators=(",",":")),
                       (handler.headers.get("User-Agent", "")[:300]), _client_ip(handler), str(visitor_id or "")[:100]))
         conn.commit(); conn.close()
+        now = time.time(); should_cleanup = False
+        with ACTIVITY_CLEANUP_LOCK:
+            if now - ACTIVITY_CLEANUP_LAST >= 300:
+                ACTIVITY_CLEANUP_LAST = now; should_cleanup = True
+        if should_cleanup:
+            cleanup_conn = None
+            try:
+                cleanup_conn = get_conn(); _cleanup_activity_log(cleanup_conn, keep=10000)
+            except Exception:
+                pass
+            finally:
+                if cleanup_conn is not None:
+                    try: cleanup_conn.close()
+                    except Exception: pass
     except Exception:
         pass
 
@@ -1340,10 +1511,17 @@ def _record_from_values(values, mapping):
     insp_date = _parse_date(get("insp_lot_date"))
     ud_date = _parse_date(get("ud_date"))
     derived_month, derived_week, derived_quarter, derived_fy = _derive_period_fields(insp_date)
-    month = str(get("month") or derived_month).strip()
-    week = str(get("week") or derived_week).strip()
-    quarter = str(get("quarter") or derived_quarter).strip()
-    fy = str(get("financial_year") or derived_fy).strip()
+    supplied_month = str(get("month") or "").strip()
+    supplied_week = str(get("week") or "").strip()
+    supplied_quarter = str(get("quarter") or "").strip()
+    supplied_fy = str(get("financial_year") or "").strip()
+    # insp_lot_date is the canonical source for period reporting. Keep the
+    # supplied period fields only long enough for validation; _validate_record
+    # rejects contradictions. Existing DB rows are untouched.
+    month = supplied_month or derived_month
+    week = supplied_week or derived_week
+    quarter = supplied_quarter or derived_quarter
+    fy = supplied_fy or derived_fy
     try:
         weight_raw = get("output_weight", "")
         # A coil always has some real output weight in practice — a blank
@@ -1370,8 +1548,8 @@ def _record_from_values(values, mapping):
         "work_center": str(get("work_center") or "").strip(),
         "grade": str(get("grade") or "").strip(),
         "output_weight": weight,
-        "main_defect": str(get("main_defect") or "").strip(),
-        "defect_intensity": str(get("defect_intensity") or "").strip().upper(),
+        "main_defect": str(get("main_defect") or "").strip().upper(),
+        "defect_intensity": ("" if str(get("defect_intensity") or "").strip().upper() == "NONE" else str(get("defect_intensity") or "").strip().upper()),
         "quality_decision": str(get("quality_decision") or "").strip().upper(),
         "insp_lot_date": insp_date.isoformat() if insp_date else "",
         "ud_date": ud_date.isoformat() if ud_date else "",
@@ -1391,8 +1569,24 @@ def _validate_record(r):
         return "QUALITY DECISION is required"
     if r["output_weight"] is None:
         return "Output Weight is required and must be numeric"
+    if not isinstance(r["output_weight"], (int, float)) or not math.isfinite(float(r["output_weight"])):
+        return "Output Weight must be a finite number"
     if r["output_weight"] <= 0:
         return "Output Weight must be greater than zero"
+    insp = r.get("insp_lot_date") or ""
+    if not insp:
+        return "INSP LOT DATE is required"
+    try:
+        insp_date = _dt.date.fromisoformat(insp)
+        exp_month, exp_week, exp_q, exp_fy = _derive_period_fields(insp_date)
+        for field, supplied, expected in (("month", r.get("month", ""), exp_month),
+                                           ("week", r.get("week", ""), exp_week),
+                                           ("quarter", r.get("quarter", ""), exp_q),
+                                           ("financial_year", r.get("financial_year", ""), exp_fy)):
+            if supplied and supplied != expected:
+                return f"{field.upper()} does not match INSP LOT DATE ({expected})"
+    except ValueError:
+        return "Invalid INSP LOT DATE"
     if r["quality_decision"] not in DECISION_ORDER:
         return "Unknown QUALITY DECISION: " + r["quality_decision"]
     return ""
@@ -1468,35 +1662,91 @@ def _parse_uploaded_file(filename, data):
     return rows
 
 
-def _insert_records(records):
-    """BATCH NO is the unique coil identifier: one row per BATCH NO. A row
-    whose BATCH NO already exists is treated as an update to that batch
-    (or a no-op duplicate if nothing actually changed), never a new insert —
-    regardless of whether its HEAT NO matches or differs from what's on file."""
-    conn = get_conn(); cur = conn.cursor()
-    existing = {}
-    cur.execute("SELECT id,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition")
-    cols=["id","heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
-    for row in cur.fetchall():
-        d=dict(zip(cols,row)); existing[str(d.get("batch_no") or "").strip().upper()]=d
-    inserted=0; updated=0; duplicates=0; errors=[]; seen=set(); good=[]; updates=[]
-    fields=["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
-    for idx,r in enumerate(records,start=2):
-        err=_validate_record(r); key=str(r.get("batch_no","")).strip().upper()
-        if err: errors.append({"row":idx,"error":err}); continue
-        if key in seen: duplicates+=1; continue
-        seen.add(key); old=existing.get(key)
-        if old:
-            changed=any(str(old.get(k) if old.get(k) is not None else "") != str(r.get(k) if r.get(k) is not None else "") for k in fields)
-            if changed: updates.append((r,old["id"])); updated+=1
-            else: duplicates+=1
-        else: good.append(r)
-    if good:
-        cur.executemany("""INSERT INTO disposition (batch_no,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r[k] for k in ["batch_no"]+fields) for r in good]); inserted=len(good)
-    for r,rid in updates:
-        cur.execute("""UPDATE disposition SET heat_no=?,work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
-    conn.commit(); conn.close(); RESPONSE_CACHE.clear(); return {"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
+def _cache_clear():
+    global RESPONSE_CACHE_BYTES
+    with RESPONSE_CACHE_LOCK:
+        RESPONSE_CACHE.clear()
+        RESPONSE_CACHE_BYTES = 0
 
+def _cache_get(key):
+    global RESPONSE_CACHE_BYTES
+    now = time.time()
+    with RESPONSE_CACHE_LOCK:
+        hit = RESPONSE_CACHE.get(key)
+        if hit and now - hit[0] < RESPONSE_CACHE_TTL:
+            return hit[1]
+        if hit:
+            RESPONSE_CACHE.pop(key, None)
+            RESPONSE_CACHE_BYTES = max(0, RESPONSE_CACHE_BYTES - int(hit[2]))
+    return None
+
+def _cache_put(key, payload):
+    global RESPONSE_CACHE_BYTES
+    now = time.time()
+    try:
+        estimated = len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8"))
+    except Exception:
+        return
+    if estimated <= 0 or estimated > RESPONSE_CACHE_MAX_BYTES:
+        return
+    with RESPONSE_CACHE_LOCK:
+        old = RESPONSE_CACHE.pop(key, None)
+        if old:
+            RESPONSE_CACHE_BYTES = max(0, RESPONSE_CACHE_BYTES - int(old[2]))
+        RESPONSE_CACHE[key] = (now, payload, estimated)
+        RESPONSE_CACHE_BYTES += estimated
+        while len(RESPONSE_CACHE) > RESPONSE_CACHE_MAX_ENTRIES or RESPONSE_CACHE_BYTES > RESPONSE_CACHE_MAX_BYTES:
+            oldest_key, oldest = min(RESPONSE_CACHE.items(), key=lambda x: x[1][0])
+            RESPONSE_CACHE.pop(oldest_key, None)
+            RESPONSE_CACHE_BYTES = max(0, RESPONSE_CACHE_BYTES - int(oldest[2]))
+
+def _insert_records(records):
+    """Insert/update disposition records under a serialized transaction.
+
+    Normalized non-empty BATCH NO identifies one coil. Legacy duplicate groups are
+    preserved. PostgreSQL uses a transaction-scoped advisory lock; SQLite uses
+    BEGIN IMMEDIATE. This prevents concurrent imports from racing on new batches.
+    """
+    with DISPOSITION_WRITE_LOCK:
+        conn = get_conn(); cur = conn.cursor()
+        try:
+            if USE_POSTGRES:
+                conn.execute("SELECT pg_advisory_xact_lock(hashtext('quality-disposition-import'))")
+            else:
+                conn.execute("BEGIN IMMEDIATE")
+            existing = {}
+            cur.execute("SELECT id,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition")
+            cols=["id","heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
+            for row in cur.fetchall():
+                d=dict(zip(cols,row)); key=str(d.get("batch_no") or "").strip().upper()
+                if key: existing.setdefault(key, d)
+            inserted=0; updated=0; duplicates=0; errors=[]; seen=set(); good=[]; updates=[]
+            fields=["heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
+            for idx,r in enumerate(records,start=2):
+                err=_validate_record(r); key=str(r.get("batch_no","")).strip().upper()
+                if err: errors.append({"row":idx,"error":err}); continue
+                if key in seen: duplicates+=1; continue
+                seen.add(key); old=existing.get(key)
+                if old:
+                    changed=any(str(old.get(k) if old.get(k) is not None else "") != str(r.get(k) if r.get(k) is not None else "") for k in fields)
+                    if changed: updates.append((r,old["id"])); updated+=1
+                    else: duplicates+=1
+                else: good.append(r)
+            if good:
+                cur.executemany("""INSERT INTO disposition (batch_no,heat_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r[k] for k in ["batch_no"]+fields) for r in good])
+                inserted=len(good)
+            for r,rid in updates:
+                cur.execute("""UPDATE disposition SET heat_no=?,work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
+            conn.commit()
+            result={"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
+        finally:
+            try: conn.close()
+            except Exception: pass
+        _cache_clear(); return result
 
 def _norm_defect_key(s):
     """Normalize a defect name for matching: uppercase, letters/digits only.
@@ -1697,7 +1947,7 @@ def _replace_fishbone_master(bundle, filename, imported_by):
     style_records = bundle.get("style") or []
     if not records:
         raise ValueError("No defect rows were found in the uploaded file")
-    _write_backup_file("before_fishbone_import")  # safety snapshot of the outgoing data
+    _require_safety_backup("before_fishbone_import")  # fail closed on backup failure
     conn = get_conn()
     seen = set()
     rows = []
@@ -1707,6 +1957,7 @@ def _replace_fishbone_master(bundle, filename, imported_by):
             continue
         seen.add(norm)
         rows.append((r["defect_name"], norm) + tuple(r.get(f, "") for f in FISHBONE_CAUSE_FIELDS))
+    conn.execute("DELETE FROM fishbone_style")
     conn.execute("DELETE FROM fishbone_master")
     conn.executemany(
         "INSERT INTO fishbone_master (defect_name,norm_name,man,machine,material,method,measurement,environment) VALUES (?,?,?,?,?,?,?,?)",
@@ -1765,6 +2016,18 @@ def _replace_fishbone_master(bundle, filename, imported_by):
     return {"detected": len(records), "imported": len(rows), "rca_detected": len(rca_records), "rca_imported": len(rca_rows), "style_imported": style_updated}
 
 
+def _backup_jsonable(value):
+    """Convert DB-native date/time values to JSON-safe ISO strings without
+    changing the live database representation."""
+    if isinstance(value, (_dt.datetime, _dt.date)):
+        return value.isoformat()
+    return value
+
+
+def _backup_rows_jsonable(rows):
+    return [{k: _backup_jsonable(v) for k, v in dict(r).items()} for r in rows]
+
+
 def _backup_snapshot_data():
     """Gather everything a backup needs to fully restore the app's data: every
     disposition row, the 6M Fishbone Master + aliases, and KPI targets."""
@@ -1794,18 +2057,36 @@ def _backup_snapshot_data():
             fishbone_style = [dict(r) for r in conn.execute("SELECT category,label,icon,color FROM fishbone_style").fetchall()]
         except Exception:
             fishbone_style = []
+        try:
+            kpi_target_history = [dict(r) for r in conn.execute("SELECT label,old_target,new_target,old_warning,new_warning,old_critical,new_critical,old_direction,new_direction,effective_date,changed_by,changed_at FROM kpi_target_history ORDER BY id").fetchall()]
+        except Exception:
+            kpi_target_history = []
+        try:
+            import_history = [dict(r) for r in conn.execute("SELECT filename,detected,valid,duplicates,errors,updated,imported,imported_by,created_at FROM import_history ORDER BY id").fetchall()]
+        except Exception:
+            import_history = []
+        disposition = _backup_rows_jsonable(disposition)
+        fishbone_master = _backup_rows_jsonable(fishbone_master)
+        fishbone_alias = _backup_rows_jsonable(fishbone_alias)
+        kpi_targets = _backup_rows_jsonable(kpi_targets)
+        rca_master = _backup_rows_jsonable(rca_master)
+        fishbone_style = _backup_rows_jsonable(fishbone_style)
+        kpi_target_history = _backup_rows_jsonable(kpi_target_history)
+        import_history = _backup_rows_jsonable(import_history)
     finally:
         conn.close()
     return {
         "backup_version": 2,
         "created_at": datetime.now().isoformat(),
-        "counts": {"disposition": len(disposition), "fishbone_master": len(fishbone_master), "fishbone_alias": len(fishbone_alias), "kpi_targets": len(kpi_targets), "rca_master": len(rca_master), "fishbone_style": len(fishbone_style)},
+        "counts": {"disposition": len(disposition), "fishbone_master": len(fishbone_master), "fishbone_alias": len(fishbone_alias), "kpi_targets": len(kpi_targets), "rca_master": len(rca_master), "fishbone_style": len(fishbone_style), "kpi_target_history": len(kpi_target_history), "import_history": len(import_history)},
         "disposition": disposition,
         "fishbone_master": fishbone_master,
         "fishbone_alias": fishbone_alias,
         "kpi_targets": kpi_targets,
         "rca_master": rca_master,
         "fishbone_style": fishbone_style,
+        "kpi_target_history": kpi_target_history,
+        "import_history": import_history,
     }
 
 def _backup_prune():
@@ -1819,22 +2100,142 @@ def _backup_prune():
     except Exception:
         pass
 
-def _write_backup_file(reason="manual"):
-    """Snapshot current data to a timestamped, gzip-compressed JSON file in
-    BACKUP_DIR. Never raises — a failed backup must not block the import that
-    triggered it."""
+def _require_safety_backup(reason="safety"):
+    path = _write_backup_file(reason)
+    if not path:
+        raise RuntimeError("Safety backup failed; database mutation aborted")
+    return path
+
+def _backup_snapshot_transaction(reason="manual"):
+    """Create a consistent application snapshot from one read transaction.
+
+    Contract: the returned envelope is the exact JSON shape consumed by the
+    backup writer, backup validator and restore routine. Keeping the metadata
+    and table sections together prevents drift between snapshot creation and
+    file serialization.
+    """
+    conn = get_conn()
+    # Full persistent application state. Runtime session/cache state is
+    # process-local and intentionally recreated after restore.
+    tables = [
+        "disposition", "users", "activity_log", "audit_trail",
+        "fishbone_master", "fishbone_alias", "fishbone_import_history",
+        "kpi_targets", "rca_master", "fishbone_style",
+        "kpi_target_history", "import_history"
+    ]
     try:
-        os.makedirs(BACKUP_DIR, exist_ok=True)
-        data = _backup_snapshot_data()
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_reason = re.sub(r"[^a-zA-Z0-9_-]", "", reason)[:40] or "manual"
-        fname = f"backup_{ts}_{safe_reason}.json.gz"
-        fpath = os.path.join(BACKUP_DIR, fname)
-        with gzip.open(fpath, "wt", encoding="utf-8") as f:
-            json.dump(data, f)
-        _backup_prune()
-        return {"filename": fname, "counts": data["counts"], "created_at": data["created_at"]}
+        if USE_POSTGRES:
+            conn.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        else:
+            conn.execute("BEGIN")
+
+        snap = {
+            "backup_version": 4,
+            "created_at": datetime.now().isoformat(),
+            "reason": str(reason or "manual"),
+            "database_backend": "postgres" if USE_POSTGRES else "sqlite",
+            "scope": "full_persistent_application_state",
+            "excluded_runtime_state": ["sessions", "response_cache", "import_previews"],
+        }
+        counts = {}
+        for table in tables:
+            fetched = conn.execute(f"SELECT * FROM {table}").fetchall()
+            normalized = _backup_rows_jsonable(fetched)
+            snap[table] = normalized
+            counts[table] = len(normalized)
+        snap["counts"] = counts
+        conn.rollback()
+        return snap
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def _backup_integrity_payload(data):
+    unsigned = dict(data)
+    unsigned.pop("integrity_sha256", None)
+    return json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+def _backup_integrity_sha256(data):
+    return hashlib.sha256(_backup_integrity_payload(data)).hexdigest()
+
+def _backup_is_valid(data, require_integrity=False):
+    if not isinstance(data, dict):
+        return False, "Backup payload is not an object"
+    required = ("backup_version","created_at","counts","disposition","fishbone_master","fishbone_alias","kpi_targets","rca_master","fishbone_style","kpi_target_history","import_history")
+    missing = [k for k in required if k not in data]
+    try:
+        version = int(data.get("backup_version") or 0)
+    except (TypeError, ValueError):
+        return False, "Backup version is invalid"
+    if version >= 4:
+        missing.extend(k for k in ("users","activity_log","audit_trail","fishbone_import_history","scope") if k not in data)
+        if data.get("scope") != "full_persistent_application_state":
+            return False, "Backup scope is invalid"
+    if missing:
+        return False, "Missing sections: " + ", ".join(sorted(set(missing)))
+    counts = data.get("counts")
+    if not isinstance(counts, dict):
+        return False, "Backup counts section is invalid"
+    required_sections = ("disposition","fishbone_master","fishbone_alias","kpi_targets","rca_master","fishbone_style","kpi_target_history","import_history")
+    if version >= 4:
+        required_sections += ("users","activity_log","audit_trail","fishbone_import_history")
+    for section in required_sections:
+        rows = data.get(section)
+        if not isinstance(rows, list):
+            return False, f"Backup section '{section}' is invalid"
+        recorded_count = counts.get(section)
+        if recorded_count is not None:
+            try:
+                if int(recorded_count) != len(rows):
+                    return False, f"Backup count mismatch for {section}"
+            except (TypeError, ValueError):
+                return False, f"Backup count for {section} is invalid"
+    recorded = str(data.get("integrity_sha256") or "")
+    if not recorded:
+        if require_integrity:
+            return False, "Backup integrity checksum is missing"
+        return True, "Legacy backup: no embedded checksum"
+    calculated = _backup_integrity_sha256(data)
+    if not hmac.compare_digest(recorded, calculated):
+        return False, "Backup integrity checksum mismatch"
+    return True, "Integrity checksum verified"
+
+def _write_backup_file(reason="manual"):
+    """Create an atomic, gzip-compressed backup with an embedded integrity checksum."""
+    try:
+        with BACKUP_WRITE_LOCK:
+            os.makedirs(BACKUP_DIR, exist_ok=True)
+            data = _backup_snapshot_transaction(reason)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_reason = re.sub(r"[^a-zA-Z0-9_-]", "", reason)[:40] or "manual"
+            fname = f"backup_{ts}_{safe_reason}_{uuid.uuid4().hex[:8]}.json.gz"
+            fpath = os.path.join(BACKUP_DIR, fname)
+            data["app_version"] = APP_VERSION
+            data["database_backend"] = "postgres" if USE_POSTGRES else "sqlite"
+            data["integrity_sha256"] = _backup_integrity_sha256(data)
+            tmp_path = fpath + ".tmp"
+            with open(tmp_path, "wb") as raw:
+                with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
+                    gz.write(json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+                    gz.flush()
+                raw.flush()
+                os.fsync(raw.fileno())
+            os.replace(tmp_path, fpath)
+            _backup_prune()
+            return {"filename": fname, "counts": data["counts"], "created_at": data["created_at"], "app_version": APP_VERSION}
     except Exception as e:
+        try:
+            if 'tmp_path' in locals() and os.path.exists(tmp_path): os.remove(tmp_path)
+        except Exception:
+            pass
         print(f"WARNING: backup failed ({reason}): {e}")
         return None
 
@@ -1871,10 +2272,11 @@ def _scheduled_backup_loop():
     # schema step can't wedge this loop forever) before the first snapshot
     # attempt, instead of racing it and logging a spurious "no such table"
     # warning on every cold start.
-    waited = 0
-    while not STARTUP_READY and waited < 300:
+    while not STARTUP_READY:
+        if STARTUP_ERROR:
+            print(f"Scheduled backup disabled for this process because startup failed: {STARTUP_ERROR}", flush=True)
+            return
         time.sleep(1)
-        waited += 1
     while True:
         try:
             age = _seconds_since_last_backup()
@@ -1895,18 +2297,50 @@ def _list_backups():
             fp = os.path.join(BACKUP_DIR, f)
             m = re.match(r"backup_(\d{8})_(\d{6})_(.+)\.json\.gz", f)
             reason = m.group(3) if m else "unknown"
-            out.append({"filename": f, "reason": reason, "size_kb": round(os.path.getsize(fp)/1024, 1), "modified_at": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%b-%Y %H:%M:%S")})
+            valid = True
+            backup_version = None
+            try:
+                with gzip.open(fp, "rt", encoding="utf-8") as bf:
+                    obj = json.load(bf)
+                backup_version = obj.get("backup_version")
+                valid, _why = _backup_is_valid(obj)
+            except Exception:
+                valid = False
+            out.append({"filename": f, "reason": reason, "size_kb": round(os.path.getsize(fp)/1024, 1), "modified_at": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%b-%Y %H:%M:%S"), "valid": valid, "backup_version": backup_version})
         out.sort(key=lambda x: x["filename"], reverse=True)
         return out
     except Exception:
         return []
 
 def _restore_backup_data(data):
-    """Fully restore disposition + 6M Fishbone Master/alias + KPI targets from a
-    backup snapshot dict (as produced by _backup_snapshot_data)."""
+    """Atomically restore all snapshot sections.
+
+    Data-safety rule: if *any* section fails, rollback the entire restore so the
+    live database is left exactly as it was before the operation. We never
+    swallow restore exceptions and report a false success.
+    """
+    required_keys = {"disposition", "fishbone_master", "fishbone_alias", "kpi_targets", "rca_master", "fishbone_style", "kpi_target_history", "import_history"}
+    missing = sorted(k for k in required_keys if k not in data)
+    version = int(data.get("backup_version") or 0)
+    if version >= 4:
+        missing.extend(k for k in ("users","activity_log","audit_trail","fishbone_import_history") if k not in data)
+    if missing:
+        raise ValueError("Backup is incomplete; missing sections: " + ", ".join(sorted(set(missing))))
+
+    disp_rows = data.get("disposition") or []
+    seen_batches=set()
+    for i,r in enumerate(disp_rows, start=1):
+        batch=str(r.get("batch_no") or "").strip().upper()
+        if not batch: raise ValueError(f"Backup disposition row {i} has no BATCH NO")
+        if batch in seen_batches: raise ValueError(f"Backup contains duplicate BATCH NO: {batch}")
+        seen_batches.add(batch)
+        try: weight=float(r.get("output_weight"))
+        except Exception: raise ValueError(f"Backup disposition row {i} has invalid Output Weight")
+        if not math.isfinite(weight) or weight<=0: raise ValueError(f"Backup disposition row {i} has invalid Output Weight")
+        if not str(r.get("insp_lot_date") or "").strip(): raise ValueError(f"Backup disposition row {i} is missing INSP LOT DATE")
+
     conn = get_conn()
     try:
-        disp_rows = data.get("disposition") or []
         conn.execute("DELETE FROM disposition")
         if disp_rows:
             cols = ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","ud_date","month","week","quarter","financial_year"]
@@ -1914,6 +2348,7 @@ def _restore_backup_data(data):
                 f"INSERT INTO disposition ({','.join(cols)}) VALUES ({','.join(['?']*len(cols))})",
                 [tuple(r.get(c, "") for c in cols) for r in disp_rows],
             )
+
         fb_rows = data.get("fishbone_master") or []
         conn.execute("DELETE FROM fishbone_master")
         if fb_rows:
@@ -1921,58 +2356,135 @@ def _restore_backup_data(data):
                 "INSERT INTO fishbone_master (defect_name,norm_name,man,machine,material,method,measurement,environment) VALUES (?,?,?,?,?,?,?,?)",
                 [(r.get("defect_name",""), r.get("norm_name",""), r.get("man",""), r.get("machine",""), r.get("material",""), r.get("method",""), r.get("measurement",""), r.get("environment","")) for r in fb_rows],
             )
+
         alias_rows = data.get("fishbone_alias") or []
-        try:
-            conn.execute("DELETE FROM fishbone_alias")
-            if alias_rows:
-                conn.executemany(
-                    "INSERT INTO fishbone_alias (disposition_defect,norm_disposition_defect,master_defect,created_by) VALUES (?,?,?,?)",
-                    [(r.get("disposition_defect",""), _norm_defect_key(r.get("disposition_defect","")), r.get("master_defect",""), r.get("created_by","")) for r in alias_rows],
-                )
-        except Exception:
-            pass
+        conn.execute("DELETE FROM fishbone_alias")
+        if alias_rows:
+            conn.executemany(
+                "INSERT INTO fishbone_alias (disposition_defect,norm_disposition_defect,master_defect,created_by) VALUES (?,?,?,?)",
+                [(r.get("disposition_defect",""), _norm_defect_key(r.get("disposition_defect","")), r.get("master_defect",""), r.get("created_by","")) for r in alias_rows],
+            )
+
         kpi_rows = data.get("kpi_targets") or []
-        try:
-            for r in kpi_rows:
-                conn.execute(
-                    "INSERT INTO kpi_targets(label,target,warning,critical,direction) VALUES(?,?,?,?,?) ON CONFLICT(label) DO UPDATE SET target=excluded.target,warning=excluded.warning,critical=excluded.critical,direction=excluded.direction,updated_at=CURRENT_TIMESTAMP",
-                    (r.get("label",""), r.get("target"), r.get("warning"), r.get("critical"), r.get("direction","higher")),
-                )
-        except Exception:
-            pass
+        # True snapshot semantics: remove targets absent from the backup instead
+        # of leaving post-backup additions behind. This happens in the same
+        # transaction, so a failure rolls the delete back too.
+        conn.execute("DELETE FROM kpi_targets")
+        if kpi_rows:
+            conn.executemany(
+                "INSERT INTO kpi_targets(label,target,warning,critical,direction) VALUES(?,?,?,?,?)",
+                [(r.get("label",""), r.get("target"), r.get("warning"), r.get("critical"), r.get("direction","higher")) for r in kpi_rows],
+            )
+
         rca_rows = data.get("rca_master") or []
-        try:
-            conn.execute("DELETE FROM rca_master")
-            if rca_rows:
-                conn.executemany(
-                    "INSERT INTO rca_master (defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    [(r.get("defect_name",""), r.get("norm_name",""), r.get("category",""), r.get("why1",""), r.get("why2",""), r.get("why3",""), r.get("why4",""), r.get("why5",""), r.get("action",""), r.get("preventive_action",""), r.get("role",""), r.get("responsibility","")) for r in rca_rows],
-                )
-        except Exception:
-            rca_rows = []
+        conn.execute("DELETE FROM rca_master")
+        if rca_rows:
+            conn.executemany(
+                "INSERT INTO rca_master (defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                [(r.get("defect_name",""), r.get("norm_name",""), r.get("category",""), r.get("why1",""), r.get("why2",""), r.get("why3",""), r.get("why4",""), r.get("why5",""), r.get("action",""), r.get("preventive_action",""), r.get("role",""), r.get("responsibility","")) for r in rca_rows],
+            )
+
         style_rows = data.get("fishbone_style") or []
-        try:
-            existing_cats = {r[0] for r in conn.execute("SELECT category FROM fishbone_style").fetchall()}
-            for r in style_rows:
-                cat = r.get("category")
-                if not cat:
-                    continue
-                if cat in existing_cats:
-                    conn.execute("UPDATE fishbone_style SET label=?, icon=?, color=?, updated_at=CURRENT_TIMESTAMP WHERE category=?", (r.get("label",""), r.get("icon",""), r.get("color",""), cat))
-                else:
-                    conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, r.get("label",""), r.get("icon",""), r.get("color","")))
-                    existing_cats.add(cat)
-        except Exception:
-            style_rows = []
+        conn.execute("DELETE FROM fishbone_style")
+        if style_rows:
+            conn.executemany(
+                "INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)",
+                [(r.get("category",""), r.get("label",""), r.get("icon",""), r.get("color","")) for r in style_rows],
+            )
+
+        history_rows = data.get("kpi_target_history") or []
+        conn.execute("DELETE FROM kpi_target_history")
+        if history_rows:
+            conn.executemany(
+                "INSERT INTO kpi_target_history(label,old_target,new_target,old_warning,new_warning,old_critical,new_critical,old_direction,new_direction,effective_date,changed_by,changed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                [(r.get("label",""),r.get("old_target"),r.get("new_target"),r.get("old_warning"),r.get("new_warning"),r.get("old_critical"),r.get("new_critical"),r.get("old_direction"),r.get("new_direction"),r.get("effective_date",""),r.get("changed_by",""),r.get("changed_at")) for r in history_rows],
+            )
+
+        import_rows = data.get("import_history") or []
+        conn.execute("DELETE FROM import_history")
+        if import_rows:
+            conn.executemany(
+                "INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                [(r.get("filename",""),r.get("detected",0),r.get("valid",0),r.get("duplicates",0),r.get("errors",0),r.get("updated",0),r.get("imported",0),r.get("imported_by",""),r.get("created_at")) for r in import_rows],
+            )
+
+        if version >= 4:
+            user_rows = data.get("users") or []
+            conn.execute("DELETE FROM users")
+            if user_rows:
+                conn.executemany(
+                    "INSERT INTO users (id,username,display_name,password_hash,role,active,must_reset_password,created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    [(r.get("id"),r.get("username",""),r.get("display_name",""),r.get("password_hash",""),
+                      r.get("role","viewer"),r.get("active",True),r.get("must_reset_password",False),r.get("created_at")) for r in user_rows],
+                )
+
+            activity_rows = data.get("activity_log") or []
+            conn.execute("DELETE FROM activity_log")
+            if activity_rows:
+                conn.executemany(
+                    "INSERT INTO activity_log (id,user_id,event_type,tab,filters_json,user_agent,ip_address,visitor_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    [(r.get("id"),r.get("user_id"),r.get("event_type",""),r.get("tab",""),r.get("filters_json","{}"),
+                      r.get("user_agent",""),r.get("ip_address",""),r.get("visitor_id",""),r.get("created_at")) for r in activity_rows],
+                )
+
+            audit_rows = data.get("audit_trail") or []
+            conn.execute("DELETE FROM audit_trail")
+            if audit_rows:
+                conn.executemany(
+                    "INSERT INTO audit_trail (id,user_id,username,role,action,record_id,details,ip_address,user_agent,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    [(r.get("id"),r.get("user_id"),r.get("username",""),r.get("role",""),r.get("action",""),r.get("record_id"),
+                      r.get("details","{}"),r.get("ip_address",""),r.get("user_agent",""),r.get("created_at")) for r in audit_rows],
+                )
+
+            fishbone_history_rows = data.get("fishbone_import_history") or []
+            conn.execute("DELETE FROM fishbone_import_history")
+            if fishbone_history_rows:
+                conn.executemany(
+                    "INSERT INTO fishbone_import_history (id,filename,detected,imported,imported_by,created_at,rca_detected,rca_imported,style_imported) VALUES (?,?,?,?,?,?,?,?,?)",
+                    [(r.get("id"),r.get("filename",""),r.get("detected",0),r.get("imported",0),r.get("created_at"),
+                      r.get("rca_detected",0),r.get("rca_imported",0),r.get("style_imported",0)) for r in fishbone_history_rows],
+                )
+
+            if USE_POSTGRES:
+                for table in ("users", "activity_log", "audit_trail", "fishbone_import_history"):
+                    conn.execute(
+                        "SELECT setval(pg_get_serial_sequence(%s, 'id'), COALESCE((SELECT MAX(id) FROM %s), 1), (SELECT COUNT(*) > 0 FROM %s))"
+                        % (repr(table), table, table)
+                    )
+
         conn.commit()
-    finally:
+    except Exception:
+        try:
+            conn.rollback()
+        finally:
+            conn.close()
+        raise
+    else:
         conn.close()
+
     FISHBONE_CACHE["rows"] = None
     FISHBONE_CACHE["aliases"] = None
     RCA_CACHE["rows"] = None
     FISHBONE_STYLE_CACHE["rows"] = None
-    return {"disposition": len(disp_rows), "fishbone_master": len(fb_rows), "fishbone_alias": len(alias_rows), "kpi_targets": len(kpi_rows), "rca_master": len(rca_rows), "fishbone_style": len(style_rows)}
-
+    _cache_clear()
+    with SESSION_LOCK:
+        SESSIONS.clear()
+    with LOGIN_LOCK:
+        LOGIN_ATTEMPTS.clear()
+    return {
+        "disposition": len(disp_rows),
+        "users": len(data.get("users") or []) if version >= 4 else None,
+        "activity_log": len(data.get("activity_log") or []) if version >= 4 else None,
+        "audit_trail": len(data.get("audit_trail") or []) if version >= 4 else None,
+        "fishbone_import_history": len(data.get("fishbone_import_history") or []) if version >= 4 else None,
+        "fishbone_master": len(fb_rows),
+        "fishbone_alias": len(alias_rows),
+        "kpi_targets": len(kpi_rows),
+        "rca_master": len(rca_rows),
+        "fishbone_style": len(style_rows),
+        "kpi_target_history": len(history_rows),
+        "import_history": len(import_rows),
+    }
 
 def _fishbone_master_rows(force=False):
     if FISHBONE_CACHE["rows"] is None or force:
@@ -2281,6 +2793,31 @@ def _ensure_admin_schema():
             id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, detected INTEGER DEFAULT 0, valid INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0, updated INTEGER DEFAULT 0,
             imported INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    # Enforce the business rule that a non-empty BATCH NO identifies one coil.
+    # Safety-first: if legacy duplicates exist, do not alter/delete anything and
+    # do not fail startup; surface the condition for the admin data-integrity view.
+    try:
+        dup_sql = (
+            "SELECT COUNT(*) FROM (SELECT UPPER(TRIM(batch_no)) b, COUNT(*) c "
+            "FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' "
+            "GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1) x"
+        )
+        dup_count = int(conn.execute(dup_sql).fetchone()[0] or 0)
+        if dup_count == 0:
+            idx_sql = (
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_disposition_batch_norm "
+                "ON disposition (UPPER(TRIM(batch_no))) "
+                "WHERE TRIM(COALESCE(batch_no,''))<>''"
+            )
+            conn.execute(idx_sql)
+            conn.commit()
+        else:
+            print(f"WARNING: normalized BATCH NO uniqueness not enabled; {dup_count} duplicate group(s) require review", flush=True)
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        print(f"WARNING: batch uniqueness index check skipped: {e}", flush=True)
+
     # 6M Fishbone (Man/Machine/Material/Method/Measurement/Environment)
     # master reference data — imported by an admin from the 6M Defect
     # Master workbook, independent of the monthly disposition data import.
@@ -2529,7 +3066,11 @@ def _export_data(filters):
     root_cause=_report_root_cause(filters,top_defect)
     fishbone = _fishbone_match(top_defect) if top_defect else None
     target=float(get_kpi_targets().get("First Pass Yield % (Prime%)",{}).get("target") or 0.97)
-    target_history=[{"period":r.get("name"),"target":target,"actual":float(r.get("first_pass_yield_pct") or 0),"attainment":(float(r.get("first_pass_yield_pct") or 0)/target if target else 0),"gap_pp":(float(r.get("first_pass_yield_pct") or 0)-target)*100} for r in monthly.get("rows",[])]
+    target_history=[]
+    for r in monthly.get("rows",[]):
+        actual=float(r.get("first_pass_yield_pct") or 0)
+        period_target=float(_historical_kpi_target("First Pass Yield % (Prime%)", r.get("name")) or target)
+        target_history.append({"period":r.get("name"),"target":period_target,"actual":actual,"attainment":(actual/period_target if period_target else 0),"gap_pp":(actual-period_target)*100})
     return {"filters": filters, "kpis": kpis, "defects": defects, "wcg": wcg, "monthly": monthly, "period": period, "quarterly": quarterly, "yearly": yearly, "intel": intel, "root_cause": {"defect":top_defect,"rows":root_cause}, "target_history": {"target":target,"rows":target_history}, "fishbone": fishbone, "fishbone_style": _fishbone_style()}
 
 def compute_qcr_intelligence(filters, monthly, defects, wcg, kpis=None):
@@ -2597,9 +3138,19 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
               "reject_pct":max(0,min(1,(rej_vals[-1]+sr) if rej_vals else 0)),
               "defect_pct":max(0,min(1,(defect_vals[-1]+sd) if defect_vals else 0)),
               "periods_used":len(recent),"slope_fpy":sf,"slope_reject":sr,"slope_defect":sd}
-    forecast["risk"]={"fpy":"high" if forecast["fpy"]<.90 else ("medium" if forecast["fpy"]<.97 else "low"),
-                       "reject_pct":"high" if forecast["reject_pct"]>.05 else ("medium" if forecast["reject_pct"]>.03 else "low"),
-                       "defect_pct":"high" if forecast["defect_pct"]>.05 else ("medium" if forecast["defect_pct"]>.03 else "low")}
+    def forecast_risk(label, value):
+        cfg=get_kpi_targets().get(label) or {}
+        direction=(cfg.get("direction") or "higher").lower()
+        target=num(cfg.get("target")); warning=num(cfg.get("warning"))
+        if direction=="lower":
+            return "low" if value <= target else ("medium" if value <= warning else "high")
+        if direction=="higher":
+            return "low" if value >= target else ("medium" if value >= warning else "high")
+        return "low"
+    forecast["risk"]={"fpy":forecast_risk("First Pass Yield % (Prime%)",forecast["fpy"]),
+                       "reject_pct":forecast_risk("Reject % Qty",forecast["reject_pct"]),
+                       "defect_pct":forecast_risk("Defect Rate",forecast["defect_pct"])}
+    forecast["thresholds"]={k:get_kpi_targets().get(v,{}) for k,v in {"fpy":"First Pass Yield % (Prime%)","reject_pct":"Reject % Qty","defect_pct":"Defect Rate"}.items()}
 
     # KPI target intelligence / health score.
     klist=(kpis.get("kpis",[]) if isinstance(kpis,dict) else list(kpis or []))
@@ -2649,8 +3200,10 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
                 recurrence=sum(1 for x in hs[-4:] if x["reject"]>0)
                 rec=min(1,recurrence/3)
                 score=round((sev*.40+vol*.25+tr*.20+rec*.15)*100,1)
+                confidence_level=conf(coils)
                 risk="High" if score>=65 else ("Medium" if score>=35 else "Low")
-                out.append({"name":name,"coils":coils,"qty":qty,"reject_qty":rej,"reject_pct":rp,"trend":trend,"recurrence":recurrence,"score":score,"risk":risk,"confidence":conf(coils)})
+                if confidence_level=="low" and risk=="High": risk="Medium"
+                out.append({"name":name,"coils":coils,"qty":qty,"reject_qty":rej,"reject_pct":rp,"trend":trend,"recurrence":recurrence,"score":score,"risk":risk,"confidence":confidence_level})
             out.sort(key=lambda x:x["score"],reverse=True);return out
         finally:c.close()
     risk={"work_centers":dimension_rows("work_center","work_center"),"grades":dimension_rows("grade","grade")}
@@ -2803,7 +3356,7 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
     # intelligence even when the production KPIs themselves look healthy.
     try:
         c=conn.cursor(); whq,pq=build_where(filters)
-        c.execute(f"SELECT COUNT(*), SUM(CASE WHEN TRIM(COALESCE(defect_intensity,''))='' THEN 1 ELSE 0 END) FROM disposition {whq}",pq)
+        c.execute(f"SELECT COUNT(*), SUM(CASE WHEN TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE' THEN 1 ELSE 0 END) FROM disposition {whq}",pq)
         dq_total,dq_missing=c.fetchone(); dq_total=int(dq_total or 0);dq_missing=int(dq_missing or 0)
     finally:
         try:c.close()
@@ -3088,6 +3641,7 @@ class Handler(BaseHTTPRequestHandler):
         body = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("X-Request-ID", secrets.token_hex(8))
+        self.send_header("X-App-Version", APP_VERSION)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self._security_headers()
@@ -3097,6 +3651,7 @@ class Handler(BaseHTTPRequestHandler):
         body = html.encode("utf-8")
         self.send_response(status)
         self.send_header("X-Request-ID", secrets.token_hex(8))
+        self.send_header("X-App-Version", APP_VERSION)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self._security_headers()
@@ -3111,12 +3666,18 @@ class Handler(BaseHTTPRequestHandler):
         # nothing — no database, no auth, no disk — so it answers immediately
         # even while background initialisation is still running.
         if path in {"/healthz", "/readyz"}:
-            self._send_json({
-                "ok": True,
+            # /healthz only answers whether the Python process is alive.
+            # /readyz is the deployment gate and must return 503 until every
+            # startup task succeeds. This prevents Render from marking a
+            # deployment healthy when the database schema/seed/index setup
+            # failed. No data is changed by this check.
+            payload = {
+                "ok": True if path == "/healthz" else STARTUP_READY,
                 "ready": STARTUP_READY,
                 "startup_error": STARTUP_ERROR or None,
                 "backend": "postgres" if USE_POSTGRES else "sqlite",
-            })
+            }
+            self._send_json(payload, status=(200 if path == "/healthz" or STARTUP_READY else 503))
             return
 
         # Versioned static CSS/JS: aggressively cached by browsers.
@@ -3129,6 +3690,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", mime)
                 self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                self.send_header("X-App-Version", APP_VERSION)
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self._write_body(body)
                 return
@@ -3298,7 +3860,7 @@ class Handler(BaseHTTPRequestHandler):
                 rows = _drilldown_rows(filters, qs.get('metric',''), qs.get('drill_value'), limit=50000)
                 out=io.StringIO(newline=''); w=csv.writer(out)
                 w.writerow(['Insp Lot Date','HEAT NO','BATCH NO','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)'])
-                for r in rows: w.writerow([r['insp_lot_date'],r['heat_no'],r['batch_no'],r['work_center'],r['grade'],r['main_defect'],r['defect_intensity'],r['quality_decision'],r['output_weight']])
+                for r in rows: w.writerow([_csv_safe_value(r['insp_lot_date']),_csv_safe_value(r['heat_no']),_csv_safe_value(r['batch_no']),_csv_safe_value(r['work_center']),_csv_safe_value(r['grade']),_csv_safe_value(r['main_defect']),_csv_safe_value(r['defect_intensity']),_csv_safe_value(r['quality_decision']),r['output_weight']])
                 _activity_event(self, 'drilldown_export_csv', filters=filters)
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
             except Exception as e:
@@ -3306,9 +3868,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/qcr":
             filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
             cache_key = "qcr:" + json.dumps(filters, sort_keys=True, separators=(",", ":"))
-            now = time.time(); hit = RESPONSE_CACHE.get(cache_key)
-            if hit and now-hit[0] < RESPONSE_CACHE_TTL:
-                self._send_json(hit[1]); return
+            hit = _cache_get(cache_key)
+            if hit is not None:
+                self._send_json(hit); return
             try:
                 # Consolidated QCR endpoint: run the five SQLite reads sequentially.
                 # The previous threaded fan-out could intermittently return empty/partial
@@ -3361,10 +3923,7 @@ class Handler(BaseHTTPRequestHandler):
                            "intel_error": intel_error, "section_errors": section_errors}
                 # A payload with degraded sections is still real data for the sections
                 # that succeeded, so it is safe (and useful) to cache and return as-is.
-                RESPONSE_CACHE[cache_key] = (now, payload)
-                if len(RESPONSE_CACHE) > 100:
-                    oldest = sorted(RESPONSE_CACHE.items(), key=lambda x:x[1][0])[:20]
-                    for k,_ in oldest: RESPONSE_CACHE.pop(k, None)
+                _cache_put(cache_key, payload)
                 self._send_json(payload)
             except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/root_cause":
@@ -3446,7 +4005,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 filters = _export_filters(qs); where_sql, params = build_where(filters)
                 conn = get_conn(); cur = conn.cursor(); cur.execute(f"SELECT insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params); rows=cur.fetchall(); conn.close()
-                out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","BATCH NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow(list(r)) for r in rows]
+                out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","BATCH NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow([_csv_safe_value(v) for v in r]) for r in rows]
                 _activity_event(self, "export_csv", filters=filters)
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),"text/csv; charset=utf-8",_safe_filename(filters,".csv"))
             except Exception as e:
@@ -3507,12 +4066,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 filters={k: qs.get(k,"All") for k in FILTER_KEYS}
                 monthly=compute_monthly_trend(filters)
-                target=float(get_kpi_targets().get("First Pass Yield % (Prime%)",{}).get("target") or 0.97)
+                current_target=float(get_kpi_targets().get("First Pass Yield % (Prime%)",{}).get("target") or 0.97)
                 history=[]
                 for r in monthly.get("rows",[]):
                     actual=float(r.get("first_pass_yield_pct") or 0)
+                    target=_historical_kpi_target("First Pass Yield % (Prime%)", r.get("name"))
                     history.append({"period":r.get("name"),"target":target,"actual":actual,"attainment":(actual/target if target else 0),"gap_pp":(actual-target)*100})
-                self._send_json({"target":target,"rows":history})
+                self._send_json({"target":current_target,"rows":history})
             except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/kpi_targets":
             try:
@@ -3625,11 +4185,13 @@ class Handler(BaseHTTPRequestHandler):
                     missing_date=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))='' ")
                     duplicate_batch_groups=q1("SELECT COUNT(*) FROM (SELECT TRIM(batch_no) b, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY TRIM(batch_no) HAVING COUNT(*)>1) x")
                     if USE_POSTGRES:
-                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight::text,''))<>'' AND (TRIM(COALESCE(output_weight::text,'')) !~ '^[+-]?[0-9]+([.][0-9]+)?$|^[+-]?[.][0-9]+$' OR CAST(output_weight AS DOUBLE PRECISION)<=0)")
+                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight::text IN ('NaN','Infinity','-Infinity') OR output_weight<=0")
+                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE'")
                     else:
-                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(output_weight,''))<>'' AND CAST(output_weight AS REAL)<=0")
-                    issue_total=missing_heat+missing_batch+missing_grade+missing_decision+missing_date+duplicate_batch_groups+invalid_weight
-                    self._send_json({"ok":True,"records":total,"issues":issue_total,"checks":{"missing_heat":missing_heat,"missing_batch":missing_batch,"missing_grade":missing_grade,"missing_decision":missing_decision,"missing_date":missing_date,"duplicate_batch_groups":duplicate_batch_groups,"invalid_negative_weight":invalid_weight}})
+                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight<=0 OR output_weight!=output_weight")
+                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE'")
+                    issue_total=missing_heat+missing_batch+missing_grade+missing_decision+missing_date+duplicate_batch_groups+invalid_weight+missing_intensity
+                    self._send_json({"ok":True,"records":total,"issues":issue_total,"checks":{"missing_heat":missing_heat,"missing_batch":missing_batch,"missing_grade":missing_grade,"missing_decision":missing_decision,"missing_date":missing_date,"missing_intensity":missing_intensity,"duplicate_batch_groups":duplicate_batch_groups,"invalid_weight":invalid_weight}})
                 except Exception as e:
                     self._send_json({"ok":False,"error":str(e)[:300]},status=500)
                 finally:
@@ -3713,9 +4275,8 @@ class Handler(BaseHTTPRequestHandler):
                     name=os.path.basename(str(qs.get("name",""))); fpath=os.path.join(BACKUP_DIR,name)
                     if not name.startswith("backup_") or not name.endswith(".json.gz") or not os.path.isfile(fpath): raise ValueError("Backup file not found")
                     with gzip.open(fpath,"rt",encoding="utf-8") as f: data=json.load(f)
-                    counts=data.get("counts",{}) or {}; required=("disposition","fishbone_master","fishbone_alias","kpi_targets","rca_master","fishbone_style")
-                    valid=all(k in counts for k in required) and isinstance(data.get("backup_version"),int)
-                    self._send_json({"valid":bool(valid),"filename":name,"counts":counts,"backup_version":data.get("backup_version"),"size_bytes":os.path.getsize(fpath)})
+                    valid, reason = _backup_is_valid(data)
+                    self._send_json({"valid":bool(valid),"filename":name,"reason":reason,"counts":data.get("counts",{}),"backup_version":data.get("backup_version"),"size_bytes":os.path.getsize(fpath)})
                 except Exception as e: self._send_json({"valid":False,"error":str(e)},status=400)
         elif path == "/api/admin/validation_rules":
             if not _is_admin(self): _auth_error(self)
@@ -3751,18 +4312,23 @@ class Handler(BaseHTTPRequestHandler):
                     rows=conn.execute("SELECT id,heat_no,batch_no,grade,quality_decision,output_weight,insp_lot_date,defect_intensity,work_center,main_defect FROM disposition").fetchall()
                     conn.close()
                     valid_decisions={"PRIME","FOR NEXT PROCESS","SALVAGE","HOLD FOR DECISION","REJECT","RE-WORK","DIVERT"}
-                    counts={k:0 for k in ["missing_heat_no","duplicate_batch","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values"]}
+                    counts={k:0 for k in ["missing_heat_no","missing_batch_no","duplicate_batch","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values"]}
                     bad_ids=set(); batches={}
                     for r in rows:
                         d=dict(r); rid=d.get("id")
                         heat=str(d.get("heat_no") or "").strip(); batch=str(d.get("batch_no") or "").strip()
                         if not heat: counts["missing_heat_no"]+=1; bad_ids.add(rid)
+                        if not batch: counts["missing_batch_no"]+=1; bad_ids.add(rid)
                         if not str(d.get("grade") or "").strip(): counts["missing_grade"]+=1; bad_ids.add(rid)
                         dec=str(d.get("quality_decision") or "").strip().upper()
                         if not dec: counts["missing_decision"]+=1; bad_ids.add(rid)
                         elif dec not in valid_decisions: counts["invalid_values"]+=1; bad_ids.add(rid)
                         wt=d.get("output_weight")
-                        if wt is None or (isinstance(wt,(int,float)) and (not math.isfinite(float(wt)) or float(wt)<0)): counts["missing_weight"]+=1; bad_ids.add(rid)
+                        try:
+                            wt_num = float(wt) if wt is not None else None
+                        except Exception:
+                            wt_num = None
+                        if wt_num is None or not math.isfinite(wt_num) or wt_num <= 0: counts["missing_weight"]+=1; bad_ids.add(rid)
                         datev=str(d.get("insp_lot_date") or "").strip()
                         invalid_date=False
                         if not datev: invalid_date=True
@@ -3770,7 +4336,7 @@ class Handler(BaseHTTPRequestHandler):
                             try: datetime.strptime(datev[:10], "%Y-%m-%d")
                             except Exception: invalid_date=True
                         if invalid_date: counts["invalid_dates"]+=1; bad_ids.add(rid)
-                        if not str(d.get("defect_intensity") or "").strip(): counts["missing_intensity"]+=1; bad_ids.add(rid)
+                        if not str(d.get("defect_intensity") or "").strip() or str(d.get("defect_intensity") or "").strip().upper() == "NONE": counts["missing_intensity"]+=1; bad_ids.add(rid)
                         if not str(d.get("work_center") or "").strip() or (not str(d.get("main_defect") or "").strip()): counts["invalid_values"]+=1; bad_ids.add(rid)
                         if batch: batches.setdefault(batch.upper(),[]).append(rid)  # BATCH NO must be unique — one coil, one batch
                     dup_groups=[]
@@ -3846,7 +4412,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 try:
                     conn=get_conn(); rows=conn.execute("SELECT COALESCE(NULLIF(a.ip_address,''),'Unknown') ip_address,COALESCE(u.username,'Anonymous') username,a.event_type,a.tab,a.created_at,a.user_agent FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 5000").fetchall(); conn.close()
-                    out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Time","User","IP Address","Action","Tab","User Agent"]); [w.writerow([r[4],r[1],r[0],r[2],r[3],r[5]]) for r in rows]
+                    out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Time","User","IP Address","Action","Tab","User Agent"]); [w.writerow([_csv_safe_value(r[4]),_csv_safe_value(r[1]),_csv_safe_value(r[0]),_csv_safe_value(r[2]),_csv_safe_value(r[3]),_csv_safe_value(r[5])]) for r in rows]
                     data=out.getvalue().encode('utf-8-sig'); self.send_response(200); self.send_header('Content-Type','text/csv; charset=utf-8'); self.send_header('Content-Disposition','attachment; filename="admin_audit_log.csv"'); self.send_header('Content-Length',str(len(data))); self.send_header('Cache-Control','no-store'); self.end_headers(); self.wfile.write(data)
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/audit_trail":
@@ -3903,7 +4469,7 @@ class Handler(BaseHTTPRequestHandler):
                     writer.writerow(["ID","Insp Lot Date","HEAT NO","BATCH NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"])
                     for r in rows:
                         d = dict(r)
-                        writer.writerow([d.get(k, "") for k in ["id","insp_lot_date","heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","month","week","quarter","financial_year"]])
+                        writer.writerow([_csv_safe_value(d.get(k, "")) for k in ["id","insp_lot_date","heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","month","week","quarter","financial_year"]])
                     data = out.getvalue().encode('utf-8-sig')
                     self.send_response(200)
                     self.send_header("Content-Type", "text/csv; charset=utf-8")
@@ -3928,6 +4494,10 @@ class Handler(BaseHTTPRequestHandler):
         if declared_length > MAX_REQUEST_BYTES:
             self._send_json({"error": f"Request body too large (max {MAX_REQUEST_BYTES // (1024*1024)} MB)."}, status=413)
             return
+        transfer_encoding = str(self.headers.get("Transfer-Encoding", "")).lower()
+        if transfer_encoding and transfer_encoding != "identity":
+            self._send_json({"error": "Transfer-Encoding is not supported; send a Content-Length body."}, status=411)
+            return
         if path.startswith("/api/admin/") and path not in ("/api/admin/login",):
             if not _admin_post_allowed(self):
                 return
@@ -3939,36 +4509,55 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/viewer/login":
             try:
+                ip = _client_ip(self)
+                allowed, retry_after = _login_allowed(ip)
+                if not allowed:
+                    self._send_json({"error": f"Too many failed login attempts. Try again in about {retry_after} seconds."}, status=429)
+                    return
                 body = _json_body(self); username = str(body.get("username","")).strip(); password = str(body.get("password",""))
                 conn=get_conn(); row=conn.execute("SELECT id,username,display_name,password_hash,role,active FROM users WHERE username=?",(username,)).fetchone()
                 conn.close()
-                env_login = bool(ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and (not row or bool(row[5])))
+                # Environment credentials are provisioning-only. Once a users-table
+                # row exists, the database password is the sole authentication source.
+                env_login = bool(ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and not row)
                 valid = env_login or bool(row and bool(row[5]) and row[4] in ("viewer", "admin") and _verify_password(password,row[3]))
                 if valid:
                     role = "admin" if env_login else row[4]
                     uid = row[0] if row else None
                     display = "Administrator" if env_login else row[2]
-                    token=secrets.token_urlsafe(32); SESSIONS[token]={"username":username,"display_name":display,"role":role,"user_id":uid,"expires":_dt.datetime.now().timestamp()+VIEWER_SESSION_TTL}
+                    token=secrets.token_urlsafe(32)
+                    with SESSION_LOCK:
+                        SESSIONS[token]={"username":username,"display_name":display,"role":role,"user_id":uid,"expires":_dt.datetime.now().timestamp()+VIEWER_SESSION_TTL}
                     self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store")
                     secure=self.headers.get("X-Forwarded-Proto","").lower()=="https"; cookie=f"qdash_user={token}; Path=/; HttpOnly; SameSite=Lax"; cookie += "; Secure" if secure else ""; self.send_header("Set-Cookie",cookie); self.end_headers(); self.wfile.write(json.dumps({"authenticated":True,"username":username,"display_name":display,"role":role}).encode())
-                    meta={"user_id":uid,"username":username,"display_name":display,"role":role}; SESSIONS[token].update(meta); _activity_event(self,"login")
-                else: self._send_json({"error":"Invalid username or password"},status=401)
+                    meta={"user_id":uid,"username":username,"display_name":display,"role":role}
+                    with SESSION_LOCK:
+                        if token in SESSIONS:
+                            SESSIONS[token].update(meta)
+                    _activity_event(self,"login")
+                else:
+                    _record_login_failure(ip)
+                    self._send_json({"error":"Invalid username or password"},status=401)
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/viewer/logout":
-            token=_cookie_value(self.headers.get("Cookie",""),"qdash_user"); meta=SESSIONS.get(token);
+            token=_cookie_value(self.headers.get("Cookie",""),"qdash_user")
+            with SESSION_LOCK:
+                meta=dict(SESSIONS.get(token) or {})
+                SESSIONS.pop(token,None)
             if meta: _activity_event(self,"logout")
-            SESSIONS.pop(token,None); self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Set-Cookie","qdash_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); self.end_headers(); self.wfile.write(b'{"authenticated":false}'); return
+            self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Set-Cookie","qdash_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); self.end_headers(); self.wfile.write(b'{"authenticated":false}'); return
 
         if path == "/api/admin/revoke_session":
             if not _require_role(self,"admin"): return
             try:
                 body=_json_body(self); target=str(body.get("username","")).strip(); current=_cookie_value(self.headers.get("Cookie",""),"qdash_admin")
                 removed=0
-                for tok,meta in list(SESSIONS.items()):
-                    if tok!=current and meta.get("username")==target:
-                        SESSIONS.pop(tok,None); removed+=1
+                with SESSION_LOCK:
+                    for tok,meta in list(SESSIONS.items()):
+                        if tok!=current and meta.get("username")==target:
+                            SESSIONS.pop(tok,None); removed+=1
                 _audit(self,"session_revoked",details={"username":target,"count":removed})
                 self._send_json({"ok":True,"removed":removed})
             except Exception as e: self._send_json({"error":str(e)},status=400)
@@ -3983,20 +4572,21 @@ class Handler(BaseHTTPRequestHandler):
                 if not _strong_password(new_password):
                     raise ValueError("New password must be at least 12 characters and include uppercase, lowercase, number and special character")
                 token = _cookie_value(self.headers.get("Cookie", ""), "qdash_admin")
-                meta = SESSIONS.get(token, {})
+                with SESSION_LOCK:
+                    meta = dict(SESSIONS.get(token) or {})
                 conn = get_conn(); row = conn.execute("SELECT id,password_hash FROM users WHERE username=?", (meta.get("username", ADMIN_USERNAME),)).fetchone()
                 current_ok = bool(row and _verify_password(current, row[1]))
-                if not current_ok and ADMIN_PASSWORD and hmac.compare_digest(current, ADMIN_PASSWORD) and meta.get("username") == ADMIN_USERNAME:
-                    current_ok = True
                 if not current_ok:
                     conn.close(); self._send_json({"error":"Current password is incorrect"}, status=401); return
                 conn.execute("UPDATE users SET password_hash=?, must_reset_password=? WHERE id=?", (_hash_password(new_password), (0 if not USE_POSTGRES else False), row[0])); conn.commit(); conn.close()
                 current_token = _cookie_value(self.headers.get("Cookie", ""), "qdash_admin")
-                for tok, smeta in list(SESSIONS.items()):
-                    if tok != current_token and smeta.get("username") == meta.get("username"):
-                        SESSIONS.pop(tok, None)
-                meta["expires"] = _dt.datetime.now().timestamp() + SESSION_TTL
-                meta["must_reset"] = False
+                with SESSION_LOCK:
+                    for tok, smeta in list(SESSIONS.items()):
+                        if tok != current_token and smeta.get("username") == meta.get("username"):
+                            SESSIONS.pop(tok, None)
+                    if current_token in SESSIONS:
+                        SESSIONS[current_token]["expires"] = _dt.datetime.now().timestamp() + SESSION_TTL
+                        SESSIONS[current_token]["must_reset"] = False
                 _activity_event(self, "admin_password_changed")
                 self._send_json({"ok":True,"message":"Password changed. Please sign in again on other devices."})
             except Exception as e:
@@ -4030,7 +4620,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not active and row[2] == "admin":
                     admins=conn.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=TRUE").fetchone()[0]
                     if admins <= 1: conn.close(); self._send_json({"error":"At least one active administrator must remain."},status=400); return
-                current_token=_cookie_value(self.headers.get("Cookie",""),"qdash_admin"); current_meta=SESSIONS.get(current_token,{})
+                current_token=_cookie_value(self.headers.get("Cookie",""),"qdash_admin")
+                with SESSION_LOCK:
+                    current_meta=dict(SESSIONS.get(current_token) or {})
                 if not active and row[1] == current_meta.get("username"):
                     conn.close(); self._send_json({"error":"You cannot disable your own active administrator account."},status=400); return
                 conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); _audit(self,"user_toggle",record_id=uid,details={"active":active}); self._send_json({"ok":True})
@@ -4051,9 +4643,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not row: conn.close(); self._send_json({"error":"User not found"},status=404); return
                 temp_password=_generate_temp_password()
                 conn.execute("UPDATE users SET password_hash=?, must_reset_password=? WHERE id=?", (_hash_password(temp_password), (True if USE_POSTGRES else 1), uid)); conn.commit(); conn.close()
-                for tok, smeta in list(SESSIONS.items()):
-                    if smeta.get("username") == row[1]:
-                        SESSIONS.pop(tok, None)
+                with SESSION_LOCK:
+                    for tok, smeta in list(SESSIONS.items()):
+                        if smeta.get("username") == row[1]:
+                            SESSIONS.pop(tok, None)
                 _audit(self,"admin_password_reset",record_id=uid,details={"username":row[1]})
                 self._send_json({"ok":True,"username":row[1],"temp_password":temp_password,"message":"Temporary password generated. Share it with the user through a secure channel — it will not be shown again — and they must set their own password on next admin login."})
             except Exception as e: self._send_json({"error":str(e)},status=400)
@@ -4072,8 +4665,10 @@ class Handler(BaseHTTPRequestHandler):
                 conn = get_conn()
                 row = conn.execute("SELECT id,username,display_name,password_hash,role,active,must_reset_password FROM users WHERE username=?", (username,)).fetchone()
                 conn.close()
+                # ADMIN_USERNAME/ADMIN_PASSWORD provision the first admin at
+                # startup; authentication thereafter is always database-backed.
                 valid = bool(row and bool(row[5]) and row[4] in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") and _verify_password(password, row[3]))
-                if not valid and ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and (not row or bool(row[5])):
+                if not valid and ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and not row:
                     valid = True
                 if valid:
                     _clear_login_failures(ip)
@@ -4082,7 +4677,8 @@ class Handler(BaseHTTPRequestHandler):
                     now = _dt.datetime.now().timestamp()
                     display = row[2] if row else "Administrator"
                     must_reset = bool(row[6]) if row else False
-                    SESSIONS[token] = {"username": username or ADMIN_USERNAME, "display_name": display, "role": (row[4] if row else "admin"), "user_id": (row[0] if row else None), "active": True, "expires": now + SESSION_TTL, "csrf": csrf, "must_reset": must_reset}
+                    with SESSION_LOCK:
+                        SESSIONS[token] = {"username": username or ADMIN_USERNAME, "display_name": display, "role": (row[4] if row else "admin"), "user_id": (row[0] if row else None), "active": True, "expires": now + SESSION_TTL, "csrf": csrf, "must_reset": must_reset}
                     secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -4116,13 +4712,21 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/activity/event":
             if not _is_viewer(self): _viewer_auth_error(self); return
+            if not _activity_allowed(f"{_client_ip(self)}|event", limit=120):
+                self._send_json({"ok": False, "error": "Activity event rate limit exceeded"}, status=429); return
             try:
-                body=_json_body(self); _activity_event(self,str(body.get("event_type","event")),str(body.get("tab","")),body.get("filters") or {},str(body.get("visitor_id",""))); self._send_json({"ok":True})
+                body=_json_body(self)
+                event_type=str(body.get("event_type","event")).strip()[:80] or "event"
+                tab=str(body.get("tab","")).strip()[:80]
+                _activity_event(self,event_type,tab,body.get("filters") or {},str(body.get("visitor_id","")))
+                self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/activity/heartbeat":
             if not _is_viewer(self): _viewer_auth_error(self); return
+            if not _activity_allowed(f"{_client_ip(self)}|heartbeat", limit=60):
+                self._send_json({"ok": False, "error": "Activity heartbeat rate limit exceeded"}, status=429); return
             try:
                 body=_json_body(self); visitor_id=str(body.get("visitor_id","")).strip()
                 if not visitor_id or len(visitor_id)>100:
@@ -4153,7 +4757,7 @@ class Handler(BaseHTTPRequestHandler):
                 meta=_admin_meta(self) or {}; changed_by=meta.get("username", "Admin")
                 if oldrow:
                     conn.execute("""INSERT INTO kpi_target_history(label,old_target,new_target,old_warning,new_warning,old_critical,new_critical,old_direction,new_direction,effective_date,changed_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(label,oldrow[0],target,oldrow[1],warning,oldrow[2],critical,oldrow[3],direction,str(body.get("effective_date", "")).strip(),changed_by))
-                conn.commit(); conn.close(); _activity_event(self,"kpi_target_update",tab="Admin"); _audit(self,"kpi_target_update",details={"label":label,"target":target,"effective_date":str(body.get("effective_date",""))})
+                conn.commit(); conn.close(); _cache_clear(); _activity_event(self,"kpi_target_update",tab="Admin"); _audit(self,"kpi_target_update",details={"label":label,"target":target,"effective_date":str(body.get("effective_date",""))})
                 self._send_json({"ok":True,"targets":get_kpi_targets()})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
@@ -4215,7 +4819,17 @@ class Handler(BaseHTTPRequestHandler):
                                     updated_details.append({"batch_no":r.get("batch_no",""),"heat_no":r.get("heat_no",""),"changes":changed_fields})
                             else: duplicates+=1
                         else: valid.append(r)
-                token=secrets.token_urlsafe(24); IMPORT_PREVIEWS[token]={"created":time.time(),"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"updated":updated,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
+                token=secrets.token_urlsafe(24)
+                with IMPORT_PREVIEW_LOCK:
+                    now_preview = time.time()
+                    for old_token, old_item in list(IMPORT_PREVIEWS.items()):
+                        if now_preview - old_item.get("created", 0) > IMPORT_PREVIEW_TTL:
+                            IMPORT_PREVIEWS.pop(old_token, None)
+                    if len(IMPORT_PREVIEWS) >= MAX_IMPORT_PREVIEWS:
+                        oldest = sorted(IMPORT_PREVIEWS.items(), key=lambda kv: kv[1].get("created", 0))[:max(1, len(IMPORT_PREVIEWS)-MAX_IMPORT_PREVIEWS+1)]
+                        for old_token, _ in oldest:
+                            IMPORT_PREVIEWS.pop(old_token, None)
+                    IMPORT_PREVIEWS[token]={"created":now_preview,"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"updated":updated,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
                 self._send_json({"ok":True,"preview_id":token,"filename":uploaded[0],**IMPORT_PREVIEWS[token]["summary"],"updated_details":updated_details,"sample":[{k:r.get(k,"") for k in ["insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision"]} for r in valid[:25]]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
@@ -4225,6 +4839,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body=_json_body(self); pid=str(body.get("preview_id","")); item=IMPORT_PREVIEWS.get(pid)
                 if not item or time.time()-item.get("created",0)>IMPORT_PREVIEW_TTL: IMPORT_PREVIEWS.pop(pid,None); raise ValueError("Import preview expired. Please upload the file again.")
+                _require_safety_backup("before_disposition_import")
                 result=_insert_records(item["records"]); meta=_admin_meta(self) or {};
                 conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]}); _audit(self,"data_import_confirm",details={"filename":item["filename"],"inserted":result["inserted"],"updated":result.get("updated",0)})
                 _write_backup_file("disposition_import")
@@ -4251,7 +4866,19 @@ class Handler(BaseHTTPRequestHandler):
                 records = _parse_uploaded_file(uploaded[0], uploaded[1])
                 if len(records) > 10000:
                     raise ValueError("Import limited to 10,000 records per upload")
+                _require_safety_backup("before_disposition_import")
                 result = _insert_records(records)
+                try:
+                    meta = _admin_meta(self) or {}
+                    conn = get_conn()
+                    conn.execute(
+                        "INSERT INTO import_history (filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES (?,?,?,?,?,?,?,?)",
+                        (uploaded[0], len(records), len(records), 0, 0, result.get("updated",0), result.get("inserted",0), meta.get("username",""))
+                    )
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
                 _audit(self,"direct_import",details={"filename":uploaded[0],"detected":len(records),"inserted":result.get("inserted",0),"updated":result.get("updated",0)})
                 self._send_json({"ok": True, "detected": len(records), **result})
             except Exception as e:
@@ -4328,9 +4955,12 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError("Backup file not found")
                     with gzip.open(fpath, "rt", encoding="utf-8") as f:
                         data = json.load(f)
-                if not isinstance(data, dict) or "disposition" not in data:
-                    raise ValueError("This doesn't look like a valid backup file")
-                _write_backup_file("before_restore")  # safety snapshot of whatever is about to be replaced
+                valid, reason = _backup_is_valid(data)
+                if not valid:
+                    raise ValueError("Backup integrity validation failed: " + reason)
+                safety = _write_backup_file("before_restore")
+                if not safety:
+                    raise ValueError("Pre-restore safety backup failed. Restore was blocked to protect live data.")
                 counts = _restore_backup_data(data)
                 meta = _admin_meta(self) or {}
                 _audit(self, "backup_restore", details=counts)
@@ -4347,6 +4977,7 @@ class Handler(BaseHTTPRequestHandler):
                 master_defect = str(body.get("master_defect", "")).strip()
                 if not disp_defect or not master_defect:
                     raise ValueError("Both a defect name and a 6M master defect are required")
+                _require_safety_backup("before_fishbone_alias_set")
                 norm = _norm_defect_key(disp_defect)
                 meta = _admin_meta(self) or {}
                 conn = get_conn()
@@ -4355,6 +4986,7 @@ class Handler(BaseHTTPRequestHandler):
                              (disp_defect, norm, master_defect, meta.get("username", "Admin")))
                 conn.commit(); conn.close()
                 FISHBONE_CACHE["aliases"] = None
+                _cache_clear()
                 _audit(self, "fishbone_alias_set", details={"disposition_defect": disp_defect, "master_defect": master_defect})
                 self._send_json({"ok": True})
             except Exception as e:
@@ -4366,10 +4998,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body = _json_body(self)
                 aid = int(body.get("id"))
+                _require_safety_backup("before_fishbone_alias_delete")
                 conn = get_conn()
                 conn.execute("DELETE FROM fishbone_alias WHERE id=?", (aid,))
                 conn.commit(); conn.close()
                 FISHBONE_CACHE["aliases"] = None
+                _cache_clear()
                 _audit(self, "fishbone_alias_delete", record_id=aid)
                 self._send_json({"ok": True})
             except Exception as e:
@@ -4432,9 +5066,11 @@ class Handler(BaseHTTPRequestHandler):
                 select = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
                 clauses=[]; params=[]
                 if issue == "missing_heat_no": clauses.append("TRIM(COALESCE(heat_no,''))=''")
+                elif issue == "missing_batch_no": clauses.append("TRIM(COALESCE(batch_no,''))=''")
                 elif issue == "missing_grade": clauses.append("TRIM(COALESCE(grade,''))=''")
                 elif issue == "missing_decision": clauses.append("TRIM(COALESCE(quality_decision,''))=''")
-                elif issue == "invalid_weights": clauses.append("output_weight IS NULL OR output_weight <= 0")
+                elif issue == "invalid_weights":
+                    clauses.append("output_weight IS NULL OR output_weight <= 0" if not USE_POSTGRES else "output_weight IS NULL OR output_weight::text IN ('NaN','Infinity','-Infinity') OR output_weight <= 0")
                 elif issue == "invalid_dates":
                     all_rows=[dict(r) for r in conn.execute(select).fetchall()]
                     bad=[]
@@ -4443,7 +5079,7 @@ class Handler(BaseHTTPRequestHandler):
                         try: datetime.strptime(dv[:10], "%Y-%m-%d") if dv else (_ for _ in ()).throw(ValueError())
                         except Exception: bad.append(r)
                     conn.close(); self._send_json({"rows":bad[:limit],"total":len(bad),"issue":issue}); return
-                elif issue == "missing_intensity": clauses.append("TRIM(COALESCE(defect_intensity,''))=''")
+                elif issue == "missing_intensity": clauses.append("TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE'")
                 elif issue == "invalid_values": clauses.append("TRIM(COALESCE(work_center,''))='' OR TRIM(COALESCE(main_defect,''))='' OR (TRIM(COALESCE(quality_decision,''))<>'' AND UPPER(TRIM(quality_decision)) NOT IN (%s))" % ','.join('?'*len(valid_decisions))); params.extend(valid_decisions)
                 elif issue == "duplicate_batch":
                     rows = [dict(r) for r in conn.execute(select + " WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT UPPER(TRIM(batch_no)) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1) ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
@@ -4464,11 +5100,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body = _json_body(self)
                 record_id = int(body.get("id"))
+                _require_safety_backup("before_record_delete")
                 conn = get_conn()
                 cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
                 conn.commit()
                 conn.close()
                 _audit(self,"record_delete",record_id=record_id)
+                _cache_clear()
                 self._send_json({"ok": True, "deleted": cur.rowcount})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
@@ -4481,6 +5119,7 @@ class Handler(BaseHTTPRequestHandler):
 # /readyz report it so a slow first boot is diagnosable from the outside.
 STARTUP_READY = False
 STARTUP_ERROR = ""
+STARTUP_LOCK = threading.Lock()
 
 
 def _run_startup_tasks():
@@ -4494,6 +5133,7 @@ def _run_startup_tasks():
     was alive and working, but nothing was ever listening.
     """
     global STARTUP_READY, STARTUP_ERROR
+    errors = []
     for label, fn in (("admin schema", _ensure_admin_schema),
                       ("initial seed", _seed_postgres_if_empty),
                       ("query indexes", ensure_fast_indexes)):
@@ -4502,11 +5142,19 @@ def _run_startup_tasks():
             fn()
             print(f"Startup: {label} ready in {time.time() - started:.1f}s", flush=True)
         except Exception as exc:
-            STARTUP_ERROR = (STARTUP_ERROR + "; " if STARTUP_ERROR else "") + f"{label}: {exc}"
-            print(f"Startup WARNING: {label} failed after "
+            errors.append(f"{label}: {exc}")
+            print(f"Startup ERROR: {label} failed after "
                   f"{time.time() - started:.1f}s — {exc}", flush=True)
-    STARTUP_READY = True
-    print("Startup: all initialisation complete.", flush=True)
+    with STARTUP_LOCK:
+        STARTUP_ERROR = "; ".join(errors)
+        # Never advertise readiness after a failed startup step. The process
+        # may remain alive long enough for diagnosis, but /readyz will stay
+        # 503 and Render can restart the unhealthy deployment.
+        STARTUP_READY = not errors
+    if STARTUP_READY:
+        print("Startup: all initialisation complete.", flush=True)
+    else:
+        print("Startup: initialization FAILED; service is not ready.", flush=True)
 
 
 def main():

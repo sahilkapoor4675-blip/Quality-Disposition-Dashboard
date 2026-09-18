@@ -1,201 +1,70 @@
-# Quality Disposition Control Dashboard — Web App
+# Quality Disposition Control Dashboard — V60.0
 
-**Version: V27.1 — Stability & Security Maintenance Release**
+**Release:** FINAL-STABILITY-HARDENED
 
-Pure Python (built-in `http.server`) + SQLite. No Flask. No external CDN.
-Everything runs locally, no internet connection required after setup.
+Pure Python (`http.server`) dashboard with PostgreSQL support for production and SQLite for local/offline development. No Flask and no external frontend CDN.
 
-## Contents
-- `server.py` — the web server (routes + KPI calculation engine)
-- `index.html` — the dashboard frontend (vanilla HTML/CSS/JS)
-- `quality.db` — SQLite database (the bundled disposition dataset imported from your workbook)
-- `build_db.py` — script used to (re)build `quality.db` from the original .xlsm
+## Production data model
+Render + external PostgreSQL (Supabase/Neon/etc.) is the recommended production path. On Render, the app fails closed when `DATABASE_URL` is missing; it will not silently switch a production deployment to SQLite.
 
-## How to run
-1. Make sure Python 3 is installed (`python3 --version`).
-2. Open a terminal in this folder.
-3. Run:
-   ```
-   python3 server.py
-   ```
-4. Open your browser at: **http://localhost:8000/**
-5. To share on your local office network, run:
-   ```
-   python3 server.py 8000
-   ```
-   and give colleagues `http://<your-pc-ip-address>:8000/` (find your IP with `ipconfig` on Windows).
+For local development, omit `DATABASE_URL` and the app uses a persistent SQLite file outside the application bundle. Existing local data is not reseeded on normal restarts or code replacement.
 
-## To refresh data later
-If you get a new/updated workbook, just re-run:
+## Run locally
+```bash
+python3 server.py
 ```
-python3 build_db.py
+Open `http://localhost:8000/`. Set `DB_PATH` when you need an explicit SQLite location.
+
+## Required production environment
+Set these in Render Environment Variables, never in Git:
+```text
+DATABASE_URL=<PostgreSQL connection string>
+ADMIN_USERNAME=<initial admin username>
+ADMIN_PASSWORD=<strong admin password>
+DB_LIMIT_MB=500
 ```
-This rebuilds `quality.db` from the .xlsm file. Then restart `server.py`.
 
-## What's included
-- ✅ Exactly 16 KPI cards, colored exactly like the original workbook (green=good, red=bad, amber=caution, purple, slate — extracted directly from the workbook's cell font colors)
-- ✅ **Previous-period comparison on every KPI card** — "Prev: X" + ▲/▼ trend arrow + %/pts change, exactly replicating the "KPI Comparison" sheet engine (auto-detects Month/Week/Quarter/FY comparison mode based on which single filter is active)
-- ✅ 4,820/the bundled disposition dataset imported, all with Output Weight
-- ✅ 8 live filters: Month, Work Center, Grade, Quality Decision, Week, Quarter, Financial Year, Defect Intensity
-- ✅ Real charts matching the original workbook's embedded Excel charts:
-  - Pie chart — Quality Decision Mix (Qty MT)
-  - Bar chart — Quality Decision by category (color-coded: green=Prime, red=Reject, amber=Hold, etc.)
-  - Combo chart (bar + line) — Top 5 Defects Pareto with cumulative %
-  - Bar chart — Defect Intensity Breakdown
-  - Bar charts — Work Center & Grade performance
-  - Line charts — Monthly and Weekly trends
-- ✅ 5 tabs, replicating all sheets from your original workbook
-- ✅ All charts are hand-drawn inline SVG (no chart libraries, no CDN — fully offline)
-- ✅ No external dependencies (no Flask) — works fully offline
+`ADMIN_USERNAME` / `ADMIN_PASSWORD` provision the account only when that username does not already exist. Existing users, roles, passwords and imported data are preserved.
 
-### Note on Monthly/Period Trend
-The original workbook pre-lists every month/week through the year 2030 (mostly
-showing 0s for future dates that haven't happened yet). This web app instead
-shows only the months/weeks that actually have data in your file — cleaner to
-read, and it will automatically extend as you add new records via `build_db.py`.
+## Data imports
+Use `/admin` for single-record entry or bulk `.xlsx/.xlsm/.csv/.tsv` imports. Imports are validated before write, duplicate BATCH NO values are handled as no-op/update according to the existing business rule, and each data-changing import creates a safety backup.
 
-### How the "Previous Period" comparison works
-Select exactly ONE time filter (Month, Week, Quarter, or Financial Year) —
-leave the others on "All". The dashboard automatically compares against the
-immediately preceding period of that type (e.g. selecting "Aug-2026" compares
-against "Jul-2026"). If no time filter is selected, comparison is not shown
-(same as the original workbook's behaviour).
+**Business rule:** normalized non-empty `BATCH NO` identifies one coil. Existing legacy duplicate groups are never deleted automatically. PostgreSQL imports are transaction-locked so concurrent imports cannot both create the same new batch.
 
-## 🔐 Admin / Viewer security and data updates
-The web app now has two access levels:
+## Backups and restore
+Backups are JSON-GZIP snapshots stored outside the application bundle. V55 fixed the backup snapshot/writer contract regression. V56 added P1 data-safety/concurrency hardening. V57 adds P2 cache bounds, backup integrity checks, serialized backup writes, and audit-history retention limits.
 
-- **Viewer:** dashboard, filters, charts and tables are read-only. Viewers cannot add, import or delete records.
-- **Admin:** protected `/admin` page for adding one record, bulk importing `.xlsx/.xlsm/.tsv/.csv`, reviewing the latest records and deleting incorrect records. Write APIs are checked server-side, so hiding a button is not the security mechanism.
+The built-in backup is a recovery aid, not a substitute for provider-level durable/off-site backup. For production, periodically download/copy backups outside the Render instance.
+Legacy V54/V55/V56 backups remain restoreable; V57 adds checksums to newly created backups without invalidating older backup files.
 
-### Admin credentials
-V27.1 has **no hard-coded administrator password** and does not reset the `users` table at startup.
-For a new deployment, provision the first administrator with environment variables:
-- `ADMIN_USERNAME`
-- `ADMIN_PASSWORD`
+## Security
+- Admin mutation APIs require authenticated role checks and CSRF validation.
+- Login attempts are rate-limited.
+- Public activity event/heartbeat endpoints are rate-limited independently; normal admin POST actions are not throttled by the activity limiter.
+- CSV exports prefix spreadsheet-formula control strings so exported operational data is treated as text by spreadsheet programs.
+- Request bodies, sessions and import previews are bounded.
 
-**Before publishing the link, set these as environment variables:**
-```
-ADMIN_USERNAME=your_admin_name
-ADMIN_PASSWORD=your_strong_password
-```
-Do not put the production password inside the source code or Git repository.
+## Dashboard
+The dashboard provides live filters, KPI cards, defect analysis, work-center/grade views, trends, QCR intelligence, Fishbone/RCA references and Excel/PDF/PPTX/CSV exports. Viewer access remains read-only.
 
-### Adding future data
-1. Open the shared dashboard link.
-2. Open **🔐 Admin**.
-3. Login.
-4. Either use **Add One Record** for a single coil/record, or **Bulk Import** for an Excel/TSV/CSV file.
-5. The importer validates required fields, skips exact duplicates, and derives Month/Week/Quarter/FY from `Insp Lot Date` when those fields are not supplied.
-6. The existing 16 KPIs, filters, charts, tables and dynamic totals read the live database and update after the new records are saved.
+## Schema
+`supabase_schema.sql` is the reference PostgreSQL schema. Runtime startup remains authoritative and performs idempotent migrations for older deployments.
 
-### Important for online deployment
-The database must live on **persistent storage**. A temporary/free cloud filesystem can be reset when a service restarts or is redeployed. For a company-wide production deployment, use a persistent disk/volume or a managed database. The current package is designed so the SQLite database remains the single source of truth; the dashboard stays read-only for viewers while only authenticated admins can write to it.
+## Release notes
+**V60.0 — STABILITY RELEASE CANDIDATE**
+- Fixed admin CSV formula-injection protection gap.
+- Wired activity-log retention with periodic cleanup.
+- Scoped activity rate limits to public activity endpoints only.
+- Added transactional import serialization for SQLite and PostgreSQL.
+- Updated the reference PostgreSQL schema to match runtime columns/tables.
+- Removed stale documentation that referenced absent `build_db.py` / bundled `quality.db` as the production source of truth.
+- Unified backend/frontend release identity and cache-busting to V60.0.
 
-### Local sharing
-If the server runs on an always-on company PC/server, colleagues can use `http://<server-ip>:8000/`. They do not need Python installed. Keep the server machine secured and use a strong admin password.
+V56.0 remains the preceding P1-hardened build; V55.0 is the preceding P0-repaired build. The build process never connects to production PostgreSQL and does not delete existing application rows.
 
-## Next step for company-wide sharing
-This local version is great for testing. For real multi-user access with logins/roles,
-this same server.py logic can be deployed to a small always-on machine or cloud VM
-(so it's reachable at all times, not just when your PC is on).
+## Current release
 
-## Deploy online — so NOBODY needs Python installed (recommended)
-Use **Render.com** (free tier). Render's servers already have Python installed —
-you never install anything on your own PC, and colleagues just open a link in
-their browser.
+V60.0 is the stability/release-candidate build built on the P0/P1/P2 hardening baseline. P0/P1 data-safety behavior is retained; production PostgreSQL is never modified by the build process.
 
-### Steps
-1. Go to https://github.com and create a free account (if you don't have one).
-2. Create a new repository (e.g. "quality-dashboard") → click **"uploading an
-   existing file"** → drag-and-drop all files from this folder
-   (`server.py`, `index.html`, `quality.db`, `build_db.py`, `render.yaml`,
-   `runtime.txt`) → commit.
-3. Go to https://render.com → sign up free (no card required for free tier) →
-   **New +** → **Web Service** → connect your GitHub repo.
-4. Render auto-detects `render.yaml`. Confirm:
-   - Build Command: `echo 'no build needed'`
-   - Start Command: `python3 server.py`
-5. Click **Create Web Service**. Wait ~2 minutes for the first deploy.
-6. You'll get a public URL like `https://quality-dashboard.onrender.com`.
-   Share this link with anyone — they open it in any browser, no install needed.
-
-### Updating data later
-Whenever you get a new workbook: run `build_db.py` once on your PC (needs
-Python only for this one-time step) to regenerate `quality.db`, then upload
-the updated `quality.db` file to the same GitHub repo — Render auto-redeploys
-and everyone sees the new data on the same link.
-
-Note: Render's free tier "sleeps" after 15 minutes of no traffic and takes
-~30 seconds to wake up on the next visit. For an always-instant company
-dashboard, a paid tier (~$7/month) removes the sleep delay.
-
-
-### Data update included
-- Sep-2026 data from the workbook's **Disposition Data** sheet has been imported (116 records), bringing the database to the bundled disposition dataset.
-- All existing filters are database-driven, so Sep-2026 values automatically appear in Month, Week, Quarter, Financial Year, Work Center, Grade, Quality Decision and Defect Intensity filters and in all dashboard/trend views.
-
-
-## Render production storage
-
-This app supports a Render Persistent Disk for the SQLite database. The included `render.yaml` mounts a 1 GB disk at `/var/data` and sets `DB_PATH=/var/data/quality.db`. The bundled `quality.db` is copied to that persistent location only if the persistent database does not exist, so normal redeploys do not overwrite admin-imported data.
-
-### Deployment flow
-1. Connect the GitHub repository to Render and deploy the Web Service.
-2. Use the Blueprint configuration in `render.yaml`, or add the disk manually at `/var/data`.
-3. Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` as Render environment variables; do not commit them to GitHub.
-4. After the first deploy, all Admin imports are written to `/var/data/quality.db`.
-5. Future GitHub code pushes trigger Render redeploys, but the persistent database remains intact.
-
-Because SQLite is stored on a persistent disk, keep the service at one instance.
-
-## Free Render + External PostgreSQL
-
-For Render Free, do not use a Render Persistent Disk. Set `DATABASE_URL` in Render Environment Variables to your external PostgreSQL connection string (for example from a free Supabase/Neon project). The app uses PostgreSQL whenever `DATABASE_URL` is present and falls back to SQLite locally when it is absent.
-
-On the first PostgreSQL deployment, if the PostgreSQL `disposition` table is empty, the bundled `quality.db` seed records are copied once. Existing PostgreSQL data is never overwritten by a redeploy. After that, Admin imports are written directly to PostgreSQL, so GitHub/Render code redeploys do not erase the data.
-
-Admin -> Database Status shows provider, record count, used MB, configured capacity and health threshold. `DB_LIMIT_MB` defaults to 500 MB and can be changed if your provider's actual limit differs.
-
-Important: keep `DATABASE_URL`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` in Render Environment Variables, not in GitHub.
-
-## FREE production data setup
-For Render Free, use an external PostgreSQL database such as Supabase Free. Set `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `DB_LIMIT_MB=500` in Render Environment Variables. See `SUPABASE_RENDER_FREE_SETUP.md` for the exact setup and migration flow.
-
-## Dashboard Export
-
-The live dashboard now provides **Excel, PDF, and CSV** export buttons in the Dashboard Filters toolbar. Exports use the current dashboard filters, so the report matches the selected Month, Work Center, Grade, Decision, Week, Quarter, Financial Year, and Defect Intensity.
-
-- **Excel**: KPI Summary, Defect Analysis, Work Center, Grade Analysis, Monthly/Weekly/Quarterly/FY trend sheets, with totals.
-- **PDF**: print-ready KPI summary, defect analysis, work-center and grade tables, with active filters and generation time.
-- **CSV**: filtered record-level data for operational use.
-- Viewer export endpoints are read-only; Admin-only database backup remains separate.
-
-
-### Viewer login & activity monitoring
-Viewer login is currently disabled. The main dashboard is open to all visitors without username/password. Every dashboard page visit and dashboard action is recorded with the visitor IP address, timestamp, event, tab and browser/user-agent. Admin can review **Dashboard Activity** to see unique IPs, opens, last seen time, browser/device information and recent activity. Named viewer login can be enabled in a future version if required. Admin/data-management APIs remain protected by Admin login.
-
-For the first deployment, the environment-backed `ADMIN_USERNAME` / `ADMIN_PASSWORD` account is created only if that username does not already exist. Existing users, roles and passwords are preserved. Log in to `/admin`, create viewer accounts, then share those credentials with authorized viewers.
-
-## Admin Control Center (Upgraded)
-
-The Admin Panel now includes:
-- Admin Home KPIs: total records, last data update, database size, active admins, dashboard views, last login and failed login attempts.
-- Monthly Data Import Wizard for XLSX/XLSM, CSV and TSV/TAB with detect → validate → duplicate check → preview → confirm → summary flow.
-- Import preview prevents direct writes to the live database until Confirm Import is clicked.
-- Data Quality Monitor with completeness, invalid value, duplicate and missing-intensity checks plus a Data Quality Score.
-- Import History for traceability of every confirmed bulk import.
-- Exportable Admin Audit Log (up to the latest 5,000 activity entries).
-- KPI Target History with old/new target values, effective date, changed-by and timestamp.
-- Role-aware administration: Super Admin, Data Admin, Quality Manager and Viewer. Backend permissions restrict sensitive actions by role.
-
-
-## V29 improvements
-
-V29 adds decision-support UI improvements to Admin and the main dashboard. These are read-only presentation/workflow enhancements; the bundled `quality.db` seed is unchanged.
-
-## V40 Intro Screen
-- 10-second Quality Intelligence intro for Non-Ferrous / Cupronickel Division.
-- Dark/light asset selected from the dashboard theme/system preference.
-- Intro ends on the final frame and waits for **ENTER DASHBOARD**.
-- A lightweight CSS ambient layer continues moving while the final frame is held.
-- Existing dashboard, admin, API and data files are preserved; no data records are modified by this UI change.
+## V60 Stability Release Gate
+V60 includes permanent isolated regression scripts under `tests/` plus final admin inline-handler hardening. Before deploying a new build, run the commands in `RELEASE_GATE.md` and require all checks to pass.

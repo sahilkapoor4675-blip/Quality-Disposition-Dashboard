@@ -1,1 +1,1 @@
-"""Backend support modules for Quality Disposition Dashboard."""
+"""Quality Disposition Dashboard regression tests."""
