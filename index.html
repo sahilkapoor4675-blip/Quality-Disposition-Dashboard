@@ -16,14 +16,16 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&family=Allura&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css?v=61.0">
 <script>
-// Apply the saved (or system-preferred) theme before first paint, so there's
-// no flash of the wrong theme. The toggle button in the header (wired in
-// app.js) flips this and persists the choice.
+// Apply the saved theme before first paint, so there's no flash of the
+// wrong theme. Light mode is always the default on first visit — the
+// system's prefers-color-scheme is intentionally NOT used as a fallback,
+// so a visitor on a dark-mode OS still lands on light mode. Dark mode only
+// turns on if the person has explicitly switched to it before (the toggle
+// button in the header, wired in app.js, flips this and persists the choice).
 (function(){
   try{
     var saved=localStorage.getItem('qdash_theme');
-    var theme=saved||(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-    if(theme==='dark')document.documentElement.setAttribute('data-theme','dark');
+    if(saved==='dark')document.documentElement.setAttribute('data-theme','dark');
   }catch(e){}
 })();
 </script>
