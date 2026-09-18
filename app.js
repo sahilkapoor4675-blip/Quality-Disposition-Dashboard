@@ -504,22 +504,22 @@ function niceMax(v){
 // Y-axis title for VERTICAL charts (rotated, placed at far left)
 function yAxisTitle(text, h, padT, padB){
   const cy = padT + (h - padT - padB) / 2;
-  return `<text x="16" y="${cy}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
+  return `<text x="16" y="${cy}" font-size="11.5" font-weight="700" fill="var(--chart-axis-title)" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
 }
 // X-axis title for VERTICAL charts (centered, placed at bottom)
 function xAxisTitleV(text, w, h, padL, padR){
   const cx = padL + (w - padL - padR) / 2;
-  return `<text x="${cx}" y="${h - 6}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
+  return `<text x="${cx}" y="${h - 6}" font-size="11.5" font-weight="700" fill="var(--chart-axis-title)" text-anchor="middle">${text}</text>`;
 }
 // X-axis title (value axis) for HORIZONTAL bar charts (centered, at bottom)
 function xAxisTitleH(text, w, h, padL, padR){
   const cx = padL + (w - padL - padR) / 2;
-  return `<text x="${cx}" y="${h - 6}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle">${text}</text>`;
+  return `<text x="${cx}" y="${h - 6}" font-size="11.5" font-weight="700" fill="var(--chart-axis-title)" text-anchor="middle">${text}</text>`;
 }
 // Y-axis title (category axis) for HORIZONTAL bar charts (rotated, far left)
 function yAxisTitleH(text, h, padT, padB){
   const cy = padT + (h - padT - padB) / 2;
-  return `<text x="16" y="${cy}" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
+  return `<text x="16" y="${cy}" font-size="11.5" font-weight="700" fill="var(--chart-axis-title)" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
 }
 
 function makePieChart(container, items, valueKey, labelKey, opts={}){
@@ -552,14 +552,14 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
     const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${s.color}" stroke="#fff" stroke-width="2.5"><title>${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
+    slices += `<path data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${s.color}" stroke="var(--chart-halo)" stroke-width="2.5"><title>${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
   });
 
   // Center label: grand total
   const totalText = opts.valFmt ? opts.valFmt(total) : total.toFixed(2);
   const centerLabel = `
-    <text x="${cx}" y="${cy-10}" font-size="21" font-weight="700" text-anchor="middle" fill="#6b7c93">TOTAL</text>
-    <text x="${cx}" y="${cy+16}" font-size="29" font-weight="700" text-anchor="middle" fill="#1c2b3a">${totalText}</text>`;
+    <text x="${cx}" y="${cy-10}" font-size="21" font-weight="700" text-anchor="middle" fill="var(--chart-muted)">TOTAL</text>
+    <text x="${cx}" y="${cy+16}" font-size="29" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${totalText}</text>`;
 
   // Pass 3: place outside labels. To keep both sides visually balanced,
   // slices are assigned to left/right by rank (alternating) so neither
@@ -588,9 +588,9 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
       const labelX = cx + side*(r+labelOffset);
       const anchor = side > 0 ? "start" : "end";
       const valText = opts.valFmt ? opts.valFmt(s.val) : s.val.toFixed(2);
-      out += `<polyline points="${edgeX},${edgeY} ${elbowX},${targetY} ${labelX-side*4},${targetY}" fill="none" stroke="#94a3b8" stroke-width="1.2"/>`;
+      out += `<polyline points="${edgeX},${edgeY} ${elbowX},${targetY} ${labelX-side*4},${targetY}" fill="none" stroke="var(--chart-leader)" stroke-width="1.2"/>`;
       out += `<circle cx="${edgeX}" cy="${edgeY}" r="3" fill="${s.color}"/>`;
-      out += `<text x="${labelX}" y="${targetY-6}" font-size="21" font-weight="700" text-anchor="${anchor}" fill="#1c2b3a">${escQcr(s.d[labelKey])}<title>${escQcr(s.d[labelKey])}</title></text>`;
+      out += `<text x="${labelX}" y="${targetY-6}" font-size="21" font-weight="700" text-anchor="${anchor}" fill="var(--chart-strong)">${escQcr(s.d[labelKey])}<title>${escQcr(s.d[labelKey])}</title></text>`;
       out += `<text x="${labelX}" y="${targetY+11}" font-size="19" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
     });
     return out;
@@ -622,8 +622,8 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
 
   for(let g=0; g<=4; g++){
     const gy = padT + (h-padT-padB) * (1 - g/4);
-    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="#6b7c93">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
+    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--chart-grid)" stroke-width="1"/>`;
+    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="var(--chart-muted)">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
   }
 
   items.forEach((d, i) => {
@@ -633,15 +633,15 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
     const y = h - padB - barH;
     const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
-    bars += `<text x="${x + barW/2}" y="${y - 8}" font-size="14.5" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${x + barW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x+barW/2} ${h-padB+20})"${escQcr(truncateLabel(d[labelKey], 12))}</text>`;
+    bars += `<text x="${x + barW/2}" y="${y - 8}" font-size="14.5" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${opts.fmt ? opts.fmt(val) : val}</text>`;
+    labels += `<text x="${x + barW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${x+barW/2} ${h-padB+20})"${escQcr(truncateLabel(d[labelKey], 12))}</text>`;
   });
   const legend = `<div class="legend-item"><span class="legend-dot" style="background:#118DFF"></span>${opts.legend || opts.yLabel || valueKey}</div>`;
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
-    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
+    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="var(--chart-axis)" stroke-width="1.5"/>
     ${bars}${labels}
   </svg>`;
 }
@@ -666,8 +666,8 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
 
   for(let g=0; g<=4; g++){
     const gx = padL + plotW * g/4;
-    gridlines += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${h-padB}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="#6b7c93">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
+    gridlines += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${h-padB}" stroke="var(--chart-grid)" stroke-width="1"/>`;
+    gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="var(--chart-muted)">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
   }
 
   rows.forEach((d, i) => {
@@ -677,8 +677,8 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const barH = rowH * 0.6;
     const barColor = opts.color || CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
-    bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="#1c2b3a">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="#334155">${escQcr(truncateLabel(d[labelKey], 26))}<title>${escQcr(d[labelKey])}</title></text>`;
+    bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="var(--chart-strong)">${opts.fmt ? opts.fmt(val) : val}</text>`;
+    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}<title>${escQcr(d[labelKey])}</title></text>`;
   });
   // Each category gets the same color as its bar so the legend is a true
   // key for the colorful Work Center / Grade chart (not a generic metric legend).
@@ -690,7 +690,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     ${gridlines}
     ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleH(opts.xLabel, w, h, padL, padR) : ""}
-    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="var(--chart-axis)" stroke-width="1.5"/>
     ${bars}${labels}
   </svg>`;
 }
@@ -714,8 +714,8 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   for(let g=0; g<=4; g++){
     const gx = padL + plotW * g/4;
     const gv = commonMax * g/4;
-    gridlines += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${h-padB}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="#6b7c93">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(0)}</text>`;
+    gridlines += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${h-padB}" stroke="var(--chart-grid)" stroke-width="1"/>`;
+    gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="var(--chart-muted)">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(0)}</text>`;
   }
   seriesDefs.forEach(s => {
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${escQcr(s.label)}</div>`;
@@ -729,16 +729,16 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const barW = Math.max(0, (val / maxV) * plotW);
       const y = groupY + si * (barH + 5);
       bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${s.color}" rx="3"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
-      bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
+      bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="12.5" font-weight="700" text-anchor="end" fill="#334155">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
+    labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="12.5" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
   });
 
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleH(opts.xLabel, w, h, padL, padR) : ""}
-    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="var(--chart-axis)" stroke-width="1.5"/>
     ${bars}${labels}
   </svg>`;
 }
@@ -763,8 +763,8 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   for(let g=0; g<=4; g++){
     const gy = padT + (h-padT-padB) * (1 - g/4);
     const gv = Math.max(...maxes) * g/4;
-    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="#6b7c93">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(0)}</text>`;
+    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--chart-grid)" stroke-width="1"/>`;
+    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="var(--chart-muted)">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(0)}</text>`;
   }
   seriesDefs.forEach(s => {
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${escQcr(s.label)}</div>`;
@@ -779,16 +779,16 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
       bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
-      bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${s.fmt ? s.fmt(val) : val}</text>`;
+      bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey], truncLen))}<title>${escQcr(d[labelKey])}</title></text>`;
+    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey], truncLen))}<title>${escQcr(d[labelKey])}</title></text>`;
   });
 
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
-    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
+    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="var(--chart-axis)" stroke-width="1.5"/>
     ${bars}${labels}
   </svg>`;
 }
@@ -804,9 +804,9 @@ function makeLineChart(container, items, labelKey, series, opts={}){
   let gridlines = "";
   for(let g=0; g<=4; g++){
     const gy = padT + (h-padT-padB) * (1 - g/4);
-    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#eef1f6" stroke-width="1"/>`;
+    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--chart-grid)" stroke-width="1"/>`;
     const gv = maxV*g/4;
-    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="#6b7c93">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(2)}</text>`;
+    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="var(--chart-muted)">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(2)}</text>`;
   }
 
   let svgParts = "", legend = "";
@@ -819,7 +819,7 @@ function makeLineChart(container, items, labelKey, series, opts={}){
       const x = padL + (n > 1 ? i * stepX : (w-padL-padR)/2);
       const y = h - padB - (v / maxV) * (h - padT - padB);
       points += `${x},${y} `;
-      dots += `<circle cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"><title>${escQcr(s.label)} — ${escQcr(items[i][labelKey])}: ${s.fmt ? s.fmt(v) : v}</title></circle>`;
+      dots += `<circle cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="var(--chart-halo)" stroke-width="1.5"><title>${escQcr(s.label)} — ${escQcr(items[i][labelKey])}: ${s.fmt ? s.fmt(v) : v}</title></circle>`;
       // Show the actual value in bold near the point (skip some when crowded)
       if(i % skip === 0 || i === n-1){
         const labelY = y - 10 - (si * 14);
@@ -834,14 +834,14 @@ function makeLineChart(container, items, labelKey, series, opts={}){
   items.forEach((d, i) => {
     if(i % skip !== 0 && i !== n-1) return;
     const x = padL + (n > 1 ? i * stepX : (w-padL-padR)/2);
-    xLabels += `<text x="${x}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-30 ${x} ${h-padB+20})">${escQcr(truncateLabel((d[labelKey]||"").replace("Wk of ",""), 12))}</text>`;
+    xLabels += `<text x="${x}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${x} ${h-padB+20})">${escQcr(truncateLabel((d[labelKey]||"").replace("Wk of ",""), 12))}</text>`;
   });
 
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${gridlines}
     ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
-    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
+    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="var(--chart-axis)" stroke-width="1.5"/>
     ${svgParts}${xLabels}
   </svg>`;
 }
@@ -858,8 +858,8 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
   for(let g=0; g<=4; g++){
     const ratio=g/4, gy=padT+plotH*(1-ratio);
     const bv=maxBar*ratio, lv=maxLine*ratio;
-    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="#eef1f6" stroke-width="1"/>`;
-    gridlines += `<text x="${padL-9}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="#6b7c93">${opts.barFmt?opts.barFmt(bv):bv.toFixed(0)}</text>`;
+    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--chart-grid)" stroke-width="1"/>`;
+    gridlines += `<text x="${padL-9}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="var(--chart-muted)">${opts.barFmt?opts.barFmt(bv):bv.toFixed(0)}</text>`;
     gridlines += `<text x="${w-padR+9}" y="${gy+4}" font-size="10.5" text-anchor="start" fill="#DC2626">${opts.lineFmt?opts.lineFmt(lv):lv.toFixed(0)}</text>`;
   }
   items.forEach((d,i)=>{
@@ -867,13 +867,13 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const x=padL+i*gap+(gap-barW)/2, y=h-padB-barH;
     const barColor = opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length];
     bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${barColor}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}</title></rect>`;
-    bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="#1c2b3a">${opts.barFmt?opts.barFmt(val):val}</text>`;
+    bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${opts.barFmt?opts.barFmt(val):val}</text>`;
     const lineVal=Math.max(0,Math.min(maxLine,Number(d[lineKey])||0));
     const lineY=h-padB-(lineVal/maxLine)*plotH, px=x+barW/2;
     points += `${px},${lineY} `;
-    dots += `<circle cx="${px}" cy="${lineY}" r="4" fill="#DC2626" stroke="#fff" stroke-width="1.5"><title>Cumulative: ${opts.lineFmt?opts.lineFmt(lineVal):lineVal}</title></circle>`;
+    dots += `<circle cx="${px}" cy="${lineY}" r="4" fill="#DC2626" stroke="var(--chart-halo)" stroke-width="1.5"><title>Cumulative: ${opts.lineFmt?opts.lineFmt(lineVal):lineVal}</title></circle>`;
     dots += `<text x="${px}" y="${Math.max(lineY-10,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="#DC2626">${opts.lineFmt?opts.lineFmt(lineVal):lineVal}</text>`;
-    labels += `<text x="${px}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="#334155" transform="rotate(-35 ${px} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey],16))}<title>${escQcr(d[labelKey])}</title></text>`;
+    labels += `<text x="${px}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-35 ${px} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey],16))}<title>${escQcr(d[labelKey])}</title></text>`;
   });
   const legend=`<div class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS[0]}"></span>${opts.barLegend||"Qty (MT)"}</div><div class="legend-item"><span class="legend-dot" style="background:#DC2626"></span>${opts.lineLegend||"Cumulative %"}</div>`;
   container.innerHTML=`<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
@@ -881,7 +881,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     ${yAxisTitle(opts.barAxisLabel||"Qty (MT)",h,padT,padB)}
     <text x="${w-16}" y="${padT+plotH/2}" font-size="11.5" font-weight="700" fill="#DC2626" text-anchor="middle" transform="rotate(-90 ${w-16} ${padT+plotH/2})">${opts.lineAxisLabel||"Cumulative %"}</text>
     ${xAxisTitleV(opts.xLabel||"Main Defect",w,h,padL,padR)}
-    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ceda" stroke-width="1.5"/>
+    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="var(--chart-axis)" stroke-width="1.5"/>
     ${bars}<polyline points="${points}" fill="none" stroke="#DC2626" stroke-width="2.5"/>${dots}${labels}
   </svg>`;
 }
@@ -1280,14 +1280,14 @@ function buildFishboneSvg(item){
   const W=spineX2+headW+30;
 
   let svg='';
-  svg+=`<line x1="${spineX1}" y1="${spineY}" x2="${spineX2}" y2="${spineY}" stroke="#243B53" stroke-width="3"/>`;
-  svg+=`<polygon points="${spineX2},${spineY} ${spineX2-20},${spineY-13} ${spineX2-20},${spineY+13}" fill="#243B53"/>`;
+  svg+=`<line x1="${spineX1}" y1="${spineY}" x2="${spineX2}" y2="${spineY}" stroke="var(--fb-spine)" stroke-width="3"/>`;
+  svg+=`<polygon points="${spineX2},${spineY} ${spineX2-20},${spineY-13} ${spineX2-20},${spineY+13}" fill="var(--fb-spine)"/>`;
 
   // ---- head box (the defect / effect) ----
   const headFit=fbFitBox(item.defect, headW, {pad:22, baseSize:16, minSize:9, maxLines:4, charW:0.66, lineH:1.2});
   const headH=Math.max(80, 30+headFit.lines.length*headFit.lineHeight+18);
   const headY=spineY-headH/2;
-  svg+=`<rect x="${spineX2}" y="${headY}" width="${headW}" height="${headH}" rx="12" fill="#16324F"/>`;
+  svg+=`<rect x="${spineX2}" y="${headY}" width="${headW}" height="${headH}" rx="12" fill="var(--fb-head)"/>`;
   const hMidOffset=(headFit.lines.length-1)*headFit.lineHeight/2;
   svg+=headFit.lines.map((ln,i)=>`<text x="${spineX2+headW/2}" y="${spineY - hMidOffset + i*headFit.lineHeight + 5}" font-size="${headFit.fontSize}" font-weight="800" fill="#fff" text-anchor="middle">${escQcr(ln)}</text>`).join('');
 
@@ -1305,13 +1305,13 @@ function buildFishboneSvg(item){
       const t=ts[i];
       const bx=b.anchorX+dx*t, by=spineY+dy*t;
       const ex=bx+px*14, ey=by+py*14;
-      svg+=`<line x1="${bx}" y1="${by}" x2="${ex}" y2="${ey}" stroke="${it.missing?'#c3cdd8':b.color}" stroke-width="1.5"/>`;
+      svg+=`<line x1="${bx}" y1="${by}" x2="${ex}" y2="${ey}" stroke="${it.missing?'var(--fb-cause-muted-line)':b.color}" stroke-width="1.5"/>`;
       const anchor = px>=0 ? 'start':'end';
       const tx = ex + (px>=0?5:-5);
       const {fontSize,lines,lineHeight}=it.fit;
       const midOffset=(lines.length-1)*lineHeight/2;
       lines.forEach((ln,li)=>{
-        svg+=`<text x="${tx}" y="${ey - midOffset + li*lineHeight + 4}" font-size="${fontSize}" font-weight="${it.missing?'600':'700'}" font-style="${it.missing?'italic':'normal'}" fill="${it.missing?'#9aa7b4':'#243B53'}" text-anchor="${anchor}">${escQcr(ln)}</text>`;
+        svg+=`<text x="${tx}" y="${ey - midOffset + li*lineHeight + 4}" font-size="${fontSize}" font-weight="${it.missing?'600':'700'}" font-style="${it.missing?'italic':'normal'}" fill="${it.missing?'var(--fb-cause-muted)':'var(--fb-cause-text)'}" text-anchor="${anchor}">${escQcr(ln)}</text>`;
       });
     });
     const boxW=176,boxX=tipX-boxW/2, boxY=b.side==='top'?tipY-BOX_H:tipY;

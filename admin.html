@@ -38,6 +38,15 @@ html[data-theme="dark"] .admin-prod-card{background:linear-gradient(145deg,#151F
 html[data-theme="dark"]{
   --navy:#0B1220;--blue:#4DA3FF;--bg:#0B1220;--card:#141B2C;--border:#2A3B54;
   --text:#E8EDF6;--muted:#9AABC2;--red:#F87171;--green:#34D399;
+  /* This second variable family (--admin-surface*, --admin-heading, --admin-line,
+     --admin-accent) is a SEPARATE namespace from --card/--text/--border above,
+     used by the Command Center, Recovery Center, activity timeline, health
+     score/notification cards, KPI import-diff preview and a few other admin
+     panels. It was never redefined for dark mode before, which is exactly why
+     those particular panels stayed white while everything else using
+     --card/--text/--border correctly went dark. */
+  --admin-accent:#4DA3FF;--admin-surface:#141B2C;--admin-surface-2:#101827;
+  --admin-heading:#F0F4FA;--admin-line:#2A3B54;
   color-scheme:dark;
 }
 html[data-theme="dark"] body{
@@ -174,6 +183,24 @@ html[data-theme="dark"] .theme-toggle-btn:hover{background:#1B2A40;border-color:
 .theme-toggle-btn.muted{opacity:.55}
 html[data-theme="dark"] ::selection{background:#2563EB;color:#fff}
 html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.78)}
+/* These don't go through --card/--text/--border and aren't covered by the
+   --admin-surface* redefinition above either (they're hardcoded colors, not
+   var()-driven), so each needs its own explicit dark rule. */
+html[data-theme="dark"] .admin-sidebar{background:rgba(15,22,38,.92);}
+html[data-theme="dark"] .sidebar-link{color:#8CA0B8;}
+html[data-theme="dark"] .sidebar-link:hover{background:#182234;color:var(--admin-heading);}
+html[data-theme="dark"] .sidebar-link.active{background:#123A59;color:var(--admin-accent);}
+html[data-theme="dark"] .sidebar-foot{color:#7A8CA3;}
+html[data-theme="dark"] .shortcut-key{background:#182234;color:#A9B8CA;border-color:#2A3B54;}
+html[data-theme="dark"] kbd{background:#182234;color:#C7D2E3;border-color:#334861;}
+html[data-theme="dark"] .activity-icon{background:#123A59;}
+html[data-theme="dark"] .notify-count{background:#123A59;color:#8EC8FF;}
+html[data-theme="dark"] .v29-alert.warn{border-color:#5A4A24;}
+html[data-theme="dark"] .v29-alert.bad{border-color:#5A2A33;}
+html[data-theme="dark"] .diff-changes span{background:#182234;color:var(--text);}
+html[data-theme="dark"] .admin-health-score-card,
+html[data-theme="dark"] .admin-notify-card,
+html[data-theme="dark"] .admin-personal-card{background:var(--admin-surface);border-color:var(--admin-line);}
 @media(max-width:600px){
   .theme-toggle-btn{width:38px;height:38px;font-size:17px}
 }
@@ -224,12 +251,14 @@ function escAttrJs(value){
     .replace(/>/g, "&gt;");
 }
 
-/* Admin theme bootstrap: apply saved/system theme before first paint. */
+/* Admin theme bootstrap: apply saved theme before first paint. Light mode
+   is always the default — system prefers-color-scheme is intentionally not
+   used as a fallback (see index.html for the matching dashboard-side logic).
+   Dark mode only turns on if this admin previously switched to it. */
 (function(){
   try{
     var saved=localStorage.getItem('qdash_theme');
-    var theme=saved||(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-    if(theme==='dark')document.documentElement.setAttribute('data-theme','dark');
+    if(saved==='dark')document.documentElement.setAttribute('data-theme','dark');
   }catch(e){}
 })();
 </script>
@@ -684,7 +713,7 @@ html[data-theme="dark"] .admin-health-score-card,html[data-theme="dark"] .admin-
     const failed=parseInt(($('hFailed')?.textContent||'0').replace(/,/g,''),10)||0; const sec=failed===0?100:failed<5?85:failed<15?65:40;
     const score=Math.round(dq*.45+db*.2+bk*.2+sec*.15); const ring=$('adminHealthRing'), val=$('adminHealthRingValue');
     if($('adminHealthScore'))$('adminHealthScore').textContent=score+'/100'; if($('adminHealthState'))$('adminHealthState').textContent=score>=85?'Healthy':score>=65?'Watch':'Action required';
-    if(ring){const deg=Math.max(0,Math.min(100,score))*3.6;ring.style.background=`conic-gradient(${healthColor(score)} 0deg ${deg}deg,#E8EEF5 ${deg}deg 360deg)`;if(val)val.textContent=score}
+    if(ring){const deg=Math.max(0,Math.min(100,score))*3.6;const track=document.documentElement.getAttribute('data-theme')==='dark'?'#26364C':'#E8EEF5';ring.style.background=`conic-gradient(${healthColor(score)} 0deg ${deg}deg,${track} ${deg}deg 360deg)`;if(val)val.textContent=score}
   }
   function renderAlerts(){
     const list=$('adminNotifyList'),count=$('adminNotifyCount');if(!list)return;const a=[];

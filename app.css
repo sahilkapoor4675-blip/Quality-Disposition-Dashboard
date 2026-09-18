@@ -2,6 +2,15 @@
     --navy:#0f2a4a; --navy2:#16395f; --accent:#118DFF; --green:#16A34A;
     --red:#DC2626; --amber:#D97706; --purple:#7C3AED; --slate:#64748B;
     --bg:#f4f6fa; --card:#ffffff; --text:#1c2b3a; --muted:#6b7c93; --border:#e3e8f0; --heading:#183A58;
+    /* Chart SVG "chrome" (axis text, gridlines, baselines, marker halos) —
+       every chart-building function in app.js uses these instead of a baked-in
+       hex so charts can go dark along with the rest of the page. Data colors
+       (bar/slice/line colors from CHART_COLORS / DECISION_COLORS) are NOT
+       themed — they're chosen to read fine on both a white and a dark card. */
+    --chart-strong:#1c2b3a; --chart-muted:#6b7c93; --chart-label:#334155; --chart-axis-title:#475569;
+    --chart-grid:#eef1f6; --chart-axis:#c7ceda; --chart-leader:#94a3b8; --chart-halo:#fff;
+    /* True Ishikawa fishbone SVG (Dashboard tab) chrome. */
+    --fb-spine:#243B53; --fb-head:#16324F; --fb-cause-text:#243B53; --fb-cause-muted:#9aa7b4; --fb-cause-muted-line:#c3cdd8;
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:'Manrope','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;}
@@ -903,15 +912,18 @@ html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B
    Design rule followed throughout: every background/text pair below is
    picked and overridden TOGETHER, never just one half of a pair — so text
    can never end up invisible against its own background. Chart and diagram
-   SVGs (Pareto/bar/pie/fishbone) keep their light "paper" card background
-   in both themes on purpose: their text/line colors are baked into the SVG
-   for a white background, so re-theming only the chrome around them (never
-   the SVG's own card) guarantees they stay perfectly legible either way.
+   SVGs (Pareto/bar/pie/fishbone) draw their axis text, gridlines and marker
+   halos from the --chart-*/--fb-* variables set on this same root (see
+   :root above for the light values), so their card can go dark here too
+   without any text going invisible.
    ================================================================ */
 html[data-theme="dark"]{
   --navy:#0B1220; --navy2:#141F33; --accent:#4DA3FF; --green:#34D399;
   --red:#F87171; --amber:#FBBF24; --purple:#B197FC; --slate:#94A3B8;
   --bg:#0B1220; --card:#141B2C; --text:#E8EDF6; --muted:#9AABC2; --border:#2A3B54; --heading:#F0F4FA;
+  --chart-strong:#EAF1FB; --chart-muted:#93A5BE; --chart-label:#C7D2E3; --chart-axis-title:#AEBBD1;
+  --chart-grid:#26364C; --chart-axis:#3A4C68; --chart-leader:#7E90A8; --chart-halo:#141B2C;
+  --fb-spine:#6FA3DD; --fb-head:#1E3A5C; --fb-cause-text:#DCE6F5; --fb-cause-muted:#7E90A8; --fb-cause-muted-line:#3A4C68;
   color-scheme: dark;
 }
 html[data-theme="dark"] body{background:#0B1220 !important;color:var(--text);}
@@ -1003,6 +1015,14 @@ html[data-theme="dark"] .drill-dialog,
 html[data-theme="dark"] .qcr-fb-branch,
 html[data-theme="dark"] .qcr-fb-note{background:#141B2C;border-color:#2A3B54;color:var(--text);}
 html[data-theme="dark"] .qcr-fb-branch{border-top-color:var(--fb-color,#94A3B8);}
+html[data-theme="dark"] .qcr-fb-note{color:#FCD9B8;border-color:#5A4326;}
+html[data-theme="dark"] .qcr-fb-ul li{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-fb-empty{color:#8CA0B8;}
+html[data-theme="dark"] .qcr-fb-spine{color:#9AABC2;border-top-color:#2A3B54;}
+html[data-theme="dark"] .qcr-fb-spine span{background:#1E3A5C;}
+html[data-theme="dark"] .qcr-fishbone-chip{background:#141B2C;color:var(--text);}
+html[data-theme="dark"] .qcr-rca-chain{color:#9AABC2;}
+html[data-theme="dark"] .qcr-rca-arrow{color:#7E90A8;}
 html[data-theme="dark"] .qcr-hero{background:linear-gradient(135deg,#101B2E 0%,#0E1B2C 100%);border-color:#2A3B54;}
 html[data-theme="dark"] .panel h3,
 html[data-theme="dark"] .qcr-card>h3,
@@ -1079,12 +1099,19 @@ html[data-theme="dark"] .drill-table th,
 html[data-theme="dark"] .drill-body #drillContent .drill-table thead th{background:#101827!important;color:#E8EDF6!important;box-shadow:0 1px 0 #2A3B54,0 3px 8px rgba(0,0,0,.35)!important;}
 html[data-theme="dark"] .drill-table .grand-total-row td{background:#1B2740!important;color:#E8EDF6!important;border-top-color:#2A3B54!important;}
 
-/* Charts/diagrams intentionally KEPT LIGHT in dark mode (see note above) —
-   their own text/line colors assume a white card, so the card must stay
-   white for that text to stay visible. Only the surrounding page goes dark. */
+/* Charts/diagrams: previously kept on a forced-white card in dark mode
+   because their SVG text/line colors were baked in for a white background
+   (see git history). That's no longer true — every chart-building function
+   in app.js now draws its axis text, gridlines, baselines and marker halos
+   using the --chart-* / --fb-* variables defined above, which this dark
+   root already redefines. So the card can go properly dark like every other
+   surface, and the SVG content stays legible because it's reading the same
+   dark-aware variables. Bar/slice/line data colors are untouched — chosen to
+   read fine on both themes. */
 html[data-theme="dark"] .chart-scroll,
 html[data-theme="dark"] #dashFishboneDiagram,
-html[data-theme="dark"] #qcrFishboneDiagram{background:#fff!important;border-color:#2A3B54;}
+html[data-theme="dark"] #qcrFishboneDiagram{background:var(--card)!important;border-color:var(--border);}
+html[data-theme="dark"] .legend{color:#AEBBD1;}
 
 /* Theme toggle button */
 .theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:9px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;font-size:17px;transition:background .15s ease;}
