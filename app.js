@@ -145,12 +145,7 @@ async function loadFilters(){
   const container = document.getElementById("filters");
   const toolbarHost = document.getElementById("headerFilterToolbar");
   if (toolbarHost) {
-    // Reset All belongs with the filter controls it resets, not with the
-    // Export actions — so the header keeps Exports + the active-filter
-    // badge, and Reset All is rendered down in the Dashboard Filters panel
-    // itself (see the "filters-reset-row" appended after the filter fields
-    // below).
-    toolbarHost.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span></div></div>`;
+    toolbarHost.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
     container.innerHTML = "";
   } else {
     container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
@@ -186,16 +181,6 @@ async function loadFilters(){
     renderOptions();
     field.classList.toggle("filter-active", currentFilters[f.key]!=="All");
   });
-  // Reset All is the filters' own reset, so when the toolbar (Export
-  // buttons + badge) has been moved up into the header, Reset All stays
-  // down here with the filter fields it actually resets, instead of living
-  // in the header next to unrelated Export actions.
-  if (toolbarHost && !document.getElementById("resetAllBtn")) {
-    const resetRow = document.createElement("div");
-    resetRow.className = "filters-reset-row";
-    resetRow.innerHTML = `<button id="resetAllBtn" class="reset-all" type="button">Reset All</button>`;
-    container.appendChild(resetRow);
-  }
   document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); triggerFilterRefresh();});
   function exportDashboard(format){ const params=new URLSearchParams(currentFilters).toString(); window.location.href=`/api/export/${format}?${params}`; }
   document.getElementById("exportExcelBtn").addEventListener("click",()=>exportDashboard("excel"));

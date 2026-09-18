@@ -12,6 +12,7 @@ risk of a circular import.
 
 import io
 import re
+import os
 from datetime import datetime
 
 try:
@@ -156,6 +157,27 @@ def _chart_png(kind, title, labels, values, second=None, second_label=None, perc
     fig.tight_layout(pad=1.25)
     out=io.BytesIO(); fig.savefig(out,format="png",bbox_inches="tight",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
 
+# Export safety limits. Raw CSV remains complete; these limits only bound rendered
+# report elements so a pathological number of categories/periods cannot make
+# Matplotlib/ReportLab/PowerPoint recurse or allocate unbounded memory.
+EXPORT_CHART_CATEGORY_LIMIT = max(10, int(os.environ.get("EXPORT_CHART_CATEGORY_LIMIT", "40")))
+EXPORT_TREND_POINT_LIMIT = max(12, int(os.environ.get("EXPORT_TREND_POINT_LIMIT", "72")))
+
+def _top_rows(rows, limit, key="output_qty"):
+    rows = list(rows or [])
+    if len(rows) <= limit:
+        return rows
+    def score(r):
+        try:
+            return float(r.get(key) or 0)
+        except Exception:
+            return 0.0
+    return sorted(rows, key=score, reverse=True)[:limit]
+
+def _recent_rows(rows, limit):
+    rows = list(rows or [])
+    return rows[-limit:] if len(rows) > limit else rows
+
 FISHBONE_BRANCHES = [
     ("man","Man","#118DFF","top"),
     ("machine","Machine","#16A34A","top"),
@@ -220,26 +242,29 @@ def _fishbone_png(item, style=None):
     out=io.BytesIO(); fig.savefig(out,format="png",bbox_inches="tight",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
 
 def _export_charts(payload):
-    """Build the same set of dashboard charts shown in the webapp, as PNGs, for Excel/PDF/PPT exports.
-    Reuses data already computed in the payload instead of re-querying the database — this is the
-    main speed optimization for the export endpoints (previously issued an extra DB round trip)."""
+    """Build dashboard charts from bounded category/period lists.
+    Raw exports remain complete; only rendered chart series are capped to keep
+    Excel/PDF/PPTX generation predictable on messy/high-cardinality data."""
     d=payload["defects"]; wc=payload["wcg"]["by_work_center"]; gr=payload["wcg"]["by_grade"]
     kp=payload.get("kpis",{}) or {}
     charts=[]
-    decisions=[r for r in (kp.get("decision_table") or []) if r.get("qty")]
+    decisions=sorted([r for r in (kp.get("decision_table") or []) if r.get("qty")], key=lambda r: float(r.get("qty") or 0), reverse=True)[:12]
     if decisions:
         charts.append(("Decision Distribution",_chart_png("pie","Quality Decision Distribution",[r["decision"] for r in decisions],[r["qty"] for r in decisions])))
     if d.get("pareto"):
-        charts.append(("Defect Pareto",_chart_png("pareto","Top Defect Pareto — Output Qty",[r["defect"] for r in d["pareto"]],[r["qty"] for r in d["pareto"]],[r["cum_pct"] for r in d["pareto"]])))
-    it=[r for r in (kp.get("intensity_table") or []) if r.get("qty") or r.get("coils")]
+        p=d["pareto"][:10]
+        charts.append(("Defect Pareto",_chart_png("pareto","Top Defect Pareto — Output Qty",[r["defect"] for r in p],[r["qty"] for r in p],[r.get("cum_pct",0) for r in p])))
+    it=_top_rows([r for r in (kp.get("intensity_table") or []) if r.get("qty") or r.get("coils")], EXPORT_CHART_CATEGORY_LIMIT, "qty")
     if it:
         charts.append(("Defect Intensity",_chart_png("bar","Defect Intensity — Output Qty (MT)",[r["intensity"] for r in it],[r["qty"] for r in it])))
-    if wc:
-        charts.append(("Work Center",_chart_png("bar","Output Quantity by Work Center",[r["name"] for r in wc],[r["output_qty"] for r in wc])))
-    if gr:
-        charts.append(("Grade",_chart_png("bar","Output Quantity by Grade",[r["name"] for r in gr],[r["output_qty"] for r in gr])))
+    wc_chart=_top_rows(wc, EXPORT_CHART_CATEGORY_LIMIT, "output_qty")
+    if wc_chart:
+        charts.append(("Work Center",_chart_png("bar","Output Quantity by Work Center",[r["name"] for r in wc_chart],[r["output_qty"] for r in wc_chart])))
+    gr_chart=_top_rows(gr, EXPORT_CHART_CATEGORY_LIMIT, "output_qty")
+    if gr_chart:
+        charts.append(("Grade",_chart_png("bar","Output Quantity by Grade",[r["name"] for r in gr_chart],[r["output_qty"] for r in gr_chart])))
     for title,key in [("Monthly Trend","monthly"),("Weekly Trend","period"),("Quarterly Trend","quarterly"),("Financial Year Trend","yearly")]:
-        rows=payload[key]["rows"]
+        rows=_recent_rows(payload[key]["rows"], EXPORT_TREND_POINT_LIMIT)
         if rows:
             charts.append((title,_chart_png("line",title,[r["name"] for r in rows],[r["output_qty"] for r in rows])))
     return [(n,b) for n,b in charts if b]
@@ -365,7 +390,7 @@ def _excel_report(payload):
         header(fw,26,["Category","Cause"])
         row=27
         for key,label,_c,_s in FISHBONE_BRANCHES:
-            for cause in (fb.get("causes") or {}).get(key) or []:
+            for cause in ((fb.get("causes") or {}).get(key) or []):
                 fw.cell(row,1,label); fw.cell(row,2,cause); row+=1
         autofit(fw)
         rca=fb.get("rca") or {}
@@ -512,25 +537,25 @@ def _pdf_report(payload):
     _pdf_section(story,styles,"Defect Analysis",[charts_dict.get("Defect Pareto"),charts_dict.get("Defect Intensity")],rows,[45,300,70,80,80],chart_w=375,chart_h=167,note=reg_note)
 
     # ---- Work Center / Grade: table + matching bar chart, same page. ----
-    wc=payload["wcg"]["by_work_center"]; wtot=payload["wcg"]["total_work_center"]
+    wc=list(payload["wcg"]["by_work_center"] or []); wtot=payload["wcg"]["total_work_center"]
     wc_rows=[["Name","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty"]]+[[r.get("name"),r.get("coils"),f'{r.get("output_qty",0):.3f}',r.get("defect_coils"),f'{r.get("defect_pct",0)*100:.2f}%',f'{r.get("reject_qty",0):.3f}',f'{r.get("reject_pct_qty",0)*100:.2f}%'] for r in wc]
     if wtot: wc_rows.append(["Total",wtot.get("coils"),f'{wtot.get("output_qty",0):.3f}',wtot.get("defect_coils"),f'{wtot.get("defect_pct",0)*100:.2f}%',f'{wtot.get("reject_qty",0):.3f}',f'{wtot.get("reject_pct_qty",0)*100:.2f}%'])
     _pdf_section(story,styles,"Work Center Performance",[charts_dict.get("Work Center")],wc_rows,[130,80,90,90,80,100,90])
 
-    gr=payload["wcg"]["by_grade"]; gtot=payload["wcg"]["total_grade"]
+    gr=list(payload["wcg"]["by_grade"] or []); gtot=payload["wcg"]["total_grade"]
     gr_rows=[["Name","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty"]]+[[r.get("name"),r.get("coils"),f'{r.get("output_qty",0):.3f}',r.get("defect_coils"),f'{r.get("defect_pct",0)*100:.2f}%',f'{r.get("reject_qty",0):.3f}',f'{r.get("reject_pct_qty",0)*100:.2f}%'] for r in gr]
     if gtot: gr_rows.append(["Total",gtot.get("coils"),f'{gtot.get("output_qty",0):.3f}',gtot.get("defect_coils"),f'{gtot.get("defect_pct",0)*100:.2f}%',f'{gtot.get("reject_qty",0):.3f}',f'{gtot.get("reject_pct_qty",0)*100:.2f}%'])
     _pdf_section(story,styles,"Grade Performance",[charts_dict.get("Grade")],gr_rows,[150,80,90,90,80,100,90])
 
     # ---- Trend sheets: table + matching line chart, same page. ----
     for label,key,chart_name in [("Monthly Trend","monthly","Monthly Trend"),("Weekly Trend","period","Weekly Trend"),("Quarterly Trend","quarterly","Quarterly Trend"),("Financial Year Trend","yearly","Financial Year Trend")]:
-        trows=payload[key]["rows"]; total=payload[key].get("total")
+        trows=list(payload[key]["rows"] or []); total=payload[key].get("total")
         rows2=[["Period","Coils","Output MT","Defect %","Reject % Qty","FPY %"]]+[[r.get("name"),r.get("coils"),f'{r.get("output_qty",0):.3f}',f'{r.get("defect_pct",0)*100:.2f}%',f'{r.get("reject_pct_qty",0)*100:.2f}%',f'{r.get("first_pass_yield_pct",0)*100:.2f}%'] for r in trows]
         if total: rows2.append(["Total",total.get("coils"),f'{total.get("output_qty",0):.3f}',f'{total.get("defect_pct",0)*100:.2f}%',f'{total.get("reject_pct_qty",0)*100:.2f}%',f'{total.get("fpy",0)*100:.2f}%'])
         _pdf_section(story,styles,label,[charts_dict.get(chart_name)],rows2,[110,90,100,90,100,90])
 
     # ---- Target vs Actual History ----
-    th=payload.get("target_history",{}); tr=[['Period','Target','Actual','Attainment','Gap pp']]+[[r.get('period'),f"{r.get('target',0)*100:.2f}%",f"{r.get('actual',0)*100:.2f}%",f"{r.get('attainment',0)*100:.1f}%",f"{r.get('gap_pp',0):+.2f}"] for r in th.get('rows',[])]
+    th=payload.get("target_history",{}); tr=[['Period','Target','Actual','Attainment','Gap pp']]+[[r.get('period'),f"{r.get('target',0)*100:.2f}%",f"{r.get('actual',0)*100:.2f}%",f"{r.get('attainment',0)*100:.1f}%",f"{r.get('gap_pp',0):+.2f}"] for r in (th.get('rows',[]) or [])]
     _pdf_section(story,styles,"Target vs Actual History",[],tr,[100,90,90,100,80])
 
     # ---- 6M Fishbone Analysis: diagram + cause list, same page. ----
@@ -539,7 +564,7 @@ def _pdf_report(payload):
         fb_png=_fishbone_png(fb, payload.get("fishbone_style"))
         cause_rows=[["Category","Cause"]]
         for key,label,_c,_s in FISHBONE_BRANCHES:
-            for cause in (fb.get("causes") or {}).get(key) or []:
+            for cause in ((fb.get("causes") or {}).get(key) or []):
                 cause_rows.append([label,cause])
         _pdf_section(story,styles,f"6M Fishbone Analysis — {fb.get('defect','')}",[fb_png] if fb_png else [],cause_rows,[130,600],chart_w=740,chart_h=390)
         rca=fb.get("rca") or {}
@@ -643,30 +668,33 @@ def _pptx_report(payload):
             style_table(gframe.table,headers,chunk,col_weights)
         return chunks
 
-    def add_chart_table_slide(title_text, chart_imgs, headers, rows, col_weights=None, max_rows=9, sub=None):
-        """One slide: matching chart(s) framed at the top, its data table right below —
-        exactly what a chart+table combo report page should look like."""
+    def add_chart_table_slide(title_text, chart_imgs, headers, rows, col_weights=None, max_rows=8, sub=None):
+        """Paginate complete table data while keeping the matching chart(s) on EVERY slide.
+        This guarantees chart+table pairing even for very large datasets; no export rows are
+        silently dropped. Charts are intentionally visual summaries and may use bounded series."""
         chart_imgs=[im for im in (chart_imgs or []) if im]
-        first_chunk=rows[:max_rows]; rest=rows[max_rows:]
-        s=add_slide(); band(s,title_text,sub or (f"Showing {len(first_chunk)} of {len(rows)} rows" if len(rows)>max_rows else None))
-        if chart_imgs:
-            n=len(chart_imgs); gap=Inches(0.18)
-            avail_w=prs.slide_width-Inches(0.8)-(n-1)*gap; pic_w=int(avail_w/n); pic_h=Inches(2.55); top=Inches(1.18)
-            x=Inches(0.4)
-            for img in chart_imgs:
-                frame=s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,x-Pt(3),top-Pt(3),pic_w+Pt(6),pic_h+Pt(6))
-                frame.fill.solid(); frame.fill.fore_color.rgb=WHITE; frame.line.color.rgb=BORDER; frame.line.width=Pt(0.75); frame.shadow.inherit=False
-                s.shapes.add_picture(io.BytesIO(img),x,top,width=pic_w,height=pic_h)
-                x=int(x+pic_w+gap)
-            table_top=Inches(3.95); table_h=Inches(3.15)
-        else:
-            table_top=Inches(1.25); table_h=Inches(5.7)
-        if headers and (first_chunk or headers):
-            left=Inches(0.4); width=prs.slide_width-Inches(0.8)
-            gframe=s.shapes.add_table(len(first_chunk)+1,len(headers),left,table_top,width,table_h)
-            style_table(gframe.table,headers,first_chunk,col_weights)
-        if rest:
-            add_table_slide(title_text,headers,rest,col_weights,max_rows=14,note="(continued)")
+        rows=list(rows or [])
+        chunks=[rows[i:i+max_rows] for i in range(0,len(rows),max_rows)] or [[]]
+        for ci,chunk in enumerate(chunks):
+            continuation = ci>0
+            default_sub = (f"Rows {ci*max_rows+1}-{ci*max_rows+len(chunk)} of {len(rows)}" if len(rows)>max_rows else None)
+            s=add_slide(); band(s,title_text,sub or default_sub)
+            if chart_imgs:
+                n=len(chart_imgs); gap=Inches(0.18)
+                avail_w=prs.slide_width-Inches(0.8)-(n-1)*gap; pic_w=int(avail_w/n); pic_h=Inches(2.55); top=Inches(1.18)
+                x=Inches(0.4)
+                for img in chart_imgs:
+                    frame=s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,x-Pt(3),top-Pt(3),pic_w+Pt(6),pic_h+Pt(6))
+                    frame.fill.solid(); frame.fill.fore_color.rgb=WHITE; frame.line.color.rgb=BORDER; frame.line.width=Pt(0.75); frame.shadow.inherit=False
+                    s.shapes.add_picture(io.BytesIO(img),x,top,width=pic_w,height=pic_h)
+                    x=int(x+pic_w+gap)
+                table_top=Inches(3.95); table_h=Inches(3.15)
+            else:
+                table_top=Inches(1.25); table_h=Inches(5.7)
+            if headers:
+                left=Inches(0.4); width=prs.slide_width-Inches(0.8)
+                gframe=s.shapes.add_table(len(chunk)+1,len(headers),left,table_top,width,table_h)
+                style_table(gframe.table,headers,chunk,col_weights)
 
     charts_dict=dict(_export_charts(payload))
 
@@ -699,21 +727,16 @@ def _pptx_report(payload):
             p2=tf.add_paragraph(); p2.text=_export_display_value(k.get("value",0),k.get("fmt","")); p2.font.size=Pt(22); p2.font.bold=True; p2.font.color.rgb=NAVY; p2.alignment=PP_ALIGN.CENTER
 
     if "Decision Distribution" in charts_dict:
-        s=add_slide(); band(s,"Quality Decision Distribution")
-        pic_w=Inches(7.5); pic_h=Inches(5.15); left=int((prs.slide_width-pic_w)/2); top=Inches(1.55)
-        s.shapes.add_picture(io.BytesIO(charts_dict["Decision Distribution"]),left,top,width=pic_w,height=pic_h)
+        drows=sorted([r for r in (payload.get("kpis",{}).get("decision_table") or []) if r.get("qty")], key=lambda r: float(r.get("qty") or 0), reverse=True)
+        add_chart_table_slide("Quality Decision Distribution",[charts_dict["Decision Distribution"]],["Decision","Output Qty"],[[r.get("decision"),f'{float(r.get("qty") or 0):,.3f}'] for r in drows],col_weights=[2.4,1.4],max_rows=8)
 
     # ---- Defect Analysis: table + its Pareto / Intensity charts, same slide. ----
     # A slide deck that paginates the full register would mean one slide per
     # ~14 rows -- hundreds of slides for an unusually large (e.g. messy-data)
     # register. Cap it the same way the PDF export does; the complete
     # register is always available in the Excel export.
-    d=payload["defects"]; _pptx_register=d.get("register",[])
-    _PPTX_REGISTER_CAP=150
-    _pptx_reg_sub=None
-    if len(_pptx_register)>_PPTX_REGISTER_CAP:
-        _pptx_reg_sub=f"Top {_PPTX_REGISTER_CAP} of {len(_pptx_register)} defect categories by quantity — see the Excel export for the complete register."
-        _pptx_register=_pptx_register[:_PPTX_REGISTER_CAP]
+    d=payload["defects"]; _pptx_register=list(d.get("register") or [])
+    _pptx_reg_sub=("Chart series are a visual Top-N summary; the table contains the complete defect register." if _pptx_register else None)
     add_chart_table_slide("Defect Analysis",[charts_dict.get("Defect Pareto"),charts_dict.get("Defect Intensity")],
         ["Rank","Defect","Records","Qty (MT)","% Records"],
         [[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in _pptx_register],
@@ -722,7 +745,7 @@ def _pptx_report(payload):
     # ---- Work Center / Grade: table + matching bar chart, same slide. ----
     wcg_headers=["Name","Coils","Output MT","Defect Coils","Defect %","Reject Qty MT","Reject % Qty"]
     wcg_weights=[2.2,1,1.3,1.3,1,1.4,1.3]
-    wc=payload["wcg"]["by_work_center"]; gr=payload["wcg"]["by_grade"]
+    wc=list(payload["wcg"]["by_work_center"] or []); gr=list(payload["wcg"]["by_grade"] or [])
     add_chart_table_slide("Work Center Performance",[charts_dict.get("Work Center")],wcg_headers,
         [[r.get("name"),r.get("coils"),f'{r.get("output_qty",0):.3f}',r.get("defect_coils"),f'{r.get("defect_pct",0)*100:.2f}%',f'{r.get("reject_qty",0):.3f}',f'{r.get("reject_pct_qty",0)*100:.2f}%'] for r in wc],
         col_weights=wcg_weights)
@@ -733,7 +756,7 @@ def _pptx_report(payload):
     # ---- Trend slides: table + matching line chart, same slide (Monthly/Weekly/Quarterly/FY). ----
     trend_headers=["Period","Coils","Output MT","Defect %","Reject % Qty","FPY %"]; trend_weights=[1.6,1,1.3,1,1.2,1]
     for label,key,chart_name in [("Monthly Trend","monthly","Monthly Trend"),("Weekly Trend","period","Weekly Trend"),("Quarterly Trend","quarterly","Quarterly Trend"),("Financial Year Trend","yearly","Financial Year Trend")]:
-        trows=payload[key]["rows"]
+        trows=list(payload[key]["rows"] or [])
         add_chart_table_slide(label,[charts_dict.get(chart_name)],trend_headers,
             [[r.get("name"),r.get("coils"),f'{r.get("output_qty",0):.3f}',f'{r.get("defect_pct",0)*100:.2f}%',f'{r.get("reject_pct_qty",0)*100:.2f}%',f'{r.get("first_pass_yield_pct",0)*100:.2f}%'] for r in trows],
             col_weights=trend_weights)
@@ -757,7 +780,7 @@ def _pptx_report(payload):
     # ---- Target vs Actual History ----
     th=payload.get("target_history",{})
     add_table_slide("Target vs Actual History",["Period","Target","Actual","Attainment","Gap (pp)"],
-        [[r.get('period'),f"{r.get('target',0)*100:.2f}%",f"{r.get('actual',0)*100:.2f}%",f"{r.get('attainment',0)*100:.1f}%",f"{r.get('gap_pp',0):+.2f}"] for r in th.get('rows',[])],
+        [[r.get('period'),f"{r.get('target',0)*100:.2f}%",f"{r.get('actual',0)*100:.2f}%",f"{r.get('attainment',0)*100:.1f}%",f"{r.get('gap_pp',0):+.2f}"] for r in (th.get('rows',[]) or [])],
         col_weights=[1.4,1,1,1.2,1])
 
     # ---- Root cause / improvement opportunities — bullet slide. ----

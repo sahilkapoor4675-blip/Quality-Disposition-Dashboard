@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V60.0
+# Quality Disposition Control Dashboard — V62.0
 
 **Release:** FINAL-STABILITY-HARDENED
 
@@ -51,20 +51,28 @@ The dashboard provides live filters, KPI cards, defect analysis, work-center/gra
 `supabase_schema.sql` is the reference PostgreSQL schema. Runtime startup remains authoritative and performs idempotent migrations for older deployments.
 
 ## Release notes
-**V60.0 — STABILITY RELEASE CANDIDATE**
+**V62.0 — STABILITY RELEASE CANDIDATE**
 - Fixed admin CSV formula-injection protection gap.
 - Wired activity-log retention with periodic cleanup.
 - Scoped activity rate limits to public activity endpoints only.
 - Added transactional import serialization for SQLite and PostgreSQL.
 - Updated the reference PostgreSQL schema to match runtime columns/tables.
 - Removed stale documentation that referenced absent `build_db.py` / bundled `quality.db` as the production source of truth.
-- Unified backend/frontend release identity and cache-busting to V60.0.
+- Unified backend/frontend release identity and cache-busting to V62.0.
 
 V56.0 remains the preceding P1-hardened build; V55.0 is the preceding P0-repaired build. The build process never connects to production PostgreSQL and does not delete existing application rows.
 
 ## Current release
 
-V60.0 is the stability/release-candidate build built on the P0/P1/P2 hardening baseline. P0/P1 data-safety behavior is retained; production PostgreSQL is never modified by the build process.
+V62.0 is the stability/release-candidate build built on the P0/P1/P2 hardening baseline. P0/P1 data-safety behavior is retained; production PostgreSQL is never modified by the build process.
 
 ## V60 Stability Release Gate
 V60 includes permanent isolated regression scripts under `tests/` plus final admin inline-handler hardening. Before deploying a new build, run the commands in `RELEASE_GATE.md` and require all checks to pass.
+
+
+## V62.0 — EXPORT HARDENING
+- Fixed Excel/PDF/PPTX export failures on high-cardinality Work Center/Grade data.
+- Bounded chart/table rendering without truncating Raw Data CSV.
+- Removed the global high-recursion/64 MiB thread-stack workaround.
+- Heavy report exports serialize by default on small hosts.
+- Added `tests/export_stress.py` as a permanent release gate.
