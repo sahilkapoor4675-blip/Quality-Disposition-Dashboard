@@ -196,7 +196,17 @@
   ['pointerdown','keydown','touchstart'].forEach(function(ev){ window.addEventListener(ev,resumeAudio,{once:true,passive:true}); });
   resumeAudio();
   function tone(time,freq,dur,type,peak,glideTo){
-    if(!ctx||reduceMotion) return;
+    // Only actually schedule a sound while the context is genuinely
+    // running. If it's still "suspended" (no user gesture yet — the normal
+    // state for the very first thing on a fresh page load), currentTime is
+    // frozen, so anything scheduled now would sit queued at that same
+    // frozen instant and then all fire in a chaotic burst together the
+    // moment the context finally resumes (e.g. on the "Enter Dashboard"
+    // click) — audibly landing well after its matching text already
+    // appeared. Skipping the cue entirely here is the better trade-off:
+    // that one beat plays silently instead of arriving late and out of
+    // step with everything else.
+    if(!ctx||reduceMotion||ctx.state!=='running') return;
     try{
       var osc=ctx.createOscillator(), gain=ctx.createGain();
       osc.type=type||'sine';
@@ -211,7 +221,7 @@
   }
   function tick(time,freq){ tone(time,freq,.09,'triangle',.05); }
   function whoosh(time,dur,from,to){
-    if(!ctx||reduceMotion) return;
+    if(!ctx||reduceMotion||ctx.state!=='running') return; // see the note in tone() above
     try{
       var n=Math.max(1,Math.floor(ctx.sampleRate*dur));
       var buf=ctx.createBuffer(1,n,ctx.sampleRate), data=buf.getChannelData(0);
@@ -228,30 +238,41 @@
   function chime(time,freqs,dur){ (freqs||[]).forEach(function(f,idx){ tone(time+idx*.05,f,dur||.5,'sine',.065); }); }
 
   // ---- Single timeline drives both the visuals and the audio, so the two
-  // can never drift apart. ----
-  var audioBase = ctx? ctx.currentTime+0.05 : 0;
+  // can never drift apart. Every tone below is scheduled at now() — read
+  // fresh, inside the very same setTimeout callback that reveals its
+  // matching letter/element — instead of against a single future timeline
+  // computed once up front. That "computed once up front" approach was the
+  // actual bug: setTimeout delays aren't perfectly precise (the browser can
+  // be busy loading fonts/scripts right as the intro starts), so the visual
+  // reveal could fire late while the Web Audio clock kept its own exact
+  // schedule regardless — the two drifted apart, and on a slow load the
+  // gap was big enough to see (and hear). Reading now() at the moment each
+  // callback actually runs means a delayed visual and its sound are always
+  // delayed by the exact same amount together, so they can't end up
+  // out of step with each other.
+  function now(){ return ctx? ctx.currentTime : 0; }
   function show(el){ if(el) el.classList.add('show'); }
   function at(ms,fn){ setTimeout(fn, reduceMotion? Math.min(ms,50) : ms); }
 
   var STEP = reduceMotion? 3 : 42;   // ms per letter, NON-FERROUS
   var TSTEP = reduceMotion? 3 : 36;  // ms per letter, QUALITY INTELLIGENCE
 
-  at(120,function(){ show(document.getElementById('ivLogo')); whoosh(audioBase+.12,.35,300,1500); });
+  at(120,function(){ show(document.getElementById('ivLogo')); whoosh(now(),.35,300,1500); });
 
   var tagEls=Array.prototype.slice.call(document.querySelectorAll('#ivTag .iv'));
   tagEls.forEach(function(el,i){
     var when=430+i*125;
-    at(when,function(){ show(el); tick(audioBase+when/1000,640+i*65); });
+    at(when,function(){ show(el); tick(now(),640+i*65); });
   });
 
   var nfStart=430+tagEls.length*125+60;
   nfLetters.forEach(function(s,i){
     var when=nfStart+i*STEP;
-    at(when,function(){ show(s); tick(audioBase+when/1000,560+i*15); });
+    at(when,function(){ show(s); tick(now(),560+i*15); });
   });
   var nfEnd=nfStart+nfLetters.length*STEP;
-  at(nfEnd+60,function(){ chime(audioBase+(nfEnd+60)/1000,[392,494],.4); });
-  at(nfEnd+260,function(){ show(document.getElementById('ivDivision')); tick(audioBase+(nfEnd+260)/1000,340); });
+  at(nfEnd+60,function(){ chime(now(),[392,494],.4); });
+  at(nfEnd+260,function(){ show(document.getElementById('ivDivision')); tick(now(),340); });
   at(nfEnd+520,function(){ show(document.getElementById('ivQuote')); });
 
   var titleStart=nfEnd+780;
@@ -260,16 +281,16 @@
     at(when,function(){
       show(s);
       var f = s.classList.contains('q') ? (760-i*9) : (s.classList.contains('i') ? (420+i*9) : null);
-      if(f) tick(audioBase+when/1000,f);
+      if(f) tick(now(),f);
     });
   });
   var titleEnd=titleStart+titleLetters.length*TSTEP;
-  at(titleEnd+70,function(){ show(document.getElementById('ivTitleLine')); chime(audioBase+(titleEnd+70)/1000,[523,659,784],.55); });
+  at(titleEnd+70,function(){ show(document.getElementById('ivTitleLine')); chime(now(),[523,659,784],.55); });
 
   var cardEls=Array.prototype.slice.call(document.querySelectorAll('#ivCards .iv'));
   cardEls.forEach(function(el,i){
     var when=titleEnd+300+i*150;
-    at(when,function(){ show(el); tick(audioBase+when/1000,500+i*90); });
+    at(when,function(){ show(el); tick(now(),500+i*90); });
   });
   var cardsEnd=titleEnd+300+cardEls.length*150;
 
@@ -280,7 +301,7 @@
     screen.classList.add('intro-ready');
     btn.removeAttribute('disabled'); btn.removeAttribute('aria-disabled'); btn.setAttribute('tabindex','0');
     show(document.getElementById('ivHint'));
-    chime(audioBase+readyAt/1000,[659,880],.5);
+    chime(now(),[659,880],.5);
     try{ btn.focus({preventScroll:true}); }catch(e){}
   });
 
