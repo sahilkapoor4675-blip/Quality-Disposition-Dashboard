@@ -531,3 +531,306 @@ Heavy report exports default to one-at-a-time on small hosts. The global Python 
   alignment changed, not the IDs, handlers, or filter/export logic.
 
 ---
+
+## V62.2
+
+# V62.2 — Export RecursionError Fix + Header Branding Scale-Up
+
+## Root cause of the recurring export failure
+Every "This report hit an unexpectedly deep processing limit…" export failure
+traced back to `_chart_png()`'s Pareto chart (the dual-axis defect chart used
+in Excel/PDF/PPT exports). It combines `ax.twinx()` (for the Qty / Cumulative %
+dual axis) with `fig.savefig(..., bbox_inches="tight")`. On matplotlib 3.8.x,
+that combination can recurse deep enough — the recursion depth scales with the
+number of distinct defect labels on the chart — to blow past Python's stack
+limit with a genuine `RecursionError`, which is why a narrower filter (fewer
+defect labels) "worked around" it and a broad/unfiltered report didn't.
+
+## Fixed
+- `reports.py` — dropped `bbox_inches="tight"` from both chart PNG savefig()
+  calls (`_chart_png()` and `_fishbone_png()`). `fig.tight_layout()` already
+  lays the figure out correctly; re-tightening at savefig() time was the
+  actual recursion trigger, not merely something that needed a higher
+  recursion limit or a smaller payload.
+- `requirements.txt` — bumped `matplotlib` from `~=3.8.0` to `~=3.10.0` (a
+  deliberate minor-version bump, not just a patch bump) as defense-in-depth.
+  Stress-tested the exact Pareto-chart code path at up to 3,000 chart labels
+  and 400 repeated chart renders in one process on 3.10.x with no recursion
+  or slowdown.
+- Existing recursion-safety scaffolding in `server.py` (raised recursion
+  limit, larger thread stack, one-time capped-payload retry, and the
+  diagnostic error response) is left in place as a general safety net for any
+  other unrelated deep-recursion edge case — it's just no longer needed for
+  this particular failure.
+
+## Header branding scale-up
+- `app.css` — the earlier header-height reduction shrank the logo and title
+  text along with the header's own padding, which left the branding looking
+  small/lost inside the header. Scaled the logo (58px, 42px on mobile) and
+  every title/subtitle line back up together so the branding fills the
+  header's footprint again, without the header itself growing tall.
+
+## Preserved
+- All export formats, filters, KPI/QCR calculations and chart appearance are
+  otherwise unchanged — only the two `savefig()` calls and the matplotlib
+  version changed on the backend; only sizing changed in the header.
+
+---
+
+## V62.3
+
+# V62.3 — Dashboard Fishbone Cause Text Size
+
+## What changed
+- `app.js` — `buildFishboneSvg()` (the true Ishikawa diagram on the Dashboard
+  tab): cause-label font size raised from 12.5px to 14px (fallback minimum
+  8.5px → 9.5px to match), and the vertical spacing between causes along
+  each of the 6 bones (`ROW_GAP`) increased from 48 to 56 so the now-larger,
+  still auto-wrapping text has enough room and doesn't overlap a neighboring
+  cause. The diagram's existing auto-wrap/auto-shrink logic (`fbFitBox`) is
+  untouched — a long cause still wraps onto up to 3 lines, and only shrinks
+  toward the (now slightly higher) minimum font size on the rare cause that
+  still won't fit, so nothing gets visually cut off.
+
+## Preserved
+- QCR tab's card-grid fishbone layout (a separate function) is unchanged —
+  this was a Dashboard-tab-only request.
+- Cause data, matching logic, RCA table, and every other diagram element
+  (spine, head box, branch color/icon boxes) are unchanged.
+
+---
+
+## V62.4
+
+# V62.4 — Site-Wide Sound Effects
+
+## What changed
+- Added `sfx.js`: a small, self-contained sound-effect engine. Every sound is
+  synthesized on the fly with the Web Audio API (short tones through a
+  gentle low-pass filter) — there are no audio files to host or download,
+  so it loads instantly and works offline.
+- One delegated click/change listener (in `sfx.js` itself) covers the whole
+  app instead of wiring every button by hand, since both the dashboard and
+  admin panel build most of their buttons dynamically. Different UI
+  conditions get audibly different sounds:
+  - `click` — a generic secondary button/link
+  - `confirm` — a primary/submit button (Save, Login, the export buttons)
+  - `select` — picking a filter option, a fishbone-defect chip, a native
+    `<select>` value, or a checkbox/radio
+  - `open` / `close` — opening a filter dropdown or a file picker
+  - `tab` — switching dashboard tabs or admin sidebar sections
+  - `toggle` — the dark-mode and sound-mute buttons
+  - `success` — an admin action's `setMsg(..., 'ok')` result
+  - `error` — an admin action's `setMsg(..., 'err')` result
+  - `warning` — Reset All, Delete, Logout and other destructive actions
+  - `notify` — the app's existing `alert()` calls (wrapped, not rewritten)
+- Added a small 🔊/🔈 mute button next to the existing dark-mode toggle in
+  both `index.html` and `admin.html`. The on/off preference is remembered in
+  `localStorage`, independent of the dark-mode preference.
+- `server.py` — added `/sfx.js` to the same versioned-static-asset route
+  `/app.js` already uses (this server has no generic static-file handler;
+  every servable path is explicit), so the new file is actually reachable.
+- `admin.html` — its shared `setMsg(id, text, kind)` helper (used by every
+  admin panel for its inline success/error messages) now also plays the
+  matching sound, so real success/failure outcomes are covered, not just
+  the click that triggered them.
+
+## Preserved
+- No existing click handler, export, filter, or admin workflow logic was
+  touched — the listener only *observes* clicks/changes to play a sound; it
+  never calls `preventDefault()` or otherwise intercepts the interaction.
+- Sound is on by default but fully mutable per browser/device; muting is
+  remembered across visits.
+
+---
+
+## V62.5
+
+# V62.5 — Dark Mode: Charts, 6M Fishbone, and Admin Panels
+
+## Root causes found
+- **Charts (Dashboard/QCR/all analysis tabs) stayed on a white card in dark
+  mode.** Every chart-building function in `app.js` draws its own inline SVG
+  (pie, bar, horizontal bar, grouped bar, line, combo/Pareto) with axis text,
+  gridlines and baselines as hardcoded hex colors tuned for a white
+  background. A previous pass deliberately left the chart card forced white
+  in dark mode as a workaround, since re-theming the card alone would have
+  made that baked-in dark navy text invisible.
+- **QCR tab's 6M Fishbone was "pura white" in dark mode.** Its container
+  (`#qcrFishboneDiagram`) was being force-set to `background:#fff !important`
+  by that same old workaround, and several of its own elements (cause list
+  text, "no cause on file" text, the spine caption, the note banner's text/
+  border) had no dark-mode color at all.
+- **Some Admin tabs stayed white in dark mode.** Admin has two separate CSS
+  variable families: `--card`/`--text`/`--border` (redefined for dark mode
+  already) and a second one — `--admin-surface`, `--admin-surface-2`,
+  `--admin-heading`, `--admin-line`, `--admin-accent` — used by the Command
+  Center, Recovery Center, activity timeline, health-score/notification
+  cards, and the KPI import-diff preview. That second family was **never
+  redefined for dark mode**, so every panel built from it stayed on its
+  light default regardless of theme, while panels using the first family
+  correctly went dark — hence only *some* tabs looking broken.
+
+## Fixed
+- `app.css` — added a `--chart-*` variable set (axis text, gridlines,
+  baseline, marker halo) and an `--fb-*` set (Ishikawa spine/head/cause
+  text) to `:root`, with dark-mode-legible values redefined under
+  `html[data-theme="dark"]`. Light-mode values are identical to the old
+  hardcoded hex, so light mode is pixel-for-pixel unchanged.
+- `app.js` — every chart function (`makePieChart`, `makeBarChart`,
+  `makeHBarChart`, `makeHGroupedBarChart`, `makeGroupedBarChart`,
+  `makeLineChart`, `makeComboChart`, the axis-title helpers) and
+  `buildFishboneSvg` (the Dashboard tab's true Ishikawa diagram) now read
+  those variables instead of hardcoded hex for every "chrome" element —
+  never the data bar/slice/line colors, which already read fine on both
+  themes.
+- `app.css` — removed the forced-white override on `.chart-scroll`,
+  `#dashFishboneDiagram` and `#qcrFishboneDiagram`; they now go properly
+  dark like every other card. Added the missing dark colors for
+  `.qcr-fb-ul li`, `.qcr-fb-empty`, `.qcr-fb-spine` (+ its border and pill),
+  `.qcr-fb-note`, `.qcr-fishbone-chip`, `.qcr-rca-chain` and `.legend`.
+- `admin.html` — redefined `--admin-surface`, `--admin-surface-2`,
+  `--admin-heading`, `--admin-line`, `--admin-accent` inside the existing
+  dark-mode block, fixing the Command Center, Recovery Center, activity
+  timeline, health-score/notification cards and import-diff preview in one
+  change. Also added explicit dark colors for the handful of elements that
+  don't use either variable family at all: `.admin-sidebar`, `.sidebar-link`
+  (default/hover/active), `kbd`, `.shortcut-key`, `.activity-icon`,
+  `.notify-count`, `.v29-alert.warn`/`.bad` borders, and `.diff-changes
+  span`. The Command Center health ring's progress-track color is set via
+  inline JS (can't be reached by CSS), so it now picks a dark-safe track
+  color when `data-theme="dark"` is active.
+
+## Preserved
+- Light mode is visually unchanged everywhere — every new dark value is
+  additive, gated behind `html[data-theme="dark"]`.
+- No chart data, KPI/QCR calculation, or admin workflow logic was touched;
+  only which color each existing SVG/HTML element draws with in dark mode.
+
+---
+
+## V62.6
+
+# V62.6 — Light Mode Is Always the Default
+
+## What changed
+- `index.html` and `admin.html` — the pre-paint theme bootstrap no longer
+  falls back to the OS's `prefers-color-scheme: dark` when there's no saved
+  preference. A first-time visitor now always lands on light mode, even on
+  a device set to dark mode at the OS level. Dark mode only activates once
+  someone explicitly clicks the 🌙 toggle — from then on their choice is
+  remembered in `localStorage` (`qdash_theme`) exactly as before.
+
+## Preserved
+- The toggle button, its icon/label sync, and the saved-preference
+  persistence are all unchanged — this only removes the *system* fallback
+  used when nothing has been saved yet.
+
+---
+
+## V62.7
+
+# V62.7 — Intro Screen: Text/Sound Sync Fix
+
+## Root cause
+The intro's text reveal and its procedurally-generated sound cues were
+driven by two different clocks that could drift apart:
+- **Visuals** (`show()`, revealing each letter/line/card) run off plain
+  `setTimeout` delays — not perfectly precise; the browser can be a little
+  busy right at page load (fonts, other scripts still loading).
+- **Audio** was scheduled all at once, up front, as one absolute Web Audio
+  timeline (`audioBase + when/1000` for every cue) computed before any of
+  the `setTimeout`s had even started firing.
+
+Two separate problems came from this:
+1. If a `setTimeout` fired a few ms late (page busy), that visual reveal
+   drifted out of step with its already-fixed audio cue.
+2. More significantly: a fresh page load has had **no user gesture yet**,
+   so the browser's autoplay policy starts the `AudioContext` in a
+   `"suspended"` state. `AudioContext.currentTime` does not advance while
+   suspended, so every cue scheduled during that window landed at
+   essentially the same frozen instant — and only actually played once the
+   context resumed (typically when the person finally clicks something,
+   often the "Enter Dashboard" button at the very end). By then the text
+   had long since finished appearing, and the sound would land late.
+
+## Fixed (`index.html`, intro script)
+- Every tone/whoosh/chime is now scheduled with a freshly-read `now()`
+  (`ctx.currentTime`, read at the exact moment its `setTimeout` callback
+  actually runs) instead of a precomputed future point on a single timeline
+  set up in advance. A delayed visual and its sound are now the same
+  event, so they can no longer drift apart from each other.
+- `tone()` and `whoosh()` now check `ctx.state === 'running'` before
+  scheduling anything. If the context is still suspended (no gesture yet),
+  that one cue is silently skipped instead of sitting queued to fire late —
+  so a not-yet-interacted-with intro plays its visuals with no delayed/
+  out-of-sync sound catching up afterwards, rather than a mistimed one.
+
+## Preserved
+- The intro's visual timing, letter-by-letter reveal, and overall pacing are
+  completely unchanged — only how (and whether) each accompanying sound
+  cue gets scheduled.
+
+---
+
+## V62.8
+
+# V62.8 — Intro "QUALITY INTELLIGENCE" Now Matches the Header Font
+
+## What changed
+- `index.html` — the intro screen's "QUALITY INTELLIGENCE" headline used a
+  bold sans-serif font (`'Sora'`), different from the header's own
+  "QUALITY INTELLIGENCE" title, which is set in the script font `'Allura'`
+  (see `.quality-intelligence-title` in `app.css`). Switched the intro's
+  headline to the same `'Allura'` cursive font, sized up (script fonts read
+  smaller at the same point size than a bold sans) and given the header's
+  same soft two-tone text-shadow (a thin dark offset plus a light highlight)
+  instead of the old harder drop-shadow, so it reads as the same brand
+  wordmark in both places. `Allura` was already being loaded (it's in the
+  page's Google Fonts link, used by the header), so nothing new to load.
+- Colors were already identical between the two (red "QUALITY" / blue
+  "INTELLIGENCE") — only the font, size, weight and shadow style changed.
+
+## Preserved
+- The letter-by-letter reveal animation and its timing/sound cues are
+  untouched — each letter is still its own `<span>`, just rendered in the
+  new font.
+
+---
+
+## V62.9
+
+# V62.9 — The Real Reason Dark Mode Looked Broken: Stale Cached CSS/JS
+
+## Root cause
+`/app.css` and `/app.js` are served with `Cache-Control: public,
+max-age=31536000, immutable` — a full year, never revalidated — which is
+exactly what makes the dashboard load instantly on repeat visits. The
+cache-busting for that is the `?v=61.0` query string linked from
+`index.html`. Every dark-mode fix since V62.5 (charts, the QCR 6M
+fishbone/RCA table, admin panels) was made correctly in `app.css`/`app.js`
+on disk — but **`?v=61.0` was never bumped**, so any browser that had
+already loaded this dashboard before kept using its year-old cached copy of
+`app.css`/`app.js` forever, completely unaware the file on the server had
+changed. That's exactly why it looked "kahin dark, kahin white" — the HTML
+itself is never cached (`Cache-Control: no-store`) so it always reflected
+the latest markup, but the CSS/JS actually painting the colors was stuck on
+a much older version underneath it.
+
+## Fixed
+- `index.html` — bumped `/app.css` and `/app.js` to `?v=63.0`, forcing every
+  browser to fetch the current files at least this once.
+- `server.py` — added `_asset_version()`/`_inject_asset_versions()`: when
+  serving `index.html` or `admin.html`, the server now rewrites every
+  `/app.css`, `/app.js` and `/sfx.js` reference to carry that file's actual
+  on-disk last-modified time as its `?v=`, regardless of whatever version
+  string is hardcoded in the HTML source. This is the permanent fix —
+  correctness no longer depends on remembering to bump a number by hand
+  every time one of these three files changes; it's now automatic on every
+  deploy.
+
+## Preserved
+- The one-year immutable caching itself (what makes repeat visits fast) is
+  unchanged — only how the cache gets busted when the file actually changes.
+
+---

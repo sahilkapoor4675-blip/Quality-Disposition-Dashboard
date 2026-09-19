@@ -104,6 +104,41 @@ def _csv_safe_value(value):
 
 SERVER_STARTED_AT = time.time()
 APP_VERSION = os.environ.get("APP_VERSION", "V60.0")
+
+# ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
+# These three are served with a one-year "immutable" Cache-Control (see the
+# static-asset branch of do_GET below), which is what makes them load
+# instantly on repeat visits — but it also means a browser that already has
+# e.g. /app.css?v=61.0 cached will keep using that exact copy FOREVER, even
+# after the file's actual content changes on the server, unless the URL
+# itself changes. Editing app.css/app.js and forgetting to also bump the
+# "?v=" the HTML links to is exactly what caused real, previously-reported
+# bugs (dark-mode/chart fixes landing on the server but never reaching
+# already-visited browsers, producing a stale mix of old-and-new styling).
+# So this version is no longer something anyone needs to remember to bump by
+# hand: it's the asset file's own last-modified time, computed once and
+# reused, and it changes automatically the moment the file's content changes
+# on disk (including on every redeploy that touches these files).
+_ASSET_VERSION_CACHE = {}
+def _asset_version(filename):
+    v = _ASSET_VERSION_CACHE.get(filename)
+    if v is not None:
+        return v
+    try:
+        v = str(int(os.path.getmtime(os.path.join(os.path.dirname(os.path.abspath(__file__)), filename))))
+    except OSError:
+        v = APP_VERSION
+    _ASSET_VERSION_CACHE[filename] = v
+    return v
+
+_ASSET_HREF_RE = re.compile(r'((?:href|src)="\/(app\.css|app\.js|sfx\.js))(?:\?v=[^"]*)?"')
+def _inject_asset_versions(html):
+    """Rewrite every /app.css, /app.js, /sfx.js reference in an HTML page to
+    carry that file's current on-disk version, regardless of whatever
+    version string is hardcoded in the source HTML. Makes the manual "?v="
+    in index.html/admin.html purely cosmetic/documentation — correctness no
+    longer depends on anyone remembering to bump it."""
+    return _ASSET_HREF_RE.sub(lambda m: f'{m.group(1)}?v={_asset_version(m.group(2))}"', html)
 ADMIN_BUILD_VERSION = APP_VERSION
 
 try:
@@ -4002,12 +4037,12 @@ class Handler(BaseHTTPRequestHandler):
             _activity_event(self, "dashboard_open", tab="dashboard")
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
                        "r", encoding="utf-8") as f:
-                self._send_html(f.read())
+                self._send_html(_inject_asset_versions(f.read()))
         elif path in {"/admin", "/admin.html"}:
             # Admin shell is intentionally always served; authentication gates the API/data actions.
             # No-store prevents a stale authenticated/unauthenticated shell from being reused.
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
-                body = f.read()
+                body = _inject_asset_versions(f.read())
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
