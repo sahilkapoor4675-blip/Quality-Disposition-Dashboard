@@ -1,13 +1,13 @@
 :root{
     --navy:#0f2a4a; --navy2:#16395f; --accent:#118DFF; --green:#16A34A;
     --red:#DC2626; --amber:#D97706; --purple:#7C3AED; --slate:#64748B;
-    --bg:#f4f6fa; --card:#ffffff; --text:#1c2b3a; --muted:#6b7c93; --border:#e3e8f0; --heading:#183A58;
+    --bg:#f4f6fa; --card:#ffffff; --text:#1c2b3a; --muted:#5b6c82; --border:#e3e8f0; --heading:#183A58;
     /* Chart SVG "chrome" (axis text, gridlines, baselines, marker halos) —
        every chart-building function in app.js uses these instead of a baked-in
        hex so charts can go dark along with the rest of the page. Data colors
        (bar/slice/line colors from CHART_COLORS / DECISION_COLORS) are NOT
        themed — they're chosen to read fine on both a white and a dark card. */
-    --chart-strong:#1c2b3a; --chart-muted:#6b7c93; --chart-label:#334155; --chart-axis-title:#475569;
+    --chart-strong:#1c2b3a; --chart-muted:#5b6c82; --chart-label:#334155; --chart-axis-title:#475569;
     --chart-grid:#eef1f6; --chart-axis:#c7ceda; --chart-leader:#94a3b8; --chart-halo:#fff;
     /* True Ishikawa fishbone SVG (Dashboard tab) chrome. */
     --fb-spine:#243B53; --fb-head:#16324F; --fb-cause-text:#243B53; --fb-cause-muted:#9aa7b4; --fb-cause-muted-line:#c3cdd8;
@@ -163,6 +163,10 @@
   .chart-scroll > .legend{order:0;position:relative;margin:0 0 12px;padding:0 16px;justify-content:center!important;}
   .legend-dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
   .no-data{color:var(--muted);font-size:14.5px;padding:16px;}
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:38px 20px;color:var(--muted);text-align:center;}
+  .empty-state-icon{width:52px;height:52px;color:var(--chart-leader,#94a3b8);opacity:.75;}
+  .empty-state-title{font:700 15px Manrope,sans-serif;color:var(--chart-label,#334155);}
+  .empty-state-sub{font:600 13px Manrope,sans-serif;color:var(--muted);max-width:280px;}
   .subhead{font-size:14px;color:var(--muted);padding:0 16px;margin:-6px 0 10px 0;}500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
   body{font-family:'Manrope','Segoe UI','Helvetica Neue',Arial,sans-serif;}
   header{position:relative;}
@@ -269,6 +273,26 @@ header .sub{font-weight:800!important;letter-spacing:.2px;}
 .filter-option.selected{background:#EAF5FC;color:#176A9D;}
 .active-filter-badge{background:#E9F5FC;color:#176A9D;}
 .export-btn{border:1px solid #cfe0fb;background:#fff;color:#0f2a4a;border-radius:7px;padding:7px 10px;font-size:13.5px;font-weight:800;cursor:pointer}.export-btn:hover{background:#eef4ff}.reset-all{border-color:#D3DEE8;background:#fff;color:var(--muted);}
+.export-btn.exporting{cursor:wait;opacity:.8;display:inline-flex;align-items:center;gap:7px;}
+.export-spinner{width:13px;height:13px;border-radius:50%;border:2px solid rgba(15,42,74,.25);border-top-color:#0f2a4a;display:inline-block;animation:exportSpin .7s linear infinite;}
+@keyframes exportSpin{to{transform:rotate(360deg);}}
+html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);border-top-color:#E8EDF6;}
+
+/* ---- Toast notifications: top-right, stacked, auto-dismissing. ---- */
+.toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;pointer-events:none;}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--slate);border-radius:10px;padding:12px 12px;box-shadow:0 10px 28px rgba(15,42,74,.16);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);}
+.toast.show{opacity:1;transform:translateX(0) scale(1);}
+.toast.hide{opacity:0;transform:translateX(12px) scale(.97);}
+.toast-success{border-left-color:var(--green);}
+.toast-error{border-left-color:var(--red);}
+.toast-info{border-left-color:var(--accent);}
+.toast-icon{font-size:17px;line-height:1;margin-top:1px;}
+.toast-body{flex:1;min-width:0;}
+.toast-title{font:800 13.5px Manrope,sans-serif;color:var(--heading);}
+.toast-msg{font:600 12.5px Manrope,sans-serif;color:var(--muted);margin-top:2px;line-height:1.4;word-break:break-word;}
+.toast-close{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 4px;line-height:1;flex:none;}
+.toast-close:hover{color:var(--heading);}
+@media(max-width:600px){.toast-host{left:12px;right:12px;top:12px;max-width:none;}}
 .kpi-grid{gap:14px;}
 .kpi-card{background:linear-gradient(180deg,#FFFFFF 0%,#FBFDFF 100%);border-color:#DCE6EF;border-radius:12px;box-shadow:0 5px 16px rgba(28,62,91,.065);}
 .kpi-card:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(28,62,91,.11);}
@@ -288,10 +312,21 @@ header .sub{font-weight:800!important;letter-spacing:.2px;}
 .section-header{background:linear-gradient(90deg,#183A58,#245777);}
 .panel{border-color:#DDE6EF;box-shadow:0 5px 18px rgba(30,65,95,.055);}
 .panel h3{color:#1C3A55;}
+.compare-toggle{display:flex;align-items:center;gap:7px;margin:-6px 18px 12px;font:700 13px Manrope,sans-serif;color:var(--muted);cursor:pointer;width:fit-content;}
+.compare-toggle input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
+.compare-toggle-swatch{width:16px;height:0;border-top:2px dashed var(--muted);display:inline-block;}
+html[data-theme="dark"] .compare-toggle{color:#9AABC2;}
+html[data-theme="dark"] .compare-toggle-swatch{border-top-color:#9AABC2;}
 .tabs{gap:7px;}
 .tab-btn{background:#fff;border-color:#DCE6EF;color:var(--muted);box-shadow:0 2px 6px rgba(30,65,95,.035);}
 .tab-btn.active{background:#183A58;border-color:#183A58;box-shadow:0 5px 14px rgba(24,58,88,.16);}
 th{background:#2B78A8;border-color:#2B78A8;}
+.sortable-th{cursor:pointer;user-select:none;position:relative;padding-right:20px!important;}
+.sortable-th:hover{background:#256a94!important;}
+.sortable-th::after{content:"↕";position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;opacity:.55;}
+.sortable-th.sort-asc::after{content:"↑";opacity:1;}
+.sortable-th.sort-desc::after{content:"↓";opacity:1;}
+.sortable-th:focus-visible{outline:2px solid #fff;outline-offset:-2px;}
 tbody tr:nth-child(even){background:#F7FAFC;}
 tbody tr:hover{background:#EEF7FC;}
 tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
@@ -453,6 +488,23 @@ button,select,input,.filters,.filters *{font-family:var(--font-body);}
    redeclared inside every QCR patch)
    ================================================================ */
 .container{max-width:1480px;padding:22px 24px 30px;overflow:visible;height:auto;min-height:0;max-height:none;}
+/* ---- Wide/ultra-wide desktop layout ----
+   Below ~1700px the existing 1480px-max, 4-column KPI grid already uses the
+   screen well. Above that (1440p/1600p/ultrawide monitors), that same
+   1480px cap left a growing strip of empty space on both sides and the KPI
+   row stayed frozen at 4 cards no matter how much extra width was
+   available. This widens the container in two steps and lets the KPI grid
+   add a 5th/6th column once there's genuinely room for one, rather than
+   just stretching the existing 4 cards wider (which reads as sparse, not
+   "using the space well"). */
+@media(min-width:1700px){
+  .container,header{max-width:1740px;}
+  .kpi-grid{grid-template-columns:repeat(5,minmax(0,1fr));}
+}
+@media(min-width:2100px){
+  .container,header{max-width:2000px;}
+  .kpi-grid{grid-template-columns:repeat(6,minmax(0,1fr));}
+}
 .filters{
   position:-webkit-sticky;position:sticky;top:0;z-index:1000;
   min-height:92px;padding:16px 18px 18px;margin-bottom:14px;
@@ -490,13 +542,33 @@ body.drill-modal-open .filters{z-index:1;}
    ================================================================ */
 .drill-modal{position:fixed;inset:0;z-index:200000;background:rgba(15,35,55,.38);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:22px;}
 .drill-modal.open{display:flex;}
-.drill-dialog{width:min(1280px,96vw);height:min(780px,92vh);background:#fff;border-radius:15px;box-shadow:0 24px 70px rgba(12,34,55,.28);display:flex;flex-direction:column;overflow:hidden;border:1px solid #d7e2eb;}
+.drill-dialog{width:min(1280px,96vw);height:min(780px,92vh);background:#fff;border-radius:15px;box-shadow:0 24px 70px rgba(12,34,55,.28);display:flex;flex-direction:column;overflow:hidden;border:1px solid #d7e2eb;position:relative;min-width:480px;min-height:320px;}
+.drill-head{cursor:move;}
+.drill-head button,.drill-head a,.drill-head-actions{cursor:pointer;}
+.drill-dialog.dragging{user-select:none;transition:none!important;}
+.drill-resize-handle{position:absolute;right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;z-index:5;}
+.drill-resize-handle::after{content:"";position:absolute;right:5px;bottom:5px;width:9px;height:9px;border-right:2.5px solid #b9c8d6;border-bottom:2.5px solid #b9c8d6;border-radius:0 0 3px 0;}
+.drill-resize-handle:hover::after{border-color:var(--accent);}
+html[data-theme="dark"] .drill-resize-handle::after{border-color:#3A4C68;}
+html[data-theme="dark"] .drill-resize-handle:hover::after{border-color:var(--accent);}
+@media(max-width:700px){.drill-resize-handle{display:none;}.drill-head{cursor:default;}}
 .drill-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid #e2eaf0;background:linear-gradient(135deg,#fff,#f5f9fc);}
 .drill-head>div:first-child{grid-column:2;text-align:center;}
 .drill-head h3{margin:0;font:800 16px Manrope,sans-serif;color:var(--heading);}
 .drill-sub{font:600 15.5px Manrope,sans-serif;color:var(--muted);}
 .drill-head-actions{grid-column:3;justify-self:end;margin-left:0;display:flex;gap:8px;}
 .drill-head button,.drill-export{font:700 14px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:7px 10px;color:#31516b;cursor:pointer;text-decoration:none;}
+/* "You are here" trail — hidden (display:none, set from JS) whenever the
+   drill-down is only one level deep, since a breadcrumb with a single
+   non-clickable crumb tells the person nothing they don't already see in
+   the title above it. It only earns its place once there IS a path
+   (e.g. Defect: X > Heat H12345) worth showing and navigating. */
+.drill-breadcrumb{display:none;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 17px;background:#f5f9fc;border-bottom:1px solid #e2eaf0;font:700 13px Manrope,sans-serif;}
+.drill-breadcrumb-crumb{background:none;border:0;padding:3px 6px;border-radius:6px;color:var(--muted);cursor:pointer;font:inherit;}
+.drill-breadcrumb-crumb:hover{background:#e7f0f7;color:var(--accent);}
+.drill-breadcrumb-crumb.current{color:var(--heading);cursor:default;font-weight:800;}
+.drill-breadcrumb-crumb.current:hover{background:none;}
+.drill-breadcrumb-sep{color:#aebccb;}
 .drill-export{background:#edf7ff;border-color:#abd0ea;color:#12669d;}
 .drill-body{padding:12px 15px;overflow:auto;flex:1;min-height:0;}
 .drill-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;font:600 15.5px Manrope,sans-serif;color:#5b7183;}
@@ -1033,6 +1105,13 @@ html[data-theme="dark"] .qcr-kpi-value.neutral,
 html[data-theme="dark"] .section-title,
 html[data-theme="dark"] .section-header{color:#E8EDF6;}
 html[data-theme="dark"] .qcr-card>h3{border-bottom-color:#2A3B54;}
+html[data-theme="dark"] .drill-breadcrumb{background:#101827;border-color:#2A3B54;}
+html[data-theme="dark"] .drill-breadcrumb-crumb{color:#9AABC2;}
+html[data-theme="dark"] .drill-breadcrumb-crumb:hover{background:#1B2740;color:var(--accent);}
+html[data-theme="dark"] .drill-breadcrumb-crumb.current{color:#E8EDF6;}
+html[data-theme="dark"] .drill-breadcrumb-sep{color:#3A4C68;}
+html[data-theme="dark"] .empty-state-title{color:#C7D2E3;}
+html[data-theme="dark"] .empty-state-icon{color:#7E90A8;}
 html[data-theme="dark"] .section-header,
 html[data-theme="dark"] .panel h3,
 html[data-theme="dark"] .drill-head,
@@ -1087,6 +1166,7 @@ html[data-theme="dark"] table{color:var(--text);}
 html[data-theme="dark"] th,
 html[data-theme="dark"] td{border-color:#2A3B54;}
 html[data-theme="dark"] thead th{background:#101827;color:#E8EDF6;}
+html[data-theme="dark"] .sortable-th:hover{background:#1B2740!important;}
 html[data-theme="dark"] tbody tr:nth-child(even){background:#101827;}
 
 /* The drill-down table's sticky header (and its grand-total row) hard-code a
@@ -1123,6 +1203,9 @@ html[data-theme="dark"] .theme-toggle-btn{border-color:#2A3B54;background:#141B2
    GLOBAL SEARCH — find any defect / grade / work center quickly.
    ================================================================ */
 .global-search-wrap{position:relative;margin-bottom:14px;}
+.kbd-hint{position:absolute;right:14px;top:50%;transform:translateY(-50%);font:700 11px/1 Manrope,sans-serif;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 7px;pointer-events:none;}
+html[data-theme="dark"] .kbd-hint{background:#0F1626;border-color:#2A3B54;color:#9AABC2;}
+@media(max-width:700px){.kbd-hint{display:none;}}
 .global-search-input{width:100%;padding:13px 16px;font-size:15px;font-weight:600;border-radius:12px;border:1.5px solid var(--border);background:var(--card);color:var(--text);box-shadow:0 3px 10px rgba(15,42,74,.05);transition:border-color .15s ease,box-shadow .15s ease;}
 .global-search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(35,136,201,.15);}
 .global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 30px rgba(15,42,74,.16);max-height:360px;overflow-y:auto;z-index:10000;display:none;}
@@ -1272,3 +1355,51 @@ html[data-theme="dark"] .header-toolbar-row .filter-toolbar{border-top-color:rgb
 .tab-btn{animation:none;}
 .tab-btn.active{animation:tabActivatePop .32s cubic-bezier(.34,1.56,.64,1);}
 .tab-btn.active::after{transform-origin:center;animation:tabUnderlineIn .28s ease .05s both;}
+
+/* ================================================================
+   PRINT — desktop users often hit Ctrl+P to hand a report to someone
+   directly from the browser rather than exporting a file first. Hides
+   every interactive/chrome element (nav, filters, buttons, toggles,
+   toasts) and keeps just the active tab's KPIs/charts/tables, in normal
+   black-on-white regardless of dark mode, with page-break hints so a
+   table or chart doesn't get sliced across two pages.
+   ================================================================ */
+@media print{
+  html[data-theme="dark"]{--bg:#fff;--card:#fff;--text:#1c2b3a;--muted:#5b6c82;--border:#e3e8f0;--heading:#183A58;}
+  body{background:#fff!important;}
+  header,.tabs,.filters,.global-search-wrap,.toast-host,.drill-modal,
+  .compare-toggle,.sfx-toggle-btn,.theme-toggle-btn,.admin-link,
+  .live-status,.filter-summary-bar,.export-btn,.reset-all,.kbd-hint,
+  .sortable-th::after,.qcr-fishbone-chips,.qcr-problem-actions{display:none!important;}
+  .container{max-width:none!important;padding:0!important;}
+  .panel,.kpi-card,.qcr-card{box-shadow:none!important;border:1px solid #ccc!important;break-inside:avoid;page-break-inside:avoid;}
+  .kpi-grid{grid-template-columns:repeat(3,1fr)!important;}
+  .tab-panel.hidden{display:none!important;}
+  table{font-size:11px;}
+  a[href]::after{content:none!important;}
+}
+
+/* ================================================================
+   SIDE-BY-SIDE COMPARE MODE (desktop only — see the media query at the
+   bottom). Two independent iframes, each the full live dashboard at a
+   different filter value, so both sides are completely interactive.
+   ================================================================ */
+.compare-modal{position:fixed;inset:0;z-index:200000;background:rgba(15,35,55,.5);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:24px;}
+.compare-modal.open{display:flex;}
+.compare-setup{background:var(--card);border-radius:14px;box-shadow:0 24px 70px rgba(12,34,55,.3);padding:26px 28px;width:min(560px,94vw);}
+.compare-setup h3{margin:0 0 6px;font:800 18px Manrope,sans-serif;color:var(--heading);}
+.compare-setup-desc{margin:0 0 18px;color:var(--muted);font:600 13.5px Manrope,sans-serif;}
+.compare-setup-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
+.compare-setup-row label{display:flex;flex-direction:column;gap:5px;font:700 12.5px Manrope,sans-serif;color:var(--muted);}
+.compare-setup-row select{padding:8px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font:600 13.5px Manrope,sans-serif;}
+.compare-setup-actions{display:flex;justify-content:flex-end;gap:8px;}
+.compare-view{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;z-index:200000;}
+.compare-view.hidden{display:none;}
+.compare-view-head{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:var(--card);border-bottom:1px solid var(--border);}
+.compare-view-head span{font:800 14.5px Manrope,sans-serif;color:var(--heading);}
+.compare-view-head div{display:flex;gap:8px;}
+.compare-panes{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--border);overflow:hidden;}
+.compare-panes iframe{width:100%;height:100%;border:0;background:var(--bg);}
+@media(max-width:1100px){
+  .compare-modal,#compareModeBtn{display:none!important;} /* needs real side-by-side width — a genuinely desktop-only feature */
+}

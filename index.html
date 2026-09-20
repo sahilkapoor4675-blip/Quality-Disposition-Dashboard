@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&family=Allura&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=63.0">
+<link rel="stylesheet" href="/app.css?v=66.0">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -348,9 +348,51 @@
 <div class="container">
   <div class="global-search-wrap" id="globalSearchWrap">
     <input type="text" id="globalSearchInput" class="global-search-input" placeholder="🔎 Search any defect, grade, or work center…" autocomplete="off">
+    <kbd class="kbd-hint" title="Press ? for all keyboard shortcuts">/</kbd>
     <div class="global-search-results" id="globalSearchResults"></div>
   </div>
-  <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div></div></div>
+  <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" id="drillDialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head" id="drillHead"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><nav class="drill-breadcrumb" id="drillBreadcrumb" aria-label="Drill-down path"></nav><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div><div class="drill-resize-handle" id="drillResizeHandle" title="Drag to resize" aria-hidden="true"></div></div></div>
+
+  <!-- Side-by-side compare: two independent copies of this very page, each
+       loaded with a different value for one chosen filter (Month by
+       default), running in their own iframes. This reuses the URL-state
+       feature (?tab=...&month=...) rather than duplicating any rendering
+       code, so each side is the real, fully-interactive dashboard — not a
+       simplified read-only summary. Desktop-only (needs real width). -->
+  <div class="compare-modal" id="compareModal" aria-hidden="true">
+    <div class="compare-setup" id="compareSetup">
+      <h3>⊞ Compare Two Periods Side-by-Side</h3>
+      <p class="compare-setup-desc">Pick a filter dimension and two values — everything else (tab, other filters) stays the same on both sides.</p>
+      <div class="compare-setup-row">
+        <label>Compare by
+          <select id="compareDimSelect"></select>
+        </label>
+        <label>Left side
+          <select id="compareValueA"></select>
+        </label>
+        <label>Right side
+          <select id="compareValueB"></select>
+        </label>
+      </div>
+      <div class="compare-setup-actions">
+        <button type="button" class="btn" id="compareCancelBtn">Cancel</button>
+        <button type="button" class="btn primary" id="compareGoBtn">Show Comparison</button>
+      </div>
+    </div>
+    <div class="compare-view hidden" id="compareView">
+      <div class="compare-view-head">
+        <span id="compareViewTitle"></span>
+        <div>
+          <button type="button" class="btn" id="compareEditBtn">✎ Change</button>
+          <button type="button" class="btn" id="compareCloseBtn">✕ Close Compare</button>
+        </div>
+      </div>
+      <div class="compare-panes">
+        <iframe id="compareFrameA" title="Comparison — left"></iframe>
+        <iframe id="compareFrameB" title="Comparison — right"></iframe>
+      </div>
+    </div>
+  </div>
 
   <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
 
@@ -492,6 +534,7 @@
 
     <div class="panel">
       <h3>📈 Monthly Quality Trend — Defect % &amp; First Pass Yield % (Prime%) &amp; Reject % Qty</h3>
+      <label class="compare-toggle"><input type="checkbox" id="monthlyCompareToggle"> Compare to previous period <span class="compare-toggle-swatch" aria-hidden="true"></span></label>
       <div class="chart-scroll" id="monthlyLineChart"></div>
     </div>
     <div class="panel">
@@ -597,6 +640,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=63.0" defer></script>
+<script src="/app.js?v=66.0" defer></script>
 </body>
 </html>

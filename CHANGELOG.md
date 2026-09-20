@@ -834,3 +834,172 @@ a much older version underneath it.
   unchanged — only how the cache gets busted when the file actually changes.
 
 ---
+
+## V63.0
+
+# V63.0 — UI Improvements: Breadcrumbs, Compare-to-Previous, Toasts, Export Spinner, Contrast Fixes
+
+## Drill-down breadcrumb ("You are here")
+- `index.html`/`app.js` — the drill-down modal (defect → records → Heat
+  detail) now keeps a real stack (`drillStack`) instead of one flat state
+  that got overwritten every time you went one level deeper. A breadcrumb
+  bar appears once there are 2+ levels (e.g. "Defect: Casting Mark ›
+  Heat H12345"), each earlier crumb is clickable to jump straight back to
+  it, and it stays hidden entirely at a single level so it never clutters
+  the common case. `openDrilldown()` still starts a fresh trail (for a new
+  chart click); the new `pushDrilldown()` is used for the "go one level
+  deeper" case (the Heat No. link inside the records table).
+
+## Chart "compare to previous period"
+- `app.js`/`index.html` — added a "Compare to previous period" checkbox
+  above the Monthly Quality Trend chart. When on, each of the three metric
+  lines gets a second, dashed/lighter line built from the same data already
+  on hand (each point shifted back one month), so the gap between the solid
+  and dashed line at any given month reads directly as "how much did this
+  move since last month" — no extra API call needed. `makeLineChart()` now
+  supports a per-series `dashed:true` flag (dash pattern, lighter opacity,
+  no dot/value clutter) for this and any future overlay series.
+
+## Friendly empty states
+- `app.js`/`app.css` — every chart's "No data to display" and the
+  drill-down's "no records" state now render through one shared
+  `emptyStateMarkup()` helper: a soft dashed-circle icon plus a title and a
+  short, actionable sub-line ("Try widening the date range or clearing a
+  filter") instead of a single bare sentence.
+
+## Export button progress + toast notifications
+- `app.js` — the four export buttons (Excel/PDF/PPT/CSV) now use
+  `fetch()` + a blob download instead of a bare `location.href` redirect.
+  This does two things at once: the button shows a spinner and "Generating…"
+  the whole time the file is being built, and — because the request now has
+  a real success/failure result — a toast notification confirms it
+  ("Export ready — filename.xlsx has finished downloading") or explains
+  what went wrong, instead of a silent click with no feedback either way.
+- Added a small, reusable `showToast(kind, title, message)` (`app.js`) and
+  its styling (`app.css`): a top-right stack of auto-dismissing cards for
+  success/error/info, independent of sfx.js's sound cues — so someone with
+  sound muted still gets a clear visual confirmation.
+
+## Admin: relative "X min ago" timestamps
+- `admin.html` — the Dashboard Activity timeline and the per-IP "Last Seen"
+  column showed a frozen, literal date/time string. Added `timeAgo()` plus
+  a `data-ts`-driven `setInterval` (every 30s) that keeps every timestamp
+  reading "just now" → "2 min ago" → "1 hr ago" → "3d ago" as time passes,
+  with no page reload and no extra API calls — it's purely re-formatting a
+  timestamp the page already has.
+- (Checked, already in place: sidebar links and Command Center cards both
+  already call `scrollIntoView({behavior:'smooth',block:'start'})` on
+  switch — no change needed there.)
+
+## Accessibility: WCAG AA contrast pass
+- Ran every dark-mode text/background color pair introduced across the
+  recent dark-mode work through the WCAG contrast formula — all pass AA
+  (4.5:1) for normal text, several comfortably (7:1+).
+- Found and fixed a **pre-existing, theme-independent** gap: `--muted`
+  (`app.css`, light mode) was `#6b7c93` on white — 4.26:1, just under the
+  4.5:1 AA minimum for normal text — used everywhere from chart axis labels
+  to the new toast/empty-state sub-text. Darkened it to `#5b6c82` (5.37:1).
+  Found and fixed the same issue in `admin.html`'s separate `--muted`
+  (`#718096` → `#5c6b7d`, 4.02:1 → 5.45:1). Both are CSS variables, so this
+  one change corrects contrast everywhere they're used, in both files.
+
+## Preserved
+- All existing chart/table/export/admin data and calculations are
+  untouched — this batch is presentation and feedback only.
+
+---
+
+## V63.1
+
+# V63.1 — Desktop Power-User Features, Batch 1: URL State, Keyboard Shortcuts, Table Sort
+
+## URL reflects tab + filters
+- `app.js` — the active tab and every non-"All" filter now show up in the
+  address bar (e.g. `?tab=wcgrade&work_center=WC-12`). Filter changes use
+  `history.replaceState` (no extra back-button stop per click); switching
+  tabs uses `history.pushState` (each tab is its own back/forward stop).
+  A `popstate` listener restores whichever tab+filters that history entry
+  represents, and `init()` now reads the URL on first load — so a
+  bookmarked or pasted link opens straight into that exact view instead of
+  always starting blank. "Save current view" now goes through the same
+  `syncFilterUiFromState()` used for this, instead of its own copy of that
+  DOM-sync logic.
+
+## Keyboard shortcuts
+- `app.js`/`index.html` — `/` focuses the global search box, `1`–`5` switch
+  tabs, `Ctrl+E` (`Cmd+E` on Mac) triggers the Excel export, and `?` shows a
+  toast listing them. All are disabled while typing in any input/textarea/
+  select/contenteditable, so normal typing is never hijacked. A small `/`
+  key-cap hint sits inside the search box (hidden on narrow/mobile widths —
+  these are desktop-only shortcuts).
+
+## Click-to-sort tables
+- `app.js`/`app.css` — every data table (Decision, Defect, Work Center,
+  Grade, Monthly/Weekly/Quarterly/Yearly Trend, Defect Register, Defect
+  Intensity — 10 in total) now sorts by clicking a column header, with an
+  ↑/↓ arrow indicator and keyboard support (Enter/Space on a focused
+  header). The Grand Total row always stays pinned at the bottom regardless
+  of sort. The chosen sort is remembered per table and re-applied
+  automatically after a filter change refreshes that table's rows, instead
+  of silently reverting to server order.
+
+## Preserved
+- No calculation, filter, or export logic changed — this batch only adds
+  navigation/interaction affordances on top of existing data flows.
+
+---
+
+## V63.2
+
+# V63.2 — Desktop Power-User Features, Batch 2
+
+## Wide/ultra-wide layout
+- `app.css` — above ~1700px width the container/header widen and the KPI
+  grid adds a 5th column; above ~2100px a 6th. Below that, layout is
+  unchanged (the existing 1480px cap already used normal desktop widths
+  well) — this only kicks in once there's real spare width to use.
+
+## Resizable/draggable drill-down modal
+- `index.html`/`app.js`/`app.css` — the drill-down dialog can now be
+  dragged by its header (like a real window) and resized from a
+  bottom-right handle, with sensible min-width/min-height. Resets back to
+  its default centered size the next time it's opened.
+
+## Print support (Ctrl+P)
+- `app.css` — a `@media print` stylesheet hides the header, tabs, filters,
+  search box, toasts, buttons and toggles, forces light colors even in
+  dark mode, and adds page-break hints so a chart/table/card isn't sliced
+  across two pages — for handing someone a report straight from the
+  browser's own print/Save-as-PDF.
+
+## Admin: drag-and-drop file upload
+- `admin.html` — the monthly-data and 6M-fishbone-master upload boxes now
+  accept a file dragged straight from File Explorer/Finder, in addition to
+  the existing click-to-browse. Drops fill the same `<input type="file">`,
+  so every existing validation/preview flow needs no changes at all.
+
+## Admin: bulk delete + Shift+click range-select
+- `server.py` — added `/api/admin/bulk_delete`: one safety backup and one
+  transaction for the whole batch, instead of what a naive loop over the
+  single-record delete endpoint would do (one full database backup file
+  per record — slow and wasteful for a multi-select).
+- `admin.html` — added a "🗑 Delete Selected" button next to the existing
+  "Export Selected" (which was already there), plus Shift+click a row
+  checkbox to select every row between it and the last one clicked.
+
+## Side-by-side compare mode
+- `index.html`/`app.js`/`app.css` — a new "⊞ Compare Periods" button opens
+  a small picker (a filter dimension — Month by default — plus a value for
+  each side), then shows two independent, fully live copies of the
+  dashboard side-by-side in iframes, one per value, everything else (tab,
+  other filters) held the same on both. This reuses the URL-state feature
+  from the previous batch (`?tab=...&month=...`) rather than duplicating
+  any rendering logic — each side is the real interactive dashboard, not a
+  simplified summary. Desktop-only (hidden below ~1100px — there's no
+  useful way to show two dashboards side-by-side on a narrow screen).
+
+## Preserved
+- All six of the above are additive UI/interaction features; no existing
+  calculation, filter, export, or admin data-mutation logic changed.
+
+---

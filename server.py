@@ -5407,6 +5407,31 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=400)
             return
 
+        if path == "/api/admin/bulk_delete":
+            # Same effect as calling /api/admin/delete once per record, but as
+            # ONE safety backup + ONE transaction instead of N of each — doing
+            # a real loop over the single-record endpoint for a multi-select
+            # "Delete Selected" would otherwise write a full database backup
+            # file per record, which is both slow and wasteful for a batch.
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
+            try:
+                body = _json_body(self)
+                ids = [int(x) for x in (body.get("ids") or [])][:2000]
+                if not ids:
+                    self._send_json({"error": "No record IDs provided."}, status=400); return
+                _require_safety_backup("before_record_bulk_delete")
+                conn = get_conn()
+                placeholders = ",".join("?" for _ in ids)
+                cur = conn.execute(f"DELETE FROM disposition WHERE id IN ({placeholders})", ids)
+                conn.commit()
+                conn.close()
+                _audit(self,"record_bulk_delete",details={"record_ids":ids,"count":cur.rowcount})
+                _cache_clear()
+                self._send_json({"ok": True, "deleted": cur.rowcount})
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=400)
+            return
+
         self._send_json({"error": "not found"}, status=404)
 
 
