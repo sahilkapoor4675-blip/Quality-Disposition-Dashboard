@@ -127,6 +127,39 @@ let kpiAnimationToken = 0;
 })();
 let refreshController = null;
 
+// ---- Keyboard shortcuts (desktop power-user efficiency) ----
+// Disabled while typing anywhere (input/textarea/select/contenteditable) so
+// normal typing — including inside the filter search boxes — is never
+// hijacked; and Ctrl/Cmd/Alt combos other than the ones listed are left
+// alone so browser/OS shortcuts keep working normally.
+(function initKeyboardShortcuts(){
+  const TAB_ORDER = ['dashboard','controlroom','wcgrade','defects','weekly'];
+  document.addEventListener('keydown', (e)=>{
+    const ae=document.activeElement, tag=(ae&&ae.tagName||'').toLowerCase();
+    const typing = tag==='input' || tag==='textarea' || tag==='select' || (ae&&ae.isContentEditable);
+    if(e.key==='/' && !typing){
+      e.preventDefault();
+      document.getElementById('globalSearchInput')?.focus();
+      return;
+    }
+    if(!typing && (e.key==='e'||e.key==='E') && (e.ctrlKey||e.metaKey)){
+      e.preventDefault();
+      document.getElementById('exportExcelBtn')?.click();
+      return;
+    }
+    if(!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-5]$/.test(e.key)){
+      const tabName = TAB_ORDER[Number(e.key)-1];
+      const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+      if(btn){ e.preventDefault(); activateTab(tabName); }
+      return;
+    }
+    if(!typing && e.key==='?'){
+      e.preventDefault();
+      showToast('info','Keyboard shortcuts','/ search · 1-5 switch tabs · Ctrl+E export Excel · Esc close');
+    }
+  });
+})();
+
 // Used ONLY for KPI cards — 3 decimal places after the point, per request.
 function fmtValue(v, fmt){
   if(fmt === "int") return Math.round(v).toLocaleString();
@@ -142,13 +175,14 @@ function fmtPct(v){ return (v*100).toFixed(2) + "%"; }
 async function loadFilters(){
   const res = await fetch("/api/filters");
   const options = await res.json();
+  window._filterOptionsCache = options;
   const container = document.getElementById("filters");
   const toolbarHost = document.getElementById("headerFilterToolbar");
   if (toolbarHost) {
     toolbarHost.innerHTML = `<div class="filter-toolbar"><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button></div></div>`;
-    container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+    container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">⊞ Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   } else {
-    container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+    container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">⊞ Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   }
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
@@ -171,7 +205,7 @@ async function loadFilters(){
         const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
         opt.textContent=x.label;
         opt.addEventListener("click",()=>{
-          currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); field.classList.toggle("filter-active", x.value!=="All"); updateActiveFilterBadge(); triggerFilterRefresh();
+          currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); field.classList.toggle("filter-active", x.value!=="All"); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();
         }); list.appendChild(opt);
       });
       if(!filtered.length) list.innerHTML='<div class="filter-empty">No matching options</div>';
@@ -181,12 +215,37 @@ async function loadFilters(){
     renderOptions();
     field.classList.toggle("filter-active", currentFilters[f.key]!=="All");
   });
-  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); triggerFilterRefresh();});
-  function exportDashboard(format){ const params=new URLSearchParams(currentFilters).toString(); window.location.href=`/api/export/${format}?${params}`; }
-  document.getElementById("exportExcelBtn").addEventListener("click",()=>exportDashboard("excel"));
-  document.getElementById("exportPdfBtn").addEventListener("click",()=>exportDashboard("pdf"));
-  document.getElementById("exportPptBtn").addEventListener("click",()=>exportDashboard("pptx"));
-  document.getElementById("exportCsvBtn").addEventListener("click",()=>exportDashboard("csv"));
+  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();});
+  function exportDashboard(format,btn){
+    const params=new URLSearchParams(currentFilters).toString();
+    const url=`/api/export/${format}?${params}`;
+    if(!btn){ window.location.href=url; return; } // fallback if called without a button reference
+    const original=btn.innerHTML;
+    btn.disabled=true; btn.classList.add('exporting');
+    btn.innerHTML=`<span class="export-spinner" aria-hidden="true"></span> Generating…`;
+    fetch(url,{cache:'no-store'}).then(res=>{
+      if(!res.ok) return res.json().catch(()=>null).then(j=>{ throw new Error((j&&j.error)?j.error:('Export failed (HTTP '+res.status+').')); });
+      const cd=res.headers.get('Content-Disposition')||'';
+      const m=/filename="?([^";]+)"?/i.exec(cd);
+      const filename=m?m[1]:(`export.${format==='pptx'?'pptx':format}`);
+      return res.blob().then(blob=>({blob,filename}));
+    }).then(({blob,filename})=>{
+      const dlUrl=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=dlUrl; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(dlUrl),4000);
+      showToast('success','Export ready',filename+' has finished downloading.');
+      if(window.SFX) SFX.play('success');
+    }).catch(e=>{
+      showToast('error','Export failed',String(e.message||e));
+      if(window.SFX) SFX.play('error');
+    }).finally(()=>{
+      btn.disabled=false; btn.classList.remove('exporting'); btn.innerHTML=original;
+    });
+  }
+  document.getElementById("exportExcelBtn").addEventListener("click",e=>exportDashboard("excel",e.currentTarget));
+  document.getElementById("exportPdfBtn").addEventListener("click",e=>exportDashboard("pdf",e.currentTarget));
+  document.getElementById("exportPptBtn").addEventListener("click",e=>exportDashboard("pptx",e.currentTarget));
+  document.getElementById("exportCsvBtn").addEventListener("click",e=>exportDashboard("csv",e.currentTarget));
   document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));},{once:true});
   updateActiveFilterBadge();
 }
@@ -307,6 +366,56 @@ function renderPeriodBanner(period){
     : `📅 <b>Current Period:</b> ${escQcr(cur)} &nbsp;&nbsp;|&nbsp;&nbsp; <i>Select a single Month/Week/Quarter/FY filter to see period-over-period comparison</i>`;
 }
 
+// ---- Click-to-sort table headers (desktop power-user feature) ----
+// Sort state is remembered per table (column + direction) so it survives a
+// filter-triggered data refresh: each render function calls
+// applyTableSort(tableId) after populating rows, which re-applies whatever
+// sort was last chosen instead of resetting to server order every time.
+// A "grand total" row (class="grand-total-row") is always pinned to the
+// bottom, whatever the sort.
+const SORTABLE_TABLE_IDS = ["decisionTable","defectTable","intensityTable","monthlyTable","wcTable","gradeTable","registerTable","weeklyTable","quarterlyTable","yearlyTable"];
+const _tableSortState = new Map(); // tableId -> {col, dir}
+function _parseSortCell(text){
+  const t=text.trim().replace(/[,%]/g,'');
+  const n=parseFloat(t);
+  return (t!=='' && !isNaN(n) && /^-?[\d.]+$/.test(t)) ? n : null;
+}
+function applyTableSort(tableId){
+  const state=_tableSortState.get(tableId); if(!state) return;
+  const tbody=document.querySelector(`#${tableId} tbody`); if(!tbody) return;
+  const rows=[...tbody.querySelectorAll('tr')];
+  const totalRows=rows.filter(r=>r.classList.contains('grand-total-row'));
+  const dataRows=rows.filter(r=>!r.classList.contains('grand-total-row'));
+  dataRows.sort((a,b)=>{
+    const av=a.children[state.col]?.textContent||'', bv=b.children[state.col]?.textContent||'';
+    const an=_parseSortCell(av), bn=_parseSortCell(bv);
+    const cmp=(an!==null && bn!==null) ? (an-bn) : av.trim().localeCompare(bv.trim(),undefined,{numeric:true});
+    return cmp*state.dir;
+  });
+  dataRows.concat(totalRows).forEach(r=>tbody.appendChild(r));
+}
+function initSortableTables(){
+  SORTABLE_TABLE_IDS.forEach(tableId=>{
+    const table=document.getElementById(tableId); if(!table) return;
+    const ths=[...table.querySelectorAll('thead th')];
+    ths.forEach((th,col)=>{
+      th.classList.add('sortable-th');
+      th.setAttribute('tabindex','0'); th.setAttribute('role','button'); th.setAttribute('aria-label',th.textContent.trim()+' — click to sort');
+      const doSort=()=>{
+        const cur=_tableSortState.get(tableId);
+        const dir=(cur && cur.col===col) ? -cur.dir : 1;
+        _tableSortState.set(tableId,{col,dir});
+        ths.forEach(t=>t.classList.remove('sort-asc','sort-desc'));
+        th.classList.add(dir===1?'sort-asc':'sort-desc');
+        applyTableSort(tableId);
+        if(window.SFX) SFX.play('select');
+      };
+      th.addEventListener('click',doSort);
+      th.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); doSort(); } });
+    });
+  });
+}
+
 function renderDecisionTable(rows, total){
   const tbody = document.querySelector("#decisionTable tbody");
   tbody.innerHTML = "";
@@ -323,6 +432,7 @@ function renderDecisionTable(rows, total){
       <td>${fmtPct(total.pct_coils)}</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_qty)}</td>`;
     tbody.appendChild(tr);
   }
+  applyTableSort("decisionTable");
 }
 
 function renderDefectTable(rows, total){
@@ -342,6 +452,7 @@ function renderDefectTable(rows, total){
     const gt=document.createElement("tr"); gt.className="grand-total-row";
     gt.innerHTML=`<td>Grand Total</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(1)}</td><td>${fmtPct(1)}</td>`; tbody.appendChild(gt);
   }
+  applyTableSort("defectTable");
 }
 
 function renderIntensityTable(rows, total){
@@ -360,6 +471,7 @@ function renderIntensityTable(rows, total){
       <td>${fmtPct(total.pct_coils)}</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_qty)}</td>`;
     tbody.appendChild(tr);
   }
+  applyTableSort("intensityTable");
 }
 
 function renderMetricsTable(tableId, rows, total, ranked=false){
@@ -389,6 +501,7 @@ function renderMetricsTable(tableId, rows, total, ranked=false){
     <td>${fmtPct(Number(gt.output_qty)?Number(gt.reject_qty||0)/Number(gt.output_qty):0)}</td>
     <td>${fmtPct(Number(gt.output_qty)?Number(gt.prime_qty||0)/Number(gt.output_qty):0)}</td>`;
   tbody.appendChild(tr);
+  applyTableSort(tableId);
 }
 
 
@@ -407,17 +520,76 @@ function savedViews(){try{return JSON.parse(localStorage.getItem('qdash_saved_vi
 function renderSavedViews(){const sel=document.getElementById('savedViewSelect'); if(!sel)return; const views=savedViews(); sel.innerHTML='<option value="">Saved Views</option>'+Object.keys(views).sort().map(n=>`<option value="${escQcr(n)}">${escQcr(n)}</option>`).join('');}
 function saveCurrentView(){const name=prompt('Enter a name for this filter view:'); if(!name||!name.trim())return; const views=savedViews(); views[name.trim()]=Object.assign({},currentFilters); localStorage.setItem('qdash_saved_views',JSON.stringify(views)); renderSavedViews(); document.getElementById('savedViewSelect').value=name.trim();}
 function manageSavedViews(){const views=savedViews(); const names=Object.keys(views); if(!names.length){alert('No saved views yet.');return;} const name=prompt('Enter the exact saved view name to delete:\n\n'+names.join('\n')); if(name&&views[name]){delete views[name];localStorage.setItem('qdash_saved_views',JSON.stringify(views));renderSavedViews();}}
-function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); document.querySelectorAll('.filter-field').forEach(field=>{const key=field.dataset.filterKey; const val=currentFilters[key]||'All'; const span=field.querySelector('.filter-trigger span'); if(span){const opts=[...field.querySelectorAll('.filter-option')]; const match=opts.find(o=>o.dataset.value===val); span.textContent=match?match.textContent:val;} field.classList.toggle('filter-active', val!=='All');}); updateActiveFilterBadge(); triggerFilterRefresh();}
+// ---- URL state: the current tab and every non-"All" filter are reflected
+// in the address bar (?tab=...&work_center=...), so the browser's own
+// back/forward buttons work between tabs/filter changes, and a person can
+// bookmark or paste a link to a colleague that opens straight into the
+// exact view they were looking at. Filter tweaks use replaceState (one
+// URL update, no extra back-button stop per click); switching tabs uses
+// pushState (each tab is a distinct "page" worth a back-button stop).
+const TAB_KEYS=['dashboard','controlroom','wcgrade','defects','weekly'];
+function readUrlState(){
+  const params=new URLSearchParams(location.search);
+  const tab=params.get('tab');
+  const filters={};
+  FILTER_DEFS.forEach(f=>{ const v=params.get(f.key); if(v) filters[f.key]=v; });
+  return { tab: TAB_KEYS.includes(tab)?tab:null, filters };
+}
+function writeUrlState(push){
+  const tab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
+  const params=new URLSearchParams();
+  if(tab!=='dashboard') params.set('tab',tab);
+  FILTER_DEFS.forEach(f=>{ if(currentFilters[f.key] && currentFilters[f.key]!=='All') params.set(f.key,currentFilters[f.key]); });
+  const qs=params.toString(), url=location.pathname+(qs?('?'+qs):'');
+  const state={tab,filters:Object.assign({},currentFilters)};
+  if(push) history.pushState(state,'',url); else history.replaceState(state,'',url);
+}
+// Syncs the filter dropdown UI (trigger label text + the "active" pill
+// styling) to whatever is currently in currentFilters. Used whenever
+// currentFilters is changed from somewhere other than a direct dropdown
+// click — restoring from the URL on load, the back/forward buttons, and
+// applying a saved view all funnel through here instead of duplicating
+// this DOM-sync logic three times.
+function syncFilterUiFromState(){
+  document.querySelectorAll('.filter-field').forEach(field=>{
+    const key=field.dataset.filterKey, val=currentFilters[key]||'All';
+    const span=field.querySelector('.filter-trigger span');
+    if(span){ const opts=[...field.querySelectorAll('.filter-option')]; const match=opts.find(o=>o.dataset.value===val); span.textContent=match?match.textContent:val; }
+    field.classList.toggle('filter-active', val!=='All');
+  });
+  updateActiveFilterBadge();
+}
+function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); syncFilterUiFromState(); writeUrlState(false); triggerFilterRefresh();}
 function drilldownFiltersQuery(extra={}){const p=new URLSearchParams(currentFilters); Object.keys(extra).forEach(k=>p.set(k,extra[k])); return p.toString();}
-let drillState={metric:'',title:'',extra:{},page:1};
+let drillStack=[];
+function currentDrill(){return drillStack[drillStack.length-1]||{metric:'',title:'',extra:{},page:1};}
+function renderDrillBreadcrumb(){
+  const nav=document.getElementById('drillBreadcrumb'); if(!nav)return;
+  if(drillStack.length<2){nav.innerHTML='';nav.style.display='none';return;}
+  nav.style.display='flex';
+  nav.innerHTML=drillStack.map((lvl,i)=>{
+    const isLast=i===drillStack.length-1;
+    const label=escQcr(lvl.crumb||lvl.title||'Level '+(i+1));
+    return (i>0?'<span class="drill-breadcrumb-sep" aria-hidden="true">›</span>':'')+
+      (isLast
+        ? `<span class="drill-breadcrumb-crumb current" aria-current="page">${label}</span>`
+        : `<button type="button" class="drill-breadcrumb-crumb" data-drill-level="${i}">${label}</button>`);
+  }).join('');
+}
+function goToDrillLevel(i){
+  if(i<0||i>=drillStack.length)return;
+  drillStack=drillStack.slice(0,i+1);
+  renderDrillBreadcrumb();
+  renderDrillPage(currentDrill().page||1);
+}
 function renderDrillPage(page=1){
-  const {metric,title,extra}=drillState, modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
-  drillState.page=page; document.getElementById('drillTitle').textContent=title||'Underlying Records'; document.getElementById('drillSubtitle').textContent=activeFilterSummary();
+  const {metric,title,extra}=currentDrill(), modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
+  currentDrill().page=page; document.getElementById('drillTitle').textContent=title||'Underlying Records'; document.getElementById('drillSubtitle').textContent=activeFilterSummary();
   content.innerHTML='<div class="drill-empty">Loading underlying records…</div>'; document.getElementById('drillCount').textContent='Loading…';
   const qs=drilldownFiltersQuery(Object.assign({metric,page,page_size:250},extra)); document.getElementById('drillExportBtn').href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric},extra));
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
     if(data.error)throw new Error(data.error); document.getElementById('drillCount').textContent=Number(data.count||0).toLocaleString()+' coils'; document.getElementById('drillScope').textContent=(data.scope||'')+' • '+Number(data.row_count||data.rows?.length||0).toLocaleString()+' records';
-    if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">No underlying records found for this KPI/selection.</div>';return;}
+    if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('No underlying records found for this KPI/selection.','Try a wider date range or clear a filter.')+'</div>';return;}
     const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     const fmtDate=v=>{const s=String(v||''); if(/^\d{4}-\d{2}-\d{2}/.test(s)){const [y,m,d]=s.slice(0,10).split('-'); return `${d}-${m}-${y}`;} return s;};
     const heads=['Date','Heat No','Batch No','Work Center','Grade','Main Defect','Defect Intensity','Decision','Weight (MT)'];
@@ -426,21 +598,105 @@ function renderDrillPage(page=1){
     html+=`</tbody><tfoot><tr class="grand-total-row"><td colspan="2">Grand Total — ${Number(data.count||0).toLocaleString()} coils</td><td></td><td></td><td></td><td></td><td></td><td>Records: ${Number(data.row_count||0).toLocaleString()}</td><td>${Number(data.total_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr></tfoot></table></div>`;
     if(Number(data.total_pages||1)>1) html+=`<div class="drill-pagination"><button type="button" data-drill-page="${Math.max(1,Number(data.page||1)-1)}" ${Number(data.page||1)<=1?'disabled':''}>‹ Previous</button><span>Page ${Number(data.page||1)} of ${Number(data.total_pages||1)}</span><button type="button" data-drill-page="${Math.min(Number(data.total_pages||1),Number(data.page||1)+1)}" ${Number(data.page||1)>=Number(data.total_pages||1)?'disabled':''}>Next ›</button></div>`;
     content.innerHTML=html;
-  }).catch(e=>{content.innerHTML='<div class="drill-empty">Unable to load records. '+String(e.message||e)+'</div>';document.getElementById('drillCount').textContent='Error';});
+  }).catch(e=>{content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('Unable to load records.',String(e.message||e))+'</div>';document.getElementById('drillCount').textContent='Error';});
 }
-function openDrilldown(metric,title,extra={}){ drillState={metric,title,extra,page:1}; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('drill-modal-open'); renderDrillPage(1); }
+// Opens a fresh drill-down as the FIRST level (e.g. clicking a defect bar on
+// a chart) — resets any previous breadcrumb trail, since this is a new,
+// unrelated drill starting over from the top.
+function openDrilldown(metric,title,extra={},crumb){ drillStack=[{metric,title,extra,page:1,crumb:crumb||title}]; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('drill-modal-open'); renderDrillBreadcrumb(); renderDrillPage(1); }
+// Pushes ONE LEVEL DEEPER onto the existing trail (e.g. clicking a Heat No.
+// inside an already-open drill-down) — so "Defect: X" > "Heat H12345" both
+// stay visible and clickable in the breadcrumb, instead of the first level
+// being silently replaced and losing its context.
+function pushDrilldown(metric,title,extra={},crumb){ drillStack.push({metric,title,extra,page:1,crumb:crumb||title}); renderDrillBreadcrumb(); renderDrillPage(1); }
 
-function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open');}
+function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open'); drillStack=[]; const d=document.getElementById('drillDialog'); if(d){d.style.cssText='';} /* reset any drag/resize back to default centered size for next open */}
 qcrWireProblemActions();
+// Desktop convenience: the drill-down modal can be dragged by its header
+// and resized from its bottom-right corner, like a real window, instead of
+// being a fixed-size overlay. Pure pointer-event math — no library.
+function wireDrillDialogDragResize(){
+  const dialog=document.getElementById('drillDialog'), head=document.getElementById('drillHead'), handle=document.getElementById('drillResizeHandle');
+  if(!dialog||!head||!handle) return;
+  let mode=null, startX=0, startY=0, startRect=null;
+  function onMove(e){
+    if(!mode) return;
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    if(mode==='drag'){
+      dialog.style.position='fixed'; dialog.style.margin='0';
+      dialog.style.left=Math.max(0,Math.min(window.innerWidth-80,startRect.left+dx))+'px';
+      dialog.style.top=Math.max(0,Math.min(window.innerHeight-40,startRect.top+dy))+'px';
+    } else if(mode==='resize'){
+      dialog.style.width=Math.max(480,startRect.width+dx)+'px';
+      dialog.style.height=Math.max(320,startRect.height+dy)+'px';
+    }
+  }
+  function onUp(){ mode=null; dialog.classList.remove('dragging'); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); }
+  head.addEventListener('mousedown',e=>{
+    if(e.target.closest('#drillCloseBtn,#drillExportBtn')) return; // don't start a drag from the action buttons
+    mode='drag'; startX=e.clientX; startY=e.clientY; startRect=dialog.getBoundingClientRect(); dialog.classList.add('dragging');
+    document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
+  });
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault(); mode='resize'; startX=e.clientX; startY=e.clientY; startRect=dialog.getBoundingClientRect(); dialog.classList.add('dragging');
+    document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
+  });
+}
+// Side-by-side compare: reuses the URL-state feature (?tab=...&<dim>=...)
+// so each pane is a fully live, independent copy of this same dashboard at
+// a different filter value — not a simplified summary that needs its own
+// rendering path to maintain.
+function wireCompareMode(){
+  const btn=document.getElementById('compareModeBtn'), modal=document.getElementById('compareModal');
+  if(!btn||!modal) return;
+  const dimSelect=document.getElementById('compareDimSelect'), valA=document.getElementById('compareValueA'), valB=document.getElementById('compareValueB');
+  dimSelect.innerHTML=FILTER_DEFS.map(f=>`<option value="${f.key}">${f.label.replace(/^\S+\s/,'')}</option>`).join('');
+  dimSelect.value='month';
+  function populateValues(){
+    const key=dimSelect.value;
+    const raw=(window._filterOptionsCache&&window._filterOptionsCache[key])||[];
+    const items=raw.map(item=>(item&&typeof item==='object')?item:{value:item,label:item}).filter(x=>x.value!=='All');
+    const optionsHtml=items.map(x=>`<option value="${escQcr(x.value)}">${escQcr(x.label)}</option>`).join('');
+    valA.innerHTML=optionsHtml; valB.innerHTML=optionsHtml;
+    if(items.length>1) valB.selectedIndex=1; // default to two different values instead of the same one twice
+  }
+  dimSelect.addEventListener('change',populateValues);
+  populateValues();
+  function openSetup(){ modal.classList.add('open'); document.getElementById('compareView').classList.add('hidden'); document.getElementById('compareSetup').style.display='block'; }
+  btn.addEventListener('click',openSetup);
+  document.getElementById('compareCancelBtn').addEventListener('click',()=>modal.classList.remove('open'));
+  document.getElementById('compareCloseBtn').addEventListener('click',()=>modal.classList.remove('open'));
+  document.getElementById('compareEditBtn').addEventListener('click',openSetup);
+  document.getElementById('compareGoBtn').addEventListener('click',()=>{
+    const key=dimSelect.value, a=valA.value, b=valB.value;
+    if(!a||!b){ showToast('error','Pick both values','Choose a value for both the left and right side.'); return; }
+    const tab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
+    function buildUrl(val){
+      const params=new URLSearchParams();
+      if(tab!=='dashboard') params.set('tab',tab);
+      FILTER_DEFS.forEach(f=>{ if(f.key===key) return; if(currentFilters[f.key]&&currentFilters[f.key]!=='All') params.set(f.key,currentFilters[f.key]); });
+      params.set(key,val);
+      return location.pathname+'?'+params.toString();
+    }
+    document.getElementById('compareFrameA').src=buildUrl(a);
+    document.getElementById('compareFrameB').src=buildUrl(b);
+    const dimLabel=(FILTER_DEFS.find(f=>f.key===key)||{}).label||key;
+    document.getElementById('compareViewTitle').textContent=`Comparing ${dimLabel.replace(/^\S+\s/,'')}: ${a}  vs  ${b}`;
+    document.getElementById('compareSetup').style.display='none';
+    document.getElementById('compareView').classList.remove('hidden');
+  });
+}
 function wireDrilldown(){
   document.getElementById('drillCloseBtn')?.addEventListener('click',closeDrilldown);
   document.getElementById('drillModal')?.addEventListener('click',e=>{if(e.target.id==='drillModal')closeDrilldown();});
-document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.target.closest('.heat-detail-btn');if(b){const heat=b.dataset.heat;if(heat)openDrilldown('heat_detail',`Heat ${heat} — Complete History`,{drill_value:heat});return;} const pg=e.target.closest('[data-drill-page]');if(pg&&!pg.disabled)renderDrillPage(Number(pg.dataset.drillPage));});
+document.getElementById('drillBreadcrumb')?.addEventListener('click',e=>{const b=e.target.closest('[data-drill-level]');if(b)goToDrillLevel(Number(b.dataset.drillLevel));});
+document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.target.closest('.heat-detail-btn');if(b){const heat=b.dataset.heat;if(heat)pushDrilldown('heat_detail',`Heat ${heat} — Complete History`,{drill_value:heat},`Heat ${heat}`);return;} const pg=e.target.closest('[data-drill-page]');if(pg&&!pg.disabled)renderDrillPage(Number(pg.dataset.drillPage));});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrilldown();});
   document.getElementById('saveViewBtn')?.addEventListener('click',saveCurrentView);
   document.getElementById('clearViewsBtn')?.addEventListener('click',manageSavedViews);
   document.getElementById('savedViewSelect')?.addEventListener('change',e=>applySavedView(e.target.value));
   renderSavedViews();
+  wireDrillDialogDragResize();
 }
 async function loadKpis(signal){
   const params = new URLSearchParams(currentFilters).toString();
@@ -522,8 +778,43 @@ function yAxisTitleH(text, h, padT, padB){
   return `<text x="16" y="${cy}" font-size="11.5" font-weight="700" fill="var(--chart-axis-title)" text-anchor="middle" transform="rotate(-90 16 ${cy})">${text}</text>`;
 }
 
+// Friendly empty-state markup shared by every chart and the drill-down
+// modal, instead of a bare line of text. `sub` is optional supporting text
+// (e.g. a hint to widen the filter); an inline SVG icon keeps this
+// dependency-free and themeable via currentColor.
+function emptyStateMarkup(title, sub){
+  return `<div class="empty-state"><svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="32" cy="32" r="29" stroke="currentColor" stroke-width="2.5" stroke-dasharray="4 5"/><path d="M20 40 L28 30 L36 35 L44 22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="44" cy="22" r="2.8" fill="currentColor"/><circle cx="36" cy="35" r="2.8" fill="currentColor"/><circle cx="28" cy="30" r="2.8" fill="currentColor"/><circle cx="20" cy="40" r="2.8" fill="currentColor"/></svg><div class="empty-state-title">${escQcr(title)}</div>${sub?`<div class="empty-state-sub">${escQcr(sub)}</div>`:''}</div>`;
+}
+
+// ---- Toast notifications: a visual, top-right sliding confirmation for
+// success/error/info, so people who keep sound muted (see sfx.js) still get
+// a clear confirmation an action finished — sound and toast are independent
+// of each other, neither depends on the other being on. ----
+function ensureToastHost(){
+  let host=document.getElementById('toastHost');
+  if(!host){ host=document.createElement('div'); host.id='toastHost'; host.className='toast-host'; host.setAttribute('aria-live','polite'); host.setAttribute('role','status'); document.body.appendChild(host); }
+  return host;
+}
+function showToast(kind,title,message,opts={}){
+  const host=ensureToastHost();
+  const el=document.createElement('div');
+  el.className='toast toast-'+(kind||'info');
+  const icon=kind==='success'?'✅':kind==='error'?'⚠️':'ℹ️';
+  el.innerHTML=`<span class="toast-icon" aria-hidden="true">${icon}</span><div class="toast-body"><div class="toast-title"></div><div class="toast-msg"></div></div><button class="toast-close" type="button" aria-label="Dismiss notification">✕</button>`;
+  el.querySelector('.toast-title').textContent=title||'';
+  const msgEl=el.querySelector('.toast-msg');
+  if(message) msgEl.textContent=message; else msgEl.remove();
+  host.appendChild(el);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('show')));
+  const dur=opts.duration||(kind==='error'?6500:4200);
+  let dismissed=false;
+  const dismiss=()=>{ if(dismissed)return; dismissed=true; el.classList.remove('show'); el.classList.add('hide'); setTimeout(()=>el.remove(),260); };
+  const timer=setTimeout(dismiss,dur);
+  el.querySelector('.toast-close').addEventListener('click',()=>{clearTimeout(timer);dismiss();});
+}
+
 function makePieChart(container, items, valueKey, labelKey, opts={}){
-  if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   const sorted = [...items].sort((a,b) => b[valueKey]-a[valueKey]);
   // Wider viewBox gives outside labels enough room; CSS still scales it responsively.
   const w = 1500, h = 820, cx = 750, cy = 380, r = 280, innerR = 145;
@@ -612,7 +903,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
 
 /* Vertical bar chart — used for SHORT category names only (Months etc). */
 function makeBarChart(container, items, valueKey, labelKey, opts={}){
-  if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   const w = DESIGN_W, h = 380, padL = 65, padR = 20, padT = 30, padB = 95;
   const maxV = niceMax(Math.max(...items.map(d => d[valueKey]), 0));
   const plotW = w - padL - padR;
@@ -649,7 +940,7 @@ function makeBarChart(container, items, valueKey, labelKey, opts={}){
 /* Horizontal bar chart — used for LONG category names (Grades, Defects,
    Work Centers, Intensity levels) so labels never get cut off. */
 function makeHBarChart(container, items, valueKey, labelKey, opts={}){
-  if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   // Always order horizontal bars from highest to lowest value. This prevents a
   // low-value bar from appearing above a higher-value bar and makes the chart
   // read like a proper ranked analysis. Keep a stable secondary sort by name.
@@ -697,7 +988,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
 
 /* Horizontal GROUPED bar chart — e.g. Intensity: Coils + Qty side-by-side. */
 function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
-  if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   const w = DESIGN_W;
   const rowH = opts.rowH || 58, padL = 200, padR = 70, padT = 20, padB = 55;
   const h = items.length * rowH + padT + padB;
@@ -745,7 +1036,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
 
 /* Vertical grouped bar chart — for time-series with SHORT labels (Months). */
 function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
-  if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   const w = DESIGN_W, h = 430, padL = 70, padR = 20, padT = 30, padB = 115;
   const plotW = w - padL - padR;
   const gap = plotW / items.length;
@@ -794,7 +1085,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
 }
 
 function makeLineChart(container, items, labelKey, series, opts={}){
-  if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   const w = DESIGN_W, h = 400, padL = 65, padR = 30, padT = 45, padB = 95;
   const n = items.length;
   const stepX = n > 1 ? (w - padL - padR) / (n - 1) : 0;
@@ -826,8 +1117,8 @@ function makeLineChart(container, items, labelKey, series, opts={}){
         valueLabels += `<text x="${x}" y="${labelY}" font-size="14" font-weight="700" text-anchor="middle" fill="${s.color}">${s.fmt ? s.fmt(v) : v}</text>`;
       }
     });
-    svgParts += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="2.5"/>${dots}${valueLabels}`;
-    legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${escQcr(s.label)}</div>`;
+    svgParts += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="${s.dashed?2:2.5}" ${s.dashed?'stroke-dasharray="7 5" opacity=".72"':''}/>${s.dashed?'':dots+valueLabels}`;
+    legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color};${s.dashed?'opacity:.72;border:1px dashed '+s.color+';background:transparent;':''}"></span>${escQcr(s.label)}</div>`;
   });
 
   let xLabels = "";
@@ -847,7 +1138,7 @@ function makeLineChart(container, items, labelKey, series, opts={}){
 }
 
 function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
-  if(!items.length){ container.innerHTML = "<div class='no-data'>No data to display.</div>"; return; }
+  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   const w = DESIGN_W, h = 430, padL = 72, padR = 72, padT = 34, padB = 110;
   const plotW = w - padL - padR, plotH = h - padT - padB;
   const maxBar = niceMax(Math.max(...items.map(d => Number(d[barKey])||0), 0));
@@ -943,21 +1234,47 @@ async function loadDefectAnalysis(signal){
       <td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_records)}</td>`;
     tbody.appendChild(tr);
   }
-
+  applyTableSort("registerTable");
   markChartsReady();
 }
 
 // ---------- Tab: Monthly Trend ----------
+let _monthlyTrendRows = [];
+function renderMonthlyLineChart(){
+  const compare = document.getElementById("monthlyCompareToggle")?.checked;
+  const series = [
+    {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"first_pass_yield_pct", label:"First Pass Yield % (Prime%)", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
+    {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
+  ];
+  // "Compare to previous period": an extra dotted line per metric, built
+  // client-side from data already on hand — each point is that same row's
+  // value shifted back by one month, so the dashed line always trails one
+  // step behind the solid one and the gap between them at any given month
+  // reads directly as "how much did this move since last month".
+  let rows = _monthlyTrendRows;
+  if(compare){
+    rows = _monthlyTrendRows.map((row,i)=>{
+      const prev = _monthlyTrendRows[i-1];
+      const withPrev = Object.assign({}, row);
+      series.forEach(s=>{ withPrev[s.key+"_prev"] = prev ? prev[s.key] : row[s.key]; });
+      return withPrev;
+    });
+    series.slice().forEach(s=>{
+      series.push({key:s.key+"_prev", label:s.label+" (Prev. Month)", color:s.color, fmt:s.fmt, dashed:true});
+    });
+  }
+  makeLineChart(document.getElementById("monthlyLineChart"), rows, "name", series,
+    {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Month"});
+}
+document.getElementById("monthlyCompareToggle")?.addEventListener("change", renderMonthlyLineChart);
 async function loadMonthlyTrend(signal){
   const params = new URLSearchParams(currentFilters).toString();
   const res = await fetch("/api/monthly_trend?" + params, {signal});
   const data = await res.json();
   if(data.error){ console.error(data.error); return; }
-  makeLineChart(document.getElementById("monthlyLineChart"), data.rows, "name", [
-    {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
-    {key:"first_pass_yield_pct", label:"First Pass Yield % (Prime%)", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
-    {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
-  ], {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Month"});
+  _monthlyTrendRows = data.rows||[];
+  renderMonthlyLineChart();
   makeGroupedBarChart(document.getElementById("monthlyBarChart"), data.rows, "name", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"output_qty", label:"Output Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(0)},
@@ -1678,15 +1995,27 @@ const TAB_LOADERS = {
   weekly: loadPeriodTrend,
 };
 
-async function activateTab(tabName){
+async function activateTab(tabName, fromHistory){
   fetch("/api/activity/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event_type:"tab_open",tab:tabName,filters:currentFilters})}).catch(()=>{});
   if(refreshController) refreshController.abort();
   refreshController = new AbortController();
   const signal = refreshController.signal;
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tabName));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + tabName));
+  if(!fromHistory) writeUrlState(true); // fromHistory=true means popstate already changed the URL; don't push again
   try { await TAB_LOADERS[tabName](signal); if(tabName==='controlroom') scheduleQcrLayout(); } catch(e) { if(e.name!=="AbortError") console.error(e); }
 }
+// Back/forward buttons: restore whichever tab+filters that history entry
+// represents. history.state carries the exact filters we pushed; a manually
+// edited/shared URL (no state, e.g. after a fresh navigation) falls back to
+// re-parsing the query string.
+window.addEventListener('popstate', (e)=>{
+  const restored = e.state || readUrlState();
+  const filters = restored.filters || {};
+  FILTER_DEFS.forEach(f=>{ currentFilters[f.key] = filters[f.key] || "All"; });
+  syncFilterUiFromState();
+  activateTab(restored.tab || 'dashboard', true);
+});
 
 document.getElementById("tabs").addEventListener("click", (e) => {
   const btn = e.target.closest(".tab-btn");
@@ -1740,7 +2069,22 @@ async function init(){
   // Every dashboard page load is logged server-side with the visitor IP address.
   await loadKpiTargets();
   wireDrilldown();
+  // Restore tab/filters from the URL (a shared link or a page reload)
+  // before the filter dropdowns are built, so they render already-selected
+  // rather than being built as "All" and then corrected a moment later.
+  const restored = readUrlState();
+  Object.assign(currentFilters, restored.filters);
   await loadFilters();
-  await loadKpis();
+  syncFilterUiFromState();
+  initSortableTables();
+  wireCompareMode();
+  const startTab = restored.tab || 'dashboard';
+  if(startTab !== 'dashboard'){
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === startTab));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + startTab));
+    await TAB_LOADERS[startTab]();
+  } else {
+    await loadKpis();
+  }
 }
 init();
