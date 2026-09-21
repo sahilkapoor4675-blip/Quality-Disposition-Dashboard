@@ -117,7 +117,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V63.7"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.2"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -131,8 +131,8 @@ APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V63.7"
 # already-visited browsers, producing a stale mix of old-and-new styling).
 # So this version is no longer something anyone needs to remember to bump by
 # hand: it's the asset file's own last-modified time, computed once and
-# reused, and it changes automatically the moment the file's content changes
-# on disk (including on every redeploy that touches these files).
+# reused for the life of the serving process. A normal redeploy/restart
+# rebuilds these values after any asset change.
 _ASSET_VERSION_CACHE = {}
 def _asset_version(filename):
     v = _ASSET_VERSION_CACHE.get(filename)
@@ -146,13 +146,15 @@ def _asset_version(filename):
     return v
 
 _ASSET_HREF_RE = re.compile(r'((?:href|src)="\/(app\.css|app\.js|sfx\.js))(?:\?v=[^"]*)?"')
+_APP_VERSION_META_RE = re.compile(r'(<meta\s+name="app-version"\s+content=")[^"]*(")', re.I)
 def _inject_asset_versions(html):
     """Rewrite every /app.css, /app.js, /sfx.js reference in an HTML page to
     carry that file's current on-disk version, regardless of whatever
     version string is hardcoded in the source HTML. Makes the manual "?v="
     in index.html/admin.html purely cosmetic/documentation — correctness no
     longer depends on anyone remembering to bump it."""
-    return _ASSET_HREF_RE.sub(lambda m: f'{m.group(1)}?v={_asset_version(m.group(2))}"', html)
+    html = _ASSET_HREF_RE.sub(lambda m: f'{m.group(1)}?v={_asset_version(m.group(2))}"', html)
+    return _APP_VERSION_META_RE.sub(lambda m: f'{m.group(1)}{APP_VERSION}{m.group(2)}', html)
 ADMIN_BUILD_VERSION = APP_VERSION
 
 try:
@@ -683,6 +685,7 @@ def ensure_fast_indexes():
         ("idx_disp_financial_year", "financial_year"),
         ("idx_disp_defect_intensity", "defect_intensity"),
         ("idx_disp_main_defect", "main_defect"),
+        ("idx_disp_insp_lot_date", "insp_lot_date"),
     ]
     if USE_POSTGRES:
         for name, expr in [
@@ -3997,6 +4000,8 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
                 body = _inject_asset_versions(f.read())
             self.send_response(200)
+            self.send_header("X-Request-ID", secrets.token_hex(8))
+            self.send_header("X-App-Version", APP_VERSION)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
             self.send_header("Pragma", "no-cache")
@@ -5280,7 +5285,39 @@ class Handler(BaseHTTPRequestHandler):
                 body = _json_body(self)
                 limit = min(max(int(body.get("limit", 100)), 1), 500)
                 query = str(body.get("q", "")).strip()
+                if len(query) > 200:
+                    raise ValueError("Search text is limited to 200 characters")
+                record_id = body.get("record_id")
+                date_from = str(body.get("date_from", "")).strip()
+                date_to = str(body.get("date_to", "")).strip()
+                for label, value in (("date_from", date_from), ("date_to", date_to)):
+                    if value:
+                        try:
+                            parsed_date = _dt.date.fromisoformat(value)
+                        except ValueError:
+                            raise ValueError(f"{label} must be a valid YYYY-MM-DD date")
+                        if parsed_date.isoformat() != value:
+                            raise ValueError(f"{label} must be a valid YYYY-MM-DD date")
+                if date_from and date_to and date_from > date_to:
+                    raise ValueError("date_from cannot be later than date_to")
                 requested_ids = body.get("ids") or []
+                if record_id not in (None, ""):
+                    try:
+                        exact_id = int(record_id)
+                    except (TypeError, ValueError):
+                        raise ValueError("record_id must be an integer")
+                    if exact_id < 1:
+                        raise ValueError("record_id must be a positive integer")
+                    conn = get_conn()
+                    try:
+                        exact_base = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
+                        row = conn.execute(exact_base + " WHERE id=?", (exact_id,)).fetchone()
+                        grand_total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                    finally:
+                        conn.close()
+                    rows = [dict(row)] if row else []
+                    self._send_json({"rows": rows, "total": len(rows), "grand_total": grand_total, "query": ""})
+                    return
                 if requested_ids:
                     if not isinstance(requested_ids, list):
                         raise ValueError("ids must be a list")
@@ -5303,13 +5340,11 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 conn = get_conn()
                 base = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
-                # Diagnostic filters: free-text "q" (existing multi-field LIKE) can be
-                # combined with an inspection-date range (date_from/date_to, inclusive,
+                # Diagnostic filters: free-text "q" (multi-field LIKE) can be combined
+                # with an inspection-date range (date_from/date_to, inclusive,
                 # "YYYY-MM-DD") so an admin can isolate exactly the records a given
                 # import/period added — e.g. to explain a dashboard total that looks
                 # higher than what one import summary reported.
-                date_from = str(body.get("date_from", "")).strip()
-                date_to = str(body.get("date_to", "")).strip()
                 clauses = []; params = []
                 if query:
                     like = f"%{query}%"

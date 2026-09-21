@@ -1,14 +1,15 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=qa1">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=qa1">
-    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png?v=qa1">
-    <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png?v=qa1">
-    <link rel="manifest" href="/site.webmanifest?v=qa1">
-
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="/favicon.ico?v=qa1" rel="icon" type="image/x-icon"/>
+<link href="/favicon-32.png?v=qa1" rel="icon" sizes="32x32" type="image/png"/>
+<link href="/favicon-192.png?v=qa1" rel="icon" sizes="192x192" type="image/png"/>
+<link href="/favicon-180.png?v=qa1" rel="apple-touch-icon" sizes="180x180"/>
+<link href="/site.webmanifest?v=qa1" rel="manifest"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<meta name="app-version" content="V64.1">
 <title>Quality Intelligence — Admin</title>
 <style>
 :root{--navy:#16324F;--blue:#2388C9;--bg:#F5F8FB;--card:#fff;--border:#DCE6EF;--text:#24364B;--muted:#5c6b7d;--red:#D94A4A;--green:#1B9A63}
@@ -209,7 +210,6 @@ html[data-theme="dark"] .admin-personal-card{background:var(--admin-surface);bor
   .theme-toggle-btn{width:38px;height:38px;font-size:17px}
 }
 </style>
-
 <style id="jsl-watermark-style">
 /* Exact JSL Jindal Stainless logo watermark — background only; all app UI stays above it. */
 html{background:#F8FAFC;}
@@ -234,7 +234,7 @@ body > *{position:relative;z-index:1;}
 @media(max-width:900px){body::before{background-size:min(82vw,650px) auto;opacity:.09;}}
 @media(max-width:600px){body::before{background-size:min(94vw,520px) auto;opacity:.075;}}
 </style>
-<script src="/sfx.js?v=1.0" defer></script>
+<script defer="" src="/sfx.js?v=1.0"></script>
 <script>
 function escJs(value){
   return String(value ?? "")
@@ -328,7 +328,6 @@ html[data-theme="dark"] .panel:hover,html[data-theme="dark"] .admin-kpi:hover,ht
 html[data-theme="dark"] .table-wrap{box-shadow:inset 0 1px 0 rgba(255,255,255,.02),0 8px 22px rgba(0,0,0,.16)}
 @media(prefers-reduced-motion:reduce){.panel,.admin-kpi,.admin-prod-card,.connection-box,.filebox,.result,.quality-score,.issue,.recovery-card,.command-card,.health-card,.stat,.audit-card,.sidebar-link,.top .actions>*{transition:none!important}.panel:hover,.admin-kpi:hover,.admin-prod-card:hover,.connection-box:hover,.filebox:hover,.result:hover,.quality-score:hover,.issue:hover,.recovery-card:hover,.command-card:hover,.health-card:hover,.stat:hover,.audit-card:hover,.sidebar-link:hover{transform:none!important}}
 </style>
-
 <style id="v40-admin-responsive-final">
 /* overflow-x:hidden (not overflow-x:clip) forces the browser to also treat
    overflow-y as "auto" on html AND body (per the CSS overflow spec's
@@ -378,148 +377,154 @@ body{min-width:0;}
 </style>
 </head>
 <body>
-<div class="top"><div class="top-brand"><img class="top-logo" src="/jsl-header-logo.png" alt="Jindal Stainless"><div class="brand"><h1><span class="admin-title-main"><span class="admin-quality">QUALITY</span><span style="display:inline-block;width:8px"></span><span class="admin-intelligence">INTELLIGENCE</span></span><span class="admin-title-sub"><span class="admin-admin">ADMIN</span></span></h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div></div><div class="actions"><span class="secure">● SECURE ADMIN</span><span class="security-badge">CSRF • RATE LIMIT • SESSION PROTECTED</span><span class="live-db-badge" id="liveDbBadge" title="Active database connection">🟢 LIVE DB · checking</span><button class="theme-toggle-btn" id="adminThemeToggleBtn" type="button" title="Switch to dark mode" aria-label="Switch to dark mode">☾</button><button class="theme-toggle-btn sfx-toggle-btn" type="button" title="Mute sound effects" aria-label="Mute sound effects">🔊</button><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
+<div class="top"><div class="top-brand"><img alt="Jindal Stainless" class="top-logo" src="/jsl-header-logo.png"/><div class="brand"><h1><span class="admin-title-main"><span class="admin-quality">QUALITY</span><span style="display:inline-block;width:8px"></span><span class="admin-intelligence">INTELLIGENCE</span></span><span class="admin-title-sub"><span class="admin-admin">ADMIN</span></span></h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div></div><div class="actions"><span class="secure">● SECURE ADMIN</span><span class="security-badge">CSRF • RATE LIMIT • SESSION PROTECTED</span><span class="live-db-badge" id="liveDbBadge" title="Active database connection">🟢 LIVE DB · checking</span><button aria-label="Switch to dark mode" class="theme-toggle-btn" id="adminThemeToggleBtn" title="Switch to dark mode" type="button">☾</button><button aria-label="Mute sound effects" class="theme-toggle-btn sfx-toggle-btn" title="Mute sound effects" type="button">🔊</button><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
 <div class="wrap">
-  <section class="login" id="loginBox">
-    <h2>🔐 Admin Login</h2><p class="hint">Only the authorized administrator can add, import or delete data. Viewer access to the dashboard remains read-only.</p>
-    <div class="field"><label>Username</label><input id="username" autocomplete="username" value="admin"></div>
-    <div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Enter admin password"></div>
-    <div class="connection-box" id="loginConnection"><div><span class="connection-dot checking"></span><strong>Database Connection</strong><small id="loginConnectionText">Checking connection…</small></div><button type="button" class="btn" id="connectionBtn">↻ Check</button></div>
-    <button class="btn primary" style="width:100%" id="loginBtn">Login</button><div class="msg" id="loginMsg"></div>
-  </section>
+<section class="login" id="loginBox">
+<h2>🔐 Admin Login</h2><p class="hint">Only the authorized administrator can add, import or delete data. Viewer access to the dashboard remains read-only.</p>
+<div class="field"><label>Username</label><input autocomplete="username" id="username" value="admin"/></div>
+<div class="field"><label>Password</label><input autocomplete="current-password" id="password" placeholder="Enter admin password" type="password"/></div>
+<div class="connection-box" id="loginConnection"><div><span class="connection-dot checking"></span><strong>Database Connection</strong><small id="loginConnectionText">Checking connection…</small></div><button class="btn" id="connectionBtn" type="button">↻ Check</button></div>
+<button class="btn primary" id="loginBtn" style="width:100%">Login</button><div class="msg" id="loginMsg"></div>
+</section>
+<section class="login hidden" id="forceResetBox">
+<h2>🔑 Set Your New Password</h2><p class="hint">A temporary password was issued for this account. You must set your own password before you can use the admin panel.</p>
+<div class="field"><label>Temporary Password *</label><input autocomplete="current-password" id="frCurrent" placeholder="Temporary password you were given" type="password"/></div>
+<div class="field"><label>New Password *</label><input autocomplete="new-password" id="frNew" minlength="12" placeholder="Min 12 chars, upper+lower+number+special" type="password"/></div>
+<div class="field"><label>Confirm New Password *</label><input autocomplete="new-password" id="frConfirm" minlength="12" type="password"/></div>
+<button class="btn primary" id="frSubmitBtn" style="width:100%">Set New Password</button><div class="msg" id="frMsg"></div>
+</section>
+<section class="grid hidden" id="adminApp">
+<div class="admin-shell">
+<aside class="admin-sidebar" id="adminSidebar">
+<div class="sidebar-head"><span class="sidebar-kicker">ADMIN CONSOLE</span><b>Control Center</b></div>
 
-  <section class="login hidden" id="forceResetBox">
-    <h2>🔑 Set Your New Password</h2><p class="hint">A temporary password was issued for this account. You must set your own password before you can use the admin panel.</p>
-    <div class="field"><label>Temporary Password *</label><input id="frCurrent" type="password" autocomplete="current-password" placeholder="Temporary password you were given"></div>
-    <div class="field"><label>New Password *</label><input id="frNew" type="password" autocomplete="new-password" minlength="12" placeholder="Min 12 chars, upper+lower+number+special"></div>
-    <div class="field"><label>Confirm New Password *</label><input id="frConfirm" type="password" autocomplete="new-password" minlength="12"></div>
-    <button class="btn primary" style="width:100%" id="frSubmitBtn">Set New Password</button><div class="msg" id="frMsg"></div>
-  </section>
 
-  <section class="grid hidden" id="adminApp">
-    <div class="admin-shell">
-      <aside class="admin-sidebar" id="adminSidebar">
-        <div class="sidebar-head"><span class="sidebar-kicker">ADMIN CONSOLE</span><b>Control Center</b></div>
-        <button class="sidebar-link active" data-target="homePanel"><span>🏠</span> Overview</button>
-        <button class="sidebar-link" data-target="dataQualityPanel"><span>🧪</span> Data Quality</button>
-        <button class="sidebar-link" data-target="kpiPanel"><span>🎯</span> KPI Targets</button>
-        <button class="sidebar-link" data-target="addRecordPanel"><span>➕</span> Add Record</button>
-        <button class="sidebar-link" data-target="importPanel"><span>📥</span> Import Wizard</button>
-        <button class="sidebar-link" data-target="fishbonePanel"><span>🐟</span> Fishbone Master</button>
-        <button class="sidebar-link" data-target="fishboneMapPanel"><span>🔗</span> Defect Mapping</button>
-        <button class="sidebar-link" data-target="databasePanel"><span>📊</span> Database</button>
-        <button class="sidebar-link" data-target="commandCenterPanel"><span>🧭</span> Command Center</button>
-        <button class="sidebar-link" data-target="performancePanel"><span>⚡</span> DB Performance</button>
-        <button class="sidebar-link" data-target="auditExplorerPanel"><span>🔎</span> Audit Explorer</button>
-        <button class="sidebar-link" data-target="recoveryPanel"><span>🛟</span> Recovery Center</button>
-        <button class="sidebar-link" data-target="backupsPanel"><span>🗄️</span> Backups</button>
-        <button class="sidebar-link" data-target="securityPanel"><span>🛡️</span> Security</button><button class="sidebar-link" data-target="validationPanel"><span>🧩</span> Validation Rules</button>
-        <button class="sidebar-link" data-target="usersPanel"><span>👥</span> Users & Roles</button>
-        <button class="sidebar-link" data-target="auditTrailPanel"><span>🔐</span> Audit Trail</button><button class="sidebar-link" data-target="auditAnalyticsPanel"><span>📊</span> Audit Analytics</button>
-        <button class="sidebar-link" data-target="activityPanel"><span>📈</span> Activity</button>
-        <button class="sidebar-link" data-target="recordsPanel"><span>🗃️</span> Latest Records</button>
-        <div class="sidebar-foot"><span class="shortcut-key">Ctrl K</span> Search<br><span class="shortcut-key">R</span> Refresh</div>
-      </aside>
-      <main class="admin-content">
-        <div class="admin-commandbar" id="commandBar">
-          <div class="global-search-wrap admin-search-wrap">
-            <span class="search-icon">⌕</span>
-            <input id="adminGlobalSearch" class="global-search-input" type="search" placeholder="Search defects, grades, work centers, heat / batch no…  (Ctrl K)" autocomplete="off">
-            <div class="global-search-results" id="adminSearchResults"></div>
-          </div>
-          <button class="btn command-refresh" id="commandRefreshBtn" type="button">↻ Refresh</button>
-        </div>
-        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="sidebar-progress" id="sidebarProgress"><span class="sidebar-progress-kicker">CURRENT SECTION</span><strong id="currentSectionName">Overview</strong><small><span id="currentSectionIndex"></span> / <span id="currentSectionTotal"></span></small></div><nav aria-label="Admin sections" class="sidebar-nav" id="adminSidebarNav"><div class="sidebar-group" data-nav-group="monitoring"><div class="sidebar-group-label">Monitoring</div><button aria-controls="homePanel" aria-current="page" class="sidebar-link active" data-target="homePanel" type="button"><span aria-hidden="true" class="sidebar-icon">🏠</span><span class="sidebar-link-text">Overview</span></button><button aria-controls="dataQualityPanel" aria-current="false" class="sidebar-link" data-target="dataQualityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧪</span><span class="sidebar-link-text">Data Quality</span></button></div><div class="sidebar-group" data-nav-group="data-operations"><div class="sidebar-group-label">Data Operations</div><button aria-controls="kpiPanel" aria-current="false" class="sidebar-link" data-target="kpiPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🎯</span><span class="sidebar-link-text">KPI Targets</span></button><button aria-controls="addRecordPanel" aria-current="false" class="sidebar-link" data-target="addRecordPanel" type="button"><span aria-hidden="true" class="sidebar-icon">➕</span><span class="sidebar-link-text">Add Record</span></button><button aria-controls="importPanel" aria-current="false" class="sidebar-link" data-target="importPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📥</span><span class="sidebar-link-text">Import Wizard</span></button><button aria-controls="importHistoryPanel" aria-current="false" class="sidebar-link" data-target="importHistoryPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧾</span><span class="sidebar-link-text">Import History</span></button><button aria-controls="recordsPanel" aria-current="false" class="sidebar-link" data-target="recordsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🗃️</span><span class="sidebar-link-text">Latest Records</span></button><button aria-controls="fishbonePanel" aria-current="false" class="sidebar-link" data-target="fishbonePanel" type="button"><span aria-hidden="true" class="sidebar-icon">🐟</span><span class="sidebar-link-text">Fishbone Master</span></button><button aria-controls="fishboneMapPanel" aria-current="false" class="sidebar-link" data-target="fishboneMapPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔗</span><span class="sidebar-link-text">Defect Mapping</span></button></div><div class="sidebar-group" data-nav-group="system"><div class="sidebar-group-label">System</div><button aria-controls="commandCenterPanel" aria-current="false" class="sidebar-link" data-target="commandCenterPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧭</span><span class="sidebar-link-text">Command Center</span></button><button aria-controls="databasePanel" aria-current="false" class="sidebar-link" data-target="databasePanel" type="button"><span aria-hidden="true" class="sidebar-icon">📊</span><span class="sidebar-link-text">Database</span></button><button aria-controls="performancePanel" aria-current="false" class="sidebar-link" data-target="performancePanel" type="button"><span aria-hidden="true" class="sidebar-icon">⚡</span><span class="sidebar-link-text">DB Performance</span></button><button aria-controls="backupsPanel" aria-current="false" class="sidebar-link" data-target="backupsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🗄️</span><span class="sidebar-link-text">Backups</span></button><button aria-controls="recoveryPanel" aria-current="false" class="sidebar-link" data-target="recoveryPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🛟</span><span class="sidebar-link-text">Recovery Center</span></button></div><div class="sidebar-group" data-nav-group="governance"><div class="sidebar-group-label">Governance</div><button aria-controls="securityPanel" aria-current="false" class="sidebar-link" data-target="securityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🛡️</span><span class="sidebar-link-text">Security</span></button><button aria-controls="validationPanel" aria-current="false" class="sidebar-link" data-target="validationPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧩</span><span class="sidebar-link-text">Validation Rules</span></button><button aria-controls="usersPanel" aria-current="false" class="sidebar-link" data-target="usersPanel" type="button"><span aria-hidden="true" class="sidebar-icon">👥</span><span class="sidebar-link-text">Users &amp; Roles</span></button><button aria-controls="auditExplorerPanel" aria-current="false" class="sidebar-link" data-target="auditExplorerPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔎</span><span class="sidebar-link-text">Audit Explorer</span></button><button aria-controls="auditTrailPanel" aria-current="false" class="sidebar-link" data-target="auditTrailPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔐</span><span class="sidebar-link-text">Audit Trail</span></button><button aria-controls="auditAnalyticsPanel" aria-current="false" class="sidebar-link" data-target="auditAnalyticsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📊</span><span class="sidebar-link-text">Audit Analytics</span></button><button aria-controls="activityPanel" aria-current="false" class="sidebar-link" data-target="activityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📈</span><span class="sidebar-link-text">Activity</span></button></div></nav><div class="sidebar-foot"><button class="sidebar-top-btn" id="sidebarTopBtn" type="button">↑ Back to Overview</button> <span class="shortcut-key">Ctrl K</span> Search<br/> <span class="shortcut-key">R</span> Refresh</div></aside>
+<main class="admin-content">
+<div class="admin-commandbar" id="commandBar"><div aria-live="polite" class="admin-section-position" id="adminSectionPosition"><span id="adminSectionPositionIndex"></span> · <strong id="adminSectionPositionName"></strong></div>
+<div class="global-search-wrap admin-search-wrap">
+<span class="search-icon">⌕</span>
+<input autocomplete="off" class="global-search-input" id="adminGlobalSearch" maxlength="200" placeholder="Search defects, grades, work centers, heat / batch no…  (Ctrl K)" type="search"/>
+<div class="global-search-results" id="adminSearchResults"></div>
+</div>
+<button class="btn command-refresh" id="commandRefreshBtn" type="button">↻ Refresh</button>
+</div>
 <div class="admin-v29-tools" id="adminV29Tools">
-  <div class="admin-health-score-card">
-    <div><span class="v29-kicker">SYSTEM HEALTH</span><b id="adminHealthScore">—</b><span id="adminHealthState">Calculating…</span></div>
-    <div class="health-ring" id="adminHealthRing"><span id="adminHealthRingValue">—</span></div>
-  </div>
-  <div class="admin-notify-card">
-    <div class="v29-card-head"><div><span class="v29-kicker">ATTENTION CENTER</span><b>What needs attention</b></div><span class="notify-count" id="adminNotifyCount">0</span></div>
-    <div class="notify-list" id="adminNotifyList"><div class="v29-empty">No alerts yet.</div></div>
-  </div>
-  <div class="admin-personal-card">
-    <div class="v29-card-head"><div><span class="v29-kicker">WORKSPACE</span><b>Admin preferences</b></div></div>
-    <div class="pref-row"><label><input type="checkbox" id="compactAdminToggle"> Compact density</label><button class="btn" id="resetAdminPrefs">↺ Reset</button></div>
-  </div>
+<div class="admin-health-score-card">
+<div><span class="v29-kicker">SYSTEM HEALTH</span><b id="adminHealthScore">—</b><span id="adminHealthState">Calculating…</span></div>
+<div class="health-ring" id="adminHealthRing"><span id="adminHealthRingValue">—</span></div>
 </div>
-
+<div class="admin-notify-card">
+<div class="v29-card-head"><div><span class="v29-kicker">ATTENTION CENTER</span><b>What needs attention</b></div><span class="notify-count" id="adminNotifyCount">0</span></div>
+<div class="notify-list" id="adminNotifyList"><div class="v29-empty">No alerts yet.</div></div>
+</div>
+<div class="admin-personal-card">
+<div class="v29-card-head"><div><span class="v29-kicker">WORKSPACE</span><b>Admin preferences</b></div></div>
+<div class="pref-row"><label><input id="compactAdminToggle" type="checkbox"/> Compact density</label><button class="btn" id="resetAdminPrefs">↺ Reset</button></div>
+</div>
+</div>
 <div class="admin-health-strip">
-          <div><span class="health-dot" id="backupHealthDot"></span><b id="backupHealthText">Backup health: checking…</b><small id="backupHealthMeta">Automatic safety snapshots are available to admins.</small></div><div class="freshness-chip" id="dataFreshnessChip">🕒 Data freshness: checking…</div>
-          <div class="health-actions"><span class="shortcut-key">?</span><span>Shortcuts</span><button class="btn" id="showShortcutsBtn" type="button">View</button></div>
-        </div>
-        <div class="shortcut-panel hidden" id="shortcutPanel">
-          <b>Keyboard shortcuts</b><span><kbd>Ctrl</kbd> + <kbd>K</kbd> Focus search</span><span><kbd>R</kbd> Refresh data</span><span><kbd>Esc</kbd> Close search / panel</span><span><kbd>?</kbd> Show shortcuts</span>
-        </div>
-        <div class="admin-content-grid">
-          <div class="panel full" id="homePanel"><h2>🏠 Admin Control Center</h2><p class="desc">System overview, data health, usage and security at a glance.</p><div class="admin-kpi-grid"><div class="admin-kpi"><div class="label">Total Records (Live)</div><div class="value" id="hTotalRecords">—</div></div><div class="admin-kpi"><div class="label">Last Data Update</div><div class="value" id="hLastData">—</div></div><div class="admin-kpi"><div class="label">Database Size</div><div class="value" id="hDbSize">—</div></div><div class="admin-kpi"><div class="label">Active Admins</div><div class="value" id="hAdmins">—</div></div><div class="admin-kpi"><div class="label">Dashboard Views</div><div class="value" id="hViews">—</div></div><div class="admin-kpi"><div class="label">Last Login</div><div class="value" id="hLastLogin">—</div></div><div class="admin-kpi"><div class="label">Failed Login Attempts</div><div class="value" id="hFailed">—</div></div></div></div>
-<div class="admin-prod-grid full">
-  <div class="admin-prod-card" id="prodHealthCard">
-    <div class="prod-head"><div><span class="v29-kicker">PRODUCTION HEALTH</span><b>Live database connection</b></div><span class="prod-badge" id="prodHealthBadge">Checking…</span></div>
-    <div class="prod-metrics"><div><span>Provider</span><b id="prodProvider">—</b></div><div><span>Round-trip</span><b id="prodLatency">—</b></div><div><span>DB Version</span><b id="prodVersion">—</b></div></div>
-    <div class="prod-meta"><span id="prodRender">—</span><span id="prodCommit">—</span></div>
-  </div>
-  <div class="admin-prod-card">
-    <div class="prod-head"><div><span class="v29-kicker">DATA INTEGRITY</span><b>Read-only live checks</b></div><span class="prod-badge" id="integrityBadge">Checking…</span></div>
-    <div class="integrity-grid">
-      <div><span>Live records</span><b id="intRecords">—</b></div><div><span>Issue groups</span><b id="intIssues">—</b></div>
-      <div><span>Missing Heat</span><b id="intHeat">—</b></div><div><span>Missing Batch</span><b id="intBatch">—</b></div>
-      <div><span>Missing Grade</span><b id="intGrade">—</b></div><div><span>Missing Decision</span><b id="intDecision">—</b></div>
-      <div><span>Missing Date</span><b id="intDate">—</b></div><div><span>Duplicate Batch Groups</span><b id="intDup">—</b></div>
-    </div>
-  </div>
+<div><span class="health-dot" id="backupHealthDot"></span><b id="backupHealthText">Backup health: checking…</b><small id="backupHealthMeta">Automatic safety snapshots are available to admins.</small></div><div class="freshness-chip" id="dataFreshnessChip">🕒 Data freshness: checking…</div>
+<div class="health-actions"><span class="shortcut-key">?</span><span>Shortcuts</span><button class="btn" id="showShortcutsBtn" type="button">View</button></div>
 </div>
-<div class="admin-prod-grid admin-ops-grid full">
-  <div class="admin-prod-card">
-    <div class="prod-head"><div><span class="v29-kicker">DEPLOYMENT HEALTH</span><b>Runtime & build information</b></div><span class="prod-badge" id="deployHealthBadge">Checking…</span></div>
-    <div class="prod-metrics"><div><span>App Version</span><b id="deployVersion">—</b></div><div><span>Uptime</span><b id="deployUptime">—</b></div><div><span>Python</span><b id="deployPython">—</b></div></div>
-    <div class="prod-meta"><span id="deployEnv">—</span><span id="deployCommit">—</span></div>
-  </div>
-  <div class="admin-prod-card">
-    <div class="prod-head"><div><span class="v29-kicker">ERROR MONITOR</span><b>Read-only operational signals</b></div><span class="prod-badge" id="errorHealthBadge">Checking…</span></div>
-    <div class="prod-metrics"><div><span>Signals · 24h</span><b id="err24h">—</b></div><div><span>Import errors</span><b id="errImports">—</b></div><div><span>Recent signals</span><b id="errRecent">—</b></div></div>
-    <div class="prod-error-list" id="errorRecentList"><span>Checking…</span></div>
-  </div>
+<div class="shortcut-panel hidden" id="shortcutPanel">
+<b>Keyboard shortcuts</b><span><kbd>Ctrl</kbd> + <kbd>K</kbd> Focus search</span><span><kbd>R</kbd> Refresh data</span><span><kbd>Esc</kbd> Close search / panel</span><span><kbd>?</kbd> Show shortcuts</span>
 </div>
-<div class="panel full" id="dataQualityPanel"><h2>🧪 Data Quality Monitor</h2><p class="desc">Trust layer for the live dataset. Checks completeness, duplicates, date validity and controlled values.</p><div class="quality-grid"><div class="quality-score"><div><b id="dqScore">—</b><span>Data Quality Score</span><small id="dqCorrections">— records require correction</small></div></div><div class="issue-list"><button class="issue issue-btn" type="button" data-quality-issue="missing_heat_no">Missing Heat No <b id="dqHeat">—</b></button><button class="issue issue-btn" type="button" data-quality-issue="duplicate_batch">Duplicate Batch No <b id="dqDup">—</b></button><button class="issue issue-btn" type="button" data-quality-issue="missing_grade">Missing Grade <b id="dqGrade">—</b></button><button class="issue issue-btn" type="button" data-quality-issue="missing_decision">Missing Decision <b id="dqDecision">—</b></button><button class="issue issue-btn" type="button" data-quality-issue="invalid_weights">Missing Weight <b id="dqWeight">—</b></button><button class="issue issue-btn" type="button" data-quality-issue="invalid_dates">Invalid Dates <b id="dqDate">—</b></button><button class="issue issue-btn" type="button" data-quality-issue="missing_intensity">Missing Defect Intensity <b id="dqIntensity">—</b></button><button class="issue issue-btn" type="button" data-quality-issue="invalid_values">Invalid Values <b id="dqInvalid">—</b></button></div></div><div class="quality-drill-panel hidden" id="qualityDrillPanel"><div class="quality-drill-head"><b id="qualityDrillTitle">Quality issue details</b><button class="btn" id="closeQualityDrill" type="button">Close</button></div><div class="desc" id="qualityDrillMeta">—</div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Heat</th><th>Batch</th><th>Work Center</th><th>Grade</th><th>Defect</th><th>Decision</th></tr></thead><tbody id="qualityDrillBody"></tbody></table></div></div></div>
-<div class="panel full" id="kpiPanel"><h2>🎯 KPI Target Management</h2><p class="desc">Set Target, Warning and Critical bands. Higher-is-better and Lower-is-better logic automatically controls KPI card status and colour.</p><div class="form-grid"><div class="field"><label>KPI</label><select id="kt_label"></select></div><div class="field"><label>Target / High</label><input id="kt_target" type="number" step="any"></div><div class="field"><label>Warning / Mid</label><input id="kt_warning" type="number" step="any"></div><div class="field"><label>Critical / Low</label><input id="kt_critical" type="number" step="any"></div><div class="field"><label>Effective Date</label><input id="kt_effective_date" type="date"></div><div class="field"><label>Logic</label><select id="kt_direction"><option value="higher">Higher is better</option><option value="lower">Lower is better</option><option value="neutral">Neutral</option></select></div></div><div class="submit-row"><button class="btn primary" id="saveKpiTarget">Save KPI Target</button></div><div class="msg" id="kpiTargetMsg"></div><div class="table-wrap" style="margin-top:12px"><table style="min-width:800px"><thead><tr><th>KPI</th><th>Target</th><th>Warning</th><th>Critical</th><th>Logic</th><th>Last Updated</th></tr></thead><tbody id="kpiTargetsBody"></tbody></table></div></div><div class="table-wrap" style="margin-top:12px;max-height:260px"><table style="min-width:850px"><thead><tr><th>KPI</th><th>Old Target</th><th>New Target</th><th>Changed By</th><th>Effective Date</th><th>Changed At</th></tr></thead><tbody id="kpiHistoryBody"></tbody></table></div>
-    <div class="panel full" id="addRecordPanel"><h2>➕ Add One Record</h2><p class="desc">Enter a single disposition record. Month, week, quarter and financial year are automatically derived from Inspection Lot Date when left blank.</p>
-      <div class="form-grid">
-        <div class="field"><label>Insp Lot Date</label><input id="f_insp_lot_date" type="date"></div>
-        <div class="field"><label>HEAT NO *</label><input id="f_heat_no"></div>
-        <div class="field"><label>BATCH NO *</label><input id="f_batch_no" placeholder="Unique within HEAT NO"></div>
-        <div class="field"><label>Work Center</label><input id="f_work_center"></div>
-        <div class="field"><label>Grade</label><input id="f_grade"></div>
-        <div class="field"><label>Output Weight (MT)</label><input id="f_output_weight" type="number" min="0" step="0.001"></div>
-        <div class="field"><label>Main Defect</label><input id="f_main_defect" placeholder="Use NO DEFECT when applicable"></div>
-        <div class="field"><label>Defect Intensity</label><select id="f_defect_intensity"><option value="">Blank / Without Intensity</option><option>LIGHT</option><option>MEDIUM</option><option>DEEP</option></select></div>
-        <div class="field"><label>Quality Decision *</label><select id="f_quality_decision"><option value="">Select</option><option>PRIME</option><option>FOR NEXT PROCESS</option><option>SALVAGE</option><option>HOLD FOR DECISION</option><option>REJECT</option><option>RE-WORK</option><option>DIVERT</option></select></div>
-        <div class="field"><label>Month (optional)</label><input id="f_month" placeholder="Sep-2026"></div>
-        <div class="field"><label>Week (optional)</label><input id="f_week" placeholder="Wk of 07-Sep-26"></div>
-        <div class="field"><label>Quarter (optional)</label><input id="f_quarter" placeholder="Q2"></div>
-        <div class="field"><label>Financial Year (optional)</label><input id="f_financial_year" placeholder="FY 2026-27"></div>
-      </div>
-      <div class="submit-row"><button class="btn primary" id="addBtn">Save Record</button></div><div class="msg" id="addMsg"></div>
-    </div>
+<div class="admin-content-grid" id="adminContentGrid">
 
-    <div class="panel full" id="importPanel"><h2>📥 Monthly Data Import Wizard</h2><p class="desc">Upload Excel, CSV or TSV/TAB data. Nothing is written to the live database until you review the validation preview and click Confirm Import.</p><div class="wizard"><div class="step active" id="st1">1 Select</div><div class="step" id="st2">2 Detect</div><div class="step" id="st3">3 Validate</div><div class="step" id="st4">4 Duplicates</div><div class="step" id="st5">5 Preview</div><div class="step" id="st6">6 Confirm</div><div class="step" id="st7">7 Summary</div></div><div class="filebox" id="importFilebox"><input id="fileInput" type="file" accept=".xlsx,.xlsm,.tsv,.csv"><div class="filebox-hint">or drag &amp; drop a file here</div></div><div class="submit-row"><button class="btn primary" id="previewBtn">Validate & Preview</button><button class="btn primary hidden" id="confirmImportBtn">✓ Confirm Import</button><button class="btn hidden" id="cancelPreviewBtn">Cancel</button></div><div class="msg" id="importMsg"></div><div id="importResult"></div><div id="previewArea" class="hidden"><div class="stats"><div class="stat">Detected<b id="pDetected">—</b></div><div class="stat">Valid / Ready<b id="pValid">—</b></div><div class="stat">Duplicates<b id="pDuplicates">—</b></div><div class="stat">Updated Records<b id="pUpdated">—</b></div><div class="stat">Validation Errors<b id="pErrors">—</b></div><div class="stat">Missing Intensity<b id="pIntensity">—</b></div><div class="stat">Invalid Dates<b id="pDates">—</b></div><div class="stat">Unknown WC<b id="pWC">—</b></div><div class="stat">Unknown Grade<b id="pGrade">—</b></div></div><div class="table-wrap preview-table"><table style="min-width:1000px"><thead><tr><th>Date</th><th>Heat No</th><th>Batch No</th><th>Work Center</th><th>Grade</th><th>Weight</th><th>Main Defect</th><th>Intensity</th><th>Decision</th></tr></thead><tbody id="previewBody"></tbody></table></div><div class="import-diff hidden" id="importDiffPanel"><div class="v29-card-head"><div><span class="v29-kicker">IMPORT DIFF</span><b>What will change</b></div><span class="badge warn" id="importDiffCount">0 updated</span></div><div id="importDiffBody" class="import-diff-body"></div></div></div></div>
-    <div class="panel full" id="importHistoryPanel"><h2>🧾 Import History</h2><p class="desc">Previous confirmed imports with validation and duplicate statistics.</p><div class="table-wrap" style="max-height:300px"><table style="min-width:900px"><thead><tr><th>Time</th><th>File</th><th>Detected</th><th>Valid</th><th>Duplicates</th><th>Updated</th><th>Errors</th><th>Imported</th><th>By</th></tr></thead><tbody id="importHistoryBody"></tbody></table></div></div>
 
-    <div class="panel full" id="fishbonePanel"><h2>🐟 6M Fishbone Master Import</h2><p class="desc">Upload the 6M Defect Master workbook. Three sheets are read automatically, each optional except the first: <b>Master_Data</b> (Defect List + Man/Machine/Material/Method/Measurement/Environment Causes), <b>RCA_RootCause_Library</b> (Defect List, 6M Category, WHY-1..WHY-5/Root Cause, Action, Preventive Action, Role, Responsibility), and <b>Icon Color Coding</b> (6M category → recommended color). This is a separate, independent import from the monthly disposition data above. Re-uploading here fully refreshes the 6M Fishbone Analysis and RCA panels shown in the Quality Control Room, plus the diagram's icon/colors — no extra step needed once you confirm.</p>
-      <div class="filebox" id="fbFilebox"><input id="fbFileInput" type="file" accept=".xlsx,.xlsm"><div class="filebox-hint">or drag &amp; drop a file here</div></div>
-      <div class="submit-row"><button class="btn primary" id="fbImportBtn">Import 6M Fishbone Master</button></div>
-      <div class="msg" id="fbImportMsg"></div>
-      <div class="stats"><div class="stat">Defects in Master<b id="fbMasterCount">—</b></div><div class="stat">Last Updated<b id="fbMasterUpdated">—</b></div></div>
-      <div class="table-wrap" style="max-height:260px;margin-top:10px"><table style="min-width:900px"><thead><tr><th>Time</th><th>File</th><th>Detected</th><th>Imported</th><th>By</th></tr></thead><tbody id="fbHistoryBody"></tbody></table></div>
-    </div>
 
-    <div class="panel full" id="fishboneMapPanel"><h2>🔗 6M Fishbone Defect Mapping</h2><p class="desc">Disposition defect names don't always match the 6M master's spelling exactly (e.g. "INTERWRAP SCRATCHES (R" vs "Interwrap Scratch (Rolled)"). Defects below are among your top-quantity defects and either have no confident match, or only a fuzzy/approximate one — map them to the correct 6M master defect so the QCR fishbone tab shows the right causes.</p>
-      <div class="table-wrap" style="max-height:280px"><table style="min-width:800px"><thead><tr><th>Disposition Defect</th><th>Qty (MT)</th><th>Current Match</th><th>Map To</th><th></th></tr></thead><tbody id="fbUnmappedBody"></tbody></table></div>
-      <h3 style="font-size:14.5px;color:var(--navy);margin:16px 0 8px">Saved Mappings</h3>
-      <div class="table-wrap" style="max-height:220px"><table style="min-width:700px"><thead><tr><th>Disposition Defect</th><th>Mapped 6M Defect</th><th>By</th><th>Action</th></tr></thead><tbody id="fbAliasBody"></tbody></table></div>
-    </div>
-    <div class="panel full" id="databasePanel"><h2>📊 Database Status</h2><p class="desc">Current database size and latest records.</p><div class="stats">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div aria-labelledby="homePanel-title" class="panel full admin-section" data-admin-section-order="1" id="homePanel"><h2 id="homePanel-title" tabindex="-1">🏠 Admin Control Center</h2><p class="desc">System overview, data health, usage and security at a glance.</p><div class="admin-kpi-grid"><div class="admin-kpi"><div class="label">Total Records (Live)</div><div class="value" id="hTotalRecords">—</div></div><div class="admin-kpi"><div class="label">Last Data Update</div><div class="value" id="hLastData">—</div></div><div class="admin-kpi"><div class="label">Database Size</div><div class="value" id="hDbSize">—</div></div><div class="admin-kpi"><div class="label">Active Admins</div><div class="value" id="hAdmins">—</div></div><div class="admin-kpi"><div class="label">Dashboard Views</div><div class="value" id="hViews">—</div></div><div class="admin-kpi"><div class="label">Last Login</div><div class="value" id="hLastLogin">—</div></div><div class="admin-kpi"><div class="label">Failed Login Attempts</div><div class="value" id="hFailed">—</div></div></div><div class="admin-prod-grid full">
+<div class="admin-prod-card" id="prodHealthCard">
+<div class="prod-head"><div><span class="v29-kicker">PRODUCTION HEALTH</span><b>Live database connection</b></div><span class="prod-badge" id="prodHealthBadge">Checking…</span></div>
+<div class="prod-metrics"><div><span>Provider</span><b id="prodProvider">—</b></div><div><span>Round-trip</span><b id="prodLatency">—</b></div><div><span>DB Version</span><b id="prodVersion">—</b></div></div>
+<div class="prod-meta"><span id="prodRender">—</span><span id="prodCommit">—</span></div>
+</div>
+<div class="admin-prod-card">
+<div class="prod-head"><div><span class="v29-kicker">DATA INTEGRITY</span><b>Read-only live checks</b></div><span class="prod-badge" id="integrityBadge">Checking…</span></div>
+<div class="integrity-grid">
+<div><span>Live records</span><b id="intRecords">—</b></div><div><span>Issue groups</span><b id="intIssues">—</b></div>
+<div><span>Missing Heat</span><b id="intHeat">—</b></div><div><span>Missing Batch</span><b id="intBatch">—</b></div>
+<div><span>Missing Grade</span><b id="intGrade">—</b></div><div><span>Missing Decision</span><b id="intDecision">—</b></div>
+<div><span>Missing Date</span><b id="intDate">—</b></div><div><span>Duplicate Batch Groups</span><b id="intDup">—</b></div>
+</div>
+</div>
+</div><div class="admin-prod-grid admin-ops-grid full">
+<div class="admin-prod-card">
+<div class="prod-head"><div><span class="v29-kicker">DEPLOYMENT HEALTH</span><b>Runtime &amp; build information</b></div><span class="prod-badge" id="deployHealthBadge">Checking…</span></div>
+<div class="prod-metrics"><div><span>App Version</span><b id="deployVersion">—</b></div><div><span>Uptime</span><b id="deployUptime">—</b></div><div><span>Python</span><b id="deployPython">—</b></div></div>
+<div class="prod-meta"><span id="deployEnv">—</span><span id="deployCommit">—</span></div>
+</div>
+<div class="admin-prod-card">
+<div class="prod-head"><div><span class="v29-kicker">ERROR MONITOR</span><b>Read-only operational signals</b></div><span class="prod-badge" id="errorHealthBadge">Checking…</span></div>
+<div class="prod-metrics"><div><span>Signals · 24h</span><b id="err24h">—</b></div><div><span>Import errors</span><b id="errImports">—</b></div><div><span>Recent signals</span><b id="errRecent">—</b></div></div>
+<div class="prod-error-list" id="errorRecentList"><span>Checking…</span></div>
+</div>
+</div></div><div aria-labelledby="dataQualityPanel-title" class="panel full admin-section" data-admin-section-order="2" id="dataQualityPanel"><h2 id="dataQualityPanel-title" tabindex="-1">🧪 Data Quality Monitor</h2><p class="desc">Trust layer for the live dataset. Checks completeness, duplicates, date validity and controlled values.</p><div class="quality-grid"><div class="quality-score"><div><b id="dqScore">—</b><span>Data Quality Score</span><small id="dqCorrections">— records require correction</small></div></div><div class="issue-list"><button class="issue issue-btn" data-quality-issue="missing_heat_no" type="button">Missing Heat No <b id="dqHeat">—</b></button><button class="issue issue-btn" data-quality-issue="duplicate_batch" type="button">Duplicate Batch No <b id="dqDup">—</b></button><button class="issue issue-btn" data-quality-issue="missing_grade" type="button">Missing Grade <b id="dqGrade">—</b></button><button class="issue issue-btn" data-quality-issue="missing_decision" type="button">Missing Decision <b id="dqDecision">—</b></button><button class="issue issue-btn" data-quality-issue="invalid_weights" type="button">Missing Weight <b id="dqWeight">—</b></button><button class="issue issue-btn" data-quality-issue="invalid_dates" type="button">Invalid Dates <b id="dqDate">—</b></button><button class="issue issue-btn" data-quality-issue="missing_intensity" type="button">Missing Defect Intensity <b id="dqIntensity">—</b></button><button class="issue issue-btn" data-quality-issue="invalid_values" type="button">Invalid Values <b id="dqInvalid">—</b></button></div></div><div class="quality-drill-panel hidden" id="qualityDrillPanel"><div class="quality-drill-head"><b id="qualityDrillTitle">Quality issue details</b><button class="btn" id="closeQualityDrill" type="button">Close</button></div><div class="desc" id="qualityDrillMeta">—</div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Heat</th><th>Batch</th><th>Work Center</th><th>Grade</th><th>Defect</th><th>Decision</th></tr></thead><tbody id="qualityDrillBody"></tbody></table></div></div></div><div aria-labelledby="kpiPanel-title" class="panel full admin-section" data-admin-section-order="3" id="kpiPanel"><h2 id="kpiPanel-title" tabindex="-1">🎯 KPI Target Management</h2><p class="desc">Set Target, Warning and Critical bands. Higher-is-better and Lower-is-better logic automatically controls KPI card status and colour.</p><div class="form-grid"><div class="field"><label>KPI</label><select id="kt_label"></select></div><div class="field"><label>Target / High</label><input id="kt_target" step="any" type="number"/></div><div class="field"><label>Warning / Mid</label><input id="kt_warning" step="any" type="number"/></div><div class="field"><label>Critical / Low</label><input id="kt_critical" step="any" type="number"/></div><div class="field"><label>Effective Date</label><input id="kt_effective_date" type="date"/></div><div class="field"><label>Logic</label><select id="kt_direction"><option value="higher">Higher is better</option><option value="lower">Lower is better</option><option value="neutral">Neutral</option></select></div></div><div class="submit-row"><button class="btn primary" id="saveKpiTarget">Save KPI Target</button></div><div class="msg" id="kpiTargetMsg"></div><div class="table-wrap" style="margin-top:12px"><table style="min-width:800px"><thead><tr><th>KPI</th><th>Target</th><th>Warning</th><th>Critical</th><th>Logic</th><th>Last Updated</th></tr></thead><tbody id="kpiTargetsBody"></tbody></table></div><div class="table-wrap" style="margin-top:12px;max-height:260px"><table style="min-width:850px"><thead><tr><th>KPI</th><th>Old Target</th><th>New Target</th><th>Changed By</th><th>Effective Date</th><th>Changed At</th></tr></thead><tbody id="kpiHistoryBody"></tbody></table></div></div><div aria-labelledby="addRecordPanel-title" class="panel full admin-section" data-admin-section-order="4" id="addRecordPanel"><h2 id="addRecordPanel-title" tabindex="-1">➕ Add One Record</h2><p class="desc">Enter a single disposition record. Month, week, quarter and financial year are automatically derived from Inspection Lot Date when left blank.</p>
+<div class="form-grid">
+<div class="field"><label>Insp Lot Date</label><input id="f_insp_lot_date" type="date"/></div>
+<div class="field"><label>HEAT NO *</label><input id="f_heat_no"/></div>
+<div class="field"><label>BATCH NO *</label><input id="f_batch_no" placeholder="Unique within HEAT NO"/></div>
+<div class="field"><label>Work Center</label><input id="f_work_center"/></div>
+<div class="field"><label>Grade</label><input id="f_grade"/></div>
+<div class="field"><label>Output Weight (MT)</label><input id="f_output_weight" min="0" step="0.001" type="number"/></div>
+<div class="field"><label>Main Defect</label><input id="f_main_defect" placeholder="Use NO DEFECT when applicable"/></div>
+<div class="field"><label>Defect Intensity</label><select id="f_defect_intensity"><option value="">Blank / Without Intensity</option><option>LIGHT</option><option>MEDIUM</option><option>DEEP</option></select></div>
+<div class="field"><label>Quality Decision *</label><select id="f_quality_decision"><option value="">Select</option><option>PRIME</option><option>FOR NEXT PROCESS</option><option>SALVAGE</option><option>HOLD FOR DECISION</option><option>REJECT</option><option>RE-WORK</option><option>DIVERT</option></select></div>
+<div class="field"><label>Month (optional)</label><input id="f_month" placeholder="Sep-2026"/></div>
+<div class="field"><label>Week (optional)</label><input id="f_week" placeholder="Wk of 07-Sep-26"/></div>
+<div class="field"><label>Quarter (optional)</label><input id="f_quarter" placeholder="Q2"/></div>
+<div class="field"><label>Financial Year (optional)</label><input id="f_financial_year" placeholder="FY 2026-27"/></div>
+</div>
+<div class="submit-row"><button class="btn primary" id="addBtn">Save Record</button></div><div class="msg" id="addMsg"></div>
+</div><div aria-labelledby="importPanel-title" class="panel full admin-section" data-admin-section-order="5" id="importPanel"><h2 id="importPanel-title" tabindex="-1">📥 Monthly Data Import Wizard</h2><p class="desc">Upload Excel, CSV or TSV/TAB data. Nothing is written to the live database until you review the validation preview and click Confirm Import.</p><div class="wizard"><div class="step active" id="st1">1 Select</div><div class="step" id="st2">2 Detect</div><div class="step" id="st3">3 Validate</div><div class="step" id="st4">4 Duplicates</div><div class="step" id="st5">5 Preview</div><div class="step" id="st6">6 Confirm</div><div class="step" id="st7">7 Summary</div></div><div class="filebox" id="importFilebox"><input accept=".xlsx,.xlsm,.tsv,.csv" id="fileInput" type="file"/><div class="filebox-hint">or drag &amp; drop a file here</div></div><div class="submit-row"><button class="btn primary" id="previewBtn">Validate &amp; Preview</button><button class="btn primary hidden" id="confirmImportBtn">✓ Confirm Import</button><button class="btn hidden" id="cancelPreviewBtn">Cancel</button></div><div class="msg" id="importMsg"></div><div id="importResult"></div><div class="hidden" id="previewArea"><div class="stats"><div class="stat">Detected<b id="pDetected">—</b></div><div class="stat">Valid / Ready<b id="pValid">—</b></div><div class="stat">Duplicates<b id="pDuplicates">—</b></div><div class="stat">Updated Records<b id="pUpdated">—</b></div><div class="stat">Validation Errors<b id="pErrors">—</b></div><div class="stat">Missing Intensity<b id="pIntensity">—</b></div><div class="stat">Invalid Dates<b id="pDates">—</b></div><div class="stat">Unknown WC<b id="pWC">—</b></div><div class="stat">Unknown Grade<b id="pGrade">—</b></div></div><div class="table-wrap preview-table"><table style="min-width:1000px"><thead><tr><th>Date</th><th>Heat No</th><th>Batch No</th><th>Work Center</th><th>Grade</th><th>Weight</th><th>Main Defect</th><th>Intensity</th><th>Decision</th></tr></thead><tbody id="previewBody"></tbody></table></div><div class="import-diff hidden" id="importDiffPanel"><div class="v29-card-head"><div><span class="v29-kicker">IMPORT DIFF</span><b>What will change</b></div><span class="badge warn" id="importDiffCount">0 updated</span></div><div class="import-diff-body" id="importDiffBody"></div></div></div></div><div aria-labelledby="importHistoryPanel-title" class="panel full admin-section" data-admin-section-order="6" id="importHistoryPanel"><h2 id="importHistoryPanel-title" tabindex="-1">🧾 Import History</h2><p class="desc">Previous confirmed imports with validation and duplicate statistics.</p><div class="table-wrap" style="max-height:300px"><table style="min-width:900px"><thead><tr><th>Time</th><th>File</th><th>Detected</th><th>Valid</th><th>Duplicates</th><th>Updated</th><th>Errors</th><th>Imported</th><th>By</th></tr></thead><tbody id="importHistoryBody"></tbody></table></div></div><div aria-labelledby="recordsPanel-title" class="panel full admin-section" data-admin-section-order="7" id="recordsPanel"><h2 id="recordsPanel-title" tabindex="-1">🗃️ Latest Records</h2><p class="desc">Newest 100 records by default. Search by text and/or an inspection-date range to isolate exactly the records you need — e.g. everything a specific import added — then export or permanently delete the selection. The total shown in Admin is read live from the active database; search can query the live dataset without changing it. Delete is permanently applied to the live database.</p><div class="record-filter-row"><input id="recSearchText" maxlength="200" placeholder="Search ID / Heat / Batch / Work Center / Grade / Defect / Decision…" type="text"/><label>From <input id="recSearchFrom" type="date"/></label><label>To <input id="recSearchTo" type="date"/></label><button class="btn" id="recSearchBtn" type="button">🔍 Search</button><button class="btn" id="recSearchClear" type="button">Clear</button><span id="recordsMatchCount"></span><span aria-live="polite" class="record-search-msg" id="recordsSearchMsg" role="status"></span></div><div class="record-tools"><span id="selectedRecordCount">0 selected</span><button class="btn" id="exportSelectedRecords" type="button">⬇ Export Selected</button><button class="delete" id="deleteSelectedRecords" type="button">🗑 Delete Selected</button><button class="btn" id="clearSelectedRecords" type="button">Clear Selection</button></div><div class="table-wrap"><table><thead><tr><th><input aria-label="Select all visible records" id="selectAllRecords" type="checkbox"/></th><th>ID</th><th>Date</th><th>HEAT NO</th><th>BATCH NO</th><th>Work Center</th><th>Grade</th><th>Weight MT</th><th>Main Defect</th><th>Intensity</th><th>Decision</th><th>Month</th><th>Week</th><th>Quarter</th><th>FY</th><th>Action</th></tr></thead><tbody id="recordsBody"></tbody></table></div></div><div aria-labelledby="fishbonePanel-title" class="panel full admin-section" data-admin-section-order="8" id="fishbonePanel"><h2 id="fishbonePanel-title" tabindex="-1">🐟 6M Fishbone Master Import</h2><p class="desc">Upload the 6M Defect Master workbook. Three sheets are read automatically, each optional except the first: <b>Master_Data</b> (Defect List + Man/Machine/Material/Method/Measurement/Environment Causes), <b>RCA_RootCause_Library</b> (Defect List, 6M Category, WHY-1..WHY-5/Root Cause, Action, Preventive Action, Role, Responsibility), and <b>Icon Color Coding</b> (6M category → recommended color). This is a separate, independent import from the monthly disposition data above. Re-uploading here fully refreshes the 6M Fishbone Analysis and RCA panels shown in the Quality Control Room, plus the diagram's icon/colors — no extra step needed once you confirm.</p>
+<div class="filebox" id="fbFilebox"><input accept=".xlsx,.xlsm" id="fbFileInput" type="file"/><div class="filebox-hint">or drag &amp; drop a file here</div></div>
+<div class="submit-row"><button class="btn primary" id="fbImportBtn">Import 6M Fishbone Master</button></div>
+<div class="msg" id="fbImportMsg"></div>
+<div class="stats"><div class="stat">Defects in Master<b id="fbMasterCount">—</b></div><div class="stat">Last Updated<b id="fbMasterUpdated">—</b></div></div>
+<div class="table-wrap" style="max-height:260px;margin-top:10px"><table style="min-width:900px"><thead><tr><th>Time</th><th>File</th><th>Detected</th><th>Imported</th><th>By</th></tr></thead><tbody id="fbHistoryBody"></tbody></table></div>
+</div><div aria-labelledby="fishboneMapPanel-title" class="panel full admin-section" data-admin-section-order="9" id="fishboneMapPanel"><h2 id="fishboneMapPanel-title" tabindex="-1">🔗 6M Fishbone Defect Mapping</h2><p class="desc">Disposition defect names don't always match the 6M master's spelling exactly (e.g. "INTERWRAP SCRATCHES (R" vs "Interwrap Scratch (Rolled)"). Defects below are among your top-quantity defects and either have no confident match, or only a fuzzy/approximate one — map them to the correct 6M master defect so the QCR fishbone tab shows the right causes.</p>
+<div class="table-wrap" style="max-height:280px"><table style="min-width:800px"><thead><tr><th>Disposition Defect</th><th>Qty (MT)</th><th>Current Match</th><th>Map To</th><th></th></tr></thead><tbody id="fbUnmappedBody"></tbody></table></div>
+<h3 style="font-size:14.5px;color:var(--navy);margin:16px 0 8px">Saved Mappings</h3>
+<div class="table-wrap" style="max-height:220px"><table style="min-width:700px"><thead><tr><th>Disposition Defect</th><th>Mapped 6M Defect</th><th>By</th><th>Action</th></tr></thead><tbody id="fbAliasBody"></tbody></table></div>
+</div><div aria-labelledby="commandCenterPanel-title" class="panel full admin-section" data-admin-section-order="10" id="commandCenterPanel"><h2 id="commandCenterPanel-title" tabindex="-1">🧭 Admin Command Center</h2><p class="desc">A read-only production cockpit. Every indicator is derived from the active database or runtime; no automatic data changes are performed here.</p><div class="command-grid"><button class="command-card" data-go="dataQualityPanel"><span class="command-icon">🧪</span><b>Data Quality</b><small id="ccQuality">Checking…</small></button><button class="command-card" data-go="databasePanel"><span class="command-icon">🗃️</span><b>Database</b><small id="ccDatabase">Checking…</small></button><button class="command-card" data-go="backupsPanel"><span class="command-icon">🗄️</span><b>Backups</b><small id="ccBackups">Checking…</small></button><button class="command-card" data-go="securityPanel"><span class="command-icon">🛡️</span><b>Security</b><small id="ccSecurity">Checking…</small></button><button class="command-card" data-go="performancePanel"><span class="command-icon">⚡</span><b>Performance</b><small id="ccPerformance">Checking…</small></button><button class="command-card" data-go="auditExplorerPanel"><span class="command-icon">🔎</span><b>Audit Explorer</b><small id="ccAudit">Open investigation view</small></button></div><div class="service-matrix" id="serviceMatrix"><div class="service-cell" id="svcDatabase"><span>🗃️</span><b>Database</b><small>Checking…</small></div><div class="service-cell" id="svcAuthentication"><span>🔐</span><b>Authentication</b><small>Checking…</small></div><div class="service-cell" id="svcBackup"><span>🗄️</span><b>Backup</b><small>Checking…</small></div><div class="service-cell" id="svcMonitoring"><span>📡</span><b>Monitoring</b><small>Checking…</small></div></div><div class="command-status"><span class="status-led" id="ccLed"></span><b id="ccStatus">Running production checks…</b><span id="ccStatusMeta">Read-only monitoring</span></div></div><div aria-labelledby="databasePanel-title" class="panel full admin-section" data-admin-section-order="11" id="databasePanel"><h2 id="databasePanel-title" tabindex="-1">📊 Database Status</h2><p class="desc">Current database size and latest records.</p><div class="stats">
 <div class="stat">Total Records<b id="totalRecords">—</b></div>
 <div class="stat">Database<b id="dbProvider">—</b></div>
 <div class="stat">Storage Used<b id="dbUsage">—</b></div>
@@ -527,35 +532,17 @@ body{min-width:0;}
 </div>
 <div class="db-meter"><div class="db-meter-fill" id="dbMeter"></div></div>
 <div class="db-status" id="dbStatus">Checking database…</div>
-<button class="btn" id="refreshBtn">Refresh Records</button> <button class="btn" id="backupBtn">⬇ Export Disposition CSV</button></div>
-    <div class="panel full" id="backupsPanel"><h2>🗄️ Backups</h2><p class="desc">A full snapshot (disposition data + 6M Fishbone Master + aliases + KPI targets) is saved automatically after every import. Download copies to your own computer regularly for true off-server safety — a local database file alone can't protect against losing the whole server.</p>
-      <div class="submit-row"><button class="btn primary" id="createBackupBtn">🗄️ Create Backup Now</button> <label class="btn" style="cursor:pointer">⬆ Restore From File<input type="file" id="restoreFileInput" accept=".gz,.json" style="display:none"></label></div>
-      <div class="msg" id="backupMsg"></div>
-      <div class="table-wrap" style="max-height:320px"><table style="min-width:700px"><thead><tr><th>Backup</th><th>Reason</th><th>Size</th><th>Created</th><th>Action</th></tr></thead><tbody id="backupsBody"></tbody></table></div>
-    </div>
-    <div class="panel full" id="securityPanel"><h2>🛡️ Admin Security</h2><div class="security-v29"><div class="stat">Active Admin Sessions<b id="secActiveSessions">—</b></div><div class="stat">Session Lifetime<b id="secSessionTTL">—</b></div><div class="stat">Login Attempt Limit<b id="secLoginLimit">—</b></div><button class="btn" id="refreshSecurityStatus" type="button">🔄 Refresh Security Status</button></div><p class="desc">Change the current administrator password. Password policy: minimum 12 characters with uppercase, lowercase, number and special character. Existing sessions on other devices are revoked after a password change.</p><div class="form-grid"><div class="field"><label>Current Password *</label><input id="currentAdminPassword" type="password" autocomplete="current-password"></div><div class="field"><label>New Password *</label><input id="newAdminPassword" type="password" autocomplete="new-password" minlength="12"></div><div class="field"><label>Confirm New Password *</label><input id="confirmAdminPassword" type="password" autocomplete="new-password" minlength="12"></div></div><div class="submit-row"><button class="btn primary" id="changePasswordBtn">🔑 Change Admin Password</button></div><div class="msg" id="securityMsg"></div><div class="table-wrap session-table" style="margin-top:12px;max-height:260px"><table><thead><tr><th>User</th><th>Role</th><th>Current</th><th>Expires In</th><th>Action</th></tr></thead><tbody id="securitySessionsBody"></tbody></table></div></div>
-    <div class="panel full" id="usersPanel"><h2>👥 User & Role Management</h2><p class="desc">Create named accounts with least-privilege roles: QA Manager, QA Engineer, Viewer, Importer and Auditor. Passwords are stored as one-way hashes and are never logged. Admin-created passwords must be 12+ characters with uppercase, lowercase, number and special character.</p>
-      <div class="form-grid"><div class="field"><label>Username / Employee ID *</label><input id="u_username"></div><div class="field"><label>Display Name *</label><input id="u_display_name"></div><div class="field"><label>Password *</label><input id="u_password" type="password" minlength="12" autocomplete="new-password"></div><div class="field"><label>Role</label><select id="u_role"><option value="viewer">Viewer</option><option value="qa_manager">QA Manager</option><option value="qa_engineer">QA Engineer</option><option value="importer">Importer</option><option value="auditor">Auditor</option><option value="admin">Super Admin</option></select></div></div><div class="submit-row"><button class="btn primary" id="addUserBtn">👤 Create User</button></div><div class="msg" id="userMsg"></div><div class="table-wrap" style="max-height:280px"><table style="min-width:700px"><thead><tr><th>Username</th><th>Display Name</th><th>Role</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody id="usersBody"></tbody></table></div>
-    </div>
-    <div class="panel full" id="auditTrailPanel"><h2>🔐 Sensitive Action Audit Trail</h2><p class="desc">User → Action → Date/Time → IP → Record. Visible to Super Admin and Auditor roles.</p><div class="table-wrap" style="max-height:360px"><table style="min-width:1000px"><thead><tr><th>User</th><th>Role</th><th>Action</th><th>Record</th><th>Date / Time</th><th>IP</th><th>Details</th></tr></thead><tbody id="auditTrailBody"></tbody></table></div></div>
-    <div class="panel full" id="validationPanel"><h2>🧩 Quality Validation Rules</h2><p class="desc">Transparent, auditable rules used by the Admin Data Quality Monitor. This panel is configuration-safe: viewing rules never changes disposition records.</p><div class="table-wrap"><table style="min-width:850px"><thead><tr><th>Rule</th><th>Field</th><th>Severity</th><th>Description</th><th>Status</th></tr></thead><tbody id="validationRulesBody"></tbody></table></div></div>
-    <div class="panel full" id="auditAnalyticsPanel"><h2>📊 Audit Analytics</h2><p class="desc">Understand what administrators are doing without opening the full audit log.</p><div class="stats"><div class="stat">Total Audit Events<b id="aaTotal">—</b></div><div class="stat">Last 24 Hours<b id="aa24h">—</b></div></div><div class="audit-analytics-grid"><div><h3>Top Actions</h3><div class="table-wrap"><table><thead><tr><th>Action</th><th>Count</th></tr></thead><tbody id="aaActionsBody"></tbody></table></div></div><div><h3>Most Active Users</h3><div class="table-wrap"><table><thead><tr><th>User</th><th>Events</th></tr></thead><tbody id="aaUsersBody"></tbody></table></div></div></div></div>
-    <div class="panel full" id="commandCenterPanel"><h2>🧭 Admin Command Center</h2><p class="desc">A read-only production cockpit. Every indicator is derived from the active database or runtime; no automatic data changes are performed here.</p><div class="command-grid"><button class="command-card" data-go="dataQualityPanel"><span class="command-icon">🧪</span><b>Data Quality</b><small id="ccQuality">Checking…</small></button><button class="command-card" data-go="databasePanel"><span class="command-icon">🗃️</span><b>Database</b><small id="ccDatabase">Checking…</small></button><button class="command-card" data-go="backupsPanel"><span class="command-icon">🗄️</span><b>Backups</b><small id="ccBackups">Checking…</small></button><button class="command-card" data-go="securityPanel"><span class="command-icon">🛡️</span><b>Security</b><small id="ccSecurity">Checking…</small></button><button class="command-card" data-go="performancePanel"><span class="command-icon">⚡</span><b>Performance</b><small id="ccPerformance">Checking…</small></button><button class="command-card" data-go="auditExplorerPanel"><span class="command-icon">🔎</span><b>Audit Explorer</b><small id="ccAudit">Open investigation view</small></button></div><div class="service-matrix" id="serviceMatrix"><div class="service-cell" id="svcDatabase"><span>🗃️</span><b>Database</b><small>Checking…</small></div><div class="service-cell" id="svcAuthentication"><span>🔐</span><b>Authentication</b><small>Checking…</small></div><div class="service-cell" id="svcBackup"><span>🗄️</span><b>Backup</b><small>Checking…</small></div><div class="service-cell" id="svcMonitoring"><span>📡</span><b>Monitoring</b><small>Checking…</small></div></div><div class="command-status"><span class="status-led" id="ccLed"></span><b id="ccStatus">Running production checks…</b><span id="ccStatusMeta">Read-only monitoring</span></div></div>
-
-    <div class="panel full" id="performancePanel"><h2>⚡ PostgreSQL / DB Performance</h2><p class="desc">Safe read-only latency checks. No query plans, locks or session termination are requested, so this panel remains compatible with restricted hosted PostgreSQL permissions.</p><div class="stats"><div class="stat">🔌 Provider<b id="perfProvider">—</b></div><div class="stat">⚡ Round-trip<b id="perfLatency">—</b></div><div class="stat">🔁 Second Check<b id="perfLatency2">—</b></div><div class="stat">📈 Status<b id="perfStatus">—</b></div></div><div class="perf-bar"><span id="perfBar"></span></div><div class="submit-row"><button class="btn" id="refreshPerformanceBtn" type="button">🔄 Refresh Performance</button></div><div class="msg" id="perfMsg"></div></div>
-
-    <div class="panel full" id="auditExplorerPanel"><h2>🔎 Audit Explorer</h2><p class="desc">Investigate sensitive actions without modifying the audit trail. Filters are applied in the browser to the already-authorized audit dataset.</p><div class="audit-filter-grid"><div class="field"><label>🔍 Search</label><input id="auditSearch" placeholder="user, action, record, IP or details"></div><div class="field"><label>⚙️ Action</label><select id="auditActionFilter"><option value="">All actions</option></select></div><div class="field"><label>👤 User</label><input id="auditUserFilter" placeholder="username"></div><div class="field"><label>🗓️ Date</label><input id="auditDateFilter" type="date"></div></div><div class="submit-row"><button class="btn" id="auditFilterBtn" type="button">🔎 Apply Filters</button><button class="btn" id="auditClearBtn" type="button">✕ Clear</button></div><div class="stats"><div class="stat">📋 Matching Events<b id="auditMatchCount">0</b></div><div class="stat">⚠️ Sensitive Actions<b id="auditSensitiveCount">0</b></div></div><div class="table-wrap" style="max-height:360px"><table style="min-width:1000px"><thead><tr><th>👤 User</th><th>🛡️ Role</th><th>⚙️ Action</th><th>🆔 Record</th><th>🕒 Date / Time</th><th>🌐 IP</th><th>📝 Details</th></tr></thead><tbody id="auditExplorerBody"></tbody></table></div></div>
-
-    <div class="panel full" id="recoveryPanel"><h2>🛟 Recovery Center</h2><p class="desc">Recovery readiness only. This section verifies backup structure and counts; it does <b>not</b> restore, delete, migrate or overwrite data.</p><div class="recovery-grid"><div class="recovery-card"><span>🗄️</span><div><b>Backup readiness</b><small id="recoveryBackupStatus">Checking…</small></div></div><div class="recovery-card"><span>🧮</span><div><b>Snapshot coverage</b><small id="recoveryCoverage">—</small></div></div><div class="recovery-card"><span>🔐</span><div><b>Recovery policy</b><small>Manual restore only • Admin confirmation required</small></div></div></div><div class="recovery-note">🛡️ <b>Safety:</b> verification is read-only. A restore can only be initiated from the existing Backup workflow.</div><div class="submit-row"><button class="btn" id="verifyLatestBackupBtn" type="button">✅ Verify Latest Backup</button><button class="btn" id="openBackupsBtn" type="button">🗄️ Open Backups</button></div><div class="msg" id="recoveryMsg"></div></div>
-
-    <div class="panel full" id="activityPanel"><h2>📈 Dashboard Activity</h2><div class="submit-row" style="margin-top:-4px;margin-bottom:8px"><button class="btn" id="exportAuditBtn">⬇ Export Audit Log</button></div><p class="desc">Dashboard is currently open without viewer login. Each visit/action is recorded with the visitor IP address. Employee login can be enabled later if required.</p><div class="activity-timeline" id="activityTimeline"></div><div class="stats"><div class="stat">Configured Users<b id="aTotalUsers">—</b></div><div class="stat">Unique IPs<b id="aUniqueIps">—</b></div><div class="stat">Active IPs Today<b id="aActiveToday">—</b></div><div class="stat">Dashboard Opens Today<b id="aOpensToday">—</b></div><div class="stat">Opens — 7 Days<b id="aOpens7">—</b></div><div class="stat">Exports — 30 Days<b id="aExports30">—</b></div></div><div class="table-wrap" style="max-height:360px"><table style="min-width:850px"><thead><tr><th>IP Address</th><th>Dashboard Opens</th><th>Last Seen</th><th>Browser / Device</th></tr></thead><tbody id="activityUsersBody"></tbody></table></div><h3 style="font-size:14.5px;color:var(--navy);margin:18px 0 8px">Recent Activity</h3><div class="table-wrap" style="max-height:360px"><table style="min-width:1000px"><thead><tr><th>IP Address</th><th>User</th><th>Event</th><th>Tab</th><th>Time</th></tr></thead><tbody id="recentActivityBody"></tbody></table></div></div>
-    <div class="panel full" id="recordsPanel"><h2>🗃️ Latest Records</h2><p class="desc">Newest 100 records by default. Search by text and/or an inspection-date range to isolate exactly the records you need — e.g. everything a specific import added — then export or permanently delete the selection. The total shown in Admin is read live from the active database; search can query the live dataset without changing it. Delete is permanently applied to the live database.</p><div class="record-filter-row"><input type="text" id="recSearchText" placeholder="Search ID / Heat / Batch / Work Center / Grade / Defect / Decision…"><label>From <input type="date" id="recSearchFrom"></label><label>To <input type="date" id="recSearchTo"></label><button class="btn" id="recSearchBtn" type="button">🔍 Search</button><button class="btn" id="recSearchClear" type="button">Clear</button><span id="recordsMatchCount"></span></div><div class="record-tools"><span id="selectedRecordCount">0 selected</span><button class="btn" id="exportSelectedRecords" type="button">⬇ Export Selected</button><button class="delete" id="deleteSelectedRecords" type="button">🗑 Delete Selected</button><button class="btn" id="clearSelectedRecords" type="button">Clear Selection</button></div><div class="table-wrap"><table><thead><tr><th><input type="checkbox" id="selectAllRecords" aria-label="Select all visible records"></th><th>ID</th><th>Date</th><th>HEAT NO</th><th>BATCH NO</th><th>Work Center</th><th>Grade</th><th>Weight MT</th><th>Main Defect</th><th>Intensity</th><th>Decision</th><th>Month</th><th>Week</th><th>Quarter</th><th>FY</th><th>Action</th></tr></thead><tbody id="recordsBody"></tbody></table></div></div>
-          </div>
-        </main>
-      </div>
-  </section>
+<button class="btn" id="refreshBtn">Refresh Records</button> <button class="btn" id="backupBtn">⬇ Export Disposition CSV</button></div><div aria-labelledby="performancePanel-title" class="panel full admin-section" data-admin-section-order="12" id="performancePanel"><h2 id="performancePanel-title" tabindex="-1">⚡ PostgreSQL / DB Performance</h2><p class="desc">Safe read-only latency checks. No query plans, locks or session termination are requested, so this panel remains compatible with restricted hosted PostgreSQL permissions.</p><div class="stats"><div class="stat">🔌 Provider<b id="perfProvider">—</b></div><div class="stat">⚡ Round-trip<b id="perfLatency">—</b></div><div class="stat">🔁 Second Check<b id="perfLatency2">—</b></div><div class="stat">📈 Status<b id="perfStatus">—</b></div></div><div class="perf-bar"><span id="perfBar"></span></div><div class="submit-row"><button class="btn" id="refreshPerformanceBtn" type="button">🔄 Refresh Performance</button></div><div class="msg" id="perfMsg"></div></div><div aria-labelledby="backupsPanel-title" class="panel full admin-section" data-admin-section-order="13" id="backupsPanel"><h2 id="backupsPanel-title" tabindex="-1">🗄️ Backups</h2><p class="desc">A full snapshot (disposition data + 6M Fishbone Master + aliases + KPI targets) is saved automatically after every import. Download copies to your own computer regularly for true off-server safety — a local database file alone can't protect against losing the whole server.</p>
+<div class="submit-row"><button class="btn primary" id="createBackupBtn">🗄️ Create Backup Now</button> <label class="btn" style="cursor:pointer">⬆ Restore From File<input accept=".gz,.json" id="restoreFileInput" style="display:none" type="file"/></label></div>
+<div class="msg" id="backupMsg"></div>
+<div class="table-wrap" style="max-height:320px"><table style="min-width:700px"><thead><tr><th>Backup</th><th>Reason</th><th>Size</th><th>Created</th><th>Action</th></tr></thead><tbody id="backupsBody"></tbody></table></div>
+</div><div aria-labelledby="recoveryPanel-title" class="panel full admin-section" data-admin-section-order="14" id="recoveryPanel"><h2 id="recoveryPanel-title" tabindex="-1">🛟 Recovery Center</h2><p class="desc">Recovery readiness only. This section verifies backup structure and counts; it does <b>not</b> restore, delete, migrate or overwrite data.</p><div class="recovery-grid"><div class="recovery-card"><span>🗄️</span><div><b>Backup readiness</b><small id="recoveryBackupStatus">Checking…</small></div></div><div class="recovery-card"><span>🧮</span><div><b>Snapshot coverage</b><small id="recoveryCoverage">—</small></div></div><div class="recovery-card"><span>🔐</span><div><b>Recovery policy</b><small>Manual restore only • Admin confirmation required</small></div></div></div><div class="recovery-note">🛡️ <b>Safety:</b> verification is read-only. A restore can only be initiated from the existing Backup workflow.</div><div class="submit-row"><button class="btn" id="verifyLatestBackupBtn" type="button">✅ Verify Latest Backup</button><button class="btn" id="openBackupsBtn" type="button">🗄️ Open Backups</button></div><div class="msg" id="recoveryMsg"></div></div><div aria-labelledby="securityPanel-title" class="panel full admin-section" data-admin-section-order="15" id="securityPanel"><h2 id="securityPanel-title" tabindex="-1">🛡️ Admin Security</h2><div class="security-v29"><div class="stat">Active Admin Sessions<b id="secActiveSessions">—</b></div><div class="stat">Session Lifetime<b id="secSessionTTL">—</b></div><div class="stat">Login Attempt Limit<b id="secLoginLimit">—</b></div><button class="btn" id="refreshSecurityStatus" type="button">🔄 Refresh Security Status</button></div><p class="desc">Change the current administrator password. Password policy: minimum 12 characters with uppercase, lowercase, number and special character. Existing sessions on other devices are revoked after a password change.</p><div class="form-grid"><div class="field"><label>Current Password *</label><input autocomplete="current-password" id="currentAdminPassword" type="password"/></div><div class="field"><label>New Password *</label><input autocomplete="new-password" id="newAdminPassword" minlength="12" type="password"/></div><div class="field"><label>Confirm New Password *</label><input autocomplete="new-password" id="confirmAdminPassword" minlength="12" type="password"/></div></div><div class="submit-row"><button class="btn primary" id="changePasswordBtn">🔑 Change Admin Password</button></div><div class="msg" id="securityMsg"></div><div class="table-wrap session-table" style="margin-top:12px;max-height:260px"><table><thead><tr><th>User</th><th>Role</th><th>Current</th><th>Expires In</th><th>Action</th></tr></thead><tbody id="securitySessionsBody"></tbody></table></div></div><div aria-labelledby="validationPanel-title" class="panel full admin-section" data-admin-section-order="16" id="validationPanel"><h2 id="validationPanel-title" tabindex="-1">🧩 Quality Validation Rules</h2><p class="desc">Transparent, auditable rules used by the Admin Data Quality Monitor. This panel is configuration-safe: viewing rules never changes disposition records.</p><div class="table-wrap"><table style="min-width:850px"><thead><tr><th>Rule</th><th>Field</th><th>Severity</th><th>Description</th><th>Status</th></tr></thead><tbody id="validationRulesBody"></tbody></table></div></div><div aria-labelledby="usersPanel-title" class="panel full admin-section" data-admin-section-order="17" id="usersPanel"><h2 id="usersPanel-title" tabindex="-1">👥 User &amp; Role Management</h2><p class="desc">Create named accounts with least-privilege roles: QA Manager, QA Engineer, Viewer, Importer and Auditor. Passwords are stored as one-way hashes and are never logged. Admin-created passwords must be 12+ characters with uppercase, lowercase, number and special character.</p>
+<div class="form-grid"><div class="field"><label>Username / Employee ID *</label><input id="u_username"/></div><div class="field"><label>Display Name *</label><input id="u_display_name"/></div><div class="field"><label>Password *</label><input autocomplete="new-password" id="u_password" minlength="12" type="password"/></div><div class="field"><label>Role</label><select id="u_role"><option value="viewer">Viewer</option><option value="qa_manager">QA Manager</option><option value="qa_engineer">QA Engineer</option><option value="importer">Importer</option><option value="auditor">Auditor</option><option value="admin">Super Admin</option></select></div></div><div class="submit-row"><button class="btn primary" id="addUserBtn">👤 Create User</button></div><div class="msg" id="userMsg"></div><div class="table-wrap" style="max-height:280px"><table style="min-width:700px"><thead><tr><th>Username</th><th>Display Name</th><th>Role</th><th>Status</th><th>Created</th><th>Action</th></tr></thead><tbody id="usersBody"></tbody></table></div>
+</div><div aria-labelledby="auditExplorerPanel-title" class="panel full admin-section" data-admin-section-order="18" id="auditExplorerPanel"><h2 id="auditExplorerPanel-title" tabindex="-1">🔎 Audit Explorer</h2><p class="desc">Investigate sensitive actions without modifying the audit trail. Filters are applied in the browser to the already-authorized audit dataset.</p><div class="audit-filter-grid"><div class="field"><label>🔍 Search</label><input id="auditSearch" placeholder="user, action, record, IP or details"/></div><div class="field"><label>⚙️ Action</label><select id="auditActionFilter"><option value="">All actions</option></select></div><div class="field"><label>👤 User</label><input id="auditUserFilter" placeholder="username"/></div><div class="field"><label>🗓️ Date</label><input id="auditDateFilter" type="date"/></div></div><div class="submit-row"><button class="btn" id="auditFilterBtn" type="button">🔎 Apply Filters</button><button class="btn" id="auditClearBtn" type="button">✕ Clear</button></div><div class="stats"><div class="stat">📋 Matching Events<b id="auditMatchCount">0</b></div><div class="stat">⚠️ Sensitive Actions<b id="auditSensitiveCount">0</b></div></div><div class="table-wrap" style="max-height:360px"><table style="min-width:1000px"><thead><tr><th>👤 User</th><th>🛡️ Role</th><th>⚙️ Action</th><th>🆔 Record</th><th>🕒 Date / Time</th><th>🌐 IP</th><th>📝 Details</th></tr></thead><tbody id="auditExplorerBody"></tbody></table></div></div><div aria-labelledby="auditTrailPanel-title" class="panel full admin-section" data-admin-section-order="19" id="auditTrailPanel"><h2 id="auditTrailPanel-title" tabindex="-1">🔐 Sensitive Action Audit Trail</h2><p class="desc">User → Action → Date/Time → IP → Record. Visible to Super Admin and Auditor roles.</p><div class="table-wrap" style="max-height:360px"><table style="min-width:1000px"><thead><tr><th>User</th><th>Role</th><th>Action</th><th>Record</th><th>Date / Time</th><th>IP</th><th>Details</th></tr></thead><tbody id="auditTrailBody"></tbody></table></div></div><div aria-labelledby="auditAnalyticsPanel-title" class="panel full admin-section" data-admin-section-order="20" id="auditAnalyticsPanel"><h2 id="auditAnalyticsPanel-title" tabindex="-1">📊 Audit Analytics</h2><p class="desc">Understand what administrators are doing without opening the full audit log.</p><div class="stats"><div class="stat">Total Audit Events<b id="aaTotal">—</b></div><div class="stat">Last 24 Hours<b id="aa24h">—</b></div></div><div class="audit-analytics-grid"><div><h3>Top Actions</h3><div class="table-wrap"><table><thead><tr><th>Action</th><th>Count</th></tr></thead><tbody id="aaActionsBody"></tbody></table></div></div><div><h3>Most Active Users</h3><div class="table-wrap"><table><thead><tr><th>User</th><th>Events</th></tr></thead><tbody id="aaUsersBody"></tbody></table></div></div></div></div><div aria-labelledby="activityPanel-title" class="panel full admin-section" data-admin-section-order="21" id="activityPanel"><h2 id="activityPanel-title" tabindex="-1">📈 Dashboard Activity</h2><div class="submit-row" style="margin-top:-4px;margin-bottom:8px"><button class="btn" id="exportAuditBtn">⬇ Export Audit Log</button></div><p class="desc">Dashboard is currently open without viewer login. Each visit/action is recorded with the visitor IP address. Employee login can be enabled later if required.</p><div class="activity-timeline" id="activityTimeline"></div><div class="stats"><div class="stat">Configured Users<b id="aTotalUsers">—</b></div><div class="stat">Unique IPs<b id="aUniqueIps">—</b></div><div class="stat">Active IPs Today<b id="aActiveToday">—</b></div><div class="stat">Dashboard Opens Today<b id="aOpensToday">—</b></div><div class="stat">Opens — 7 Days<b id="aOpens7">—</b></div><div class="stat">Exports — 30 Days<b id="aExports30">—</b></div></div><div class="table-wrap" style="max-height:360px"><table style="min-width:850px"><thead><tr><th>IP Address</th><th>Dashboard Opens</th><th>Last Seen</th><th>Browser / Device</th></tr></thead><tbody id="activityUsersBody"></tbody></table></div><h3 style="font-size:14.5px;color:var(--navy);margin:18px 0 8px">Recent Activity</h3><div class="table-wrap" style="max-height:360px"><table style="min-width:1000px"><thead><tr><th>IP Address</th><th>User</th><th>Event</th><th>Tab</th><th>Time</th></tr></thead><tbody id="recentActivityBody"></tbody></table></div></div></div>
+</main>
 </div>
-
+</section>
+</div>
 <style id="admin-ux-upgrades">
 :root{--admin-accent:#2388C9;--admin-surface:#fff;--admin-surface-2:#F7FAFC;--admin-heading:#16324F;--admin-line:#DCE6EF}
 .grid#adminApp{display:block}
@@ -576,7 +563,6 @@ html[data-theme="dark"] .global-search-input{background:#0F1626!important;color:
 @media(max-width:1050px){.admin-shell{grid-template-columns:1fr}.admin-sidebar{position:sticky;top:0;z-index:50;max-height:none;display:flex;gap:5px;overflow-x:auto;padding:8px}.sidebar-head,.sidebar-foot{display:none}.sidebar-link{width:auto;min-width:max-content;margin:0;padding:8px 10px}.admin-content-grid{grid-template-columns:1fr}.admin-content-grid>.full{grid-column:auto}}
 @media(max-width:650px){.admin-commandbar{align-items:stretch}.command-refresh{height:44px}.admin-health-strip{align-items:flex-start;flex-direction:column}.health-actions{width:100%;justify-content:flex-end}.activity-event{grid-template-columns:28px 1fr}.activity-time{grid-column:2}}
 </style>
-
 <style>
 .db-meter{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden;margin:14px 0 8px}.db-meter-fill{height:100%;width:0;background:#2563eb;transition:width .35s ease}.db-status{font-size:14.5px;font-weight:700;margin-bottom:12px}.db-status.warning{color:#b45309}.db-status.action{color:#c2410c}.db-status.critical{color:#dc2626}.db-status.healthy{color:#15803d}
 </style>
@@ -660,7 +646,7 @@ $('confirmImportBtn').onclick=async()=>{if(!importPreviewId)return;setMsg('impor
 $('cancelPreviewBtn').onclick=()=>{importPreviewId='';$('previewArea').classList.add('hidden');$('importDiffPanel')?.classList.add('hidden');$('confirmImportBtn').classList.add('hidden');$('cancelPreviewBtn').classList.add('hidden');$('fileInput').value='';$('importResult').innerHTML='';setMsg('importMsg','Preview cancelled.');wizardStep(1)};
 
 async function loadDbStatus(){try{const d=await api('/api/admin/database_status');$('dbProvider').textContent=d.provider+ (d.persistent?' • persistent (survives app updates)':' • ⚠ NOT persistent — will reset on next app update');$('dbProvider').style.color=d.persistent?'':'#DC2626';$('dbUsage').textContent=`${d.used_mb.toFixed(2)} MB (${d.usage_pct.toFixed(1)}%)`;$('dbLimit').textContent=`${d.limit_mb.toFixed(0)} MB`;$('dbMeter').style.width=Math.min(d.usage_pct,100)+'%';const labels={healthy:'● Healthy',warning:'● Warning',action:'● Action required',critical:'● Critical'};$('dbStatus').textContent=(labels[d.status]||d.status)+` — ${d.records.toLocaleString()} records`;$('dbStatus').className='db-status '+d.status}catch(e){$('dbStatus').textContent='Database status unavailable'}}
-async function loadRecords(query='',opts={}){try{const dateFrom=opts.dateFrom||'';const dateTo=opts.dateTo||'';const reqBody={limit:100,q:query||''};if(dateFrom)reqBody.date_from=dateFrom;if(dateTo)reqBody.date_to=dateTo;const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(reqBody)});$('totalRecords').textContent=(d.grand_total??d.total).toLocaleString();const mc=$('recordsMatchCount');if(mc)mc.textContent=(query||dateFrom||dateTo)?`${d.total.toLocaleString()} matching record(s)`:'';loadDbStatus();$('recordsBody').innerHTML=d.rows.map(r=>`<tr><td><input type="checkbox" class="record-select" value="${esc(r.id)}" aria-label="Select record ${esc(r.id)}"></td><td>${r.id}</td><td>${esc(r.insp_lot_date||'')}</td><td>${esc(r.heat_no)}</td><td>${esc(r.batch_no)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${Number(r.output_weight||0).toFixed(3)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity)}</td><td>${esc(r.quality_decision)}</td><td>${esc(r.month)}</td><td>${esc(r.week)}</td><td>${esc(r.quarter)}</td><td>${esc(r.financial_year)}</td><td><button class="delete" onclick="del(${r.id})">Delete</button></td></tr>`).join('')||'<tr><td colspan="16" style="text-align:center;padding:18px;color:var(--muted)">No matching records.</td></tr>'}catch(e){setMsg('loginMsg',e.message,'err')}}
+async function loadRecords(query='',opts={}){const msg=$('recordsSearchMsg');try{const dateFrom=opts.dateFrom||'';const dateTo=opts.dateTo||'';const recordId=opts.recordId;const reqBody={limit:100,q:recordId!=null?'':(query||'')};if(recordId!=null&&recordId!=='')reqBody.record_id=Number(recordId);if(dateFrom)reqBody.date_from=dateFrom;if(dateTo)reqBody.date_to=dateTo;const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(reqBody)});$('totalRecords').textContent=(d.grand_total??d.total).toLocaleString();const mc=$('recordsMatchCount');if(mc)mc.textContent=(query||dateFrom||dateTo||recordId!=null)?`${d.total.toLocaleString()} matching record(s)`:'';if(msg){msg.textContent='';msg.className='record-search-msg'}loadDbStatus();$('recordsBody').innerHTML=d.rows.map(r=>`<tr><td><input type="checkbox" class="record-select" value="${esc(r.id)}" aria-label="Select record ${esc(r.id)}"></td><td>${r.id}</td><td>${esc(r.insp_lot_date||'')}</td><td>${esc(r.heat_no)}</td><td>${esc(r.batch_no)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${Number(r.output_weight||0).toFixed(3)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity)}</td><td>${esc(r.quality_decision)}</td><td>${esc(r.month)}</td><td>${esc(r.week)}</td><td>${esc(r.quarter)}</td><td>${esc(r.financial_year)}</td><td><button class="delete" onclick="del(${r.id})">Delete</button></td></tr>`).join('')||'<tr><td colspan="16" style="text-align:center;padding:18px;color:var(--muted)">No matching records.</td></tr>'}catch(e){if(msg){msg.textContent=e.message;msg.className='record-search-msg err'}else setMsg('loginMsg',e.message,'err')}}
 $('recSearchBtn')?.addEventListener('click',()=>{loadRecords($('recSearchText').value.trim(),{dateFrom:$('recSearchFrom').value,dateTo:$('recSearchTo').value})});
 $('recSearchText')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('recSearchBtn').click();}});
 $('recSearchClear')?.addEventListener('click',()=>{$('recSearchText').value='';$('recSearchFrom').value='';$('recSearchTo').value='';loadRecords();});
@@ -720,11 +706,11 @@ $('backupBtn').onclick=()=>{window.location.href='/api/admin/export_csv'};boot()
   const search=$('adminGlobalSearch'), results=$('adminSearchResults'); let timer=0;
   const closeSearch=()=>{if(results)results.classList.remove('open')};
   const go=(id)=>{const el=$(id);if(!el||el.classList.contains('hidden'))return;el.scrollIntoView({behavior:'smooth',block:'start'});document.querySelectorAll('.sidebar-link').forEach(b=>b.classList.toggle('active',b.dataset.target===id));};
-  document.querySelectorAll('.sidebar-link').forEach(b=>b.addEventListener('click',()=>go(b.dataset.target)));
-  document.querySelectorAll('.issue-btn').forEach(b=>b.addEventListener('click',async()=>{const issue=b.dataset.qualityIssue;const panel=$('qualityDrillPanel'),body=$('qualityDrillBody'),title=$('qualityDrillTitle'),meta=$('qualityDrillMeta');if(!panel)return;panel.classList.remove('hidden');title.textContent='Quality issue: '+b.textContent.replace(/\s+\d[\d,]*$/,'').trim();body.innerHTML='<tr><td colspan="8">Loading…</td></tr>';try{const d=await api('/api/admin/quality_records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({issue,limit:100})});meta.textContent=`${Number(d.total||0).toLocaleString()} affected record(s) found. Showing up to 100. Click a record ID to jump to latest records.`;body.innerHTML=(d.rows||[]).map(r=>`<tr><td><button class="btn" style="padding:3px 7px;font-size:12px" onclick="loadRecords(${Number(r.id)});goToRecords()">${r.id}</button></td><td>${esc(r.insp_lot_date||'')}</td><td>${esc(r.heat_no||'')}</td><td>${esc(r.batch_no||'')}</td><td>${esc(r.work_center||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.main_defect||'')}</td><td>${esc(r.quality_decision||'')}</td></tr>`).join('')||'<tr><td colspan="8" style="text-align:center">No affected records.</td></tr>'}catch(e){body.innerHTML=`<tr><td colspan="8">${esc(e.message)}</td></tr>`}}));
+  // Sidebar clicks are owned by the V64.2 canonical scroll-navigation initializer appended below.
+  document.querySelectorAll('.issue-btn').forEach(b=>b.addEventListener('click',async()=>{const issue=b.dataset.qualityIssue;const panel=$('qualityDrillPanel'),body=$('qualityDrillBody'),title=$('qualityDrillTitle'),meta=$('qualityDrillMeta');if(!panel)return;panel.classList.remove('hidden');title.textContent='Quality issue: '+b.textContent.replace(/\s+\d[\d,]*$/,'').trim();body.innerHTML='<tr><td colspan="8">Loading…</td></tr>';try{const d=await api('/api/admin/quality_records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({issue,limit:100})});meta.textContent=`${Number(d.total||0).toLocaleString()} affected record(s) found. Showing up to 100. Click a record ID to jump to latest records.`;body.innerHTML=(d.rows||[]).map(r=>`<tr><td><button class="btn" style="padding:3px 7px;font-size:12px" onclick="loadRecords('',{recordId:Number(r.id)});goToRecords()">${r.id}</button></td><td>${esc(r.insp_lot_date||'')}</td><td>${esc(r.heat_no||'')}</td><td>${esc(r.batch_no||'')}</td><td>${esc(r.work_center||'')}</td><td>${esc(r.grade||'')}</td><td>${esc(r.main_defect||'')}</td><td>${esc(r.quality_decision||'')}</td></tr>`).join('')||'<tr><td colspan="8" style="text-align:center">No affected records.</td></tr>'}catch(e){body.innerHTML=`<tr><td colspan="8">${esc(e.message)}</td></tr>`}}));
   $('closeQualityDrill')?.addEventListener('click',()=>$('qualityDrillPanel').classList.add('hidden'));
-  window.goToRecords=()=>go('recordsPanel');
-  const renderSearch=(rows,q)=>{if(!results)return; if(!rows.length){results.innerHTML='<div class="gsr-empty">No matching records</div>';results.classList.add('open');return;}results.innerHTML=rows.slice(0,8).map((r,i)=>{const field=(String(r.main_defect||'').toLowerCase().includes(q.toLowerCase())?'Defect':String(r.grade||'').toLowerCase().includes(q.toLowerCase())?'Grade':String(r.work_center||'').toLowerCase().includes(q.toLowerCase())?'Work Center':'Record');return `<div class="gsr-item" data-index="${i}" data-id="${r.id}"><div><div class="gsr-item-label">${esc(r.heat_no||r.batch_no||'Record #'+r.id)} · ${esc(r.main_defect||r.grade||r.work_center||'')}</div><div style="font-size:11.5px;color:var(--muted)">${esc(r.work_center||'')} · ${esc(r.grade||'')} · ${esc(r.insp_lot_date||'')}</div></div><span class="gsr-item-tag work_center">${field}</span></div>`}).join('');results.classList.add('open');results.querySelectorAll('.gsr-item').forEach(item=>item.addEventListener('click',()=>{const id=item.dataset.id;loadRecords(id);go('recordsPanel');closeSearch();search.value='';}));};
+  window.goToRecords=()=>window.goAdminSection?window.goAdminSection('recordsPanel'):go('recordsPanel');
+  const renderSearch=(rows,q)=>{if(!results)return; if(!rows.length){results.innerHTML='<div class="gsr-empty">No matching records</div>';results.classList.add('open');return;}results.innerHTML=rows.slice(0,8).map((r,i)=>{const field=(String(r.main_defect||'').toLowerCase().includes(q.toLowerCase())?'Defect':String(r.grade||'').toLowerCase().includes(q.toLowerCase())?'Grade':String(r.work_center||'').toLowerCase().includes(q.toLowerCase())?'Work Center':'Record');return `<div class="gsr-item" data-index="${i}" data-id="${r.id}"><div><div class="gsr-item-label">${esc(r.heat_no||r.batch_no||'Record #'+r.id)} · ${esc(r.main_defect||r.grade||r.work_center||'')}</div><div style="font-size:11.5px;color:var(--muted)">${esc(r.work_center||'')} · ${esc(r.grade||'')} · ${esc(r.insp_lot_date||'')}</div></div><span class="gsr-item-tag work_center">${field}</span></div>`}).join('');results.classList.add('open');results.querySelectorAll('.gsr-item').forEach(item=>item.addEventListener('click',()=>{const id=item.dataset.id;loadRecords('',{recordId:Number(id)});go('recordsPanel');closeSearch();search.value='';}));};
   const doSearch=async()=>{const q=search?.value.trim();if(!q){closeSearch();return;}try{const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,limit:8})});renderSearch(d.rows||[],q)}catch(e){if(results){results.innerHTML=`<div class="gsr-empty">${esc(e.message)}</div>`;results.classList.add('open')}}};
   search?.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(doSearch,220)});search?.addEventListener('keydown',e=>{if(e.key==='Escape'){search.value='';closeSearch();search.blur()}if(e.key==='Enter'&&results?.classList.contains('open')){results.querySelector('.gsr-item')?.click()}});document.addEventListener('click',e=>{if(!e.target.closest('.admin-search-wrap'))closeSearch()});
   $('showShortcutsBtn')?.addEventListener('click',()=>$('shortcutPanel').classList.toggle('hidden'));
@@ -732,14 +718,13 @@ $('backupBtn').onclick=()=>{window.location.href='/api/admin/export_csv'};boot()
   setInterval(()=>{if(!$('adminApp')?.classList.contains('hidden')){loadActivity();loadDbStatus();loadBackups();}},60000);
 })();
 </script>
-
 <style id="admin-v29-upgrades">
 .admin-v29-tools{display:grid;grid-template-columns:1.05fr 1.8fr .9fr;gap:12px;margin-bottom:12px}
 .admin-health-score-card,.admin-notify-card,.admin-personal-card{background:var(--admin-surface,#fff);border:1px solid var(--admin-line,#DCE6EF);border-radius:14px;padding:13px 14px;box-shadow:0 8px 24px rgba(30,65,95,.06)}
 .admin-health-score-card{display:flex;align-items:center;justify-content:space-between;gap:12px}.admin-health-score-card>b{display:block;font-size:30px;line-height:1;margin:4px 0}.admin-health-score-card>div:first-child>span:last-child{font-size:12px;font-weight:800;color:var(--muted)}
 .v29-kicker{display:block;font-size:10px;letter-spacing:1.15px;text-transform:uppercase;font-weight:900;color:var(--admin-accent,#2388C9)}
 .health-ring{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#2388C9 0deg,#2388C9 0deg,#E8EEF5 0deg);position:relative;flex:0 0 auto}.health-ring:after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--admin-surface,#fff)}.health-ring span{position:relative;z-index:1;font-weight:900;font-size:13px}
-.v29-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.v29-card-head>b{display:block;margin-top:2px}.notify-count{min-width:26px;height:26px;padding:0 7px;border-radius:999px;display:grid;place-items:center;background:#EAF5FC;color:#176A9D;font-weight:900;font-size:12px}.notify-list{display:grid;gap:6px;margin-top:9px;max-height:95px;overflow:auto}.v29-alert{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;background:var(--admin-surface-2,#F7FAFC);border:1px solid var(--admin-line,#DCE6EF);font-size:12px}.v29-alert b{display:block}.v29-alert small{color:var(--muted)}.v29-alert.warn{border-color:#E8D5A9}.v29-alert.bad{border-color:#E9BFC3}.v29-empty{font-size:12px;color:var(--muted);padding:7px 0}.pref-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;font-size:12px;font-weight:800}.pref-row label{display:flex;align-items:center;gap:6px;color:var(--text)}.record-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:-4px 0 9px}.record-tools>span{margin-right:auto;font-size:12.5px;font-weight:900;color:var(--muted)}.record-tools .btn{padding:6px 9px;font-size:12px}.record-filter-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}.record-filter-row #recSearchText{flex:1 1 220px;min-width:180px;padding:7px 9px;border:1px solid var(--admin-line,#DCE6EF);border-radius:7px;font:600 13px Manrope,sans-serif;background:var(--admin-surface,#fff);color:var(--text)}.record-filter-row label{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:800;color:var(--muted)}.record-filter-row input[type="date"]{padding:6px 7px;border:1px solid var(--admin-line,#DCE6EF);border-radius:7px;font:600 12.5px Manrope,sans-serif;background:var(--admin-surface,#fff);color:var(--text)}.record-filter-row .btn{padding:6px 10px;font-size:12px}#recordsMatchCount{font-size:12px;font-weight:800;color:var(--muted);margin-left:auto}
+.v29-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.v29-card-head>b{display:block;margin-top:2px}.notify-count{min-width:26px;height:26px;padding:0 7px;border-radius:999px;display:grid;place-items:center;background:#EAF5FC;color:#176A9D;font-weight:900;font-size:12px}.notify-list{display:grid;gap:6px;margin-top:9px;max-height:95px;overflow:auto}.v29-alert{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;background:var(--admin-surface-2,#F7FAFC);border:1px solid var(--admin-line,#DCE6EF);font-size:12px}.v29-alert b{display:block}.v29-alert small{color:var(--muted)}.v29-alert.warn{border-color:#E8D5A9}.v29-alert.bad{border-color:#E9BFC3}.v29-empty{font-size:12px;color:var(--muted);padding:7px 0}.pref-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;font-size:12px;font-weight:800}.pref-row label{display:flex;align-items:center;gap:6px;color:var(--text)}.record-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:-4px 0 9px}.record-tools>span{margin-right:auto;font-size:12.5px;font-weight:900;color:var(--muted)}.record-tools .btn{padding:6px 9px;font-size:12px}.record-filter-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}.record-filter-row #recSearchText{flex:1 1 220px;min-width:180px;padding:7px 9px;border:1px solid var(--admin-line,#DCE6EF);border-radius:7px;font:600 13px Manrope,sans-serif;background:var(--admin-surface,#fff);color:var(--text)} .record-search-msg{font-size:12px;font-weight:800;flex:1 1 100%;min-height:16px}.record-search-msg.err{color:#B91C1C}html[data-theme="dark"] .record-search-msg.err{color:#FCA5A5}.record-filter-row label{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:800;color:var(--muted)}.record-filter-row input[type="date"]{padding:6px 7px;border:1px solid var(--admin-line,#DCE6EF);border-radius:7px;font:600 12.5px Manrope,sans-serif;background:var(--admin-surface,#fff);color:var(--text)}.record-filter-row .btn{padding:6px 10px;font-size:12px}#recordsMatchCount{font-size:12px;font-weight:800;color:var(--muted);margin-left:auto}
 html[data-theme="dark"] .admin-health-score-card,html[data-theme="dark"] .admin-notify-card,html[data-theme="dark"] .admin-personal-card{box-shadow:0 12px 28px rgba(0,0,0,.22)}html[data-theme="dark"] .health-ring:after{background:#141B2C}html[data-theme="dark"] .v29-alert{background:#0F1626;border-color:#2A3B54}.admin-compact .panel{padding:13px}.admin-compact .admin-kpi{padding:8px 10px}.admin-compact .admin-kpi-grid{gap:7px;margin-bottom:12px}.admin-compact .admin-content-grid{gap:12px}.admin-compact .table-wrap{max-height:440px}
 @media(max-width:1050px){.admin-v29-tools{grid-template-columns:1fr 1fr}.admin-personal-card{grid-column:1/-1}}@media(max-width:650px){.admin-v29-tools{grid-template-columns:1fr}.record-tools{flex-wrap:wrap}.record-tools>span{width:100%}.record-filter-row{flex-direction:column;align-items:stretch}.record-filter-row #recordsMatchCount{margin-left:0}}
 </style>
@@ -805,14 +790,12 @@ html[data-theme="dark"] .admin-health-score-card,html[data-theme="dark"] .admin-
   window.__adminV29Refresh=refreshV29;
 })();
 </script>
-
 <style id="admin-v29-diff-security">
 .security-v29{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr)) auto;gap:9px;align-items:end;margin:0 0 14px}.security-v29 .stat{margin:0}.security-v29 .btn{height:38px}
 .import-diff{margin-top:12px;border:1px solid var(--admin-line,#DCE6EF);border-radius:11px;padding:12px;background:var(--admin-surface-2,#F7FAFC)}.import-diff-body{display:grid;gap:7px;margin-top:9px;max-height:280px;overflow:auto}.diff-item{border:1px solid var(--admin-line,#DCE6EF);border-radius:9px;padding:8px;background:var(--admin-surface,#fff)}.diff-item>div:first-child{display:flex;justify-content:space-between;gap:10px}.diff-item>div:first-child span{font-size:11px;color:var(--muted)}.diff-changes{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.diff-changes span{font-size:11.5px;padding:4px 6px;border-radius:6px;background:#EEF5FB;color:var(--text)}.diff-changes s{color:#B45309}.diff-changes strong{color:#15803D}.record-select{width:15px;height:15px;accent-color:#2388C9}
 html[data-theme="dark"] .import-diff{background:#0F1626;border-color:#2A3B54}html[data-theme="dark"] .diff-item{background:#141B2C;border-color:#2A3B54}html[data-theme="dark"] .diff-changes span{background:#182238}html[data-theme="dark"] .diff-changes s{color:#FCD34D}html[data-theme="dark"] .diff-changes strong{color:#86EFAC}
 @media(max-width:900px){.security-v29{grid-template-columns:repeat(2,minmax(130px,1fr))}.security-v29 .btn{grid-column:1/-1}}@media(max-width:600px){.security-v29{grid-template-columns:1fr}}
 </style>
-
 <style id="admin-v30-advanced">.audit-analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;min-width:0}.audit-analytics-grid>div{min-width:0}.audit-analytics-grid table{min-width:0;width:100%}.audit-analytics-grid h3{font-size:14px;color:var(--navy);margin:0 0 7px}.session-table table{min-width:700px}html[data-theme="dark"] .audit-analytics-grid h3{color:#E8EDF6}@media(max-width:800px){.audit-analytics-grid{grid-template-columns:1fr}}</style>
 <script>
 async function loadValidationRules(){try{const d=await api('/api/admin/validation_rules');const h=$('validationRulesBody');if(h)h.innerHTML=(d.rules||[]).map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.field)}</td><td><span class="badge ${r.severity==='High'?'bad':'warn'}">${esc(r.severity)}</span></td><td>${esc(r.description)}</td><td><span class="badge ok">Active</span></td></tr>`).join('')}catch(e){console.error(e)}}
@@ -867,7 +850,6 @@ html[data-theme="dark"] .command-card,html[data-theme="dark"] .recovery-card{box
 <script>
 (function initAdminV35(){
   const $id=id=>document.getElementById(id); const go=target=>$id(target)?.scrollIntoView({behavior:'smooth',block:'start'});
-  document.querySelectorAll('.command-card[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
   $id('openBackupsBtn')?.addEventListener('click',()=>go('backupsPanel'));
   async function perf(){try{const d=await api('/api/admin/db_performance');$id('perfProvider').textContent=d.provider||'—';$id('perfLatency').textContent=Number(d.latency_ms).toFixed(1)+' ms';$id('perfLatency2').textContent=Number(d.second_latency_ms).toFixed(1)+' ms';$id('perfStatus').textContent=d.status==='healthy'?'Healthy':d.status==='warning'?'Watch':'Slow';$id('perfBar').style.width=Math.min(100,Math.max(4,Number(d.latency_ms)/10))+'%';setMsg('perfMsg',`Read-only check completed at ${d.checked_at||'now'}.`,'ok');return d}catch(e){setMsg('perfMsg',e.message,'err');return null}}
   $id('refreshPerformanceBtn')?.addEventListener('click',perf);
@@ -927,4 +909,125 @@ html[data-theme="dark"] .audit-analytics-grid h3{color:#F0F4FA!important}
 html[data-theme="dark"] .audit-filter-grid input,html[data-theme="dark"] .audit-filter-grid select{background:#0F1727!important;color:#E8EDF6!important;border-color:#344861!important}
 html[data-theme="dark"] .recovery-note{background:#111C2C;border-color:#2A3B54;color:#A9B8CA}
 </style>
-</body></html>
+<style id="admin-v64-scroll-nav">
+/* V64.2 Admin navigation: one source of truth for sidebar + section order. */
+html{scroll-behavior:auto}
+.admin-shell{align-items:start}
+.admin-sidebar{display:flex;flex-direction:column;min-height:0}
+.sidebar-progress{margin:4px 0 8px;padding:10px 11px;border:1px solid var(--admin-line);border-radius:10px;background:linear-gradient(180deg,var(--admin-surface),var(--admin-surface-2));}
+.sidebar-progress-kicker{display:block;font-size:9px;letter-spacing:1.15px;text-transform:uppercase;font-weight:900;color:var(--admin-accent)}
+.sidebar-progress strong{display:block;margin-top:3px;font-size:13px;color:var(--admin-heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-progress small{display:block;margin-top:2px;color:#7A8A9D;font-size:11px;font-weight:800}
+.sidebar-nav{display:grid;gap:8px;min-height:0;overflow:visible;padding-right:2px}
+.sidebar-group{display:grid;gap:2px}
+.sidebar-group-label{padding:8px 8px 4px;color:#8A98A9;font-size:9.5px;letter-spacing:1.2px;font-weight:900;text-transform:uppercase}
+.sidebar-link{margin:0!important}
+.sidebar-link-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-link[aria-current="page"]{box-shadow:inset 3px 0 0 var(--admin-accent),0 4px 12px rgba(35,136,201,.08)!important}
+.sidebar-top-btn{width:100%;border:1px solid var(--admin-line);background:var(--admin-surface);color:var(--admin-heading);border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:850;margin-bottom:8px}
+.sidebar-top-btn:hover{background:var(--admin-surface-2)}
+.admin-section{scroll-margin-top:18px}
+.admin-section:target{outline:2px solid rgba(35,136,201,.18);outline-offset:2px}
+.admin-section-position{display:flex;align-items:center;gap:5px;min-width:170px;max-width:320px;padding:0 9px;height:38px;border:1px solid var(--admin-line);border-radius:9px;background:var(--admin-surface-2);color:#75869A;font-size:11px;white-space:nowrap;overflow:hidden}
+.admin-section-position strong{color:var(--admin-heading);overflow:hidden;text-overflow:ellipsis}
+html[data-theme="dark"] .sidebar-progress,html[data-theme="dark"] .sidebar-top-btn,html[data-theme="dark"] .admin-section-position{background:#111C2C;border-color:#2A3B54;color:#A9B8CA}
+html[data-theme="dark"] .sidebar-progress strong,html[data-theme="dark"] .admin-section-position strong{color:#E8EDF6}
+html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
+@media(max-width:1050px){
+  .admin-sidebar{display:block;padding:8px;overflow:visible}
+  .sidebar-progress{display:none}
+  .sidebar-nav{display:flex;gap:5px;overflow-x:auto;overflow-y:hidden;padding-bottom:1px}
+  .sidebar-group{display:contents}
+  .sidebar-group-label{display:none}
+  .sidebar-link{flex:0 0 auto;width:auto!important;min-width:max-content}
+  .sidebar-top-btn{display:none}
+  .admin-section-position{display:none}
+}
+@media(max-width:650px){.sidebar-link{padding:8px 9px!important;font-size:12.5px!important}.sidebar-icon{width:22px!important}.admin-commandbar{position:sticky;top:0;z-index:60;background:var(--admin-surface);padding:6px 0}.admin-commandbar .admin-section-position{display:flex;min-width:0;flex:1;height:40px}.admin-search-wrap{min-width:0}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.sidebar-link{transition:none!important}.admin-section{scroll-margin-top:8px}}
+</style><script id="admin-v64-scroll-nav-script">
+(function initAdminScrollNavigationV642(){
+  const nav=document.getElementById('adminSidebarNav');
+  const content=document.getElementById('adminContentGrid');
+  if(!nav||!content)return;
+  const links=Array.from(nav.querySelectorAll('.sidebar-link[data-target]'));
+  const sections=Array.from(content.querySelectorAll('.admin-section[data-admin-section-order]'))
+    .sort((a,b)=>Number(a.dataset.adminSectionOrder)-Number(b.dataset.adminSectionOrder));
+  const linkById=new Map(links.map(b=>[b.dataset.target,b]));
+  let activeId='homePanel', navLock=null, raf=0;
+
+  function visibleSections(){return sections.filter(s=>!s.classList.contains('hidden') && linkById.get(s.id) && !linkById.get(s.id).classList.contains('hidden'));}
+  function setCurrent(id,force=false){
+    const section=sections.find(s=>s.id===id);
+    if(!section || (!force && section.classList.contains('hidden')))return;
+    activeId=id;
+    links.forEach(b=>{
+      const on=b.dataset.target===id;
+      b.classList.toggle('active',on);
+      b.setAttribute('aria-current',on?'page':'false');
+    });
+    const idx=Math.max(1,visibleSections().findIndex(s=>s.id===id)+1), total=visibleSections().length;
+    const name=section.querySelector('h2,h1')?.textContent?.trim()||linkById.get(id)?.querySelector('.sidebar-link-text')?.textContent?.trim()||id;
+    const clean=name.replace(/^\S+\s+/,'');
+    ['currentSectionName','adminSectionPositionName'].forEach(x=>{const e=document.getElementById(x);if(e)e.textContent=clean;});
+    ['currentSectionIndex','adminSectionPositionIndex'].forEach(x=>{const e=document.getElementById(x);if(e)e.textContent=String(idx).padStart(2,'0');});
+    const totalEl=document.getElementById('currentSectionTotal');if(totalEl)totalEl.textContent=String(total).padStart(2,'0');
+    const active=linkById.get(id);if(active){const mobile=window.matchMedia('(max-width:1050px)').matches;active.scrollIntoView({behavior:mobile?'smooth':'auto',block:'nearest',inline:mobile?'center':'nearest'});}
+  }
+
+  function chooseByViewport(){
+    if(navLock)return;
+    const list=visibleSections(); if(!list.length)return;
+    const anchor=Math.min(Math.max(110,window.innerHeight*0.24),220);
+    let best=list[0], bestScore=Infinity;
+    for(const s of list){
+      const r=s.getBoundingClientRect();
+      if(r.top<=anchor && r.bottom>anchor){best=s;bestScore=-1;break;}
+      const score=Math.abs(r.top-anchor);
+      if(score<bestScore){best=s;bestScore=score;}
+    }
+    if(best.id!==activeId)setCurrent(best.id);
+  }
+  function scheduleSpy(){if(raf)return;raf=requestAnimationFrame(()=>{raf=0;chooseByViewport();});}
+
+  function go(id){
+    const el=document.getElementById(id);
+    if(!el||el.classList.contains('hidden'))return;
+    navLock=id; setCurrent(id,true);
+    el.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+    const heading=el.querySelector('h2,h1');
+    if(heading){heading.focus({preventScroll:true});}
+    window.clearTimeout(go._timer);go._timer=window.setTimeout(()=>{navLock=null;chooseByViewport();},850);
+  }
+  links.forEach(b=>b.addEventListener('click',()=>go(b.dataset.target)));
+  document.querySelectorAll('.command-card[data-go], [data-go]').forEach(b=>{
+    const id=b.dataset.go;
+    if(!id || !document.getElementById(id) || b.classList.contains('sidebar-link'))return;
+    b.addEventListener('click',()=>go(id));
+  });
+  document.getElementById('sidebarTopBtn')?.addEventListener('click',()=>go('homePanel'));
+
+  // Keep group headings truthful after role-based hiding.
+  window.__adminSyncSidebarVisibility=function(){
+    nav.querySelectorAll('.sidebar-group').forEach(g=>{
+      const visible=g.querySelector('.sidebar-link:not(.hidden)');
+      g.classList.toggle('hidden',!visible);
+    });
+    if(!document.getElementById(activeId)?.classList.contains('hidden'))setCurrent(activeId,true);
+    else setCurrent(visibleSections()[0]?.id||'homePanel',true);
+    scheduleSpy();
+  };
+
+  window.addEventListener('scroll',scheduleSpy,{passive:true});
+  window.addEventListener('resize',scheduleSpy,{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleSpy();});
+
+  // Role/UI code may hide panels after this initializer; observe both side and content.
+  const roleObserver=new MutationObserver(()=>window.__adminSyncSidebarVisibility?.());
+  roleObserver.observe(content,{subtree:true,attributes:true,attributeFilter:['class']});
+
+  // Expose a stable function for legacy handlers on the page.
+  window.goAdminSection=go;
+  setTimeout(()=>{window.__adminSyncSidebarVisibility?.();setCurrent('homePanel',true);scheduleSpy();},0);
+})();
+</script></body></html>
