@@ -1274,3 +1274,20 @@ No KPI formula, filter semantic, schema or stored data changed.
   convey, so it, its checkbox markup, and its `.compare-toggle*` CSS were removed.
 - Cache-buster bumped to `68.3`.
 
+---
+
+## V63.9
+
+# V63.9 — Admin health-cards overlap fix
+
+## Fixed
+- **Admin > Control Center: the Production Health / Data Integrity / Deployment Health / Error
+  Monitor cards overlapped each other instead of stacking as full-width rows.** `.admin-content-grid`
+  is a 2-column grid where only children with the `full` class span the whole width
+  (`.admin-content-grid>.full{grid-column:1/-1}`); the two `.admin-prod-grid` wrapper `<div>`s (each
+  holding a pair of health cards) were missing that class, so CSS grid auto-placed them side by side
+  as two half-width cells in the same row instead of two full-width rows underneath the KPI panel.
+  Squeezed into half-width, the cards' own contents overflowed their grid cell and visually painted
+  over the neighbouring card. Added `full` to both wrapper `<div class="admin-prod-grid">` elements
+  in `admin.html`. No CSS/JS changed, so no cache-buster bump needed.
+

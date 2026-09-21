@@ -454,7 +454,7 @@ body{min-width:0;}
         </div>
         <div class="admin-content-grid">
           <div class="panel full" id="homePanel"><h2>🏠 Admin Control Center</h2><p class="desc">System overview, data health, usage and security at a glance.</p><div class="admin-kpi-grid"><div class="admin-kpi"><div class="label">Total Records (Live)</div><div class="value" id="hTotalRecords">—</div></div><div class="admin-kpi"><div class="label">Last Data Update</div><div class="value" id="hLastData">—</div></div><div class="admin-kpi"><div class="label">Database Size</div><div class="value" id="hDbSize">—</div></div><div class="admin-kpi"><div class="label">Active Admins</div><div class="value" id="hAdmins">—</div></div><div class="admin-kpi"><div class="label">Dashboard Views</div><div class="value" id="hViews">—</div></div><div class="admin-kpi"><div class="label">Last Login</div><div class="value" id="hLastLogin">—</div></div><div class="admin-kpi"><div class="label">Failed Login Attempts</div><div class="value" id="hFailed">—</div></div></div></div>
-<div class="admin-prod-grid">
+<div class="admin-prod-grid full">
   <div class="admin-prod-card" id="prodHealthCard">
     <div class="prod-head"><div><span class="v29-kicker">PRODUCTION HEALTH</span><b>Live database connection</b></div><span class="prod-badge" id="prodHealthBadge">Checking…</span></div>
     <div class="prod-metrics"><div><span>Provider</span><b id="prodProvider">—</b></div><div><span>Round-trip</span><b id="prodLatency">—</b></div><div><span>DB Version</span><b id="prodVersion">—</b></div></div>
@@ -470,7 +470,7 @@ body{min-width:0;}
     </div>
   </div>
 </div>
-<div class="admin-prod-grid admin-ops-grid">
+<div class="admin-prod-grid admin-ops-grid full">
   <div class="admin-prod-card">
     <div class="prod-head"><div><span class="v29-kicker">DEPLOYMENT HEALTH</span><b>Runtime & build information</b></div><span class="prod-badge" id="deployHealthBadge">Checking…</span></div>
     <div class="prod-metrics"><div><span>App Version</span><b id="deployVersion">—</b></div><div><span>Uptime</span><b id="deployUptime">—</b></div><div><span>Python</span><b id="deployPython">—</b></div></div>
