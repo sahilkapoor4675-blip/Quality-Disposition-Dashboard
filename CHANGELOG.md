@@ -1291,3 +1291,36 @@ No KPI formula, filter semantic, schema or stored data changed.
   over the neighbouring card. Added `full` to both wrapper `<div class="admin-prod-grid">` elements
   in `admin.html`. No CSS/JS changed, so no cache-buster bump needed.
 
+---
+
+## V64.0
+
+# V64.0 — Records diagnostic search (text + date range) with export/delete
+
+## Added
+- **Admin > Latest Records: text + inspection-date-range search**, so a specific import (or any
+  other slice of data) can be isolated and inspected on its own instead of only ever seeing the
+  newest 100 rows. New inputs: a free-text box (matches ID, Heat No, Batch No, Work Center, Grade,
+  Main Defect, Decision, Month, Week, Quarter, FY — same fields the old global-search-only query
+  matched) plus a From/To inspection-date range, combinable with AND. A "N matching record(s)"
+  counter shows the filtered count without disturbing the header's live "Total Records" figure
+  (see Fixed, below). Search results feed straight into the **already-existing** Export Selected /
+  Delete Selected / bulk-delete tools in that panel — find the exact records, then act on them.
+- `/api/admin/records` now accepts optional `date_from` / `date_to` (inclusive, `YYYY-MM-DD`,
+  compared against `insp_lot_date`) alongside the existing free-text `q`.
+
+## Fixed
+- **Searching records used to overwrite the "Total Records" stat with the filtered count** until
+  the next full refresh, since `loadRecords()` always wrote the API response's `total` (which
+  becomes the filtered match count as soon as a query is present) into that header figure. The
+  endpoint now also returns `grand_total` (the true, always-unfiltered live count), and the
+  frontend uses that for the header stat while showing the filtered `total` only in the new
+  in-panel match counter.
+
+## Why this helps
+- Directly supports diagnosing "import summary says 445 but the dashboard shows 449": filter
+  Latest Records to the imported file's date range, compare the matching-record count and the sum
+  of Weight (MT) shown there against the import summary, and any extra records are now visible
+  and selectable to delete (with the existing single/bulk delete flow, itself backed by a safety
+  backup + audit trail already in place before this release).
+

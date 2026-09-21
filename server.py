@@ -5303,17 +5303,31 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 conn = get_conn()
                 base = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
+                # Diagnostic filters: free-text "q" (existing multi-field LIKE) can be
+                # combined with an inspection-date range (date_from/date_to, inclusive,
+                # "YYYY-MM-DD") so an admin can isolate exactly the records a given
+                # import/period added — e.g. to explain a dashboard total that looks
+                # higher than what one import summary reported.
+                date_from = str(body.get("date_from", "")).strip()
+                date_to = str(body.get("date_to", "")).strip()
+                clauses = []; params = []
                 if query:
                     like = f"%{query}%"
-                    where = " WHERE CAST(id AS TEXT) LIKE ? OR insp_lot_date LIKE ? OR heat_no LIKE ? OR batch_no LIKE ? OR work_center LIKE ? OR grade LIKE ? OR main_defect LIKE ? OR quality_decision LIKE ? OR month LIKE ? OR week LIKE ? OR quarter LIKE ? OR financial_year LIKE ?"
-                    params = (like,like,like,like,like,like,like,like,like,like,like,like)
-                    rows = [dict(r) for r in conn.execute(base + where + " ORDER BY id DESC LIMIT ?", params + (limit,)).fetchall()]
-                    total = conn.execute("SELECT COUNT(*) FROM disposition" + where, params).fetchone()[0]
-                else:
-                    rows = [dict(r) for r in conn.execute(base + " ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
-                    total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                    clauses.append("(CAST(id AS TEXT) LIKE ? OR insp_lot_date LIKE ? OR heat_no LIKE ? OR batch_no LIKE ? OR work_center LIKE ? OR grade LIKE ? OR main_defect LIKE ? OR quality_decision LIKE ? OR month LIKE ? OR week LIKE ? OR quarter LIKE ? OR financial_year LIKE ?)")
+                    params.extend([like]*12)
+                if date_from:
+                    clauses.append("insp_lot_date >= ?"); params.append(date_from)
+                if date_to:
+                    clauses.append("insp_lot_date <= ?"); params.append(date_to)
+                where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+                rows = [dict(r) for r in conn.execute(base + where + " ORDER BY id DESC LIMIT ?", tuple(params) + (limit,)).fetchall()]
+                total = conn.execute("SELECT COUNT(*) FROM disposition" + where, tuple(params)).fetchone()[0]
+                # grand_total is the true, unfiltered live record count — kept separate from
+                # "total" (the filtered match count) so the frontend's global "Total Records"
+                # stat doesn't get overwritten with a filtered number when an admin searches.
+                grand_total = total if not where else conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
                 conn.close()
-                self._send_json({"rows": rows, "total": total, "query": query})
+                self._send_json({"rows": rows, "total": total, "grand_total": grand_total, "query": query})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
