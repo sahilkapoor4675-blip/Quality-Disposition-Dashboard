@@ -59,3 +59,17 @@ assert 'window.goAdminSection=go' in text
 assert 'aria-current' in text
 assert '__adminSyncSidebarVisibility' in text
 print(f"ADMIN UX AUDIT PASS — {len(EXPECTED)} sidebar sections and content sections are one-to-one, ordered, role-aware, and scroll-synced.")
+
+
+# V64.2 follow-up contracts: top search removed, readable sidebar labels,
+# deterministic fresh-position tab switching.
+assert 'id="adminGlobalSearch"' not in text, 'Top admin global search UI must be removed'
+assert 'Ctrl K' not in text, 'Dead global-search shortcut must be removed'
+assert 'grid-template-columns:300px minmax(0,1fr)' in text, 'Desktop sidebar must have readable width'
+assert '.sidebar-link .sidebar-icon' in text, 'Icon selector must not style label spans as icons'
+assert '.sidebar-link-text{min-width:0;flex:1 1 auto;width:auto;overflow:visible' in text, 'Sidebar labels must not be clipped/ellipsized'
+assert 'window.scrollTo({top:targetTop' in text, 'Tab switching must use deterministic window scrolling'
+assert 'navOffset=isMobile' in text, 'Mobile sticky sidebar offset must be reserved on tab switch'
+assert '@media(max-width:650px){.sidebar-link{padding:8px 9px!important;font-size:12.5px!important}.sidebar-icon{width:22px!important}.admin-commandbar{position:static' in text, 'Mobile command bar must not remain sticky after global search removal'
+assert 'const closeSearch=()=>{}' not in text, 'Dead search helper must be removed'
+print('V64.2 admin UX follow-up contracts: PASS')

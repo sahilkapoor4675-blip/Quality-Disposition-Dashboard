@@ -1,8 +1,61 @@
 # Quality Disposition Dashboard — Changelog
 
-Consolidated release/fix history for the current V62 release. Everything lives in
+Consolidated release/fix history for the current V64.2 release. Everything lives in
 this one file now instead of separate `CHANGELOG_V*.md` files, to keep the repo
 from accumulating a changelog file per release.
+
+## V64.2
+
+Release focus: Admin Control Center usability and navigation safety.
+
+### Files changed in this Admin UX patch
+- `admin.html` — runtime Admin navigation/scroll-sync implementation and structural section alignment.
+- `admin_ux_audit.py` — non-destructive contract test for sidebar/content ordering, accessibility state, and scroll-sync hooks.
+- `README.md` — current-build documentation updated with the V64.2 Admin UX scope and safety notes.
+- `CHANGELOG.md` — this release note and the preserved historical release history.
+
+### Data-preservation verification
+- No application data file is included in this patch ZIP.
+- No backend/data-layer file is included in this patch ZIP.
+- The existing V64.1 audited baseline was used for hybrid regression testing.
+- Bundled database SHA-256 remained `91003fed5e377967c78d4a61bf0266e3529dad7bc11b5b5f9aec1b7f0071020c`.
+
+### Admin Control Center UX
+
+### V64.2 follow-up fixes
+- **Sidebar labels cut/truncated:** increased desktop sidebar width and fixed the legacy `.sidebar-link span` CSS selector that was unintentionally applying 28px icon sizing to the text span. Labels now use the available width and can wrap safely.
+- **Removed the Admin top/global search bar:** removed its markup and dead keyboard/search handlers from the Admin console. Latest Records remains the dedicated record-search surface.
+- **Tab-switch scroll-position bug:** replaced `scrollIntoView()` navigation with deterministic `window.scrollTo()` positioning so every sidebar tab opens at the fresh top of its own section. Mobile reserves the sticky sidebar height before positioning the target.
+- **Shortcut cleanup:** removed the obsolete Ctrl/⌘+K search hint from Admin navigation because the Admin global search no longer exists; refresh/help shortcuts remain.
+- **Mobile navigation overlap risk:** removed sticky positioning from the now-searchless Admin command bar so the sticky horizontal sidebar remains the only top navigation layer on small screens.
+- **Current-section label clipping:** allowed the sidebar progress label to wrap instead of truncating with ellipsis.
+
+### Follow-up verification
+- Existing V64.1/V64.2 backend and database behavior remains outside this patch.
+- Patch-level source contracts cover sidebar readability, absence of the Admin top search, and deterministic tab-jump behavior.
+- The patch was prepared against the V64.1 audited baseline and contains only Admin UX/documentation/test files.
+
+- Rebuilt the Admin sidebar as grouped, canonical navigation with 21 one-to-one section links.
+- Added scroll-spy behavior: the active sidebar tab automatically follows the section currently in the viewport.
+- Clicking a sidebar item smooth-scrolls to the matching section, updates `aria-current`, and keeps the active item visible in the sidebar.
+- Added a current-section position indicator (`01 / 21`, etc.) to reduce orientation loss while scrolling.
+- Added the previously un-navigated Import History panel to the sidebar.
+- Reordered the Admin content sections to exactly match sidebar navigation order.
+- Moved Overview production-health blocks inside Overview and KPI target history inside KPI Targets so navigation boundaries match the visible content.
+- Added a non-destructive `admin_ux_audit.py` contract test for sidebar/content ordering, accessibility attributes, and scroll-sync hooks.
+- No disposition-data schema, import, delete, restore, KPI-calculation, or backup behavior was changed by this UX release.
+
+## V64.1
+
+### Deep Audit & Maintenance
+
+- Fixed admin record deep-links so Quality issues and Global Search open an exact `record_id` instead of using fuzzy text search.
+- Fixed admin record-search errors so they render in the Records panel instead of the Login status area.
+- Added strict `YYYY-MM-DD` validation, date-range ordering checks, and a bounded record-search query length.
+- Added an inspection-date index for faster date-range diagnostics and guaranteed connection cleanup on exact-record lookup failures.
+- Added served-app version injection so HTML asset/meta markers stay aligned with `VERSION.txt`.
+- Added an isolated `deep_audit.py` release-gate covering version headers/meta, auth/CSRF, record ID lookup, date filters, and data-count integrity.
+- Hardened XML parsing guidance with `defusedxml`; updated ReportLab and psycopg2-binary dependency floors to current security-maintenance lines.
 
 ## V27.1
 
