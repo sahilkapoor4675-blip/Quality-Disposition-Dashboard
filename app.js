@@ -107,46 +107,41 @@ let kpiAnimationToken = 0;
     if (!e.target.closest("#globalSearchWrap")) results.classList.remove("open");
   });
 })();
+// ---- Display preferences: theme, table density, sound ----
+// These three used to be header buttons. They now live ONLY in the Command
+// Palette (Ctrl+K / Cmd+K, or the ⌘K button in the header), which calls the
+// functions below directly — nothing depends on a header button existing.
 // The theme itself is applied pre-paint by the inline script in index.html
-// (to avoid a flash of the wrong theme); this just wires the button and
-// keeps the icon/label in sync with the current theme.
-(function initThemeToggle(){
-  const btn = document.getElementById("themeToggleBtn");
-  if (!btn) return;
-  const apply = (theme) => {
-    document.documentElement.setAttribute("data-theme", theme);
-    btn.textContent = theme === "dark" ? "☀️" : "🌙";
-    btn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
-  };
-  apply(document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
-  btn.addEventListener("click", () => {
-    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-    apply(next);
-    try { localStorage.setItem("qdash_theme", next); } catch (e) {}
-  });
-})();
-// Density toggle: "Compact" tightens table row padding so more fits on
-// screen without scrolling — a desktop-power-user preference, remembered
-// per-browser like the theme.
-(function initDensityToggle(){
-  const btn = document.getElementById("densityToggleBtn");
-  if (!btn) return;
-  const apply = (density) => {
-    document.body.classList.toggle("density-compact", density === "compact");
-    btn.textContent = density === "compact" ? "☰" : "☰";
-    btn.title = density === "compact" ? "Switch to comfortable table rows" : "Switch to compact table rows";
-    btn.classList.toggle("density-active", density === "compact");
-  };
+// (to avoid a flash of the wrong theme); this just changes/persists it.
+function currentTheme(){ return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
+function toggleTheme(){
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem("qdash_theme", next); } catch (e) {}
+  return next;
+}
+// Density: "Compact" tightens table row padding so more fits on screen
+// without scrolling — remembered per-browser like the theme.
+function isCompactDensity(){ return document.body.classList.contains("density-compact"); }
+function applyDensity(density){ document.body.classList.toggle("density-compact", density === "compact"); }
+function toggleDensity(){
+  const next = isCompactDensity() ? "comfortable" : "compact";
+  applyDensity(next);
+  try { localStorage.setItem("qdash_density", next); } catch (e) {}
+  return next;
+}
+(function restoreDensity(){
   let saved = "comfortable";
   try { saved = localStorage.getItem("qdash_density") || "comfortable"; } catch (e) {}
-  apply(saved);
-  btn.addEventListener("click", () => {
-    const next = document.body.classList.contains("density-compact") ? "comfortable" : "compact";
-    apply(next);
-    try { localStorage.setItem("qdash_density", next); } catch (e) {}
-    if (window.SFX) SFX.play("toggle");
-  });
+  applyDensity(saved);
 })();
+// Sound: sfx.js owns the on/off state (window.SFX); this is just the toggle.
+function toggleSound(){
+  if (!window.SFX) return null;
+  const next = !SFX.isEnabled();
+  SFX.setEnabled(next);
+  return next;
+}
 // ---- Personalization: default landing tab + accent color. Both are
 // preferences reachable from the Command Palette (Ctrl+K) rather than
 // adding more header buttons — see initCommandPalette() below. ----
@@ -181,15 +176,22 @@ function initCommandPalette(){
     cmds.push({icon:'📄',label:'Export Quality Report — PDF',run:()=>document.getElementById('exportPdfBtn')?.click()});
     cmds.push({icon:'📽️',label:'Export Quality Report — PPT',run:()=>document.getElementById('exportPptBtn')?.click()});
     cmds.push({icon:'📋',label:'Export Raw Data — CSV',run:()=>document.getElementById('exportCsvBtn')?.click()});
-    cmds.push({icon:'⊞',label:'Compare Periods (side-by-side)',run:()=>document.getElementById('compareModeBtn')?.click()});
+    // Compare mode is desktop-only (its button is hidden on narrow screens), so only offer it when the button is actually shown.
+    if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({icon:'⊞',label:'Compare Periods (side-by-side)',run:()=>document.getElementById('compareModeBtn')?.click()});
     cmds.push({icon:'↺',label:'Reset All Filters',run:()=>document.getElementById('resetAllBtn')?.click()});
     cmds.push({icon:'🔎',label:'Focus Search',hint:'/',run:()=>document.getElementById('globalSearchInput')?.focus()});
-    const isDark=document.documentElement.getAttribute('data-theme')==='dark';
-    cmds.push({icon:isDark?'☀️':'🌙',label:isDark?'Switch to Light Mode':'Switch to Dark Mode',run:()=>document.getElementById('themeToggleBtn')?.click()});
-    const isCompact=document.body.classList.contains('density-compact');
-    cmds.push({icon:'☰',label:isCompact?'Switch to Comfortable Table Rows':'Switch to Compact Table Rows',run:()=>document.getElementById('densityToggleBtn')?.click()});
+    const isDark=currentTheme()==='dark';
+    cmds.push({icon:isDark?'☀️':'🌙',label:isDark?'Switch to Light Mode':'Switch to Dark Mode',kw:'theme night day appearance',run:()=>toggleTheme()});
+    const isCompact=isCompactDensity();
+    cmds.push({icon:'☰',label:isCompact?'Switch to Comfortable Table Rows':'Switch to Compact Table Rows',kw:'compact density rows spacing tight',run:()=>{
+      const d=toggleDensity();
+      showToast('success',d==='compact'?'Compact table rows on':'Comfortable table rows on', d==='compact'?'More rows fit on screen. Change it any time from Ctrl+K.':'Tables use the roomier row spacing again.');
+    }});
     const soundOn=!window.SFX||SFX.isEnabled();
-    cmds.push({icon:soundOn?'🔈':'🔊',label:soundOn?'Mute Sound Effects':'Unmute Sound Effects',run:()=>document.querySelector('.sfx-toggle-btn')?.click()});
+    cmds.push({icon:soundOn?'🔈':'🔊',label:soundOn?'Mute Sound Effects':'Unmute Sound Effects',kw:'sound volume audio speaker sfx mute unmute',run:()=>{
+      const on=toggleSound();
+      if(on!==null) showToast('success',on?'Sound effects on':'Sound effects muted', on?'Click and confirmation sounds are back.':'The dashboard is silent now. Unmute any time from Ctrl+K.');
+    }});
     cmds.push({icon:'🔐',label:'Open Admin Panel',run:()=>window.location.href='/admin'});
     const curTab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
     cmds.push({icon:'📌',label:`Set "${TAB_LABELS[curTab]||curTab}" as my Default Landing Tab`,run:()=>setDefaultLandingTab(curTab)});
@@ -200,7 +202,7 @@ function initCommandPalette(){
   function render(query){
     const all=buildCommands();
     const q=query.trim().toLowerCase();
-    filtered = q ? all.filter(c=>c.label.toLowerCase().includes(q)) : all;
+    filtered = q ? all.filter(c=>(c.label+' '+(c.kw||'')).toLowerCase().includes(q)) : all;
     active=0;
     if(!filtered.length){ list.innerHTML='<div class="cmdk-empty">No matching command.</div>'; return; }
     list.innerHTML=filtered.map((c,i)=>`<div class="cmdk-item${i===0?' active':''}" data-idx="${i}"><span class="cmdk-icon">${c.icon}</span><span class="cmdk-label">${escQcr(c.label)}</span>${c.hint?`<span class="cmdk-hint">${c.hint}</span>`:''}</div>`).join('');
@@ -866,7 +868,60 @@ const DECISION_COLORS = {
   "PRIME": "#16A34A", "FOR NEXT PROCESS": "#118DFF", "SALVAGE": "#7C3AED",
   "HOLD FOR DECISION": "#D97706", "REJECT": "#0891B2", "RE-WORK": "#64748B", "DIVERT": "#6366F1",
 };
-const DESIGN_W = 720;
+const DESIGN_W = 720; // fallback only (chart container hidden / not measurable yet)
+
+// ---------------------------------------------------------------------
+// ZOOM-AWARE CHART SIZING
+// The charts are SVG. They used to be drawn on a fixed 720-unit canvas that
+// was then stretched to the container's width, so the text size followed the
+// container width instead of the browser zoom: when the person pressed
+// Ctrl +/- the page text grew or shrank but the chart text stayed ~20px.
+// Now the canvas width is derived from the container's real CSS width:
+//     units = containerWidth / CHART_PX_PER_UNIT
+// so ONE SVG unit is always the same number of CSS pixels. Chart text is then
+// a fixed CSS size exactly like every other piece of text on the page and
+// scales with browser zoom in every browser; only the plot area gets
+// wider/narrower. (CHART_PX_PER_UNIT 1.9 reproduces the previous look at
+// 100% zoom on a ~1500px-wide window.) Below CHART_MIN_UNITS the canvas stops
+// shrinking and the whole chart scales down instead, which keeps very narrow
+// / phone layouts readable.
+// ---------------------------------------------------------------------
+const CHART_PX_PER_UNIT = 1.9;
+const CHART_MIN_UNITS = 480;
+function chartAvailWidth(el){
+  if(!el) return 0;
+  const cs = getComputedStyle(el);
+  return Math.max(0, el.clientWidth - (parseFloat(cs.paddingLeft)||0) - (parseFloat(cs.paddingRight)||0));
+}
+function chartUnits(container, pxPerUnit=CHART_PX_PER_UNIT, minUnits=CHART_MIN_UNITS, fallback=DESIGN_W){
+  const cw = chartAvailWidth(container);
+  if(!cw) return fallback;
+  return Math.max(minUnits, Math.round(cw / pxPerUnit));
+}
+// Charts remember how to redraw themselves and are redrawn (debounced) when
+// their container's width changes: browser zoom, window resize, a hidden tab
+// becoming visible, the sidebar/layout reflowing...
+const _chartResizeQueue = new Set();
+let _chartResizeTimer = null;
+const _chartResizeObserver = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(entries => {
+  entries.forEach(e => _chartResizeQueue.add(e.target));
+  clearTimeout(_chartResizeTimer);
+  _chartResizeTimer = setTimeout(() => {
+    const targets = [..._chartResizeQueue]; _chartResizeQueue.clear();
+    targets.forEach(t => {
+      if(!t._qdRedraw || !t.isConnected) return;
+      const cw = chartAvailWidth(t);
+      // Height changes (a redraw changes the chart's height) must NOT trigger another redraw.
+      if(cw > 0 && Math.abs(cw - (t._qdCw||0)) >= 6){ try { t._qdRedraw(); } catch(err){ console.error('Chart redraw failed', err); } }
+    });
+  }, 120);
+}) : null;
+function chartRemember(container, redraw){
+  if(!container) return;
+  container._qdRedraw = redraw;
+  container._qdCw = chartAvailWidth(container);
+  if(_chartResizeObserver && !container._qdObserved){ container._qdObserved = true; _chartResizeObserver.observe(container); }
+}
 
 function truncateLabel(s, n){
   if(!s) return "";
@@ -934,10 +989,18 @@ function showToast(kind,title,message,opts={}){
 }
 
 function makePieChart(container, items, valueKey, labelKey, opts={}){
+  chartRemember(container, ()=>makePieChart(container, items, valueKey, labelKey, opts));
   if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   const sorted = [...items].sort((a,b) => b[valueKey]-a[valueKey]);
-  // Wider viewBox gives outside labels enough room; CSS still scales it responsively.
-  const w = 1500, h = 820, cx = 750, cy = 380, r = 280, innerR = 145;
+  // Canvas width follows the container's real width (see ZOOM-AWARE CHART SIZING) so the
+  // label text keeps a fixed CSS size and scales with browser zoom. The pie's own coordinate
+  // system is ~2x the bar charts', hence its smaller px-per-unit. 1500 units is the full
+  // design; when the container is narrower the DONUT and the leader-line gaps shrink (factor
+  // f) so the outside labels always fit, while the text itself stays the same size.
+  const w = chartUnits(container, 0.93, 1000, 1500);
+  const f = Math.max(0.5, Math.min(1, (w/2 - 220) / 530));
+  const r = Math.round(280*f), innerR = Math.round(145*f);
+  const cx = w/2, cy = r + 100, h = cy + r + 90;
   const gapDeg = 0.018;
   const total = sorted.reduce((s,d) => s + d[valueKey], 0);
 
@@ -968,9 +1031,12 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
 
   // Center label: grand total
   const totalText = opts.valFmt ? opts.valFmt(total) : total.toFixed(2);
+  // The centre text keeps its full size while the donut hole is big enough; when the donut has
+  // shrunk (narrow container / high zoom) it scales down just enough to stay inside the hole.
+  const cScale = Math.min(1, (innerR*2*0.8) / (Math.max(String(totalText).length, 6) * 0.62 * 29));
   const centerLabel = `
-    <text x="${cx}" y="${cy-10}" font-size="21" font-weight="700" text-anchor="middle" fill="var(--chart-muted)">TOTAL</text>
-    <text x="${cx}" y="${cy+16}" font-size="29" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${totalText}</text>`;
+    <text x="${cx}" y="${cy-10*cScale}" font-size="${(21*cScale).toFixed(1)}" font-weight="700" text-anchor="middle" fill="var(--chart-muted)">TOTAL</text>
+    <text x="${cx}" y="${cy+16*cScale}" font-size="${(29*cScale).toFixed(1)}" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${totalText}</text>`;
 
   // Pass 3: place outside labels. To keep both sides visually balanced,
   // slices are assigned to left/right by rank (alternating) so neither
@@ -982,8 +1048,8 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
   leftSlices.sort((a,b) => a.midAngle - b.midAngle);
 
   const rowSpacing = 58;
-  const elbowOffset = 44;
-  const labelOffset = 250;
+  const elbowOffset = 44*f;
+  const labelOffset = 250*f;
 
   function layoutSide(list, side){
     const n = list.length;
@@ -1025,6 +1091,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
 /* Horizontal bar chart — used for LONG category names (Grades, Defects,
    Work Centers, Intensity levels) so labels never get cut off. */
 function makeHBarChart(container, items, valueKey, labelKey, opts={}){
+  chartRemember(container, ()=>makeHBarChart(container, items, valueKey, labelKey, opts));
   if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
   // Always order horizontal bars from highest to lowest value. This prevents a
   // low-value bar from appearing above a higher-value bar and makes the chart
@@ -1033,7 +1100,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const dv = (Number(b[valueKey]) || 0) - (Number(a[valueKey]) || 0);
     return dv || String(a[labelKey] || '').localeCompare(String(b[labelKey] || ''));
   });
-  const w = DESIGN_W;
+  const w = chartUnits(container);
   const rowH = 40, padL = 200, padR = 70, padT = 20, padB = 55;
   const h = rows.length * rowH + padT + padB;
   const maxV = niceMax(Math.max(...rows.map(d => Number(d[valueKey]) || 0), 0));
@@ -1073,8 +1140,9 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
 
 /* Horizontal GROUPED bar chart — e.g. Intensity: Coils + Qty side-by-side. */
 function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
+  chartRemember(container, ()=>makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts));
   if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
-  const w = DESIGN_W;
+  const w = chartUnits(container);
   const rowH = opts.rowH || 58, padL = 200, padR = 70, padT = 20, padB = 55;
   const h = items.length * rowH + padT + padB;
   const plotW = w - padL - padR;
@@ -1121,8 +1189,9 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
 
 /* Vertical grouped bar chart — for time-series with SHORT labels (Months). */
 function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
+  chartRemember(container, ()=>makeGroupedBarChart(container, items, labelKey, seriesDefs, opts));
   if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
-  const w = DESIGN_W, h = 430, padL = 70, padR = 20, padT = 30, padB = 115;
+  const w = chartUnits(container), h = 430, padL = 70, padR = 20, padT = 30, padB = 115;
   const plotW = w - padL - padR;
   const gap = plotW / items.length;
   const nSeries = seriesDefs.length;
@@ -1170,8 +1239,9 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
 }
 
 function makeLineChart(container, items, labelKey, series, opts={}){
+  chartRemember(container, ()=>makeLineChart(container, items, labelKey, series, opts));
   if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
-  const w = DESIGN_W, h = 400, padL = 65, padR = 30, padT = 45, padB = 95;
+  const w = chartUnits(container), h = 400, padL = 65, padR = 30, padT = 45, padB = 95;
   const n = items.length;
   const stepX = n > 1 ? (w - padL - padR) / (n - 1) : 0;
   const maxV = opts.max !== undefined ? opts.max :
@@ -1229,8 +1299,9 @@ function makeLineChart(container, items, labelKey, series, opts={}){
 }
 
 function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
+  chartRemember(container, ()=>makeComboChart(container, items, labelKey, barKey, lineKey, opts));
   if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
-  const w = DESIGN_W, h = 430, padL = 72, padR = 72, padT = 34, padB = 110;
+  const w = chartUnits(container), h = 430, padL = 72, padR = 72, padT = 34, padB = 110;
   const plotW = w - padL - padR, plotH = h - padT - padB;
   const maxBar = niceMax(Math.max(...items.map(d => Number(d[barKey])||0), 0));
   const maxLine = opts.lineMax !== undefined ? opts.lineMax : 1;
@@ -1661,9 +1732,16 @@ function fishboneBranchDefs(){
     return Object.assign({},b,{label:st.label, icon:st.icon, color:st.color});
   });
 }
-function buildFishboneSvg(item){
+// Fishbone canvas: 802 units of fixed margins/head + 2 lane gaps. At the full design
+// (LANE 380) that is 1562 units, drawn at FISHBONE_PX_PER_UNIT CSS px per unit. When the
+// container is narrower the lanes tighten (down to FISHBONE_LANE_MIN); below that the SVG keeps
+// its natural CSS size and the card scrolls sideways, so the text never shrinks with the window
+// and always follows browser zoom. `availUnits` = container width / FISHBONE_PX_PER_UNIT.
+const FISHBONE_PX_PER_UNIT = 0.88, FISHBONE_LANE_MAX = 380, FISHBONE_LANE_MIN = 280, FISHBONE_FIXED_W = 802;
+function buildFishboneSvg(item, availUnits){
   const causes=item.causes||{};
-  const LANE=380, TIP_DX=-160, ROW_GAP=56, BOX_H=42;
+  const laneFor = Number.isFinite(availUnits) ? Math.floor((availUnits - FISHBONE_FIXED_W) / 2) : FISHBONE_LANE_MAX;
+  const LANE=Math.max(FISHBONE_LANE_MIN, Math.min(FISHBONE_LANE_MAX, laneFor)), TIP_DX=-160, ROW_GAP=56, BOX_H=42;
   const anchors=[210, 210+LANE, 210+LANE*2];
   const spineX1=30, spineX2=anchors[2]+260;
   const headW=232;
@@ -1727,10 +1805,12 @@ function buildFishboneSvg(item){
     svg+=`<text x="${tipX}" y="${boxY+BOX_H/2+6}" font-size="17" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
   });
   const SHIFT_X=70; // nudge the whole diagram right within its frame, per feedback
-  return `<svg class="chart-svg fishbone-svg" viewBox="0 0 ${W+SHIFT_X} ${H}" xmlns="http://www.w3.org/2000/svg"><g transform="translate(${SHIFT_X},0)">${svg}</g></svg>`;
+  const natW=Math.round((W+SHIFT_X)*FISHBONE_PX_PER_UNIT);
+  return `<svg class="chart-svg fishbone-svg" viewBox="0 0 ${W+SHIFT_X} ${H}" style="--fb-natural-w:${natW}px" xmlns="http://www.w3.org/2000/svg"><g transform="translate(${SHIFT_X},0)">${svg}</g></svg>`;
 }
 function dashRenderFishboneDiagram(item){
   const el=document.getElementById('dashFishboneDiagram'); if(!el) return;
+  chartRemember(el, ()=>dashRenderFishboneDiagram(item));
   if(!item){ el.innerHTML='<div class="qcr-empty">No defect data available for the current selection.</div>'; return; }
   if(!item.matched){
     el.innerHTML=`<div class="qcr-empty">No 6M Fishbone mapping found for <b>${escQcr(item.defect)}</b> yet. Ask an admin to import/update the 6M Fishbone Master, or add a defect mapping in Admin → 6M Fishbone Analysis.</div>`;
@@ -1739,7 +1819,8 @@ function dashRenderFishboneDiagram(item){
   const note = item.match_type==='fuzzy' ? `<div class="qcr-fb-note">Matched to master defect "${escQcr(item.matched_defect)}" (closest match, ${Math.round((item.confidence||0)*100)}% confidence). If this looks wrong, fix it in Admin → 6M Fishbone Analysis.</div>` : '';
   // Dashboard tab shows the fishbone diagram only — the detailed RCA
   // (5-Why / root cause / action) table stays exclusive to the QCR tab.
-  el.innerHTML = `${note}${buildFishboneSvg(item)}`;
+  const cw = chartAvailWidth(el);
+  el.innerHTML = `${note}${buildFishboneSvg(item, cw ? cw / FISHBONE_PX_PER_UNIT : undefined)}`;
 }
 function dashLoadFishbone(topDefects){
   const chipsEl=document.getElementById('dashFishboneChips'), diagEl=document.getElementById('dashFishboneDiagram');

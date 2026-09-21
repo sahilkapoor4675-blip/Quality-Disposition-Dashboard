@@ -162,7 +162,7 @@
   .tab-panel.hidden{display:none;}
 
   .chart-scroll{overflow:visible;padding:16px;}
-  .chart-svg{display:block;width:100%;height:auto;}
+  .chart-svg{display:block;width:100%;height:auto;overflow:visible;} /* overflow:visible: rotated first x-axis label used to be clipped at the left edge */
   .legend{display:flex;gap:16px;font-size:14px;color:var(--text);margin:0 0 12px;flex-wrap:wrap;padding:0 16px;font-weight:600;align-items:center;}
   .legend-item{display:flex;align-items:center;gap:6px;}
 
@@ -791,7 +791,12 @@ html[data-theme="dark"] .qcr-rca-table-wrap{border-color:#2A3B54;}
 html[data-theme="dark"] .qcr-rca-table tbody td{border-color:#2A3B54;color:var(--text);}
 html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B2C;}
 #dashFishboneDiagram{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px 10px 6px;}
-#dashFishboneDiagram .fishbone-svg{display:block;width:100%;height:auto;}
+#dashFishboneDiagram{overflow-x:auto;}
+/* Natural size (--fb-natural-w, set per diagram) is both the cap on wide screens and the floor on
+   narrow ones, so fishbone text stays a fixed CSS size and follows browser zoom; the card scrolls
+   sideways instead of shrinking the text. Phones keep the old shrink-to-fit behaviour. */
+#dashFishboneDiagram .fishbone-svg{display:block;width:100%;height:auto;max-width:var(--fb-natural-w,none);margin:0 auto;}
+@media(min-width:701px){#dashFishboneDiagram .fishbone-svg{min-width:var(--fb-natural-w,0);}}
 .qcr-ranked-main{min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start;}
 .qcr-ranked-main>b{font:750 14px Manrope,sans-serif;color:#263f54;overflow-wrap:anywhere;}
 .qcr-ranked-main>span{font:700 15.5px Manrope,sans-serif;color:var(--muted);}
@@ -1210,14 +1215,18 @@ html[data-theme="dark"] #dashFishboneDiagram,
 html[data-theme="dark"] #qcrFishboneDiagram{background:var(--card)!important;border-color:var(--border);}
 html[data-theme="dark"] .legend{color:#AEBBD1;}
 
-/* Theme toggle button */
-.theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:9px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;font-size:17px;transition:background .15s ease;}
-.theme-toggle-btn:hover{background:rgba(255,255,255,.16);}
-html[data-theme="dark"] .theme-toggle-btn{border-color:#2A3B54;background:#141B2C;}
-.theme-toggle-btn.muted{opacity:.55;}
-.theme-toggle-btn.density-active{background:rgba(255,255,255,.28);}
-html[data-theme="dark"] .theme-toggle-btn.density-active{background:#22344E;}
-.cmdk-open-btn{width:auto;padding:0 10px;font-size:12.5px;font-weight:800;letter-spacing:.3px;}
+/* Command palette button (header).
+   The dark-mode / sound / compact-rows buttons were removed from the header
+   (they live in this palette now). This button used to inherit the old
+   "white icon on translucent white" toggle style, which was designed for a
+   dark header and vanished on the light header — it now has real light and
+   dark styles that match the Admin button next to it. */
+.cmdk-open-btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:auto;min-height:34px;padding:7px 12px;border:1px solid #D5E0EA;border-radius:8px;background:#fff;color:var(--heading);font:800 13.5px/1.2 'Manrope','DM Sans',sans-serif;letter-spacing:.3px;cursor:pointer;box-shadow:0 2px 6px rgba(30,65,95,.05);transition:background .15s ease,border-color .15s ease;}
+.cmdk-open-btn:hover{background:#F2F7FB;border-color:#AFC9DC;}
+.cmdk-open-btn:focus-visible{outline:3px solid rgba(37,99,235,.35);outline-offset:2px;}
+html[data-theme="dark"] .cmdk-open-btn{background:#141B2C;border-color:#2A3B54;color:#DCE6F5;box-shadow:none;}
+html[data-theme="dark"] .cmdk-open-btn:hover{background:#1B2A40;border-color:#4A6380;}
+@media(max-width:600px){.cmdk-open-btn{padding:6px 8px;font-size:13px;}}
 
 /* ================================================================
    GLOBAL SEARCH — find any defect / grade / work center quickly.
@@ -1440,7 +1449,8 @@ html[data-theme="dark"] .header-toolbar-row .filter-toolbar{border-top-color:rgb
 .cmdk-item.active .cmdk-hint{color:rgba(255,255,255,.8);}
 .cmdk-empty{padding:22px;text-align:center;color:var(--muted);font:600 13.5px Manrope,sans-serif;}
 .cmdk-foot{display:flex;gap:14px;padding:9px 16px;border-top:1px solid var(--border);font:700 11px Manrope,sans-serif;color:var(--muted);}
-@media(max-width:700px){.cmdk-modal{display:none!important;}} /* Ctrl+K is a desktop keyboard convention */
+/* The palette opens on phones too (via the ⌘K header button): dark mode / sound / compact rows are only reachable from here now. */
+@media(max-width:700px){.cmdk-modal{padding-top:8vh;}.cmdk-dialog{max-height:78vh;}}
 
 /* Dark mode: the teal plant-name line was too dim on the dark header. */
 html[data-theme="dark"] .plant-name{color:#5EEAD4;}

@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V63.5
+# Quality Disposition Control Dashboard — V63.6
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no

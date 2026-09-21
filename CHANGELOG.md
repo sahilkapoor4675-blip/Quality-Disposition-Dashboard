@@ -1183,3 +1183,35 @@ command palette, admin add/import/delete/bulk-delete/backup/restore/6M import ch
 
 ## Preserved
 No KPI formula, filter semantic, schema or stored data changed.
+
+---
+
+## V63.6
+
+# V63.6 — Zoom-aware charts, cleaner header, command-palette button fix
+
+## Fixed
+- **Charts (and their fonts) ignored browser zoom.** Every chart was drawn on a fixed SVG canvas
+  that was stretched to the container's width, so chart text tracked the *container* instead of the
+  zoom level: pressing Ctrl +/- resized all page text (8px → 32px across 50%–200% zoom) while chart text
+  stayed ~20px. The canvas width is now derived from the container's real CSS width
+  (`chartUnits()` in `app.js`), so one SVG unit is always the same number of CSS pixels and chart
+  text scales with zoom exactly like every other piece of text, in every browser. Charts remember how
+  to redraw and re-render (debounced `ResizeObserver`) when zoom / window size / a hidden tab changes
+  their width. Look at 100% zoom is unchanged (`CHART_PX_PER_UNIT = 1.9`; tune in `app.js`).
+  - Pie chart: donut + leader lines shrink when narrow so outside labels always fit; centre total
+    scales to stay inside the hole.
+  - Fishbone diagram: lanes tighten when narrow; below its natural width the card scrolls sideways
+    instead of shrinking the text.
+  - Rotated first x-axis label of line charts was clipped at the left edge (`.chart-svg{overflow:visible}`).
+- **Command palette (⌘K) button was invisible on the light header** (white-on-white). It now has real
+  light and dark styles matching the Admin button.
+
+## Changed
+- Dark-mode, sound (mute/unmute) and compact-table-rows buttons were removed from the header; they
+  are available from the command palette (Ctrl+K / ⌘K or the ⌘K button). Their logic is now plain
+  functions (`toggleTheme`, `toggleDensity`, `toggleSound`) instead of hidden-button clicks; palette
+  search also matches "volume", "sound", "theme", "density".
+- The palette now opens on phones (it was hidden ≤700px) since it is the only place for those toggles.
+- "Compare Periods" is only offered in the palette when its button is visible (desktop).
+- Asset cache-buster bumped to `68.1`.
