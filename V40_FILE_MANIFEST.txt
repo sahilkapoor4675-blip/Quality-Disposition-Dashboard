@@ -1,7 +1,0 @@
-V40 FINAL CLEAN PACKAGE
-- Admin header restored to clean white subtle header treatment.
-- Admin layout constrained to viewport width; page-level horizontal scrolling disabled.
-- Tables retain their own internal horizontal scroll where required for wide data columns.
-- Intro is light-theme only; dark intro asset removed.
-- Intro dashboard CTA remains the acknowledgement gate; background motion continues after video end.
-- Existing application/data/server/database files preserved; no data records modified.
