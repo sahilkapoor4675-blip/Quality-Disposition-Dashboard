@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=68.1">
+<link rel="stylesheet" href="/app.css?v=68.2">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -322,16 +322,16 @@
 })();
 </script>
 
-<header>
+<header class="app-header">
   <div class="header-top-row">
     <div class="executive-header-inner">
       <img class="header-logo" src="jsl-header-logo.png" alt="Jindal Stainless">
-    <div class="executive-brand">
-      <h1 class="quality-intelligence-title"><span class="qi-quality">QUALITY</span><span class="qi-space"> </span><span class="qi-intelligence">INTELLIGENCE</span></h1>
-      <div class="executive-kicker">Disposition &amp; Defect Analytics</div>
-      <div class="plant-name">Cupronickel (Non-Ferrous) Division</div>
-      <div class="sub">Plant Quality Performance Monitoring</div>
-    </div>
+      <div class="executive-brand">
+        <h1 class="quality-intelligence-title"><span class="qi-quality">QUALITY</span><span class="qi-space"> </span><span class="qi-intelligence">INTELLIGENCE</span></h1>
+        <div class="executive-kicker">Disposition &amp; Defect Analytics</div>
+        <div class="plant-name">Cupronickel (Non-Ferrous) Division</div>
+        <div class="sub">Plant Quality Performance Monitoring</div>
+      </div>
     </div>
     <div class="executive-meta">
       <div class="updated-block">
@@ -341,13 +341,12 @@
       <div class="header-actions">
         <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
         <div class="live-users" title="Dashboard users active within the last 75 seconds"><span class="live-users-dot"></span><span>NOW ACTIVE</span><strong id="liveUsersCount">0</strong></div>
-        <!-- Dark mode, sound (mute/unmute) and compact table rows live in the Command Palette now (⌘K / Ctrl+K), so they no longer take up header space. -->
-        <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — dark mode, sound, compact rows, exports &amp; more" aria-label="Open command palette">⌘K</button>
-        <a class="admin-link" href="/admin">🔐 Admin</a>
+        <!-- Everything else (Excel / PDF / PPT / CSV exports, Admin panel, dark mode, sound, compact rows, tab
+             navigation...) lives in the Command Palette — this one button (or Ctrl+K / ⌘K) opens it. -->
+        <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — reports &amp; exports, Admin, dark mode, sound, compact rows and more" aria-label="Open command palette"><span class="cmdk-ico" aria-hidden="true">⌘</span><span class="cmdk-text">Commands</span><kbd class="cmdk-kbd" id="cmdkKbd">Ctrl K</kbd></button>
       </div>
     </div>
   </div>
-  <div class="header-toolbar-row" id="headerFilterToolbar"></div>
 </header>
 
 <div class="container">
@@ -656,6 +655,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=68.1" defer></script>
+<script src="/app.js?v=68.2" defer></script>
 </body>
 </html>

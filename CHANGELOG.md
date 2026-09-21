@@ -1215,3 +1215,41 @@ No KPI formula, filter semantic, schema or stored data changed.
 - The palette now opens on phones (it was hidden ≤700px) since it is the only place for those toggles.
 - "Compare Periods" is only offered in the palette when its button is visible (desktop).
 - Asset cache-buster bumped to `68.1`.
+
+---
+
+## V63.7
+
+# V63.7 — Clean aligned header, palette-only actions, verification fixes
+
+## Changed
+- **Header is now one clean row.** Admin and the four report buttons (Excel / PDF / PPT / Raw CSV) were removed from
+  the header — they live in the command palette (Ctrl+K / the **Commands** button), exactly like dark mode,
+  sound and compact rows already did. The empty second toolbar row is gone.
+- **Header width now matches the page.** Root cause: `header{max-width:1480px}` (declared last) overrode the
+  1740 / 2000px breakpoints that widen `.container`, and even at 1480px the header's box stuck out 24px past the
+  cards below (they sit inside the container padding). `--page-max` / `--page-pad` are now shared by `.container`
+  and the header, so the edges line up at every viewport width.
+- Logo and title block are vertically centred and left-aligned as one unit (logo 64px, hairline divider);
+  status + palette button are right-aligned at a common 36px height. Tighter tiers at ≤1500px / ≤1300px / phones.
+- The palette button now reads "⌘ Commands" with the shortcut hint (Ctrl K, or ⌘K on Apple devices).
+- `exportDashboard(format)` is now a top-level function (no button needed): progress toast while generating,
+  success/error toast, guard against double-starts. Used by the palette and Ctrl+E.
+- Cache-buster `68.2`.
+
+## Fixed
+- Fishbone diagram lost text (“…”) on tightened lanes: narrow layouts now allow up to 5 wrapped lines so no cause is
+  ever truncated (the original "show every cause" rule).
+- Dark mode: the "NOW ACTIVE" pill was a bright white block on the dark header.
+- Phones: branding no longer overflows; "Last updated" / status / palette button fit on one line ≥360px.
+
+## Verified (Chromium; Firefox is not available in the build sandbox)
+- Header edges == content edges at 1280 / 1519 / 1700 / 1900 / 2267 / 3038px, light + dark, plus phones.
+- Charts: no redraw loop after resize, hidden-tab charts redraw with the right width when shown, chart click →
+  drill-down works after a resize redraw, Compare Periods panes render, no page errors on any tab (light/dark),
+  no horizontal page overflow on a 390px phone across all 5 tabs.
+- Palette: all four exports download (and Ctrl+E), error toast on a failing export, Admin navigation.
+- Fishbone verified with real 6M master data through `/api/fishbone`.
+- Release gate: node --check, py_compile, code_health, regression_smoke, http_smoke, smoke_test, regression_test,
+  export_acceptance, export_stress — all PASS.
+

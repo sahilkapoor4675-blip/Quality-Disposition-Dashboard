@@ -172,10 +172,10 @@ function initCommandPalette(){
   function buildCommands(){
     const cmds=[];
     Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),run:()=>activateTab(key)}));
-    cmds.push({icon:'📊',label:'Export Quality Report — Excel',hint:'Ctrl+E',run:()=>document.getElementById('exportExcelBtn')?.click()});
-    cmds.push({icon:'📄',label:'Export Quality Report — PDF',run:()=>document.getElementById('exportPdfBtn')?.click()});
-    cmds.push({icon:'📽️',label:'Export Quality Report — PPT',run:()=>document.getElementById('exportPptBtn')?.click()});
-    cmds.push({icon:'📋',label:'Export Raw Data — CSV',run:()=>document.getElementById('exportCsvBtn')?.click()});
+    cmds.push({icon:'📊',label:'Export Quality Report — Excel',hint:'Ctrl+E',kw:'download report',run:()=>exportDashboard('excel')});
+    cmds.push({icon:'📄',label:'Export Quality Report — PDF',kw:'download report',run:()=>exportDashboard('pdf')});
+    cmds.push({icon:'📽️',label:'Export Quality Report — PPT',kw:'download report',run:()=>exportDashboard('pptx')});
+    cmds.push({icon:'📋',label:'Export Raw Data — CSV',kw:'download report',run:()=>exportDashboard('csv')});
     // Compare mode is desktop-only (its button is hidden on narrow screens), so only offer it when the button is actually shown.
     if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({icon:'⊞',label:'Compare Periods (side-by-side)',run:()=>document.getElementById('compareModeBtn')?.click()});
     cmds.push({icon:'↺',label:'Reset All Filters',run:()=>document.getElementById('resetAllBtn')?.click()});
@@ -192,7 +192,7 @@ function initCommandPalette(){
       const on=toggleSound();
       if(on!==null) showToast('success',on?'Sound effects on':'Sound effects muted', on?'Click and confirmation sounds are back.':'The dashboard is silent now. Unmute any time from Ctrl+K.');
     }});
-    cmds.push({icon:'🔐',label:'Open Admin Panel',run:()=>window.location.href='/admin'});
+    cmds.push({icon:'🔐',label:'Open Admin Panel',kw:'admin settings users login manage',run:()=>window.location.href='/admin'});
     const curTab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
     cmds.push({icon:'📌',label:`Set "${TAB_LABELS[curTab]||curTab}" as my Default Landing Tab`,run:()=>setDefaultLandingTab(curTab)});
     ACCENT_PRESETS.forEach(a=>cmds.push({icon:'🎨',label:`Accent Color — ${a.name}`,run:()=>{applyAccent(a.value);showToast('success','Accent color updated',a.name+' applied.');}}));
@@ -216,6 +216,9 @@ function initCommandPalette(){
   function run(i){ const c=filtered[i]; if(!c) return; close(); c.run(); if(window.SFX) SFX.play('confirm'); }
   function open(){ modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); input.value=''; render(''); input.focus(); }
   function close(){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+  // Show the shortcut in the right dialect for the platform (⌘K on Apple devices, Ctrl K elsewhere).
+  const kbdHint=document.getElementById('cmdkKbd');
+  if(kbdHint && /Mac|iPhone|iPad/i.test(navigator.platform||navigator.userAgent||'')) kbdHint.textContent='⌘K';
   window.openCommandPalette = open;
   window.closeCommandPalette = close;
   window.isCommandPaletteOpen = ()=>modal.classList.contains('open');
@@ -265,7 +268,7 @@ let refreshController = null;
     }
     if(!typing && (e.key==='e'||e.key==='E') && (e.ctrlKey||e.metaKey)){
       e.preventDefault();
-      document.getElementById('exportExcelBtn')?.click();
+      exportDashboard('excel');
       return;
     }
     if(!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-5]$/.test(e.key)){
@@ -293,18 +296,46 @@ function fmtValue(v, fmt){
 function fmtNum2(v){ return v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtPct(v){ return (v*100).toFixed(2) + "%"; }
 
+// ---- Report exports (Excel / PDF / PPT / raw CSV) ----
+// There are no export buttons any more (header is kept clean); the command palette (Ctrl+K) and the
+// Ctrl+E shortcut call this directly. Progress is shown as a toast, since large reports can take a while.
+const EXPORT_LABELS={excel:'Excel report',pdf:'PDF report',pptx:'PowerPoint report',csv:'Raw data (CSV)'};
+const _exportBusy={};
+function exportDashboard(format){
+  const label=EXPORT_LABELS[format]||format;
+  if(_exportBusy[format]){ showToast('info',label+' is already being generated','Please wait — the download starts automatically.'); return; }
+  _exportBusy[format]=true;
+  const params=new URLSearchParams(currentFilters).toString();
+  const url=`/api/export/${format}?${params}`;
+  const endProgress=showToast('info','Generating '+label+'…','Large reports can take up to a minute. The download starts automatically.',{duration:300000});
+  fetch(url,{cache:'no-store'}).then(res=>{
+    if(!res.ok) return res.json().catch(()=>null).then(j=>{ throw new Error((j&&j.error)?j.error:('Export failed (HTTP '+res.status+').')); });
+    const cd=res.headers.get('Content-Disposition')||'';
+    const m=/filename="?([^";]+)"?/i.exec(cd);
+    const filename=m?m[1]:(`export.${format==='pptx'?'pptx':format}`);
+    return res.blob().then(blob=>({blob,filename}));
+  }).then(({blob,filename})=>{
+    const dlUrl=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=dlUrl; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(dlUrl),4000);
+    endProgress();
+    showToast('success','Export ready',filename+' has finished downloading.');
+    if(window.SFX) SFX.play('success');
+  }).catch(e=>{
+    endProgress();
+    showToast('error','Export failed',String(e.message||e));
+    if(window.SFX) SFX.play('error');
+  }).finally(()=>{ _exportBusy[format]=false; });
+}
+
 async function loadFilters(){
   const res = await fetch("/api/filters");
   const options = await res.json();
   window._filterOptionsCache = options;
   const container = document.getElementById("filters");
-  const toolbarHost = document.getElementById("headerFilterToolbar");
-  if (toolbarHost) {
-    toolbarHost.innerHTML = `<div class="filter-toolbar"><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button></div></div>`;
-    container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">⊞ Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
-  } else {
-    container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><button id="exportExcelBtn" class="export-btn" type="button">📊 Quality Report • Excel</button><button id="exportPdfBtn" class="export-btn" type="button">📄 Quality Report • PDF</button><button id="exportPptBtn" class="export-btn" type="button">📽️ Quality Report • PPT</button><button id="exportCsvBtn" class="export-btn" type="button">📋 Raw Data • CSV</button><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">⊞ Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
-  }
+  // The Excel / PDF / PPT / CSV export buttons used to be built here into the header. They are now
+  // ONLY in the command palette (Ctrl+K), which calls exportDashboard() directly.
+  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">⊞ Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
     const label = document.createElement("label"); label.textContent = f.label;
@@ -337,36 +368,6 @@ async function loadFilters(){
     field.classList.toggle("filter-active", currentFilters[f.key]!=="All");
   });
   document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();});
-  function exportDashboard(format,btn){
-    const params=new URLSearchParams(currentFilters).toString();
-    const url=`/api/export/${format}?${params}`;
-    if(!btn){ window.location.href=url; return; } // fallback if called without a button reference
-    const original=btn.innerHTML;
-    btn.disabled=true; btn.classList.add('exporting');
-    btn.innerHTML=`<span class="export-spinner" aria-hidden="true"></span> Generating…`;
-    fetch(url,{cache:'no-store'}).then(res=>{
-      if(!res.ok) return res.json().catch(()=>null).then(j=>{ throw new Error((j&&j.error)?j.error:('Export failed (HTTP '+res.status+').')); });
-      const cd=res.headers.get('Content-Disposition')||'';
-      const m=/filename="?([^";]+)"?/i.exec(cd);
-      const filename=m?m[1]:(`export.${format==='pptx'?'pptx':format}`);
-      return res.blob().then(blob=>({blob,filename}));
-    }).then(({blob,filename})=>{
-      const dlUrl=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=dlUrl; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(dlUrl),4000);
-      showToast('success','Export ready',filename+' has finished downloading.');
-      if(window.SFX) SFX.play('success');
-    }).catch(e=>{
-      showToast('error','Export failed',String(e.message||e));
-      if(window.SFX) SFX.play('error');
-    }).finally(()=>{
-      btn.disabled=false; btn.classList.remove('exporting'); btn.innerHTML=original;
-    });
-  }
-  document.getElementById("exportExcelBtn").addEventListener("click",e=>exportDashboard("excel",e.currentTarget));
-  document.getElementById("exportPdfBtn").addEventListener("click",e=>exportDashboard("pdf",e.currentTarget));
-  document.getElementById("exportPptBtn").addEventListener("click",e=>exportDashboard("pptx",e.currentTarget));
-  document.getElementById("exportCsvBtn").addEventListener("click",e=>exportDashboard("csv",e.currentTarget));
   document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));});
   updateActiveFilterBadge();
 }
@@ -986,6 +987,7 @@ function showToast(kind,title,message,opts={}){
   const dismiss=()=>{ if(dismissed)return; dismissed=true; el.classList.remove('show'); el.classList.add('hide'); setTimeout(()=>el.remove(),260); };
   const timer=setTimeout(dismiss,dur);
   el.querySelector('.toast-close').addEventListener('click',()=>{clearTimeout(timer);dismiss();});
+  return ()=>{clearTimeout(timer);dismiss();};
 }
 
 function makePieChart(container, items, valueKey, labelKey, opts={}){
@@ -1753,7 +1755,7 @@ function buildFishboneSvg(item, availUnits){
     const list=fbList(causes[b.key]);
     const items=(list.length?list:['No cause on file']).map(txt=>({
       text:txt, missing:!list.length,
-      fit:fbFitBox(txt, availCauseW, {baseSize:14, minSize:9.5, maxLines:3, charW:0.64})
+      fit:fbFitBox(txt, availCauseW, {baseSize:14, minSize:9.5, maxLines:(LANE<FISHBONE_LANE_MAX?5:3), charW:0.64})
     }));
     return Object.assign({}, b, {anchorX:anchors[b.lane], items});
   });

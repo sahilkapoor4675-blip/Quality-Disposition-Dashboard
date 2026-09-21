@@ -1283,7 +1283,7 @@ html[data-theme="dark"] .gsr-item-label mark{background:#7A5C00;color:#FFE9A8;}
    wider/heavier than the content below it. Capping it to the same
    max-width and centering it lines it up with the rest of the page.
    ================================================================ */
-header{max-width:1480px;margin:0 auto;width:100%;box-sizing:border-box;}
+/* (header width/alignment is now defined once, in the HEADER block near the end of this file) */
 
 /* ================================================================
    FREEZE FILTERS + TABS TOGETHER AT THE TOP
@@ -1325,38 +1325,90 @@ header{max-width:1480px;margin:0 auto;width:100%;box-sizing:border-box;}
    did before the height reduction, without the header itself
    growing tall again.
    ================================================================ */
-header{padding:16px 28px !important;}
 header h1.quality-intelligence-title{margin:0 0 3px !important;}
 .quality-intelligence-title{font-size:38px !important;line-height:1.15 !important;padding-bottom:0 !important;}
 .executive-kicker{margin-top:4px !important;font-size:14px !important;}
 .plant-name{margin-top:3px !important;font-size:16px !important;}
 header .sub{font-size:14px !important;}
-.header-logo{height:58px !important;}
 @media(max-width:700px){
-  header{padding:12px 18px !important;}
   .quality-intelligence-title{font-size:26px !important;}
-  .header-logo{height:42px !important;}
 }
 
 /* ================================================================
-   HEADER TOOLBAR ROW — only the export buttons ("Quality Report •
-   Excel/PDF/PPT / Raw Data CSV") live here now, right-aligned, as a
-   second row right below the branding + live-status row. The
-   "Dashboard Filters" title, active-filter badge and Reset All
-   button live inside the Filters panel instead (#filters, filled by
-   loadFilters() in app.js).
+   HEADER (V63.7) — one clean row: logo + title on the left (vertically
+   centred, separated by a hairline), status + command-palette button on
+   the right. Reports/exports, Admin, dark mode, sound and compact rows
+   all live in the command palette (Ctrl+K), so the header carries no
+   action buttons.
+   ALIGNMENT: --page-max / --page-pad are shared by .container and the
+   header, and the header's side margins are computed from them, so the
+   header's edges line up exactly with the cards below at every viewport
+   width (the old header stayed at 1480px while the page grew to
+   1740/2000px, and its box also stuck out 24px past the content).
    ================================================================ */
-header{display:flex !important;flex-direction:column !important;align-items:stretch !important;justify-content:flex-start !important;gap:4px !important;}
-.header-top-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:18px;width:100%;}
-.header-toolbar-row{width:100%;}
-.header-toolbar-row:empty{display:none;}
-.header-toolbar-row .filter-toolbar{grid-column:auto;display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;padding:8px 0 0;margin-top:2px;border-top:1px solid rgba(255,255,255,.16);}
-.header-toolbar-row .filter-toolbar-title{color:rgba(255,255,255,.85) !important;font-size:12.5px !important;}
-.header-toolbar-row .active-filter-badge{background:rgba(255,255,255,.14);color:#fff;}
-@media(max-width:700px){
-  .header-toolbar-row .filter-toolbar{flex-direction:column;align-items:flex-end;gap:8px;}
+:root{--page-max:1480px;--page-pad:24px;}
+@media(min-width:1700px){:root{--page-max:1740px;}}
+@media(min-width:2100px){:root{--page-max:2000px;}}
+.container{max-width:var(--page-max);padding-left:var(--page-pad);padding-right:var(--page-pad);}
+header.app-header{
+  display:block;position:relative;box-sizing:border-box;width:auto;max-width:none;
+  margin:16px max(var(--page-pad),calc((100% - var(--page-max)) / 2 + var(--page-pad))) 0;
+  padding:14px 26px;
+  background:linear-gradient(135deg,#FFFFFF 0%,#F4F8FC 100%);
+  border:1px solid #DCE7F0;border-radius:14px;
+  box-shadow:0 6px 22px rgba(31,61,90,.08);
 }
-html[data-theme="dark"] .header-toolbar-row .filter-toolbar{border-top-color:rgba(255,255,255,.10);}
+html[data-theme="dark"] header.app-header{background:linear-gradient(135deg,#0B1220 0%,#141F33 100%);border-color:rgba(255,255,255,.08);box-shadow:0 6px 22px rgba(0,0,0,.4);}
+.header-top-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px 28px;width:100%;}
+.executive-header-inner{display:flex;align-items:center;gap:0;min-width:0;flex:0 1 auto;}
+.header-logo{height:64px;width:auto;max-width:240px;margin:0 22px 0 0;flex:none;object-fit:contain;}
+.executive-brand{min-width:0;padding-left:22px;border-left:1px solid #DCE7F0;}
+html[data-theme="dark"] .executive-brand{border-left-color:#2A3B54;}
+.executive-meta{display:flex;align-items:center;gap:18px;margin-left:auto;}
+.updated-block{text-align:right;min-width:0;padding-right:18px;border-right:1px solid #DCE7F0;}
+html[data-theme="dark"] .updated-block{border-right-color:#2A3B54;}
+/* "NOW ACTIVE" pill only had light-theme colours (a bright white pill on the dark header). */
+html[data-theme="dark"] .live-users{background:#0F2A21;border-color:#1F4A3A;color:#6EE7B7;}
+html[data-theme="dark"] .live-users .live-users-dot{background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.16);}
+.header-actions{display:flex;align-items:center;gap:10px;}
+/* live pills + palette button share one height so the right cluster reads as a single toolbar */
+header .live-status,header .live-users,header .cmdk-open-btn{box-sizing:border-box;height:36px;padding-top:0;padding-bottom:0;}
+header .live-status,header .live-users{padding-left:13px;padding-right:13px;}
+header .cmdk-open-btn{gap:8px;padding-left:12px;padding-right:9px;}
+.cmdk-ico{font-size:15px;line-height:1;}
+.cmdk-kbd{font:700 11px/1 'Manrope','DM Sans',sans-serif;letter-spacing:.2px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;}
+html[data-theme="dark"] .cmdk-kbd{background:#0F1626;border-color:#2A3B54;color:#9AABC2;}
+/* Mid-size windows: slightly tighter branding so the one-row layout survives on 1366px laptops.
+   Below ~1300px the two halves cannot share a line any more and the status cluster drops under the
+   branding, right-aligned (flex-wrap does the same thing automatically if a web font is wider than expected). */
+@media(max-width:1500px){.header-logo{height:56px;max-width:210px;margin-right:18px;}.executive-brand{padding-left:18px;}.quality-intelligence-title{font-size:34px !important;}.cmdk-kbd{display:none;}header .cmdk-open-btn{padding-right:12px;}}
+@media(max-width:1300px){.executive-meta{width:100%;margin-left:0;justify-content:flex-end;}}
+@media(max-width:900px){.header-logo{height:52px;margin-right:16px;}.executive-brand{padding-left:16px;}}
+@media(max-width:700px){
+  header.app-header{padding:12px 14px;}
+  .executive-meta{justify-content:space-between;gap:10px;}
+  .updated-block{text-align:left;border-right:0;padding-right:0;}
+  .cmdk-kbd{display:none;}
+}
+@media(max-width:600px){
+  .header-logo{height:40px;max-width:120px;margin-right:12px;}
+  .executive-brand{padding-left:12px;}
+  .executive-kicker{font-size:11.5px !important;letter-spacing:1.1px;}
+  .executive-meta{flex-wrap:nowrap;}
+  .updated-label{display:none;}
+  .updated-time{font-size:12.5px;}
+  header .live-status{padding-left:10px;padding-right:10px;font-size:12px;}
+  header .cmdk-open-btn{padding-left:10px;padding-right:10px;}
+}
+@media(max-width:480px){
+  .header-logo{height:34px;max-width:96px;margin-right:10px;}
+  .executive-brand{padding-left:10px;}
+  .quality-intelligence-title{font-size:21px !important;}
+}
+@media(max-width:420px){
+  .cmdk-text{display:none;}
+  header .cmdk-open-btn{width:36px;padding:0;justify-content:center;}
+}
 
 /* ================================================================
    FILTERS PANEL — slightly shorter now that the toolbar row moved
