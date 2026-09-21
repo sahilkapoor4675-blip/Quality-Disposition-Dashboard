@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&family=Allura&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=66.0">
+<link rel="stylesheet" href="/app.css?v=68.0">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -338,6 +338,8 @@
         <div class="live-users" title="Dashboard users active within the last 75 seconds"><span class="live-users-dot"></span><span>NOW ACTIVE</span><strong id="liveUsersCount">0</strong></div>
         <button class="theme-toggle-btn" id="themeToggleBtn" type="button" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
         <button class="theme-toggle-btn sfx-toggle-btn" type="button" title="Mute sound effects" aria-label="Mute sound effects">🔊</button>
+        <button class="theme-toggle-btn" id="densityToggleBtn" type="button" title="Switch to compact table rows" aria-label="Switch to compact table rows">☰</button>
+        <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Open command palette (Ctrl+K)" aria-label="Open command palette">⌘K</button>
         <a class="admin-link" href="/admin">🔐 Admin</a>
       </div>
     </div>
@@ -391,6 +393,17 @@
         <iframe id="compareFrameA" title="Comparison — left"></iframe>
         <iframe id="compareFrameB" title="Comparison — right"></iframe>
       </div>
+    </div>
+  </div>
+
+  <!-- Command palette: Ctrl+K / Cmd+K. Ties together navigation, export,
+       filters and preferences in one searchable list, and doubles as a
+       discoverable index of every keyboard shortcut/toggle in the app. -->
+  <div class="cmdk-modal" id="cmdkModal" aria-hidden="true">
+    <div class="cmdk-dialog" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input type="text" id="cmdkInput" class="cmdk-input" placeholder="Type a command… (export, tab name, dark mode, compact…)" autocomplete="off">
+      <div class="cmdk-list" id="cmdkList"></div>
+      <div class="cmdk-foot"><span>↑↓ navigate</span><span>↵ select</span><span>esc close</span></div>
     </div>
   </div>
 
@@ -640,6 +653,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=66.0" defer></script>
+<script src="/app.js?v=68.0" defer></script>
 </body>
 </html>

@@ -108,6 +108,13 @@
 
   .filter-trigger{font-size:14px;min-height:38px;}
   table{font-size:14.5px;} th{font-size:13.5px;} th,td{padding:9px 11px;}
+  /* ---- Density toggle: "Compact" tightens table row padding/line-height/
+     font-size so more rows fit on screen without scrolling — a desktop
+     power-user preference, remembered per-browser via localStorage. ---- */
+  body.density-compact table{font-size:12.5px;}
+  body.density-compact th,body.density-compact td{padding:4px 9px!important;}
+  body.density-compact .drill-table td{padding:3px 8px!important;line-height:1.15!important;}
+  body.density-compact .drill-table th{padding:5px 8px!important;}
   @media (min-width:1500px){.kpi-card .value{font-size:32px}.chart-scroll{min-height:410px;}}
   @media (max-width:1100px) and (min-width:901px){.kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}.kpi-card{padding:13px 13px;min-height:145px}.kpi-card .value{font-size:25px}.container{padding:20px}.chart-scroll{padding:14px;}}
   @media (prefers-reduced-motion:reduce){.kpi-card,.kpi-card .value{animation:none!important;transition:none!important}.dashboard-refreshing,.chart-refreshing,.chart-ready{transition:none!important}.chart-ready .chart-svg,.chart-ready .legend{animation:none!important}}
@@ -226,6 +233,16 @@
   .kpi-card.shimmering>*{opacity:.35}
   .kpi-card.shimmering::after{content:"";position:absolute;inset:0;opacity:1;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.75) 48%,transparent 66%);background-size:220% 100%;animation:shimmer .6s ease-in-out infinite;}
   @keyframes shimmer{from{background-position:200% 0}to{background-position:-20% 0}}
+  /* ---- Skeleton loaders: shown the moment a tab/panel starts loading (a
+     shimmering placeholder shaped like the content that's coming), instead
+     of an empty container until data arrives. Real content simply
+     overwrites this markup once the fetch resolves — nothing to clean up. */
+  .skeleton-chart{display:flex;align-items:flex-end;gap:10px;height:260px;padding:24px 24px 30px;}
+  .skeleton-bar{flex:1;border-radius:6px 6px 0 0;background:linear-gradient(105deg,#e7edf3 25%,#f4f7fa 50%,#e7edf3 75%);background-size:220% 100%;animation:shimmer 1.3s ease-in-out infinite;}
+  .skeleton-row td{padding:10px 12px!important;}
+  .skeleton-line{height:13px;border-radius:5px;background:linear-gradient(105deg,#e7edf3 25%,#f4f7fa 50%,#e7edf3 75%);background-size:220% 100%;animation:shimmer 1.3s ease-in-out infinite;}
+  html[data-theme="dark"] .skeleton-bar,html[data-theme="dark"] .skeleton-line{background:linear-gradient(105deg,#1B2740 25%,#233252 50%,#1B2740 75%);background-size:220% 100%;}
+  @media(prefers-reduced-motion:reduce){.skeleton-bar,.skeleton-line{animation:none;opacity:.5;}}
   .charts-grid .panel,.panel.chart-animated{transition:opacity .3s ease,transform .3s ease;}
   .chart-refreshing{opacity:.35;transform:translateY(4px);}
   .chart-ready{opacity:1;transform:translateY(0);}
@@ -1198,6 +1215,9 @@ html[data-theme="dark"] .legend{color:#AEBBD1;}
 .theme-toggle-btn:hover{background:rgba(255,255,255,.16);}
 html[data-theme="dark"] .theme-toggle-btn{border-color:#2A3B54;background:#141B2C;}
 .theme-toggle-btn.muted{opacity:.55;}
+.theme-toggle-btn.density-active{background:rgba(255,255,255,.28);}
+html[data-theme="dark"] .theme-toggle-btn.density-active{background:#22344E;}
+.cmdk-open-btn{width:auto;padding:0 10px;font-size:12.5px;font-weight:800;letter-spacing:.3px;}
 
 /* ================================================================
    GLOBAL SEARCH — find any defect / grade / work center quickly.
@@ -1400,6 +1420,24 @@ html[data-theme="dark"] .header-toolbar-row .filter-toolbar{border-top-color:rgb
 .compare-view-head div{display:flex;gap:8px;}
 .compare-panes{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--border);overflow:hidden;}
 .compare-panes iframe{width:100%;height:100%;border:0;background:var(--bg);}
-@media(max-width:1100px){
+@media(max-width:900px){
   .compare-modal,#compareModeBtn{display:none!important;} /* needs real side-by-side width — a genuinely desktop-only feature */
 }
+
+/* ================================================================
+   COMMAND PALETTE (Ctrl+K / Cmd+K)
+   ================================================================ */
+.cmdk-modal{position:fixed;inset:0;z-index:210000;background:rgba(15,35,55,.45);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;}
+.cmdk-modal.open{display:flex;}
+.cmdk-dialog{width:min(640px,92vw);max-height:70vh;background:var(--card);border-radius:14px;box-shadow:0 30px 80px rgba(12,34,55,.35);overflow:hidden;display:flex;flex-direction:column;border:1px solid var(--border);}
+.cmdk-input{border:0;border-bottom:1px solid var(--border);padding:17px 20px;font:600 16px Manrope,sans-serif;background:transparent;color:var(--text);outline:none;}
+.cmdk-list{overflow-y:auto;flex:1;padding:8px;}
+.cmdk-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;cursor:pointer;font:600 14px Manrope,sans-serif;color:var(--text);}
+.cmdk-item .cmdk-icon{font-size:16px;width:22px;text-align:center;flex:none;}
+.cmdk-item .cmdk-label{flex:1;}
+.cmdk-item .cmdk-hint{font-size:11.5px;color:var(--muted);font-weight:700;}
+.cmdk-item.active{background:var(--accent);color:#fff;}
+.cmdk-item.active .cmdk-hint{color:rgba(255,255,255,.8);}
+.cmdk-empty{padding:22px;text-align:center;color:var(--muted);font:600 13.5px Manrope,sans-serif;}
+.cmdk-foot{display:flex;gap:14px;padding:9px 16px;border-top:1px solid var(--border);font:700 11px Manrope,sans-serif;color:var(--muted);}
+@media(max-width:700px){.cmdk-modal{display:none!important;}} /* Ctrl+K is a desktop keyboard convention */

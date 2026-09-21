@@ -3870,20 +3870,28 @@ class Handler(BaseHTTPRequestHandler):
 
     def _security_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
+        # SAMEORIGIN (not DENY): the side-by-side "Compare Periods" feature
+        # embeds this same page in an iframe from itself. DENY/'none' blocked
+        # ALL framing including that same-origin case, so the compare view's
+        # two panes silently came up blank — SAMEORIGIN still blocks the
+        # actual threat these headers exist for (another site framing this
+        # app for clickjacking) while allowing the app to frame itself.
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         # Restricts script/style/font/connect sources to this app and the Google
-        # Fonts CDN it uses; blocks framing and third-party base URIs. 'unsafe-inline'
-        # is required because the app's UI relies on inline <script>/<style> — this
-        # is not a full XSS mitigation on its own, but it still blocks an injected
-        # payload from loading an external attacker script, exfiltrating data to a
-        # third-party endpoint, or framing the app on another site.
+        # Fonts CDN it uses; blocks third-party base URIs and framing by any
+        # OTHER origin ('self' here matches the X-Frame-Options relaxation
+        # above — same-origin framing only, for the Compare Periods feature).
+        # 'unsafe-inline' is required because the app's UI relies on inline
+        # <script>/<style> — this is not a full XSS mitigation on its own, but
+        # it still blocks an injected payload from loading an external
+        # attacker script or exfiltrating data to a third-party endpoint.
         self.send_header("Content-Security-Policy",
             "default-src 'self'; script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
-            "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'")
+            "connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'")
         if self.headers.get("X-Forwarded-Proto", "").lower() == "https":
             self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 

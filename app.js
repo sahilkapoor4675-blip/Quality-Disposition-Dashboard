@@ -125,6 +125,109 @@ let kpiAnimationToken = 0;
     try { localStorage.setItem("qdash_theme", next); } catch (e) {}
   });
 })();
+// Density toggle: "Compact" tightens table row padding so more fits on
+// screen without scrolling — a desktop-power-user preference, remembered
+// per-browser like the theme.
+(function initDensityToggle(){
+  const btn = document.getElementById("densityToggleBtn");
+  if (!btn) return;
+  const apply = (density) => {
+    document.body.classList.toggle("density-compact", density === "compact");
+    btn.textContent = density === "compact" ? "☰" : "☰";
+    btn.title = density === "compact" ? "Switch to comfortable table rows" : "Switch to compact table rows";
+    btn.classList.toggle("density-active", density === "compact");
+  };
+  let saved = "comfortable";
+  try { saved = localStorage.getItem("qdash_density") || "comfortable"; } catch (e) {}
+  apply(saved);
+  btn.addEventListener("click", () => {
+    const next = document.body.classList.contains("density-compact") ? "comfortable" : "compact";
+    apply(next);
+    try { localStorage.setItem("qdash_density", next); } catch (e) {}
+    if (window.SFX) SFX.play("toggle");
+  });
+})();
+// ---- Personalization: default landing tab + accent color. Both are
+// preferences reachable from the Command Palette (Ctrl+K) rather than
+// adding more header buttons — see initCommandPalette() below. ----
+const ACCENT_PRESETS=[
+  {name:"Ocean Blue (default)",value:""},
+  {name:"Teal",value:"#0D9488"},
+  {name:"Violet",value:"#7C3AED"},
+  {name:"Rose",value:"#E11D48"},
+  {name:"Amber",value:"#D97706"},
+  {name:"Forest",value:"#15803D"},
+];
+function applyAccent(value){
+  if(value) document.documentElement.style.setProperty("--accent",value);
+  else document.documentElement.style.removeProperty("--accent");
+  try{ localStorage.setItem("qdash_accent", value||""); }catch(e){}
+}
+(function restoreAccent(){ let saved=""; try{ saved=localStorage.getItem("qdash_accent")||""; }catch(e){} if(saved) applyAccent(saved); })();
+function setDefaultLandingTab(tabName){
+  try{ localStorage.setItem("qdash_default_tab", tabName); }catch(e){}
+  showToast("success","Default tab set",`The dashboard will open on "${document.querySelector('.tab-btn[data-tab="'+tabName+'"]')?.textContent.trim()||tabName}" from now on.`);
+}
+
+// ---- Command palette (Ctrl+K / Cmd+K) ----
+function initCommandPalette(){
+  const modal=document.getElementById('cmdkModal'), input=document.getElementById('cmdkInput'), list=document.getElementById('cmdkList');
+  if(!modal||!input||!list) return;
+  const TAB_LABELS={dashboard:'📊 Dashboard',controlroom:'🩺 Quality Control Room',wcgrade:'🏭 Work Center & Grade',defects:'⚠️ Defect Register',weekly:'📈 Monthly / Weekly Trend'};
+  function buildCommands(){
+    const cmds=[];
+    Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),run:()=>activateTab(key)}));
+    cmds.push({icon:'📊',label:'Export Quality Report — Excel',hint:'Ctrl+E',run:()=>document.getElementById('exportExcelBtn')?.click()});
+    cmds.push({icon:'📄',label:'Export Quality Report — PDF',run:()=>document.getElementById('exportPdfBtn')?.click()});
+    cmds.push({icon:'📽️',label:'Export Quality Report — PPT',run:()=>document.getElementById('exportPptBtn')?.click()});
+    cmds.push({icon:'📋',label:'Export Raw Data — CSV',run:()=>document.getElementById('exportCsvBtn')?.click()});
+    cmds.push({icon:'⊞',label:'Compare Periods (side-by-side)',run:()=>document.getElementById('compareModeBtn')?.click()});
+    cmds.push({icon:'↺',label:'Reset All Filters',run:()=>document.getElementById('resetAllBtn')?.click()});
+    cmds.push({icon:'🔎',label:'Focus Search',hint:'/',run:()=>document.getElementById('globalSearchInput')?.focus()});
+    const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+    cmds.push({icon:isDark?'☀️':'🌙',label:isDark?'Switch to Light Mode':'Switch to Dark Mode',run:()=>document.getElementById('themeToggleBtn')?.click()});
+    const isCompact=document.body.classList.contains('density-compact');
+    cmds.push({icon:'☰',label:isCompact?'Switch to Comfortable Table Rows':'Switch to Compact Table Rows',run:()=>document.getElementById('densityToggleBtn')?.click()});
+    const soundOn=!window.SFX||SFX.isEnabled();
+    cmds.push({icon:soundOn?'🔈':'🔊',label:soundOn?'Mute Sound Effects':'Unmute Sound Effects',run:()=>document.querySelector('.sfx-toggle-btn')?.click()});
+    cmds.push({icon:'🔐',label:'Open Admin Panel',run:()=>window.location.href='/admin'});
+    const curTab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
+    cmds.push({icon:'📌',label:`Set "${TAB_LABELS[curTab]||curTab}" as my Default Landing Tab`,run:()=>setDefaultLandingTab(curTab)});
+    ACCENT_PRESETS.forEach(a=>cmds.push({icon:'🎨',label:`Accent Color — ${a.name}`,run:()=>{applyAccent(a.value);showToast('success','Accent color updated',a.name+' applied.');}}));
+    return cmds;
+  }
+  let active=0, filtered=[];
+  function render(query){
+    const all=buildCommands();
+    const q=query.trim().toLowerCase();
+    filtered = q ? all.filter(c=>c.label.toLowerCase().includes(q)) : all;
+    active=0;
+    if(!filtered.length){ list.innerHTML='<div class="cmdk-empty">No matching command.</div>'; return; }
+    list.innerHTML=filtered.map((c,i)=>`<div class="cmdk-item${i===0?' active':''}" data-idx="${i}"><span class="cmdk-icon">${c.icon}</span><span class="cmdk-label">${escQcr(c.label)}</span>${c.hint?`<span class="cmdk-hint">${c.hint}</span>`:''}</div>`).join('');
+  }
+  function setActive(i){
+    const items=[...list.querySelectorAll('.cmdk-item')]; if(!items.length) return;
+    active=(i+items.length)%items.length;
+    items.forEach((el,j)=>el.classList.toggle('active',j===active));
+    items[active].scrollIntoView({block:'nearest'});
+  }
+  function run(i){ const c=filtered[i]; if(!c) return; close(); c.run(); if(window.SFX) SFX.play('confirm'); }
+  function open(){ modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); input.value=''; render(''); input.focus(); }
+  function close(){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+  window.openCommandPalette = open;
+  document.getElementById('cmdkOpenBtn')?.addEventListener('click', open);
+  input.addEventListener('input',()=>render(input.value));
+  input.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){ e.preventDefault(); setActive(active+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); setActive(active-1); }
+    else if(e.key==='Enter'){ e.preventDefault(); run(active); }
+    else if(e.key==='Escape'){ e.preventDefault(); close(); }
+  });
+  list.addEventListener('mousemove',e=>{ const it=e.target.closest('.cmdk-item'); if(it) setActive(Number(it.dataset.idx)); });
+  list.addEventListener('click',e=>{ const it=e.target.closest('.cmdk-item'); if(it) run(Number(it.dataset.idx)); });
+  modal.addEventListener('click',e=>{ if(e.target===modal) close(); });
+}
+
 let refreshController = null;
 
 // ---- Keyboard shortcuts (desktop power-user efficiency) ----
@@ -137,6 +240,11 @@ let refreshController = null;
   document.addEventListener('keydown', (e)=>{
     const ae=document.activeElement, tag=(ae&&ae.tagName||'').toLowerCase();
     const typing = tag==='input' || tag==='textarea' || tag==='select' || (ae&&ae.isContentEditable);
+    if((e.key==='k'||e.key==='K') && (e.ctrlKey||e.metaKey)){
+      e.preventDefault();
+      window.openCommandPalette && window.openCommandPalette();
+      return;
+    }
     if(e.key==='/' && !typing){
       e.preventDefault();
       document.getElementById('globalSearchInput')?.focus();
@@ -155,7 +263,7 @@ let refreshController = null;
     }
     if(!typing && e.key==='?'){
       e.preventDefault();
-      showToast('info','Keyboard shortcuts','/ search · 1-5 switch tabs · Ctrl+E export Excel · Esc close');
+      showToast('info','Keyboard shortcuts','Ctrl+K command palette · / search · 1-5 switch tabs · Ctrl+E export Excel · Esc close');
     }
   });
 })();
@@ -1110,14 +1218,20 @@ function makeLineChart(container, items, labelKey, series, opts={}){
       const x = padL + (n > 1 ? i * stepX : (w-padL-padR)/2);
       const y = h - padB - (v / maxV) * (h - padT - padB);
       points += `${x},${y} `;
-      dots += `<circle cx="${x}" cy="${y}" r="4" fill="${s.color}" stroke="var(--chart-halo)" stroke-width="1.5"><title>${escQcr(s.label)} — ${escQcr(items[i][labelKey])}: ${s.fmt ? s.fmt(v) : v}</title></circle>`;
-      // Show the actual value in bold near the point (skip some when crowded)
+      const r = s.dashed ? 3 : 4;
+      dots += `<circle cx="${x}" cy="${y}" r="${r}" fill="${s.color}" stroke="var(--chart-halo)" stroke-width="1.5"${s.dashed?' opacity=".8"':''}><title>${escQcr(s.label)} — ${escQcr(items[i][labelKey])}: ${s.fmt ? s.fmt(v) : v}</title></circle>`;
+      // Show the actual value in bold near the point (skip some when crowded).
+      // Dashed "compare to previous period" series get a smaller, lighter
+      // label placed BELOW the point instead of above — keeps it clearly
+      // legible without visually competing with the primary series' labels
+      // right above the same point.
       if(i % skip === 0 || i === n-1){
-        const labelY = y - 10 - (si * 14);
-        valueLabels += `<text x="${x}" y="${labelY}" font-size="14" font-weight="700" text-anchor="middle" fill="${s.color}">${s.fmt ? s.fmt(v) : v}</text>`;
+        const labelY = s.dashed ? (y + 17 + (si*13)) : (y - 10 - (si*14));
+        const fontSize = s.dashed ? 11 : 14;
+        valueLabels += `<text x="${x}" y="${labelY}" font-size="${fontSize}" font-weight="700" text-anchor="middle" fill="${s.color}"${s.dashed?' opacity=".8"':''}>${s.fmt ? s.fmt(v) : v}</text>`;
       }
     });
-    svgParts += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="${s.dashed?2:2.5}" ${s.dashed?'stroke-dasharray="7 5" opacity=".72"':''}/>${s.dashed?'':dots+valueLabels}`;
+    svgParts += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="${s.dashed?2:2.5}" ${s.dashed?'stroke-dasharray="7 5" opacity=".72"':''}/>${dots}${valueLabels}`;
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color};${s.dashed?'opacity:.72;border:1px dashed '+s.color+';background:transparent;':''}"></span>${escQcr(s.label)}</div>`;
   });
 
@@ -2002,8 +2116,29 @@ async function activateTab(tabName, fromHistory){
   const signal = refreshController.signal;
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tabName));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + tabName));
+  showSkeletons(tabName);
   if(!fromHistory) writeUrlState(true); // fromHistory=true means popstate already changed the URL; don't push again
   try { await TAB_LOADERS[tabName](signal); if(tabName==='controlroom') scheduleQcrLayout(); } catch(e) { if(e.name!=="AbortError") console.error(e); }
+}
+// Skeleton loaders: a shimmering placeholder shaped like a chart/table shows
+// immediately when a tab becomes visible, replaced automatically the moment
+// its real content is rendered (every chart/table function overwrites the
+// container's innerHTML, so there's nothing to explicitly tear down here).
+// Only fills containers that are genuinely empty — a filter-triggered
+// refresh of an already-loaded tab keeps its existing dim/fade treatment
+// (see triggerFilterRefresh) instead of flashing back to a skeleton.
+const SKELETON_BAR_HEIGHTS=[58,88,42,96,68,52,80,64];
+function showSkeletons(tabName){
+  const panel=document.getElementById('tab-'+tabName); if(!panel) return;
+  panel.querySelectorAll('.chart-scroll').forEach(c=>{
+    if(!c.children.length) c.innerHTML=`<div class="skeleton-chart">${SKELETON_BAR_HEIGHTS.map(h=>`<div class="skeleton-bar" style="height:${h}%"></div>`).join('')}</div>`;
+  });
+  panel.querySelectorAll('.table-scroll tbody').forEach(tb=>{
+    if(!tb.children.length){
+      const cols=tb.closest('table')?.querySelectorAll('thead th').length||6;
+      tb.innerHTML=Array.from({length:5}).map(()=>`<tr class="skeleton-row"><td colspan="${cols}"><div class="skeleton-line" style="width:${60+Math.random()*35|0}%"></div></td></tr>`).join('');
+    }
+  });
 }
 // Back/forward buttons: restore whichever tab+filters that history entry
 // represents. history.state carries the exact filters we pushed; a manually
@@ -2078,7 +2213,16 @@ async function init(){
   syncFilterUiFromState();
   initSortableTables();
   wireCompareMode();
-  const startTab = restored.tab || 'dashboard';
+  initCommandPalette();
+  // No tab in the URL (a fresh visit, not a shared link)? Fall back to
+  // whichever tab this person picked as their default landing tab (Command
+  // Palette → "Set … as my Default Landing Tab"), before finally falling
+  // back to "dashboard" if they've never set one.
+  let savedDefaultTab = null;
+  try { savedDefaultTab = localStorage.getItem("qdash_default_tab"); } catch(e) {}
+  if(savedDefaultTab && !TAB_KEYS.includes(savedDefaultTab)) savedDefaultTab = null;
+  const startTab = restored.tab || savedDefaultTab || 'dashboard';
+  showSkeletons(startTab);
   if(startTab !== 'dashboard'){
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === startTab));
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + startTab));

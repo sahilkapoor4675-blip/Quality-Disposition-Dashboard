@@ -1003,3 +1003,93 @@ a much older version underneath it.
   calculation, filter, export, or admin data-mutation logic changed.
 
 ---
+
+## V63.3
+
+# V63.3 — Bug Fixes: Compare Periods, Chart Compare Labels, Bulk-Delete Feedback
+
+## Compare Periods wasn't working — root cause
+`server.py` sends `X-Frame-Options: DENY` and `frame-ancestors 'none'` on
+every response — a real, intentional clickjacking protection. The Compare
+Periods feature (added last batch) shows two copies of this same page
+side-by-side in `<iframe>`s. Those two headers block a page from being
+framed **at all, including by itself** — so clicking "Show Comparison"
+opened the panes, but the browser refused to render anything inside them:
+both sides came up silently blank.
+
+### Fixed
+- `server.py` — relaxed `X-Frame-Options` from `DENY` to `SAMEORIGIN`, and
+  `frame-ancestors` from `'none'` to `'self'`. This still blocks the actual
+  threat these headers exist for — another site embedding this app to trick
+  someone into clicking something — while allowing the app to embed itself,
+  which is exactly what Compare Periods needs. Nothing else about the CSP
+  changed.
+- `app.css` — also lowered the width at which Compare Periods hides itself
+  from 1100px to 900px, since 1100px could hide the button on a perfectly
+  usable laptop-width browser window.
+
+## Chart "compare to previous period" — missing data labels
+`app.js`'s `makeLineChart()` deliberately left the dashed comparison line
+with no value labels or dots at all, to reduce clutter — but that made the
+comparison line hard to actually read exact values from. Restored labels
+and dots for the dashed series too, sized down and set half-opacity and
+positioned *below* each point (the primary series' labels sit above), so
+both lines are fully labeled without their labels colliding or the dashed
+line visually competing with the primary one.
+
+## Admin: bulk-delete confirmation went to the wrong place
+`admin.html` — "Delete Selected" was writing its "Deleted N records."
+confirmation into `#loginMsg` (the login form's message box) by a
+copy-paste slip — invisible unless you happened to be looking at the login
+panel, which isn't even shown once you're logged in. Now shown as a plain
+confirmation dialog, matching how its own error path already worked.
+
+## Preserved
+- Both fixes are narrowly scoped: the CSP/frame-header change only affects
+  same-origin framing permissions, and the chart change only affects the
+  dashed/comparison series' rendering — no other security posture, data, or
+  calculation changed.
+
+---
+
+## V63.4
+
+# V63.4 — Command Palette, Skeleton Loaders, Density Toggle, Personalization
+
+## Command palette (Ctrl+K / Cmd+K)
+- `index.html`/`app.js`/`app.css` — a Spotlight/VS-Code-style palette:
+  type to fuzzy-filter, ↑/↓ to move, Enter to run, Esc to close. Commands
+  cover navigation (go to any tab, with its 1–5 shortcut shown), all four
+  exports, Compare Periods, Reset All Filters, focus search, toggle dark
+  mode / compact density / sound, open Admin, set the current tab as the
+  default landing tab, and pick an accent color — so it doubles as a
+  discoverable index of every shortcut/toggle in the app, not just a
+  launcher. A small "⌘K" button in the header opens it too, for anyone who
+  wouldn't otherwise discover the keyboard shortcut.
+
+## Skeleton loaders
+- `app.js`/`app.css` — switching tabs (or the very first load) now shows a
+  shimmering placeholder shaped like the chart/table that's coming,
+  instead of an empty container until data arrives. Only fills containers
+  that are genuinely empty — a filter-triggered refresh of an
+  already-loaded tab keeps its existing dim/fade treatment rather than
+  flashing back to a skeleton.
+
+## Density toggle (Comfortable / Compact)
+- `index.html`/`app.js`/`app.css` — a "☰" header button tightens every
+  table's row padding/font-size so more rows fit without scrolling.
+  Remembered per-browser like the theme.
+
+## Personalization
+- **Default landing tab** — "Set … as my Default Landing Tab" in the
+  command palette. A fresh visit (no tab in a shared/bookmarked URL) now
+  opens on that tab instead of always "Dashboard".
+- **Accent color** — six presets in the command palette re-tint buttons/
+  badges/highlights app-wide via the existing `--accent` CSS variable;
+  remembered per-browser.
+
+## Preserved
+- All of the above are additive UI/preference features — no calculation,
+  filter, or export logic changed.
+
+---

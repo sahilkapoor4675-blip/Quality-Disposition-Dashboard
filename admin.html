@@ -796,7 +796,7 @@ html[data-theme="dark"] .admin-health-score-card,html[data-theme="dark"] .admin-
     try{
       const d=await api('/api/admin/bulk_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
       selected.clear(); if($('selectAllRecords'))$('selectAllRecords').checked=false; syncSelected();
-      setMsg('loginMsg',`Deleted ${d.deleted} record${d.deleted===1?'':'s'}.`,'ok');
+      alert(`Deleted ${d.deleted} record${d.deleted===1?'':'s'}.`);
       loadRecords(); loadHome(); loadDataQuality();
     }catch(e){alert(e.message)}
   });
