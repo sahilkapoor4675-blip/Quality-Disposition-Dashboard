@@ -91,7 +91,6 @@ aid, not a substitute for provider-level backups: copy backups off the server pe
 |---|---|
 | `server.py` | HTTP server, API, database layer, imports, backups, admin |
 | `reports.py` | Excel / PDF / PowerPoint report builders |
-| `periods.py` | Reference copy of the period helpers (`server.py` carries its own; not imported) |
 | `index.html`, `app.js`, `app.css`, `sfx.js` | Dashboard UI |
 | `admin.html` | Admin console (single file) |
 | `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
