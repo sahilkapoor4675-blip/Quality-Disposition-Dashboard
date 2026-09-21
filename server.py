@@ -83,14 +83,18 @@ from datetime import datetime
 from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+class _QualityHTTPServer(ThreadingHTTPServer):
+    # socketserver's default listen backlog is 5. A page load fires ~8 parallel API calls, so a
+    # handful of simultaneous visitors overflowed the accept queue; the kernel then silently
+    # dropped connection attempts and clients only connected after TCP retries (1s, 3s, 7s, ...
+    # up to a minute) -- requests looked "hung" even though no server thread was busy.
+    request_queue_size = 256
+    daemon_threads = True
 from urllib.parse import urlparse, parse_qs
 
 from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report
-
-def _safe_header_filename(value):
-    text = str(value or "download").replace("\r", " ").replace("\n", " ")
-    text = re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("._-")
-    return text[:160] or "download"
 
 def _csv_safe_value(value):
     """Return CSV text that spreadsheet programs treat as literal text.
@@ -103,7 +107,17 @@ def _csv_safe_value(value):
 
 
 SERVER_STARTED_AT = time.time()
-APP_VERSION = os.environ.get("APP_VERSION", "V60.0")
+def _read_version_file():
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION.txt"), "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("APP_VERSION="):
+                    return line.split("=", 1)[1].strip() or None
+    except OSError:
+        pass
+    return None
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V63.5"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -531,7 +545,9 @@ class _PGCursor:
         self.cur = cur
     def execute(self, sql, params=None):
         sql = sql.replace("?", "%s")
-        return self.cur.execute(sql, params or ())
+        # With no parameters, pass None (not an empty tuple): psycopg2 only skips %-interpolation
+        # for None, so a literal such as LIKE 'export_%' used to raise "tuple index out of range".
+        return self.cur.execute(sql, params if params else None)
     def executemany(self, sql, seq):
         sql = sql.replace("?", "%s")
         return self.cur.executemany(sql, seq)
@@ -544,7 +560,15 @@ class _PGCursor:
     def rowcount(self): return self.cur.rowcount
 
 class _PGConn:
-    def __init__(self, conn, pooled=False): self.conn = conn; self.pooled = pooled
+    def __init__(self, conn, pooled=False): self.conn = conn; self.pooled = pooled; self._closed = False
+    def __del__(self):
+        # Safety net: many request paths do `conn = get_conn() ... conn.close()`
+        # without try/finally, so an exception in between used to leave the
+        # connection checked out of the pool forever (pool max is small, so a few
+        # errors could exhaust it and hang every later request). When such a
+        # connection object is garbage-collected without close(), return it now.
+        try: self.close()
+        except Exception: pass
     def cursor(self): return _PGCursor(self.conn.cursor(cursor_factory=DictCursor))
     def execute(self, sql, params=None):
         c=self.cursor(); c.execute(sql, params); return c
@@ -553,6 +577,8 @@ class _PGConn:
     def commit(self): self.conn.commit()
     def rollback(self): self.conn.rollback()
     def close(self):
+        if self._closed: return   # idempotent: never put the same connection back twice
+        self._closed = True
         if self.pooled and PG_POOL is not None:
             # If the last statement on this connection raised (bad SQL, a
             # lock_timeout, a dropped network link, etc.), Postgres leaves the
@@ -673,36 +699,6 @@ def ensure_fast_indexes():
     conn.close()
 
 
-def norm_sinv(p):
-    """Inverse standard normal CDF (Acklam's algorithm) - no scipy needed."""
-    if p <= 0:
-        return -8.0
-    if p >= 1:
-        return 8.0
-    a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
-         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00]
-    b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
-         6.680131188771972e+01, -1.328068155288572e+01]
-    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
-         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00]
-    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
-         3.754408661907416e+00]
-    p_low = 0.02425
-    p_high = 1 - p_low
-    if p < p_low:
-        q = math.sqrt(-2 * math.log(p))
-        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
-               ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
-    elif p <= p_high:
-        q = p - 0.5
-        r = q*q
-        return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / \
-               (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)
-    else:
-        q = math.sqrt(-2 * math.log(1 - p))
-        return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
-                ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
-
 
 def build_where(filters, exclude=None):
     """Build SQL WHERE clause + params replicating the workbook's Full_Match logic.
@@ -728,13 +724,6 @@ def build_where(filters, exclude=None):
 
 
 BATCH_KEY_SQL = "NULLIF(UPPER(TRIM(COALESCE(batch_no,''))), '')"
-
-def _coil_count_sql(where_sql, params):
-    """Count coils by unique BATCH NO within the current filter scope.
-    Duplicate BATCH NO values are intentionally counted once, regardless of
-    how many source rows/heats exist for that batch — BATCH NO is the
-    unique coil identifier, whereas one HEAT NO can span several coils."""
-    return f"SELECT COUNT(DISTINCT {BATCH_KEY_SQL}) FROM disposition {where_sql}", params
 
 def kpi_threshold_color(label, value):
     status=_kpi_target_status(label,value)
@@ -1000,26 +989,6 @@ def _group_metrics(cur, where_sql, params, group_col, group_val):
         "prime_qty": prime_qty,
     }
 
-
-def _grand_total_row(rows, name="Grand Total"):
-    """Aggregate a list of _group_metrics-shaped rows into one Grand Total
-    row, recomputing percentages from the summed totals (not an average of
-    averages)."""
-    coils = sum(r["coils"] for r in rows)
-    qty = sum(r["output_qty"] for r in rows)
-    defect_coils = sum(r["defect_coils"] for r in rows)
-    reject_qty = sum(r["reject_qty"] for r in rows)
-    prime_qty = sum(r.get("prime_qty", 0) for r in rows)
-    return {
-        "name": name,
-        "coils": coils,
-        "output_qty": qty,
-        "defect_coils": defect_coils,
-        "defect_pct": (defect_coils / coils) if coils else 0.0,
-        "reject_qty": reject_qty,
-        "reject_pct_qty": (reject_qty / qty) if qty else 0.0,
-        "first_pass_yield_pct": (prime_qty / qty) if qty else 0.0,
-    }
 
 
 
@@ -1462,9 +1431,6 @@ def _role(handler):
     meta = _admin_meta(handler)
     return meta.get("role", "") if meta else ""
 
-def _can(handler, *roles):
-    return _role(handler) in roles
-
 def _require_role(handler, *roles):
     if not _is_admin(handler):
         _auth_error(handler); return False
@@ -1697,12 +1663,6 @@ def _validate_record(r):
         return "Unknown QUALITY DECISION: " + r["quality_decision"]
     return ""
 
-
-def _record_signature(r):
-    keys = ["heat_no", "batch_no", "work_center", "grade", "output_weight", "main_defect", "defect_intensity",
-            "quality_decision", "insp_lot_date", "ud_date", "month", "week", "quarter", "financial_year"]
-    raw = "|".join(str(r.get(k, "")) for k in keys)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _reject_zip_bomb(data, max_ratio=200, max_uncompressed=300 * 1024 * 1024):
@@ -2133,67 +2093,6 @@ def _backup_jsonable(value):
 def _backup_rows_jsonable(rows):
     return [{k: _backup_jsonable(v) for k, v in dict(r).items()} for r in rows]
 
-
-def _backup_snapshot_data():
-    """Gather everything a backup needs to fully restore the app's data: every
-    disposition row, the 6M Fishbone Master + aliases, and KPI targets."""
-    conn = get_conn()
-    try:
-        disposition = [dict(r) for r in conn.execute(
-            "SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition"
-        ).fetchall()]
-        fishbone_master = [dict(r) for r in conn.execute(
-            "SELECT defect_name,norm_name,man,machine,material,method,measurement,environment FROM fishbone_master"
-        ).fetchall()]
-        try:
-            fishbone_alias = [dict(r) for r in conn.execute("SELECT disposition_defect,master_defect,created_by FROM fishbone_alias").fetchall()]
-        except Exception:
-            fishbone_alias = []
-        try:
-            kpi_targets = [dict(r) for r in conn.execute("SELECT label,target,warning,critical,direction FROM kpi_targets").fetchall()]
-        except Exception:
-            kpi_targets = []
-        try:
-            rca_master = [dict(r) for r in conn.execute(
-                "SELECT defect_name,norm_name,category,why1,why2,why3,why4,why5,action,preventive_action,role,responsibility FROM rca_master"
-            ).fetchall()]
-        except Exception:
-            rca_master = []
-        try:
-            fishbone_style = [dict(r) for r in conn.execute("SELECT category,label,icon,color FROM fishbone_style").fetchall()]
-        except Exception:
-            fishbone_style = []
-        try:
-            kpi_target_history = [dict(r) for r in conn.execute("SELECT label,old_target,new_target,old_warning,new_warning,old_critical,new_critical,old_direction,new_direction,effective_date,changed_by,changed_at FROM kpi_target_history ORDER BY id").fetchall()]
-        except Exception:
-            kpi_target_history = []
-        try:
-            import_history = [dict(r) for r in conn.execute("SELECT filename,detected,valid,duplicates,errors,updated,imported,imported_by,created_at FROM import_history ORDER BY id").fetchall()]
-        except Exception:
-            import_history = []
-        disposition = _backup_rows_jsonable(disposition)
-        fishbone_master = _backup_rows_jsonable(fishbone_master)
-        fishbone_alias = _backup_rows_jsonable(fishbone_alias)
-        kpi_targets = _backup_rows_jsonable(kpi_targets)
-        rca_master = _backup_rows_jsonable(rca_master)
-        fishbone_style = _backup_rows_jsonable(fishbone_style)
-        kpi_target_history = _backup_rows_jsonable(kpi_target_history)
-        import_history = _backup_rows_jsonable(import_history)
-    finally:
-        conn.close()
-    return {
-        "backup_version": 2,
-        "created_at": datetime.now().isoformat(),
-        "counts": {"disposition": len(disposition), "fishbone_master": len(fishbone_master), "fishbone_alias": len(fishbone_alias), "kpi_targets": len(kpi_targets), "rca_master": len(rca_master), "fishbone_style": len(fishbone_style), "kpi_target_history": len(kpi_target_history), "import_history": len(import_history)},
-        "disposition": disposition,
-        "fishbone_master": fishbone_master,
-        "fishbone_alias": fishbone_alias,
-        "kpi_targets": kpi_targets,
-        "rca_master": rca_master,
-        "fishbone_style": fishbone_style,
-        "kpi_target_history": kpi_target_history,
-        "import_history": import_history,
-    }
 
 def _backup_prune():
     try:
@@ -3433,7 +3332,7 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
     parts.append(("Trend",10-trend_penalty,10,(10-trend_penalty)/10))
     compliant=sum(1 for x in ranking if x["status"]=="good");parts.append(("Target compliance",10*compliant/max(1,len(ranking)),10,compliant/max(1,len(ranking))))
     health=round(sum(x[1] for x in parts),1); health_status="good" if health>=85 else ("amber" if health>=70 else "bad")
-    reasons=sorted([(x[0],round(x[2]-x[1],1)) for x in parts if x[2]-x[1]>0],key=lambda x:x[1],reverse=True)[:3]
+    reasons=sorted([(x[0],round(x[2]-x[1],1)) for x in parts if round(x[2]-x[1],1)>0],key=lambda x:x[1],reverse=True)[:3]
 
     # Dimension helpers.  Each dimension is evaluated against the same filtered
     # population while excluding its own filter, so risk is not circular.
@@ -3462,7 +3361,7 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
                 risk="High" if score>=65 else ("Medium" if score>=35 else "Low")
                 if confidence_level=="low" and risk=="High": risk="Medium"
                 out.append({"name":name,"coils":coils,"qty":qty,"reject_qty":rej,"reject_pct":rp,"trend":trend,"recurrence":recurrence,"score":score,"risk":risk,"confidence":confidence_level})
-            out.sort(key=lambda x:x["score"],reverse=True);return out
+            out.sort(key=lambda x:(-x["score"],str(x["name"])));return out
         finally:c.close()
     risk={"work_centers":dimension_rows("work_center","work_center"),"grades":dimension_rows("grade","grade")}
 
@@ -3499,7 +3398,7 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
             arr.append({"name":x["name"],"share":ns,"change_pp":(ns-os)*100,"qty":x["qty"],"qty_change":x["qty"]-oldmap.get(x["name"],0)})
         positives=[max(0,x["qty_change"]) for x in arr];total_inc=sum(positives)
         for x in arr:x["contribution_pct"]=(max(0,x["qty_change"])/total_inc*100) if total_inc else 0
-        return max(arr,key=lambda x:abs(x["change_pp"])) if arr else None
+        return max(arr,key=lambda x:(round(abs(x["change_pp"]),9),round(x["change_pp"],9),str(x["name"]))) if arr else None
     top_def_delta=top_delta(cur_def,prev_def)
 
     # Recurrence and first appearance.
@@ -3527,7 +3426,7 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
             a,b=positive[-2],positive[-1]
             if a["qty"]>0 and b["qty"]<a["qty"]*.70:
                 improvements.append({"type":"defect","name":defect,"change_pct":pct_change(b["qty"],a["qty"]),"detail":f"{defect} reduced {abs(pct_change(b['qty'],a['qty'])):.0f}% in {b['month']} vs {a['month']}."})
-    recurring.sort(key=lambda x:(x["period_count"],x["qty"]),reverse=True);recurring=recurring[:8]
+    recurring.sort(key=lambda x:(-x["period_count"],-x["qty"],str(x.get("defect",""))));recurring=recurring[:8]
     # Attach the dominant Work Center / Grade for each recurring defect,
     # scoped to the SAME month later shown as its "period" (the last month
     # in that defect's own recurring window) — not the page's currently
@@ -3544,12 +3443,12 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
                 pf=dict(filters);pf["month"]=period_month;whx,px=build_where(pf)
                 q=whx+((" AND " if whx else "WHERE ")+"main_defect = ?")
                 pp=px+[rr["defect"]]
-                c.execute(f"SELECT work_center,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT work_center,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC, work_center LIMIT 1",pp)
                 r=c.fetchone();rr["work_center"]=r[0] if r else "—"
-                c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC, grade LIMIT 1",pp)
                 r=c.fetchone();rr["grade"]=r[0] if r else "—"
         finally:c.close()
-    new_issues.sort(key=lambda x:x["qty"],reverse=True);new_issues=new_issues[:8]
+    new_issues.sort(key=lambda x:(-x["qty"],str(x.get("defect",""))));new_issues=new_issues[:8]
     # Attach the dominant Work Center / Grade for each new-issue defect too,
     # scoped to the month it actually first appeared in (same approach as the
     # recurring-defect enrichment above). Without this, "Investigate" on a
@@ -3563,9 +3462,9 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
                 pf=dict(filters);pf["month"]=nn.get("month");whx,px=build_where(pf)
                 q=whx+((" AND " if whx else "WHERE ")+"main_defect = ?")
                 pp=px+[nn["defect"]]
-                c.execute(f"SELECT work_center,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT work_center,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY work_center ORDER BY coils DESC, work_center LIMIT 1",pp)
                 r=c.fetchone();nn["work_center"]=r[0] if r else "—"
-                c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC LIMIT 1",pp)
+                c.execute(f"SELECT grade,COUNT(DISTINCT {BATCH_KEY_SQL}) coils FROM disposition {q} GROUP BY grade ORDER BY coils DESC, grade LIMIT 1",pp)
                 r=c.fetchone();nn["grade"]=r[0] if r else "—"
         finally:c.close()
 
@@ -3711,7 +3610,10 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
             for n,v in a.items():out.append({"name":n,"share":v/ta if ta else 0,"change_pp":((v/ta if ta else 0)-(b.get(n,0)/tb if tb else 0))*100,"qty_change":v-b.get(n,0)})
             inc=sum(max(0,x["qty_change"]) for x in out)
             for x in out:x["contribution_pct"]=(max(0,x["qty_change"])/inc*100) if inc else 0
-            return sorted(out,key=lambda x:abs(x["change_pp"]),reverse=True)
+            # Two-work-center data gives equal |change| with opposite signs; float noise then decided
+            # the winner differently per database. Break ties deterministically: larger share
+            # increase first, then name.
+            return sorted(out,key=lambda x:(-round(abs(x["change_pp"]),9),-round(x["change_pp"],9),str(x["name"])))
         wc_changes=wc_contributors();wc_top=wc_changes[0] if wc_changes else None
         why={"current":cur,"previous":prev,"fpy_change_pp":fpyd,"reject_change_pp":rejd,
              "defect_contributor":top_def_delta,"wc_contributor":wc_top,
@@ -3904,9 +3806,19 @@ class Handler(BaseHTTPRequestHandler):
         # endpoint returns nothing. This affects any endpoint that touches a
         # timestamp column (KPI targets, fishbone/RCA data, disposition
         # rows, etc.), so fixing it here once covers all of them.
+        rid = secrets.token_hex(8)
+        if status >= 500 and isinstance(payload, dict) and payload.get("error"):
+            # Never hand raw exception text (SQL fragments, file paths, driver messages) to the
+            # browser. The real message goes to the server log under the same reference id.
+            try:
+                print(f"[{rid}] {getattr(self, 'command', '')} {getattr(self, 'path', '')} -> {status}: {payload.get('error')}", flush=True)
+            except Exception:
+                pass
+            payload = dict(payload)
+            payload["error"] = f"Internal server error (ref {rid}). Please retry; if it persists, contact the administrator."
         body = json.dumps(payload, separators=(",", ":"), default=str).encode("utf-8")
         self.send_response(status)
-        self.send_header("X-Request-ID", secrets.token_hex(8))
+        self.send_header("X-Request-ID", rid)
         self.send_header("X-App-Version", APP_VERSION)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -3922,6 +3834,37 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self._security_headers()
         self._write_body(body)
+
+    def do_HEAD(self):
+        # Uptime monitors (UptimeRobot etc.) and some load balancers probe with
+        # HEAD. BaseHTTPRequestHandler answers 501 to it by default, which made
+        # a healthy service look down. Serve HEAD for the probe/page routes by
+        # running the normal GET handler and discarding the body.
+        path = urlparse(self.path).path
+        if path not in {"/healthz", "/readyz", "/", "/index.html", "/admin", "/admin.html"}:
+            self.send_response(405)
+            self.send_header("Allow", "GET, POST")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        real_wfile = self.wfile
+        class _HeadOnly:
+            def __init__(self): self.buf = b""; self.headers_done = False
+            def write(self, data):
+                if self.headers_done: return len(data)
+                self.buf += data
+                if b"\r\n\r\n" in self.buf:
+                    head, _, _rest = self.buf.partition(b"\r\n\r\n")
+                    real_wfile.write(head + b"\r\n\r\n"); self.headers_done = True
+                return len(data)
+            def flush(self):
+                try: real_wfile.flush()
+                except Exception: pass
+        self.wfile = _HeadOnly()
+        try:
+            self.do_GET()
+        finally:
+            self.wfile = real_wfile
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -3962,6 +3905,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             else:
                 self.send_error(404)
+                return
         # Intro video (dashboard splash screen). Served with HTTP Range support
         # so browsers/mobile Safari can seek and start playback immediately;
         # without Range support some browsers refuse to play the file at all.
@@ -4041,6 +3985,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             else:
                 self.send_error(404)
+                return
         elif path == "/" or path == "/index.html":
             _activity_event(self, "dashboard_open", tab="dashboard")
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
@@ -4352,7 +4297,7 @@ class Handler(BaseHTTPRequestHandler):
                     unique_ips=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> ''").fetchone()[0]
                     users=conn.execute("SELECT ip_address,COUNT(CASE WHEN event_type='dashboard_open' THEN 1 END) opens,MAX(created_at) last_seen,MAX(user_agent) user_agent FROM activity_log WHERE ip_address <> '' GROUP BY ip_address ORDER BY opens DESC,last_seen DESC LIMIT 200").fetchall()
                     recent=conn.execute("SELECT COALESCE(NULLIF(a.ip_address,''),'Unknown') ip_address,COALESCE(u.username,'Anonymous') username,COALESCE(u.display_name,'Anonymous Visitor') display_name,a.event_type,a.tab,a.created_at FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 200").fetchall()
-                    trend=conn.execute("SELECT TO_CHAR(DATE(created_at),'YYYY-MM-DD') day,COUNT(*) opens FROM activity_log WHERE event_type='dashboard_open' AND created_at >= CURRENT_DATE - INTERVAL '29 days' GROUP BY DATE(created_at) ORDER BY day").fetchall()
+                    trend=conn.execute("SELECT TO_CHAR(DATE(created_at),'YYYY-MM-DD') AS day,COUNT(*) AS opens FROM activity_log WHERE event_type='dashboard_open' AND created_at >= CURRENT_DATE - INTERVAL '29 days' GROUP BY DATE(created_at) ORDER BY day").fetchall()
                 else:
                     active_today=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> '' AND date(created_at)=date('now')").fetchone()[0]
                     opens_today=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='dashboard_open' AND date(created_at)=date('now')").fetchone()[0]
@@ -4361,7 +4306,7 @@ class Handler(BaseHTTPRequestHandler):
                     unique_ips=conn.execute("SELECT COUNT(DISTINCT ip_address) FROM activity_log WHERE ip_address <> ''").fetchone()[0]
                     users=conn.execute("SELECT ip_address,SUM(CASE WHEN event_type='dashboard_open' THEN 1 ELSE 0 END) opens,MAX(created_at) last_seen,MAX(user_agent) user_agent FROM activity_log WHERE ip_address <> '' GROUP BY ip_address ORDER BY opens DESC,last_seen DESC LIMIT 200").fetchall()
                     recent=conn.execute("SELECT COALESCE(NULLIF(a.ip_address,''),'Unknown') ip_address,COALESCE(u.username,'Anonymous') username,COALESCE(u.display_name,'Anonymous Visitor') display_name,a.event_type,a.tab,a.created_at FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 200").fetchall()
-                    trend=conn.execute("SELECT date(created_at) day,COUNT(*) opens FROM activity_log WHERE event_type='dashboard_open' AND datetime(created_at)>=datetime('now','-29 days') GROUP BY date(created_at) ORDER BY day").fetchall()
+                    trend=conn.execute("SELECT date(created_at) AS day,COUNT(*) AS opens FROM activity_log WHERE event_type='dashboard_open' AND datetime(created_at)>=datetime('now','-29 days') GROUP BY date(created_at) ORDER BY day").fetchall()
                 conn.close(); self._send_json({"summary":{"total_users":total_users,"unique_ips":unique_ips,"active_today":active_today,"opens_today":opens_today,"opens_7d":opens_7,"exports_30d":exports_30},"users":[dict(r) for r in users],"recent":[dict(r) for r in recent],"trend":[dict(r) for r in trend]})
             except Exception as e:
                 self._send_json({"error":str(e)},status=500)
@@ -4705,6 +4650,23 @@ class Handler(BaseHTTPRequestHandler):
                             out.append({"defect": r[0], "qty": float(r[1] or 0), "match_type": m["match_type"], "suggested": m.get("matched_defect")})
                     self._send_json({"rows": out, "master_defects": master_names})
                 except Exception as e: self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/admin/users":
+            # The admin page loads the user table with a plain GET; only the POST
+            # form of this route existed, so the request 404'd and the Users
+            # panel stayed empty.
+            if not _is_admin(self): _auth_error(self)
+            else:
+                conn = None
+                try:
+                    conn = get_conn()
+                    rows = conn.execute("SELECT id,username,display_name,role,active,created_at,must_reset_password FROM users ORDER BY role DESC,display_name").fetchall()
+                    self._send_json({"rows": [dict(r) for r in rows]})
+                except Exception as e:
+                    self._send_json({"error": str(e)}, status=500)
+                finally:
+                    if conn is not None:
+                        try: conn.close()
+                        except Exception: pass
         elif path == "/api/admin/kpi_targets":
             if not _is_admin(self): _auth_error(self)
             else:
@@ -5402,7 +5364,10 @@ class Handler(BaseHTTPRequestHandler):
             if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
                 body = _json_body(self)
-                record_id = int(body.get("id"))
+                try:
+                    record_id = int(body.get("id"))
+                except (TypeError, ValueError):
+                    raise ValueError("A valid numeric record id is required.")
                 _require_safety_backup("before_record_delete")
                 conn = get_conn()
                 cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
@@ -5501,7 +5466,7 @@ def main():
 
     # Bind FIRST. The host's health check only needs an open port; everything
     # below is allowed to take as long as it needs without risking the deploy.
-    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    server = _QualityHTTPServer(("0.0.0.0", port), Handler)
     print(f"Quality Disposition Dashboard listening on 0.0.0.0:{port}", flush=True)
     if not (ADMIN_USERNAME and ADMIN_PASSWORD):
         print("INFO: ADMIN_USERNAME/ADMIN_PASSWORD are not set; administrator authentication will use the existing users table. Set both environment variables for first-time provisioning.", flush=True)

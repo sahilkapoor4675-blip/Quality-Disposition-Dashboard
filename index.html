@@ -9,11 +9,11 @@
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="app-version" content="V62.0">
+<meta name="app-version" content="V63.5">
 <title>Quality Disposition Control Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&family=Allura&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css?v=68.0">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
@@ -159,6 +159,11 @@
   var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   var root=document.documentElement, screen=document.getElementById('introScreen'), btn=document.getElementById('introDashboardBtn');
   if(!screen||!btn) return;
+  // Compare Periods embeds this same page in two iframes. Each pane used to replay
+  // the whole splash (and wait for its own "Enter Dashboard" click), hiding the
+  // data it was supposed to compare. Never show the intro inside a frame.
+  var inFrame=false; try{ inFrame = window.self !== window.top; }catch(e){ inFrame = true; }
+  if(inFrame){ screen.remove(); return; }
   root.classList.add('intro-active');
 
   // ---- Build the two headlines out of individual letter spans. This is

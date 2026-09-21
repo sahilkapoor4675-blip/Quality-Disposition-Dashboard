@@ -1,78 +1,90 @@
-# Quality Disposition Control Dashboard — V62.0
+# Quality Disposition Control Dashboard — V63.5
 
-**Release:** FINAL-STABILITY-HARDENED
+Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
+(`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
+frontend CDN or build step.
 
-Pure Python (`http.server`) dashboard with PostgreSQL support for production and SQLite for local/offline development. No Flask and no external frontend CDN.
+The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
+header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## Production data model
-Render + external PostgreSQL (Supabase/Neon/etc.) is the recommended production path. On Render, the app fails closed when `DATABASE_URL` is missing; it will not silently switch a production deployment to SQLite.
-
-For local development, omit `DATABASE_URL` and the app uses a persistent SQLite file outside the application bundle. Existing local data is not reseeded on normal restarts or code replacement.
+## What it does
+- **Dashboard** – live filters (Month, Week, Quarter, Financial Year, Work Center, Grade, Quality
+  Decision, Defect Intensity), KPI cards with period-over-period change, drill-down to underlying coils.
+- **Quality Control Room (QCR)** – health score, early warnings, problem finder, why-changed analysis.
+- **Work Center & Grade**, **Defects List** (with 6M Fishbone / RCA reference) and **Period Trend** tabs.
+- **Compare Periods** – two dashboards side by side; saved views; global search; command palette (Ctrl/⌘+K);
+  light/dark theme; works on phones and tablets.
+- **Exports** – Excel, PDF, PowerPoint (chart + table on every slide) and raw CSV.
+- **Admin console** (`/admin`) – add/import records, validation, users and roles, KPI targets, 6M Fishbone
+  import, audit trail, backups and restore, service/database health.
 
 ## Run locally
 ```bash
-python3 server.py
+pip install -r requirements.txt
+python3 server.py            # http://localhost:8000/  (admin console: /admin)
 ```
-Open `http://localhost:8000/`. Set `DB_PATH` when you need an explicit SQLite location.
+Without `DATABASE_URL` the app uses a persistent SQLite file outside the app folder (set `DB_PATH` to choose
+the location). The bundled `quality.db` seeds it on the first run only; later restarts and code replacements
+never reseed it.
 
-## Required production environment
-Set these in Render Environment Variables, never in Git:
-```text
-DATABASE_URL=<PostgreSQL connection string>
-ADMIN_USERNAME=<initial admin username>
-ADMIN_PASSWORD=<strong admin password>
-DB_LIMIT_MB=500
-```
+## Production (Render + PostgreSQL)
+`render.yaml` and `SUPABASE_RENDER_FREE_SETUP.md` describe the free Render + Supabase setup. On Render the app
+fails closed if `DATABASE_URL` is missing; it never silently falls back to SQLite.
 
-`ADMIN_USERNAME` / `ADMIN_PASSWORD` provision the account only when that username does not already exist. Existing users, roles, passwords and imported data are preserved.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (required in production) |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Creates the first admin only if that username does not exist yet |
+| `DB_LIMIT_MB` | Database size guard (default 500) |
+| `DB_PATH` | SQLite file location (local use) |
+| `PORT` | Listen port (default 8000) |
+| `PGSSLMODE`, `PG_POOL_MIN`, `PG_POOL_MAX` | PostgreSQL SSL mode and pool size |
+| `BACKUP_SCHEDULE_HOURS`, `BACKUP_KEEP` | Automatic backup interval and retention |
+| `EXPORT_CONCURRENCY`, `EXPORT_WAIT_TIMEOUT_S` | Heavy report export throttling on small hosts |
+| `TRUST_PROXY_HEADERS` | Honour `X-Forwarded-*` behind Render's proxy |
+| `APP_VERSION` | Optional override; by default read from `VERSION.txt` |
 
-## Data imports
-Use `/admin` for single-record entry or bulk `.xlsx/.xlsm/.csv/.tsv` imports. Imports are validated before write, duplicate BATCH NO values are handled as no-op/update according to the existing business rule, and each data-changing import creates a safety backup.
+Set these in the Render dashboard, never in Git.
 
-**Business rule:** normalized non-empty `BATCH NO` identifies one coil. Existing legacy duplicate groups are never deleted automatically. PostgreSQL imports are transaction-locked so concurrent imports cannot both create the same new batch.
+Health probes: `GET`/`HEAD /healthz` and `/readyz` (no database access; `render.yaml` uses `/readyz`).
 
-## Backups and restore
-Backups are JSON-GZIP snapshots stored outside the application bundle. V55 fixed the backup snapshot/writer contract regression. V56 added P1 data-safety/concurrency hardening. V57 adds P2 cache bounds, backup integrity checks, serialized backup writes, and audit-history retention limits.
+## Data rules
+- A normalised, non-empty `BATCH NO` identifies one coil. Existing legacy duplicates are never deleted
+  automatically.
+- Imports (`.xlsx/.xlsm/.csv/.tsv`) are validated and previewed before writing; each data-changing import
+  creates a safety backup. Imports are transaction-locked so concurrent uploads cannot create the same batch.
+- CSV exports neutralise spreadsheet-formula characters.
 
-The built-in backup is a recovery aid, not a substitute for provider-level durable/off-site backup. For production, periodically download/copy backups outside the Render instance.
-Legacy V54/V55/V56 backups remain restoreable; V57 adds checksums to newly created backups without invalidating older backup files.
+## Backups
+JSON-GZIP snapshots with integrity checksums, created after every import, on demand (Admin → Backups) and on
+a schedule. Restore verifies the checksum first and rolls back on failure. The built-in backup is a recovery
+aid, not a substitute for provider-level backups: copy backups off the server periodically.
 
 ## Security
-- Admin mutation APIs require authenticated role checks and CSRF validation.
-- Login attempts are rate-limited.
-- Public activity event/heartbeat endpoints are rate-limited independently; normal admin POST actions are not throttled by the activity limiter.
-- CSV exports prefix spreadsheet-formula control strings so exported operational data is treated as text by spreadsheet programs.
-- Request bodies, sessions and import previews are bounded.
+- Admin APIs require an authenticated admin session plus CSRF validation; login attempts are rate-limited.
+- Public activity endpoints are rate-limited separately; request bodies, sessions and import previews are
+  size-bounded.
+- Server errors (HTTP 5xx) return only a reference id to the browser; the real message is in the server log.
+- See `SECURITY.md` for the full baseline.
 
-## Dashboard
-The dashboard provides live filters, KPI cards, defect analysis, work-center/grade views, trends, QCR intelligence, Fishbone/RCA references and Excel/PDF/PPTX/CSV exports. Viewer access remains read-only.
+## Repository layout
+| Path | Role |
+|---|---|
+| `server.py` | HTTP server, API, database layer, imports, backups, admin |
+| `reports.py` | Excel / PDF / PowerPoint report builders |
+| `periods.py` | Month / week / quarter / financial-year helpers |
+| `index.html`, `app.js`, `app.css`, `sfx.js` | Dashboard UI |
+| `admin.html` | Admin console (single file) |
+| `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
+| `build_db.py`, `add_favicon.py`, `code_health.py` | Maintenance helpers |
+| `regression_smoke.py`, `http_smoke.py`, `smoke_test.py`, `regression_test.py`, `export_acceptance.py`, `export_stress.py` | Release-gate tests |
+| `quality.db` | First-run SQLite seed (4,936 disposition records) |
 
-## Schema
-`supabase_schema.sql` is the reference PostgreSQL schema. Runtime startup remains authoritative and performs idempotent migrations for older deployments.
+## Release gate
+Before deploying, run every command in `RELEASE_GATE.md` (all must pass, on an isolated database).
 
-## Release notes
-**V62.0 — STABILITY RELEASE CANDIDATE**
-- Fixed admin CSV formula-injection protection gap.
-- Wired activity-log retention with periodic cleanup.
-- Scoped activity rate limits to public activity endpoints only.
-- Added transactional import serialization for SQLite and PostgreSQL.
-- Updated the reference PostgreSQL schema to match runtime columns/tables.
-- Removed stale documentation that referenced absent `build_db.py` / bundled `quality.db` as the production source of truth.
-- Unified backend/frontend release identity and cache-busting to V62.0.
-
-V56.0 remains the preceding P1-hardened build; V55.0 is the preceding P0-repaired build. The build process never connects to production PostgreSQL and does not delete existing application rows.
-
-## Current release
-
-V62.0 is the stability/release-candidate build built on the P0/P1/P2 hardening baseline. P0/P1 data-safety behavior is retained; production PostgreSQL is never modified by the build process.
-
-## V60 Stability Release Gate
-V60 includes permanent isolated regression scripts under `tests/` plus final admin inline-handler hardening. Before deploying a new build, run the commands in `RELEASE_GATE.md` and require all checks to pass.
-
-
-## V62.0 — EXPORT HARDENING
-- Fixed Excel/PDF/PPTX export failures on high-cardinality Work Center/Grade data.
-- Bounded chart/table rendering without truncating Raw Data CSV.
-- Removed the global high-recursion/64 MiB thread-stack workaround.
-- Heavy report exports serialize by default on small hosts.
-- Added `tests/export_stress.py` as a permanent release gate.
+## Troubleshooting
+- **Old look / dark mode wrong after a deploy** – hard-refresh once (Ctrl+Shift+R); CSS and JS are cached
+  by version.
+- **Uptime monitor shows the service down** – point it at `/healthz` (GET or HEAD).
+- **Admin says login required after a restore** – expected: restore replaces the user/session tables; log in again.

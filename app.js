@@ -215,6 +215,8 @@ function initCommandPalette(){
   function open(){ modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); input.value=''; render(''); input.focus(); }
   function close(){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
   window.openCommandPalette = open;
+  window.closeCommandPalette = close;
+  window.isCommandPaletteOpen = ()=>modal.classList.contains('open');
   document.getElementById('cmdkOpenBtn')?.addEventListener('click', open);
   input.addEventListener('input',()=>render(input.value));
   input.addEventListener('keydown',e=>{
@@ -241,6 +243,15 @@ let refreshController = null;
     const ae=document.activeElement, tag=(ae&&ae.tagName||'').toLowerCase();
     const typing = tag==='input' || tag==='textarea' || tag==='select' || (ae&&ae.isContentEditable);
     if((e.key==='k'||e.key==='K') && (e.ctrlKey||e.metaKey)){
+      // Pressing it again while the palette is open closes it (it used to reopen and wipe the query).
+      if(window.isCommandPaletteOpen && window.isCommandPaletteOpen()){
+        e.preventDefault();
+        window.closeCommandPalette && window.closeCommandPalette();
+        return;
+      }
+      // Never hijack the key while the user is typing in a field (search box, filter search,
+      // saved-view name, ...). The toolbar ⌘K button still opens the palette from anywhere.
+      if(typing) return;
       e.preventDefault();
       window.openCommandPalette && window.openCommandPalette();
       return;
@@ -354,7 +365,7 @@ async function loadFilters(){
   document.getElementById("exportPdfBtn").addEventListener("click",e=>exportDashboard("pdf",e.currentTarget));
   document.getElementById("exportPptBtn").addEventListener("click",e=>exportDashboard("pptx",e.currentTarget));
   document.getElementById("exportCsvBtn").addEventListener("click",e=>exportDashboard("csv",e.currentTarget));
-  document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));},{once:true});
+  document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));});
   updateActiveFilterBadge();
 }
 function updateActiveFilterBadge(){
@@ -372,7 +383,7 @@ async function triggerFilterRefresh(){
   document.querySelectorAll('.chart-scroll').forEach(c=>c.classList.add('chart-refreshing'));
   document.querySelector('.filters')?.classList.add('filter-pulse');
   const t0=performance.now();
-  try{await TAB_LOADERS[activeTab](signal); if(activeTab==='dashboard') prefetchQcrCore({...currentFilters});}catch(e){if(e.name!=="AbortError") console.error(e);}finally{
+  try{await TAB_LOADERS[activeTab](signal); if(activeTab==='dashboard') prefetchQcrCore({...currentFilters}); finishTabLoad(activeTab);}catch(e){finishTabLoad(activeTab,e);}finally{
     const elapsed=performance.now()-t0; const wait=Math.max(0,250-elapsed);
     setTimeout(()=>{document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('shimmering')); document.querySelectorAll('.chart-scroll').forEach(c=>{c.classList.remove('chart-refreshing');c.classList.add('chart-ready');setTimeout(()=>c.classList.remove('chart-ready'),350)}); if(page)page.classList.remove('dashboard-refreshing');},wait);
   }
@@ -810,9 +821,10 @@ async function loadKpis(signal){
   const params = new URLSearchParams(currentFilters).toString();
   // Dashboard KPI and monthly trend are independent; fetch them together.
   const monthlyPromise = loadMonthlyTrend(signal);
+  monthlyPromise.catch(()=>{}); // observed below by "await monthlyPromise"; avoids an unhandled-rejection if /api/kpis fails first
   const res = await fetch("/api/kpis?" + params, {signal});
   const data = await res.json();
-  if(data.error){ console.error(data.error); return; }
+  if(!res.ok || data.error){ throw new Error(data.error || ('Request failed (HTTP '+res.status+').')); }
   renderKpis(data.kpis);
   const totalKpi = (data.kpis||[]).find(x=>x.label==='Total Coils'); refreshFilterSummary(totalKpi ? totalKpi.value : 0);
   renderPeriodBanner(data.period);
@@ -1010,41 +1022,6 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
 }
 
 /* Vertical bar chart — used for SHORT category names only (Months etc). */
-function makeBarChart(container, items, valueKey, labelKey, opts={}){
-  if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
-  const w = DESIGN_W, h = 380, padL = 65, padR = 20, padT = 30, padB = 95;
-  const maxV = niceMax(Math.max(...items.map(d => d[valueKey]), 0));
-  const plotW = w - padL - padR;
-  const gap = plotW / items.length;
-  const barW = Math.min(56, gap * 0.55);
-  let bars = "", labels = "", gridlines = "";
-
-  for(let g=0; g<=4; g++){
-    const gy = padT + (h-padT-padB) * (1 - g/4);
-    gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--chart-grid)" stroke-width="1"/>`;
-    gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="var(--chart-muted)">${opts.fmt ? opts.fmt(maxV*g/4) : (maxV*g/4).toFixed(0)}</text>`;
-  }
-
-  items.forEach((d, i) => {
-    const val = d[valueKey];
-    const barH = (val / maxV) * (h - padT - padB);
-    const x = padL + i * gap + (gap - barW) / 2;
-    const y = h - padB - barH;
-    const barColor = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${barColor}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
-    bars += `<text x="${x + barW/2}" y="${y - 8}" font-size="14.5" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${x + barW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${x+barW/2} ${h-padB+20})"${escQcr(truncateLabel(d[labelKey], 12))}</text>`;
-  });
-  const legend = `<div class="legend-item"><span class="legend-dot" style="background:#118DFF"></span>${opts.legend || opts.yLabel || valueKey}</div>`;
-  container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
-    ${gridlines}
-    ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
-    ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
-    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="var(--chart-axis)" stroke-width="1.5"/>
-    ${bars}${labels}
-  </svg>`;
-}
-
 /* Horizontal bar chart — used for LONG category names (Grades, Defects,
    Work Centers, Intensity levels) so labels never get cut off. */
 function makeHBarChart(container, items, valueKey, labelKey, opts={}){
@@ -1312,7 +1289,7 @@ async function loadWcGrade(signal){
   const params = new URLSearchParams(currentFilters).toString();
   const res = await fetch("/api/work_center_grade?" + params, {signal});
   const data = await res.json();
-  if(data.error){ console.error(data.error); return; }
+  if(!res.ok || data.error){ throw new Error(data.error || ('Request failed (HTTP '+res.status+').')); }
   makeHBarChart(document.getElementById("wcChart"), data.by_work_center, "reject_pct_qty", "name",
     {fmt: v => (v*100).toFixed(2)+"%", xLabel: "Reject % Qty", yLabel: "Work Center", drillKind:"work_center"});
   wireChartDrilldown("wcChart","work_center");
@@ -1328,7 +1305,7 @@ async function loadDefectAnalysis(signal){
   const params = new URLSearchParams(currentFilters).toString();
   const res = await fetch("/api/defect_analysis?" + params, {signal});
   const data = await res.json();
-  if(data.error){ console.error(data.error); return; }
+  if(!res.ok || data.error){ throw new Error(data.error || ('Request failed (HTTP '+res.status+').')); }
   makeComboChart(document.getElementById("paretoChart"), data.pareto, "defect", "qty", "cum_pct",
     {barFmt: v => v.toFixed(1), lineFmt: v => (v*100).toFixed(0)+"%", xLabel: "Main Defect", colorful: true, barAxisLabel: "Qty (MT)", lineAxisLabel: "Cumulative %", barLegend: "Qty (MT)", lineLegend: "Cumulative %"});
   wireChartDrilldown("paretoChart","defect");
@@ -1386,7 +1363,7 @@ async function loadMonthlyTrend(signal){
   const params = new URLSearchParams(currentFilters).toString();
   const res = await fetch("/api/monthly_trend?" + params, {signal});
   const data = await res.json();
-  if(data.error){ console.error(data.error); return; }
+  if(!res.ok || data.error){ throw new Error(data.error || ('Request failed (HTTP '+res.status+').')); }
   _monthlyTrendRows = data.rows||[];
   renderMonthlyLineChart();
   makeGroupedBarChart(document.getElementById("monthlyBarChart"), data.rows, "name", [
@@ -1402,7 +1379,7 @@ async function loadPeriodTrend(signal){
   const params = new URLSearchParams(currentFilters).toString();
   const res = await fetch("/api/period_trend?" + params, {signal});
   const data = await res.json();
-  if(data.error){ console.error(data.error); return; }
+  if(!res.ok || data.error){ throw new Error(data.error || ('Request failed (HTTP '+res.status+').')); }
 
   makeLineChart(document.getElementById("weeklyChart"), data.weekly, "name", [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
@@ -1454,7 +1431,7 @@ function qcrRenderContribPanel(id, rows, kind, meta){
       sev=reject>=0.05?'CRITICAL':reject>=0.03?'ATTENTION':'NORMAL';
       metricText=`${(reject*100).toFixed(2)}% Reject${coils?` • ${coils.toLocaleString()} coils`:''}`;
       attrs= kind==='wc' ? `data-qcr-wc="${escQcr(name)}"` : `data-qcr-grade="${escQcr(name)}"`;
-      action= kind==='wc' ? `Investigate ${name}` : `Review ${name}`;
+      action= kind==='wc' ? `Investigate ${escQcr(name)}` : `Review ${escQcr(name)}`;
       if(meta.recurring.has(name)) badges+='<span class="qcr-badge qcr-badge-recurring">🔁 Recurring</span>';
       const risk=meta.risk?meta.risk[name]:null; if(risk&&risk!=='Low') badges+=`<span class="qcr-badge qcr-badge-risk-${risk.toLowerCase()}">${risk} risk</span>`;
     }
@@ -2097,7 +2074,6 @@ async function loadControlRoom(signal){
 // ---------- QCR stable layout ----------
 // QCR uses native CSS grid only. No JS card positioning is used; this keeps
 // the tab responsive and prevents ResizeObserver/layout feedback loops.
-function layoutQcrCards(){ return; }
 function scheduleQcrLayout(){ return; }
 
 // ---------- Tab switching ----------
@@ -2118,7 +2094,7 @@ async function activateTab(tabName, fromHistory){
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + tabName));
   showSkeletons(tabName);
   if(!fromHistory) writeUrlState(true); // fromHistory=true means popstate already changed the URL; don't push again
-  try { await TAB_LOADERS[tabName](signal); if(tabName==='controlroom') scheduleQcrLayout(); } catch(e) { if(e.name!=="AbortError") console.error(e); }
+  try { await TAB_LOADERS[tabName](signal); if(tabName==='controlroom') scheduleQcrLayout(); finishTabLoad(tabName); } catch(e) { finishTabLoad(tabName, e); }
 }
 // Skeleton loaders: a shimmering placeholder shaped like a chart/table shows
 // immediately when a tab becomes visible, replaced automatically the moment
@@ -2127,6 +2103,42 @@ async function activateTab(tabName, fromHistory){
 // Only fills containers that are genuinely empty — a filter-triggered
 // refresh of an already-loaded tab keeps its existing dim/fade treatment
 // (see triggerFilterRefresh) instead of flashing back to a skeleton.
+// Error state for a tab whose data could not be loaded. Without this the shimmering placeholders
+// above stayed on screen forever ("loading forever") while the real error only went to the console.
+function clearTabError(tabName){
+  const panel=document.getElementById('tab-'+tabName); if(!panel) return;
+  panel.querySelector(':scope > .tab-load-error')?.remove();
+}
+function showTabError(tabName, err){
+  const panel=document.getElementById('tab-'+tabName); if(!panel) return;
+  const raw=(err&&err.message)?String(err.message):'';
+  const msg=raw && !/^(Unexpected token|JSON|Failed to fetch|NetworkError|Load failed)/i.test(raw) ? raw : 'The server did not respond correctly. Check your connection and try again.';
+  panel.querySelectorAll('.skeleton-chart').forEach(el=>{ el.outerHTML='<div class="load-error-inline">⚠️ Chart unavailable</div>'; });
+  panel.querySelectorAll('.table-scroll tbody').forEach(tb=>{
+    if(tb.querySelector('.skeleton-row')){
+      const cols=tb.closest('table')?.querySelectorAll('thead th').length||6;
+      tb.innerHTML=`<tr class="load-error-row"><td colspan="${cols}">⚠️ Table unavailable</td></tr>`;
+    }
+  });
+  let b=panel.querySelector(':scope > .tab-load-error');
+  if(!b){ b=document.createElement('div'); b.className='tab-load-error'; b.setAttribute('role','alert'); panel.prepend(b); }
+  b.innerHTML=`<span>⚠️ <b>Couldn't load this view.</b> ${escQcr(msg)}</span><button type="button" class="tab-retry-btn">↻ Retry</button>`;
+  b.querySelector('.tab-retry-btn').addEventListener('click',()=>{
+    b.remove();
+    panel.querySelectorAll('.load-error-inline').forEach(el=>{ el.parentElement && (el.parentElement.innerHTML=''); });
+    panel.querySelectorAll('tbody .load-error-row').forEach(tr=>{ tr.closest('tbody').innerHTML=''; });
+    activateTab(tabName, true);
+  });
+}
+// Called after every tab load attempt: shows the error state on failure, and also when a loader
+// "succeeded" but left placeholders behind (nothing was ever rendered).
+function finishTabLoad(tabName, err){
+  if(err && err.name==='AbortError') return;
+  if(err){ console.error(err); showTabError(tabName, err); return; }
+  const panel=document.getElementById('tab-'+tabName);
+  if(panel && panel.querySelector('.skeleton-chart,.skeleton-row')) showTabError(tabName, new Error('No data was returned for this view.'));
+  else clearTabError(tabName);
+}
 const SKELETON_BAR_HEIGHTS=[58,88,42,96,68,52,80,64];
 function showSkeletons(tabName){
   const panel=document.getElementById('tab-'+tabName); if(!panel) return;
@@ -2226,9 +2238,9 @@ async function init(){
   if(startTab !== 'dashboard'){
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === startTab));
     document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + startTab));
-    await TAB_LOADERS[startTab]();
+    try { await TAB_LOADERS[startTab](); finishTabLoad(startTab); } catch(e) { finishTabLoad(startTab, e); }
   } else {
-    await loadKpis();
+    try { await loadKpis(); finishTabLoad('dashboard'); } catch(e) { finishTabLoad('dashboard', e); }
   }
 }
 init();

@@ -1,9 +1,11 @@
 import os, sys, time
 from pathlib import Path
 
-ROOT=Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent
+if not (ROOT / 'server.py').exists():   # works from the repo root or from a tests/ subfolder
+    ROOT = ROOT.parent
 sys.path.insert(0, str(ROOT))
-os.environ['APP_VERSION']='V62.0'
+os.environ['APP_VERSION'] = 'test'
 
 from reports import _excel_report, _pdf_report, _pptx_report
 
@@ -28,7 +30,33 @@ payload={
  'target_history': {'rows':trend[:100]}, 'fishbone': {'matched':True,'defect':'D0','causes':causes,'rca':rca}, 'fishbone_style':{}
 }
 
+import io, shutil, subprocess, tempfile
+outputs={}
 for name, fn in [('excel', _excel_report), ('pdf', _pdf_report), ('pptx', _pptx_report)]:
     t=time.time(); data=fn(payload); assert data and len(data)>1000
+    outputs[name]=data
     print(f'{name}_export=PASS bytes={len(data)} sec={time.time()-t:.2f}')
-print('V62 EXPORT STRESS PASS')
+
+# Completeness: high-cardinality tables must be printed IN FULL (no top-N cap), only chart visuals are bounded.
+import openpyxl
+wb=openpyxl.load_workbook(io.BytesIO(outputs['excel']), read_only=True)
+for sheet in ('Defect Analysis','Work Center','Grade Analysis'):
+    n=sum(1 for _ in wb[sheet].iter_rows(values_only=True))
+    assert n>=N, f'Excel sheet {sheet} has only {n} rows (< {N})'
+from pptx import Presentation
+prs=Presentation(io.BytesIO(outputs['pptx']))
+totals={}
+for slide in prs.slides:
+    title=next((sh.text_frame.text.strip().split('\n')[0] for sh in slide.shapes if getattr(sh,'has_text_frame',False) and sh.text_frame.text.strip()), None)
+    for sh in slide.shapes:
+        if getattr(sh,'has_table',False) and sh.has_table:
+            totals[title]=totals.get(title,0)+len(sh.table.rows)-1
+for title in ('Defect Analysis','Work Center Performance','Grade Performance'):
+    assert totals.get(title,0)>=N, f'PPTX "{title}" lists only {totals.get(title,0)} rows (< {N})'
+if shutil.which('pdftotext'):
+    fp=tempfile.mktemp(suffix='.pdf'); open(fp,'wb').write(outputs['pdf'])
+    text=subprocess.run(['pdftotext','-layout',fp,'-'],capture_output=True,text=True).stdout
+    for tag in (f'D{N-1}', f'WC_{N-1}', f'GR_{N-1}'):
+        assert tag in text, f'PDF is missing the last row {tag} (table truncated)'
+    assert 'Showing top' not in text, 'PDF still contains a top-N truncation note'
+print('EXPORT STRESS PASS')

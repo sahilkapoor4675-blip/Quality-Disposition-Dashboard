@@ -2,12 +2,14 @@ import os, sys, tempfile, threading, json, gzip, shutil
 from pathlib import Path
 from datetime import date
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent
+if not (ROOT / 'server.py').exists():   # works from the repo root or from a tests/ subfolder
+    ROOT = ROOT.parent
 with tempfile.TemporaryDirectory(prefix='qdash_v61_') as td:
     db = Path(td)/'quality.db'
     backups = Path(td)/'backups'
     os.environ['DB_PATH'] = str(db)
-    os.environ['APP_VERSION'] = 'V61.0'
+    os.environ['APP_VERSION'] = 'test'
     os.environ['BACKUP_DIR'] = str(backups)
     os.environ.pop('RENDER', None)
     sys.path.insert(0, str(ROOT))
@@ -232,5 +234,5 @@ with tempfile.TemporaryDirectory(prefix='qdash_v61_') as td:
     assert 'scope": "full_persistent_application_state"' in src
     assert 'backup_version' in src and 'version >= 4' in src
 
-    print('V61 DEEP REGRESSION PASS')
+    print('DEEP REGRESSION PASS')
     print('rows_ok=1 import_concurrency=1 kpi=1 cache=1 activity_retention=1 backup_integrity=1 restore=1 restore_rollback=1 full_state_backup=1 safety_gate=1 report_filename=1 http=1 admin_handler_hardening=1 security_hardening=1')

@@ -1093,3 +1093,93 @@ confirmation dialog, matching how its own error path already worked.
   filter, or export logic changed.
 
 ---
+
+---
+
+## V63.5
+
+# V63.5 — Full Audit: Dark-Mode CSS, Compare Periods, Admin Users, Exports, Hardening
+
+## Fixed
+- **Dark mode variables never applied.** A comment in `app.css` contained `--chart-*/--fb-*`;
+  the `*/` closed the comment early and the leftover text turned the `html[data-theme="dark"]`
+  variable block into an invalid rule that browsers silently dropped. Result: dark-mode text
+  (e.g. "Selection: All Data") was near-invisible, a white strip showed behind the tabs, and chart
+  colours used the light values. Comment reworded; the block now applies.
+- `app.css`: removed a stray leftover fragment of an old `@import` that swallowed the following rule.
+- `admin.html`: removed a nested `<style id="admin-v32-production">` tag that invalidated the
+  `.admin-prod-grid` rule (production-health layout).
+- **Admin "Users" panel never loaded.** The page calls `GET /api/admin/users`; only a POST route
+  existed, so it 404'd. Added the GET route (admin-only).
+- **Compare Periods panes replayed the full intro splash** and each needed its own "Enter Dashboard"
+  click. The intro is now skipped inside an iframe.
+- **Filter dropdowns** only closed on the first outside click (`{once:true}` on the listener).
+- **PPTX export:** the Quality Decision Distribution slide now has its data table, and every
+  continuation slide (Defect / Work Center / Grade / trends) repeats its chart (RELEASE_GATE).
+- `makeBarChart` (unused) had a missing `>` in its label markup.
+
+## Hardened
+- `server.py`: HEAD support for `/healthz`, `/readyz`, `/`, `/admin` (uptime monitors got 501).
+- `server.py`: PostgreSQL pooled connection `close()` is idempotent and a `__del__` returns a
+  connection that a failed request never closed (prevents pool exhaustion).
+- `server.py`: static-asset 404 branches now `return` (no double response).
+- `APP_VERSION` default now comes from `VERSION.txt` (was a stale hard-coded V60.0).
+- Release-gate scripts work from the repo root or a `tests/` folder; `RELEASE_GATE.md` updated.
+- Dark mode: plant-name line contrast.
+
+## Verified
+regression_smoke, http_smoke, smoke_test, regression_test, export_acceptance, export_stress all pass;
+112 filter combinations checked for errors/NaN; all 5 tabs, drill-down, search, saved views, compare,
+command palette, admin add/import/delete/bulk-delete/backup/restore/6M import checked in a real browser.
+
+## Added after the first V63.5 audit pass (same release)
+- **PostgreSQL-only bugs (found by running the whole app against a real PostgreSQL 16):**
+  `GET /api/activity` (admin Activity panel) returned HTTP 500 for two reasons: the cursor wrapper passed an
+  empty parameter tuple so psycopg2 tried to interpret the `%` in `LIKE 'export_%'`, and an unaliased
+  `day` column alias is a syntax error in PostgreSQL. Both fixed; SQLite behaviour unchanged.
+- Proved the pooled-connection leak on real PostgreSQL: with the old code 12 failing requests exhausted the
+  pool ("connection pool exhausted"); with the fix the pool keeps serving.
+- QCR intelligence now ranks ties deterministically (work center / grade / defect / contributor), so
+  SQLite and PostgreSQL show the same "biggest problem" and the health-score reasons no longer include a
+  0.0-point line caused by float noise.
+- Fishbone image used in Excel/PDF/PPTX exports: emoji icons rendered as empty boxes and the left-most
+  branch labels were clipped; icons are now shown only when drawable and the canvas is widened.
+- Phones: the drill-down dialog was wider than the screen (Close button cut off) and its table wrapped one
+  character per line; it now fits the screen and scrolls sideways.
+- HTTP 5xx JSON responses no longer expose raw exception text (reference id only; details in the log).
+- Housekeeping: rewrote `README.md` and `RELEASE_GATE.md` for the current version only, refreshed
+  `GITHUB_UPLOAD.md`, removed old-version notes (`README_V27.4_NOTES.md`, `CODE_HEALTH_REPORT_V27.2.txt`,
+  `V40_FILE_MANIFEST.txt`, `THEME_NOTES.md`) and unused legacy copies (`index_original.html`,
+  `index.html.js`, `admin.html.js`, `01-…05-*.js`, `01-…04-*.css`, `quality_nonferrous_intro_dark.mp4`).
+  Test scripts no longer print old version labels.
+
+## Second audit pass (same release)
+- **Security – stored XSS fixed.** Work Center / Grade names containing HTML were injected unescaped into
+  the Quality Control Room "contributor" buttons (`Investigate <name>` / `Review <name>`). Any imported
+  or hand-entered name could run script for every dashboard visitor. Now escaped. A broad injection scan
+  (5 record fields, fishbone/RCA cells, user names, file names, saved views) across the dashboard, all tabs,
+  drill-downs, search, QCR widgets and the admin console found no other sink.
+- **Intermittent "hung" requests fixed.** The HTTP server used Python's default listen backlog of 5. A
+  page load fires ~8 parallel calls, so a few simultaneous visitors overflowed the accept queue and the
+  kernel delayed connections by TCP retries (up to a minute). Backlog is now 256; a 123-request burst
+  (incl. Excel/PDF/PPTX exports) that previously took 6-61 s (32 timeouts in some runs) now always
+  completes in ~8 s with zero failures.
+- **Admin console structure.** An unclosed `</div>` after the Import Wizard nested every later panel inside
+  it, so hiding that panel for restricted roles hid everything: QA Manager / QA Engineer / Auditor saw
+  only 3 / 3 / 2 panels instead of 15 / 17 / 13. Also removed content that sat after `</html>` and escaped
+  `&` in the index.html font URL. Both pages now validate with 0 HTML parse errors.
+- **Loading states.** Tabs no longer show shimmering skeletons forever when an API call fails: the loaders
+  now surface HTTP/JSON errors (they used to return silently) and the tab shows a message with a Retry
+  button; leftover placeholders are cleaned up even when a loader returns without rendering.
+- **Ctrl/⌘+K** no longer opens the command palette while typing in a field (the toolbar ⌘K button still
+  does); pressing it again with the palette open closes it instead of wiping the query.
+- **Exports.** PDF and PPTX no longer cap the defect register (300 / 150 rows): every row is printed.
+  Chart visuals on high-cardinality data are bounded (Top 25 bars, latest 60 points) while paired tables
+  stay complete; stress export times drop (Excel 17→4 s, PDF 16→3 s, PPTX 32→19 s) and peak memory 404→298 MB.
+  `export_stress.py` now asserts completeness of the Excel, PDF and PPTX tables.
+- Removed 9 unreferenced functions (`server.py`: `_safe_header_filename`, `norm_sinv`, `_coil_count_sql`,
+  `_grand_total_row`, `_can`, `_record_signature`, `_backup_snapshot_data`; `app.js`: `makeBarChart`,
+  `layoutQcrCards`).
+
+## Preserved
+No KPI formula, filter semantic, schema or stored data changed.

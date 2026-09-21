@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight V27.x code-health gate; no third-party tooling required."""
+"""Lightweight code-health gate; no third-party tooling required."""
 from pathlib import Path
 import ast, re, sys
 
@@ -22,7 +22,7 @@ for secret_pat in [r'QCR@Admin\d+!', r'ChangeMe@\d+', r'password\s*=\s*[\'\"][^\
         errors.append(f"Possible hardcoded credential pattern: {secret_pat}")
 
 # Basic JS/CSS sanity checks and a duplicate-selector report. We do not fail on
-# duplicates because the current cascade is intentionally preserved in V27.2.
+# duplicates because the current cascade is intentionally preserved.
 css=(ROOT/"app.css").read_text(encoding="utf-8")
 selectors=[]
 for m in re.finditer(r'([^{}]+)\{', css):
@@ -33,7 +33,7 @@ dups=sorted({s for s in selectors if selectors.count(s)>1})
 if dups:
     warnings.append(f"CSS duplicate selector groups: {len(dups)} (report only; cascade preserved)")
 
-print("V27.2 CODE HEALTH")
+print("CODE HEALTH")
 print(f"  server.py: {len(server.splitlines())} lines")
 print(f"  app.js: {(ROOT/'app.js').read_text(encoding='utf-8').count(chr(10))+1} lines")
 print(f"  app.css: {len(css.splitlines())} lines")

@@ -3,10 +3,12 @@ from urllib.error import HTTPError
 from pathlib import Path
 from datetime import date
 
-ROOT=Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent
+if not (ROOT / 'server.py').exists():   # works from the repo root or from a tests/ subfolder
+    ROOT = ROOT.parent
 with tempfile.TemporaryDirectory(prefix='qdash_http_') as td:
     os.environ['DB_PATH']=str(Path(td)/'quality.db')
-    os.environ['APP_VERSION']='V61.0'
+    os.environ['APP_VERSION'] = 'test'
     os.environ['ADMIN_USERNAME']='admin'
     os.environ['ADMIN_PASSWORD']='Strong-Admin-1234!'
     os.environ.pop('RENDER',None)

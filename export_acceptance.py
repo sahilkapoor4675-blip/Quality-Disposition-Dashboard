@@ -3,7 +3,9 @@ from pathlib import Path
 from openpyxl import load_workbook
 from pptx import Presentation
 
-ROOT=Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent
+if not (ROOT / 'server.py').exists():   # works from the repo root or from a tests/ subfolder
+    ROOT = ROOT.parent
 sys.path.insert(0,str(ROOT))
 
 from reports import _excel_report, _pdf_report, _pptx_report
@@ -51,4 +53,4 @@ with tempfile.TemporaryDirectory() as td:
                 assert tables >= 1, f'{k} slide missing paired table'
     for k,v in hits.items():
         assert v >= 1, f'{k} missing from PPT'
-print('V62 EXPORT ACCEPTANCE PASS')
+print('EXPORT ACCEPTANCE PASS')

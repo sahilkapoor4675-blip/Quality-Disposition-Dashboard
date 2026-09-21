@@ -181,6 +181,22 @@ FISHBONE_BRANCHES = [
     ("measurement","Measurement","#DB2777","bottom"),
     ("environment","Environment","#0891B2","bottom"),
 ]
+def _png_safe_icon(icon):
+    """Return the icon only if matplotlib's default font can draw every character.
+    Colour emoji (👤 📦 📋 📏 🌍) are not in DejaVu Sans and were rendered as empty
+    "tofu" boxes in the exported fishbone image; those are dropped (the coloured
+    branch label already identifies the category)."""
+    icon = "".join(ch for ch in str(icon or "") if ch not in "\ufe0f\u200d").strip()
+    if not icon:
+        return ""
+    try:
+        from matplotlib import font_manager as _fm
+        from matplotlib.ft2font import FT2Font
+        cmap = FT2Font(_fm.findfont("DejaVu Sans")).get_charmap()
+        return icon if all(ord(ch) in cmap for ch in icon) else ""
+    except Exception:
+        return ""
+
 def _fishbone_png(item, style=None):
     """Render the same 6M Ishikawa/fishbone diagram shown on the webapp (spine + 6 angled
     bones converging on the defect) as a PNG, for embedding in Excel/PDF/PPT exports.
@@ -196,7 +212,12 @@ def _fishbone_png(item, style=None):
     defect_text = item.get("defect") or "Top Defect"
     fig, ax = plt.subplots(figsize=(12.4,6.8), dpi=150)
     fig.patch.set_facecolor("white")
-    ax.set_xlim(0,12.6); ax.set_ylim(-5.0,4.9); ax.axis("off")
+    ax.set_xlim(-0.8,12.6); ax.set_ylim(-5.0,4.9); ax.axis("off")
+    # Icons are shown only when EVERY branch icon can be drawn, so labels stay consistent
+    # (never one branch with an icon and five without).
+    _icons_ok = all(
+        _png_safe_icon((style.get(b[0]) or {}).get("icon")) == "".join(ch for ch in str((style.get(b[0]) or {}).get("icon") or "") if ch not in "\ufe0f\u200d").strip()
+        for b in FISHBONE_BRANCHES)
     spine_x2=10.9
     ax.annotate("", xy=(spine_x2,0), xytext=(0.25,0), arrowprops=dict(arrowstyle="-|>",color="#243B53",lw=2.6,mutation_scale=22))
     # Head box (the defect / effect)
@@ -209,7 +230,7 @@ def _fishbone_png(item, style=None):
     for i,(key,label,_default_color,side) in enumerate(FISHBONE_BRANCHES):
         st=style.get(key,{})
         color=st.get("color") or _default_color
-        icon=st.get("icon") or ""
+        icon=_png_safe_icon(st.get("icon")) if _icons_ok else ""
         label=st.get("label") or label
         lane=i%3; anchor_x=anchors[lane]; sign=1 if side=="top" else -1
         tip_x=anchor_x-1.55; tip_y=sign*3.85
@@ -239,6 +260,9 @@ def _fishbone_png(item, style=None):
     # RecursionError, not this diagram's own artist count.
     out=io.BytesIO(); fig.savefig(out,format="png",facecolor="white"); plt.close(fig); out.seek(0); return out.getvalue()
 
+_CHART_MAX_BARS=25      # bars drawn per bar chart (tables stay complete)
+_CHART_MAX_POINTS=60    # trend points drawn per line chart (tables stay complete)
+
 def _export_charts(payload):
     """Build the same set of dashboard charts shown in the webapp, as PNGs, for Excel/PDF/PPT exports.
     Reuses data already computed in the payload instead of re-querying the database — this is the
@@ -254,14 +278,25 @@ def _export_charts(payload):
     it=[r for r in (kp.get("intensity_table") or []) if r.get("qty") or r.get("coils")]
     if it:
         charts.append(("Defect Intensity",_chart_png("bar","Defect Intensity — Output Qty (MT)",[r["intensity"] for r in it],[r["qty"] for r in it])))
+    # Chart VISUALS stay readable and fast on high-cardinality data: only the largest bars / the
+    # most recent points are drawn (the paired tables always list every row).
+    def _top_by_qty(rows,n=_CHART_MAX_BARS):
+        rows=list(rows)
+        if len(rows)<=n: return rows,""
+        return sorted(rows,key=lambda r:float(r.get("output_qty") or 0),reverse=True)[:n],f" (Top {n} of {len(rows)})"
     if wc:
-        charts.append(("Work Center",_chart_png("bar","Output Quantity by Work Center",[r["name"] for r in wc],[r["output_qty"] for r in wc])))
+        wc_top,wc_sfx=_top_by_qty(wc)
+        charts.append(("Work Center",_chart_png("bar","Output Quantity by Work Center"+wc_sfx,[r["name"] for r in wc_top],[r["output_qty"] for r in wc_top])))
     if gr:
-        charts.append(("Grade",_chart_png("bar","Output Quantity by Grade",[r["name"] for r in gr],[r["output_qty"] for r in gr])))
+        gr_top,gr_sfx=_top_by_qty(gr)
+        charts.append(("Grade",_chart_png("bar","Output Quantity by Grade"+gr_sfx,[r["name"] for r in gr_top],[r["output_qty"] for r in gr_top])))
     for title,key in [("Monthly Trend","monthly"),("Weekly Trend","period"),("Quarterly Trend","quarterly"),("Financial Year Trend","yearly")]:
         rows=payload[key]["rows"]
         if rows:
-            charts.append((title,_chart_png("line",title,[r["name"] for r in rows],[r["output_qty"] for r in rows])))
+            sfx=""
+            if len(rows)>_CHART_MAX_POINTS:
+                sfx=f" (latest {_CHART_MAX_POINTS} of {len(rows)})"; rows=rows[-_CHART_MAX_POINTS:]
+            charts.append((title,_chart_png("line",title+sfx,[r["name"] for r in rows],[r["output_qty"] for r in rows])))
     return [(n,b) for n,b in charts if b]
 
 def _xl_embed_charts(ws, charts_dict, names, start_row=3, anchor_col="J", width=500, height=225, gap_rows=13):
@@ -517,17 +552,11 @@ def _pdf_report(payload):
     story.append(PageBreak())
 
     # ---- Defect Analysis: table + its Pareto / Intensity charts, same page. ----
-    # The register normally tracks a fixed set of defect categories, but a
-    # printed/PDF table of an unusually large register (e.g. from messy
-    # source data) is neither readable nor useful -- cap what's shown here
-    # to the highest-quantity rows and note the omission; the full,
-    # uncapped register is always available in the Excel export.
+    # The COMPLETE defect register is printed (release-gate rule: no silent or noted top-N
+    # truncation of report tables). Long registers simply continue over more pages, with the
+    # header row repeated by _pdf_section().
     d=payload["defects"]; register=d["register"]
-    _PDF_REGISTER_CAP=300
     reg_note=None
-    if len(register)>_PDF_REGISTER_CAP:
-        reg_note=f"Showing top {_PDF_REGISTER_CAP} of {len(register)} defect categories by quantity — see the Excel export for the complete register."
-        register=register[:_PDF_REGISTER_CAP]
     rows=[["Rank","Defect","Records","Qty MT","% Records"]]+[[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in register]+[["","Total",d["register_total"]["records"],f'{d["register_total"]["qty"]:.3f}',f'{d["register_total"]["pct_records"]*100:.2f}%']]
     _pdf_section(story,styles,"Defect Analysis",[charts_dict.get("Defect Pareto"),charts_dict.get("Defect Intensity")],rows,[45,300,70,80,80],chart_w=375,chart_h=167,note=reg_note)
 
@@ -664,29 +693,33 @@ def _pptx_report(payload):
         return chunks
 
     def add_chart_table_slide(title_text, chart_imgs, headers, rows, col_weights=None, max_rows=9, sub=None):
-        """One slide: matching chart(s) framed at the top, its data table right below —
-        exactly what a chart+table combo report page should look like."""
+        """Chart(s) framed at the top, the data table right below. When the table has
+        more rows than fit, EVERY continuation slide repeats the same chart(s) above
+        the next block of rows, so a chart section never degrades to a bare table."""
         chart_imgs=[im for im in (chart_imgs or []) if im]
-        first_chunk=rows[:max_rows]; rest=rows[max_rows:]
-        s=add_slide(); band(s,title_text,sub or (f"Showing {len(first_chunk)} of {len(rows)} rows" if len(rows)>max_rows else None))
-        if chart_imgs:
-            n=len(chart_imgs); gap=Inches(0.18)
-            avail_w=prs.slide_width-Inches(0.8)-(n-1)*gap; pic_w=int(avail_w/n); pic_h=Inches(2.55); top=Inches(1.18)
-            x=Inches(0.4)
-            for img in chart_imgs:
-                frame=s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,x-Pt(3),top-Pt(3),pic_w+Pt(6),pic_h+Pt(6))
-                frame.fill.solid(); frame.fill.fore_color.rgb=WHITE; frame.line.color.rgb=BORDER; frame.line.width=Pt(0.75); frame.shadow.inherit=False
-                s.shapes.add_picture(io.BytesIO(img),x,top,width=pic_w,height=pic_h)
-                x=int(x+pic_w+gap)
-            table_top=Inches(3.95); table_h=Inches(3.15)
-        else:
-            table_top=Inches(1.25); table_h=Inches(5.7)
-        if headers and (first_chunk or headers):
-            left=Inches(0.4); width=prs.slide_width-Inches(0.8)
-            gframe=s.shapes.add_table(len(first_chunk)+1,len(headers),left,table_top,width,table_h)
-            style_table(gframe.table,headers,first_chunk,col_weights)
-        if rest:
-            add_table_slide(title_text,headers,rest,col_weights,max_rows=14,note="(continued)")
+        pages=[rows[i:i+max_rows] for i in range(0,len(rows),max_rows)] or [[]]
+        for pi,chunk in enumerate(pages):
+            if len(rows)>max_rows:
+                psub=f"Rows {pi*max_rows+1}-{pi*max_rows+len(chunk)} of {len(rows)}"+(f" — {sub}" if sub else "")
+            else:
+                psub=sub
+            s=add_slide(); band(s,title_text,psub)
+            if chart_imgs:
+                n=len(chart_imgs); gap=Inches(0.18)
+                avail_w=prs.slide_width-Inches(0.8)-(n-1)*gap; pic_w=int(avail_w/n); pic_h=Inches(2.55); top=Inches(1.18)
+                x=Inches(0.4)
+                for img in chart_imgs:
+                    frame=s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,x-Pt(3),top-Pt(3),pic_w+Pt(6),pic_h+Pt(6))
+                    frame.fill.solid(); frame.fill.fore_color.rgb=WHITE; frame.line.color.rgb=BORDER; frame.line.width=Pt(0.75); frame.shadow.inherit=False
+                    s.shapes.add_picture(io.BytesIO(img),x,top,width=pic_w,height=pic_h)
+                    x=int(x+pic_w+gap)
+                table_top=Inches(3.95); table_h=Inches(3.15)
+            else:
+                table_top=Inches(1.25); table_h=Inches(5.7)
+            if headers:
+                left=Inches(0.4); width=prs.slide_width-Inches(0.8)
+                gframe=s.shapes.add_table(len(chunk)+1,len(headers),left,table_top,width,table_h)
+                style_table(gframe.table,headers,chunk,col_weights)
 
     charts_dict=dict(_export_charts(payload))
 
@@ -720,20 +753,24 @@ def _pptx_report(payload):
 
     if "Decision Distribution" in charts_dict:
         s=add_slide(); band(s,"Quality Decision Distribution")
-        pic_w=Inches(7.5); pic_h=Inches(5.15); left=int((prs.slide_width-pic_w)/2); top=Inches(1.55)
-        s.shapes.add_picture(io.BytesIO(charts_dict["Decision Distribution"]),left,top,width=pic_w,height=pic_h)
+        # Chart on the left, its complete data table on the right (every decision
+        # row plus the Total), so the slide follows the same chart+table pairing
+        # as every other topic slide.
+        pic_w=Inches(6.6); pic_h=int(pic_w*5.15/7.5); top=Inches(1.4)
+        s.shapes.add_picture(io.BytesIO(charts_dict["Decision Distribution"]),Inches(0.4),top,width=pic_w,height=pic_h)
+        _dec_rows=[[r.get("decision",""),r.get("coils",0),f'{r.get("pct_coils",0)*100:.2f}%',f'{r.get("qty",0):.3f}',f'{r.get("pct_qty",0)*100:.2f}%'] for r in (payload["kpis"].get("decision_table") or [])]
+        _dt=payload["kpis"].get("decision_total")
+        if _dt: _dec_rows.append(["Total",_dt.get("coils",0),f'{_dt.get("pct_coils",0)*100:.2f}%',f'{_dt.get("qty",0):.3f}',f'{_dt.get("pct_qty",0)*100:.2f}%'])
+        _dec_h=["Decision","Coils","% Coils","Qty (MT)","% Qty"]
+        _tbl_w=prs.slide_width-Inches(0.4)-Inches(7.3)
+        _gf=s.shapes.add_table(len(_dec_rows)+1,len(_dec_h),Inches(7.3),Inches(1.5),_tbl_w,Inches(0.42)*(len(_dec_rows)+1))
+        style_table(_gf.table,_dec_h,_dec_rows,[2.4,1,1.1,1.3,1.1])
 
     # ---- Defect Analysis: table + its Pareto / Intensity charts, same slide. ----
-    # A slide deck that paginates the full register would mean one slide per
-    # ~14 rows -- hundreds of slides for an unusually large (e.g. messy-data)
-    # register. Cap it the same way the PDF export does; the complete
-    # register is always available in the Excel export.
+    # The COMPLETE defect register is paginated across slides (every continuation slide repeats
+    # the Pareto/Intensity charts above the next block of rows). No top-N cap.
     d=payload["defects"]; _pptx_register=d.get("register",[])
-    _PPTX_REGISTER_CAP=150
     _pptx_reg_sub=None
-    if len(_pptx_register)>_PPTX_REGISTER_CAP:
-        _pptx_reg_sub=f"Top {_PPTX_REGISTER_CAP} of {len(_pptx_register)} defect categories by quantity — see the Excel export for the complete register."
-        _pptx_register=_pptx_register[:_PPTX_REGISTER_CAP]
     add_chart_table_slide("Defect Analysis",[charts_dict.get("Defect Pareto"),charts_dict.get("Defect Intensity")],
         ["Rank","Defect","Records","Qty (MT)","% Records"],
         [[r["rank"],r["defect"],r["records"],f'{r["qty"]:.3f}',f'{r["pct_records"]*100:.2f}%'] for r in _pptx_register],
