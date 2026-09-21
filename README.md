@@ -94,7 +94,7 @@ aid, not a substitute for provider-level backups: copy backups off the server pe
 | `index.html`, `app.js`, `app.css`, `sfx.js` | Dashboard UI |
 | `admin.html` | Admin console (single file) |
 | `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
-| `build_db.py`, `add_favicon.py`, `code_health.py` | Maintenance helpers |
+| `code_health.py` | Maintenance helpers |
 | `regression_smoke.py`, `http_smoke.py`, `smoke_test.py`, `regression_test.py`, `regression_v64_3.py`, `export_acceptance.py`, `export_stress.py`, `admin_ux_audit.py` | Release-gate tests |
 | `quality.db` | First-run SQLite seed (4,936 disposition records) |
 
