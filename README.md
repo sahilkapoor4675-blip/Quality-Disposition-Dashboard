@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.2
+# Quality Disposition Control Dashboard — V64.3
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -7,33 +7,24 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## V64.2 Admin UX update
+## What changed in V64.3 (bug-fix release)
+- One HTTP response per request (a mis-chained `if` made every normal route also send a stray `404`).
+- Hand-edited or stale filter values (`month=garbage`, `financial_year=junk`, `month=ALL`) no longer cause HTTP 500; they simply have no previous-period comparison.
+- Admin Data Quality Monitor tiles now read the keys the server actually returns, and "records require correction" is filled in.
+- Defect Intensity is only required for coils that actually have a defect (`NO DEFECT` coils are no longer flagged).
+- Drill-down totals and rows use one shared filter builder; bad `page` / `page_size` fall back to defaults.
+- Quarterly trend groups by financial year (labels become `Q1 (FY 2026-27)` once more than one FY exists).
+- QCR executive trend arrow now compares monthly First Pass Yield correctly.
+- KPI target save rejects NaN/infinite values and inverted Target/Warning/Critical bands.
+- CSV import accepts Windows-1252 files saved by Excel.
+- Admin: Database panel loads at login; background polling stops while logged out; QA Manager sessions are listed in Security.
+- `VERSION.txt` now matches the release.
 
-This maintenance update improves the Admin console navigation without changing the dashboard data model or business logic.
-- Sidebar navigation is grouped into a canonical 21-section sequence.
-- Sidebar and content sections use the same order, so each tab maps to the section/table below it.
-- While scrolling, the active sidebar tab follows the section currently in view and remains visible in the sidebar.
-- Sidebar clicks smooth-scroll to the matching section and maintain navigation accessibility state.
-- Overview production-health content and KPI target history now live inside their logical parent sections so scroll boundaries remain consistent.
-- Import History is included in the canonical Admin navigation.
-
-### Safety / compatibility
-- This Admin UX patch does not modify `quality.db`, `server.py`, dashboard KPI formulas, imports, exports, deletes, restores, or backup logic.
-- The bundled database fingerprint used for regression safety remained unchanged: `91003fed5e377967c78d4a61bf0266e3529dad7bc11b5b5f9aec1b7f0071020c`.
-- The release was regression-tested against the existing V64.1 audited baseline before packaging.
-
-## V64.2 Admin UX follow-up
-
-This follow-up fixes three navigation usability defects found during the next cross-check:
-- The desktop sidebar width was too narrow, and a legacy `.sidebar-link span` rule was also applying icon sizing to the text span. Both are fixed; navigation labels are now fully readable without forced ellipses.
-- The Admin command bar's top global search has been removed. Record searching remains available in **Latest Records**, where it is paired with date filters and the existing export/delete workflow.
-- The follow-up also removes the mobile sticky behavior of the now-searchless command bar, preventing it from competing with the sticky Admin sidebar during tab navigation.
-- Switching Admin tabs now performs a deterministic page-level jump to the selected section's fresh top position instead of inheriting the previous section's lower scroll position. On mobile, the sticky horizontal navigation height is reserved so the selected section is not hidden underneath it.
-
-### Follow-up safety
-- This follow-up changes only Admin presentation/navigation code plus the non-destructive audit/documentation files in the patch ZIP.
-- No database, backend, import/export, delete, restore, KPI or dashboard files are included in this patch.
-- The V64.1 audited database fingerprint remains `91003fed5e377967c78d4a61bf0266e3529dad7bc11b5b5f9aec1b7f0071020c`.
+## Admin console navigation
+- Sidebar navigation is grouped into a canonical 21-section sequence; sidebar and content use the same order.
+- While scrolling, the active sidebar tab follows the section in view; clicking a tab jumps to the top of that section.
+- Overview production-health content and KPI target history live inside their logical parent sections; Import History is in the navigation.
+- There is no global search bar in Admin; use **Latest Records** (search + date filters + export/delete).
 
 ## What it does
 - **Dashboard** – live filters (Month, Week, Quarter, Financial Year, Work Center, Grade, Quality
@@ -100,12 +91,12 @@ aid, not a substitute for provider-level backups: copy backups off the server pe
 |---|---|
 | `server.py` | HTTP server, API, database layer, imports, backups, admin |
 | `reports.py` | Excel / PDF / PowerPoint report builders |
-| `periods.py` | Month / week / quarter / financial-year helpers |
+| `periods.py` | Reference copy of the period helpers (`server.py` carries its own; not imported) |
 | `index.html`, `app.js`, `app.css`, `sfx.js` | Dashboard UI |
 | `admin.html` | Admin console (single file) |
 | `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
 | `build_db.py`, `add_favicon.py`, `code_health.py` | Maintenance helpers |
-| `regression_smoke.py`, `http_smoke.py`, `smoke_test.py`, `regression_test.py`, `export_acceptance.py`, `export_stress.py` | Release-gate tests |
+| `regression_smoke.py`, `http_smoke.py`, `smoke_test.py`, `regression_test.py`, `regression_v64_3.py`, `export_acceptance.py`, `export_stress.py`, `admin_ux_audit.py` | Release-gate tests |
 | `quality.db` | First-run SQLite seed (4,936 disposition records) |
 
 ## Release gate

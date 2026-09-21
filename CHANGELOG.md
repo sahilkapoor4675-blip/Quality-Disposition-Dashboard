@@ -1,8 +1,31 @@
 # Quality Disposition Dashboard — Changelog
 
-Consolidated release/fix history for the current V64.2 release. Everything lives in
+Consolidated release/fix history for the current V64.3 release. Everything lives in
 this one file now instead of separate `CHANGELOG_V*.md` files, to keep the repo
 from accumulating a changelog file per release.
+
+## V64.3
+
+Release focus: full-application bug audit (server, dashboard, admin, exports, import/backup).
+
+### Files changed
+`server.py`, `app.js`, `admin.html`, `index.html` (version meta only), `periods.py`, `VERSION.txt`, `README.md`, `CHANGELOG.md`, `RELEASE_GATE.md`, `DELETE_THESE_FILES.txt`, plus new `regression_v64_3.py`. `quality.db` and `reports.py` are unchanged.
+
+### Fixed
+- **Double HTTP response:** `do_GET` used `if path == "/api/activity"` where an `elif` was required, so every normal route (`/`, `/api/kpis`, exports, ...) also wrote a second `404 not found` response after the real one.
+- **HTTP 500 on malformed filters:** `compute_prev_filters` raised on labels such as `month=garbage`, `week=garbage`, `financial_year=junk`, `month=ALL`. It now returns "no comparison"; all routes share `_filters_from_qs()` which trims and treats any-case `all` as `All`.
+- **Admin Data Quality Monitor:** UI read `missing_heat`, `invalid_weights`, `invalid_decisions` while the API returns `missing_heat_no`, `missing_weight`, `missing_decision`, `invalid_values`; those tiles always showed 0. "records require correction" was never populated.
+- **False data-quality issues:** Defect Intensity is required only when a real defect is recorded; 2,838 `NO DEFECT` coils no longer count as issues (score 39.4% -> 96.9% on the bundled data; real gaps: 152 coils). Applies to the score, integrity check, issue drill-down and import preview. `invalid_values` is now counted once per record.
+- **Drill-down:** one shared `_drilldown_where()` builds the filter for both totals and rows (`defect_category` totals previously disagreed with rows for `NO DEFECT`); invalid `page`/`page_size` fall back to defaults instead of HTTP 500.
+- **Quarterly trend:** grouped by (financial year, quarter) so Q1 of two different years is never merged.
+- **QCR executive strip:** trend arrow compared non-existent fields (`fpy`, `fpy_pct`) and always said "Stable"; it now uses `first_pass_yield_pct`. KPIs with no target or neutral direction are no longer counted as target breaches.
+- **KPI targets:** reject NaN/infinite values and inverted bands.
+- **CSV import:** Windows-1252 files (Excel "CSV (Comma delimited)") are decoded instead of failing.
+- **Admin:** Database panel now loads at login; three 60-second pollers referenced a non-existent `#loginPanel`/`admin-authenticated` class and kept calling admin APIs while logged out; Security session list now includes `qa_manager`; viewer login clears failed-attempt counter on success.
+- **Housekeeping:** `VERSION.txt` (was V64.0) now matches; `import uuid` no longer precedes the shebang; `periods.py` synced with `server.py` (it lacked the quarter/FY guard); saving a view no longer throws if browser storage is blocked.
+
+### Verification
+Full `RELEASE_GATE.md` suite plus the new `regression_v64_3.py` (fails on V64.2, passes on V64.3). The bundled database is unchanged.
 
 ## V64.2
 

@@ -62,7 +62,7 @@ def _prev_quarter_label(q, fy):
     return f"Q{qnum-1}", fy
 
 
-def compute_prev_filters(filters):
+def _compute_prev_filters_unchecked(filters):
     """Return the filter dict representing the 'previous period', following
     the same priority as the workbook (Week > Month > Quarter > Year).
     Returns None if no single time filter is active (comparison undefined)."""
@@ -77,6 +77,8 @@ def compute_prev_filters(filters):
         pf["week"] = "All"; pf["quarter"] = "All"; pf["financial_year"] = "All"
         return pf
     if filters.get("quarter", "All") != "All":
+        if filters.get("financial_year", "All") == "All":
+            return None  # a bare quarter is ambiguous across financial years
         pf = dict(filters)
         prev_q, prev_fy = _prev_quarter_label(filters["quarter"], filters.get("financial_year", "All"))
         pf["quarter"] = prev_q; pf["financial_year"] = prev_fy
@@ -88,6 +90,14 @@ def compute_prev_filters(filters):
         pf["month"] = "All"; pf["week"] = "All"; pf["quarter"] = "All"
         return pf
     return None
+
+
+def compute_prev_filters(filters):
+    """Safe wrapper: a malformed period label means "no comparison", never an exception."""
+    try:
+        return _compute_prev_filters_unchecked(filters)
+    except (ValueError, AttributeError, TypeError, KeyError):
+        return None
 
 
 def current_period_label(filters):

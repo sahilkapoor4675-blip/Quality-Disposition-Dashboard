@@ -15,3 +15,8 @@ admin.html.js
 index.html.js
 index_original.html
 quality_nonferrous_intro_dark.mp4
+__init__.cpython-313.pyc
+periods.cpython-313.pyc
+server.cpython-312.pyc
+server.cpython-313.pyc
+app.css.bak

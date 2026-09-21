@@ -13,6 +13,8 @@ python regression_smoke.py      # data rules, imports, KPI maths, backup/restore
 python http_smoke.py            # health/readiness + every public, export and admin-read route
 python smoke_test.py            # bundled dataset unchanged, core tabs/API respond
 python regression_test.py       # core endpoints + filter contract
+python regression_v64_3.py      # single response, malformed filters, drill totals, per-FY quarters, data-quality wiring
+python admin_ux_audit.py        # admin navigation contract
 python export_acceptance.py     # Excel/PDF/PPTX completeness + chart/table pairing
 python export_stress.py         # high-cardinality export stress
 ```

@@ -1,4 +1,3 @@
-import uuid
 #!/usr/bin/env python3
 """
 Quality Disposition Control Dashboard
@@ -8,6 +7,7 @@ Then open http://localhost:8000/  (default port 8000)
 """
 
 import json
+import uuid
 import math
 import gzip
 import os
@@ -117,7 +117,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.2"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.3"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -407,7 +407,7 @@ def _prev_quarter_label(q, fy):
     return f"Q{qnum-1}", fy
 
 
-def compute_prev_filters(filters):
+def _compute_prev_filters_unchecked(filters):
     """Return the filter dict representing the 'previous period', following
     the same priority as the workbook (Week > Month > Quarter > Year).
     Returns None if no single time filter is active (comparison undefined)."""
@@ -435,6 +435,15 @@ def compute_prev_filters(filters):
         pf["month"] = "All"; pf["week"] = "All"; pf["quarter"] = "All"
         return pf
     return None
+
+
+def compute_prev_filters(filters):
+    """Safe wrapper: a malformed period label (hand-edited URL, stale saved view)
+    means "no comparison available" instead of an HTTP 500."""
+    try:
+        return _compute_prev_filters_unchecked(filters)
+    except (ValueError, AttributeError, TypeError, KeyError):
+        return None
 
 
 def current_period_label(filters):
@@ -727,6 +736,10 @@ def build_where(filters, exclude=None):
 
 
 BATCH_KEY_SQL = "NULLIF(UPPER(TRIM(COALESCE(batch_no,''))), '')"
+# Defect intensity only applies to coils that actually have a defect. "NO DEFECT"
+# coils legitimately have no intensity and must not be reported as data-quality issues.
+MISSING_INTENSITY_SQL = ("TRIM(COALESCE(main_defect,'')) <> '' AND UPPER(TRIM(main_defect)) <> 'NO DEFECT' "
+                         "AND (TRIM(COALESCE(defect_intensity,'')) = '' OR UPPER(TRIM(defect_intensity)) = 'NONE')")
 
 def kpi_threshold_color(label, value):
     status=_kpi_target_status(label,value)
@@ -1187,15 +1200,24 @@ def compute_period_trend(filters):
 
 
 def compute_quarterly_trend(filters):
-    """Trend across quarters (ignores the Quarter filter itself)."""
+    """Trend across quarters (ignores the Quarter filter itself). Quarters are
+    grouped per financial year so Q1 of FY 2026-27 and Q1 of FY 2027-28 are never
+    merged; the FY is appended to the label only when more than one FY is present."""
     conn = get_conn()
     cur = conn.cursor()
     where_sql, params = build_where(filters, exclude={"quarter"})
 
     quarter_clause = where_sql + (" AND " if where_sql else "WHERE ") + "TRIM(COALESCE(quarter,'')) <> ''"
-    cur.execute(f"SELECT DISTINCT quarter FROM disposition {quarter_clause} ORDER BY 1", params)
-    quarters = [r[0] for r in cur.fetchall()]
-    rows = [_group_metrics(cur, where_sql, params, "quarter", q) for q in quarters]
+    cur.execute(f"SELECT DISTINCT financial_year, quarter FROM disposition {quarter_clause}", params)
+    pairs = sorted({(r[0] or "", r[1]) for r in cur.fetchall()})
+    multi_fy = len({fy for fy, _ in pairs}) > 1
+    rows = []
+    for fy, q in pairs:
+        fy_where = where_sql + (" AND " if where_sql else "WHERE ") + "COALESCE(financial_year,'') = ?"
+        row = _group_metrics(cur, fy_where, params + [fy], "quarter", q)
+        if multi_fy:
+            row["name"] = f"{q} ({fy})" if fy else q
+        rows.append(row)
     total = _overall_metrics_total(cur, where_sql, params)
     conn.close()
     return {"rows": rows, "total": total}
@@ -1710,7 +1732,11 @@ def _parse_uploaded_file(filename, data):
             rows.append(_record_from_values(list(values), mapping))
         wb.close()
     else:
-        text = data.decode("utf-8-sig")
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            # Excel on Windows saves "CSV (Comma delimited)" as Windows-1252.
+            text = data.decode("cp1252", errors="replace")
         sample = text[:4096]
         try:
             dialect = csv.Sniffer().sniff(sample, delimiters="\t,;")
@@ -3050,8 +3076,18 @@ def database_status():
 
 
 
+def _filters_from_qs(qs):
+    """Normalise query-string filters: trim, cap length, and treat blank / any-case
+    "all" as the "All" wildcard so `month=all` behaves like `month=All`."""
+    out = {}
+    for k in FILTER_KEYS:
+        v = str(qs.get(k, "All") or "").strip()[:200]
+        out[k] = "All" if (not v or v.lower() == "all") else v
+    return out
+
+
 def _export_filters(qs):
-    return {k: qs.get(k, "All") for k in FILTER_KEYS}
+    return _filters_from_qs(qs)
 
 
 def _export_recursion_response(kind, exc):
@@ -3663,8 +3699,15 @@ HTML_PAGE = None  # loaded lazily from index_template
 
 
 
-def _drilldown_rows(filters, metric, drill_value=None, limit=5000, offset=0):
-    """Return viewer-safe source records for KPI/chart drill-down using the same filters as dashboard."""
+def _safe_int(v, default):
+    try:
+        return int(str(v).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _drilldown_where(filters, metric, drill_value=None):
+    """Single source of truth for the drill-down WHERE clause (used by the record list AND its totals)."""
     where_sql, params = build_where(filters)
     metric = (metric or '').strip()
     clauses=[]; extra=[]
@@ -3705,6 +3748,12 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000, offset=0):
     if clauses:
         where_sql = where_sql + (' AND ' if where_sql else 'WHERE ') + ' AND '.join(clauses)
         params = params + extra
+    return where_sql, params
+
+
+def _drilldown_rows(filters, metric, drill_value=None, limit=5000, offset=0):
+    """Return viewer-safe source records for KPI/chart drill-down using the same filters as dashboard."""
+    where_sql, params = _drilldown_where(filters, metric, drill_value)
     conn=get_conn(); cur=conn.cursor()
     sql=f"SELECT insp_lot_date, ud_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
     cur.execute(sql, params+[limit,offset]); raw=cur.fetchall(); conn.close()
@@ -4043,28 +4092,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"active_users": 0, "error": str(e)}, status=200)
         elif path == "/api/drilldown":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             try:
-                metric = qs.get('metric',''); drill_value = qs.get('drill_value'); page=max(1,int(qs.get('page','1') or 1)); page_size=min(500,max(50,int(qs.get('page_size','250') or 250)))
+                metric = qs.get('metric',''); drill_value = qs.get('drill_value')
+                page = max(1, _safe_int(qs.get('page'), 1)); page_size = min(500, max(50, _safe_int(qs.get('page_size'), 250)))
                 offset=(page-1)*page_size
-                where_sql, base_params=build_where(filters); clauses=[]; extra=[]
-                if metric in {'Defect Coils','Defect Rate'}: clauses.append("main_defect <> '' AND main_defect <> 'NO DEFECT'")
-                elif metric in {'First Pass Yield % (Prime%)'}: clauses.append("quality_decision = ?"); extra.append('PRIME')
-                elif metric in {'Hold for Decision % Qty','Hold For Decision Qty (MT)'}: clauses.append("quality_decision = ?"); extra.append('HOLD FOR DECISION')
-                elif metric in {'Reject Qty (MT)','Reject % Qty'}: clauses.append("quality_decision = ?"); extra.append('REJECT')
-                elif metric in {'Salvage % Qty'}: clauses.append("quality_decision = ?"); extra.append('SALVAGE')
-                elif metric in {'Salvage + Divert Qty (MT)'}: clauses.append("quality_decision IN (?,?)"); extra.extend(['SALVAGE','DIVERT'])
-                elif metric in {'Rework % Qty'}: clauses.append("quality_decision = ?"); extra.append('RE-WORK')
-                elif metric == 'decision_category': clauses.append("quality_decision = ?"); extra.append(drill_value or '')
-                elif metric == 'defect_category': clauses.append("main_defect = ?"); extra.append(drill_value or '')
-                elif metric == 'month_category': clauses.append("month = ?"); extra.append(drill_value or '')
-                elif metric == 'heat_detail': clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
-                elif metric == 'quality_investigation':
-                    wc=str(qs.get('work_center','All') or 'All').strip(); grade=str(qs.get('grade','All') or 'All').strip(); defect=str(drill_value or '').strip()
-                    if wc and wc.lower()!='all': clauses.append('work_center = ?'); extra.append(wc)
-                    if grade and grade.lower()!='all': clauses.append('grade = ?'); extra.append(grade)
-                    if defect and defect.lower() not in {'all','—','-'}: clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(defect)
-                if clauses: where_sql=where_sql+(' AND ' if where_sql else 'WHERE ')+' AND '.join(clauses); base_params+=extra
+                where_sql, base_params = _drilldown_where(filters, metric, drill_value)
                 conn=get_conn(); cur=conn.cursor(); cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}",base_params); total_rows,total_coils,total_weight=cur.fetchone(); conn.close()
                 rows=_drilldown_rows(filters, metric, drill_value, limit=page_size, offset=offset)
                 self._send_json({'count':int(total_coils or 0),'row_count':int(total_rows or 0),'total_weight':float(total_weight or 0),'rows':rows,'scope':_filter_summary(filters),'page':page,'page_size':page_size,'total_pages':max(1,(int(total_rows or 0)+page_size-1)//page_size)})
@@ -4072,7 +4105,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({'error':str(e)}, status=500)
         elif path == "/api/drilldown/export":
             try:
-                filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+                filters = _filters_from_qs(qs)
                 rows = _drilldown_rows(filters, qs.get('metric',''), qs.get('drill_value'), limit=50000)
                 out=io.StringIO(newline=''); w=csv.writer(out)
                 w.writerow(['Insp Lot Date','HEAT NO','BATCH NO','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)'])
@@ -4082,7 +4115,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({'error':str(e)}, status=500)
         elif path == "/api/qcr":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             cache_key = "qcr:" + json.dumps(filters, sort_keys=True, separators=(",", ":"))
             hit = _cache_get(cache_key)
             if hit is not None:
@@ -4143,7 +4176,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(payload)
             except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/root_cause":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}; defect = qs.get("defect", "").strip()
+            filters = _filters_from_qs(qs); defect = qs.get("defect", "").strip()
             if not defect: self._send_json({"error":"defect required"}, status=400); return
             try:
                 where, params = build_where(filters)
@@ -4156,35 +4189,35 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close(); self._send_json({"defect":defect,"paths":paths,"records":records})
             except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/data_freshness":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             try: self._send_json(compute_data_freshness(filters))
             except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/kpis":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             try:
                 self._send_json(compute_kpis(filters))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/work_center_grade":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             try:
                 self._send_json(compute_work_center_grade(filters))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/defect_analysis":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             try:
                 self._send_json(compute_defect_analysis(filters))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/monthly_trend":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             try:
                 self._send_json(compute_monthly_trend(filters))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/period_trend":
-            filters = {k: qs.get(k, "All") for k in FILTER_KEYS}
+            filters = _filters_from_qs(qs)
             try:
                 weekly_d = compute_period_trend(filters)
                 quarterly_d = compute_quarterly_trend(filters)
@@ -4288,7 +4321,7 @@ class Handler(BaseHTTPRequestHandler):
                     "error": str(e)[:180],
                     "checked_at": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
                 }, status=503)
-        if path == "/api/activity":
+        elif path == "/api/activity":
             if not _is_admin(self): _auth_error(self); return
             _activity_event(self,"activity_view")
             try:
@@ -4317,7 +4350,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error":str(e)},status=500)
         elif path == "/api/qcr_target_history":
             try:
-                filters={k: qs.get(k,"All") for k in FILTER_KEYS}
+                filters=_filters_from_qs(qs)
                 monthly=compute_monthly_trend(filters)
                 current_target=float(get_kpi_targets().get("First Pass Yield % (Prime%)",{}).get("target") or 0.97)
                 history=[]
@@ -4439,10 +4472,10 @@ class Handler(BaseHTTPRequestHandler):
                     duplicate_batch_groups=q1("SELECT COUNT(*) FROM (SELECT TRIM(batch_no) b, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY TRIM(batch_no) HAVING COUNT(*)>1) x")
                     if USE_POSTGRES:
                         invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight::text IN ('NaN','Infinity','-Infinity') OR output_weight<=0")
-                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE'")
+                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE " + MISSING_INTENSITY_SQL)
                     else:
                         invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight<=0 OR output_weight!=output_weight")
-                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE'")
+                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE " + MISSING_INTENSITY_SQL)
                     issue_total=missing_heat+missing_batch+missing_grade+missing_decision+missing_date+duplicate_batch_groups+invalid_weight+missing_intensity
                     self._send_json({"ok":True,"records":total,"issues":issue_total,"checks":{"missing_heat":missing_heat,"missing_batch":missing_batch,"missing_grade":missing_grade,"missing_decision":missing_decision,"missing_date":missing_date,"missing_intensity":missing_intensity,"duplicate_batch_groups":duplicate_batch_groups,"invalid_weight":invalid_weight}})
                 except Exception as e:
@@ -4541,7 +4574,7 @@ class Handler(BaseHTTPRequestHandler):
                     {"id":"valid_decision","name":"Decision controlled","severity":"High","field":"quality_decision","description":"Decision must use an approved disposition value."},
                     {"id":"valid_weight","name":"Weight greater than zero","severity":"Medium","field":"output_weight","description":"Output weight must be present and greater than zero."},
                     {"id":"valid_date","name":"Inspection date valid","severity":"High","field":"insp_lot_date","description":"Inspection date must be present and YYYY-MM-DD compatible."},
-                    {"id":"defect_intensity","name":"Defect intensity required","severity":"Medium","field":"defect_intensity","description":"Defect intensity should be populated for traceability."},
+                    {"id":"defect_intensity","name":"Defect intensity required","severity":"Medium","field":"defect_intensity","description":"Defect intensity should be populated whenever a real defect is recorded (NO DEFECT coils are exempt)."},
                     {"id":"workcenter_defect","name":"Work Center + Defect required","severity":"Medium","field":"work_center/main_defect","description":"Work Center and Main Defect should be populated."}
                 ]})
         elif path == "/api/admin/security_status":
@@ -4552,7 +4585,7 @@ class Handler(BaseHTTPRequestHandler):
                     now=time.time(); current=_cookie_value(self.headers.get("Cookie",""),"qdash_admin")
                     sessions=[]
                     for tok,meta in list(SESSIONS.items()):
-                        if meta.get("expires",0)>now and meta.get("role") in ("admin","qa_engineer","importer","auditor"):
+                        if meta.get("expires",0)>now and meta.get("role") in ("admin","qa_manager","qa_engineer","importer","auditor"):
                             sessions.append({"current":tok==current,"username":meta.get("username",""),"display_name":meta.get("display_name","") or meta.get("username",""),"role":meta.get("role",""),"expires_in":max(0,int(meta.get("expires",0)-now))})
                     sessions.sort(key=lambda x:(not x["current"],x["username"]))
                     self._send_json({"active_sessions":len(sessions),"sessions":sessions[:50],"session_ttl_hours":SESSION_TTL/3600,"login_max_attempts":LOGIN_MAX_ATTEMPTS})
@@ -4568,14 +4601,14 @@ class Handler(BaseHTTPRequestHandler):
                     counts={k:0 for k in ["missing_heat_no","missing_batch_no","duplicate_batch","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values"]}
                     bad_ids=set(); batches={}
                     for r in rows:
-                        d=dict(r); rid=d.get("id")
+                        d=dict(r); rid=d.get("id"); inv_val=False
                         heat=str(d.get("heat_no") or "").strip(); batch=str(d.get("batch_no") or "").strip()
                         if not heat: counts["missing_heat_no"]+=1; bad_ids.add(rid)
                         if not batch: counts["missing_batch_no"]+=1; bad_ids.add(rid)
                         if not str(d.get("grade") or "").strip(): counts["missing_grade"]+=1; bad_ids.add(rid)
                         dec=str(d.get("quality_decision") or "").strip().upper()
                         if not dec: counts["missing_decision"]+=1; bad_ids.add(rid)
-                        elif dec not in valid_decisions: counts["invalid_values"]+=1; bad_ids.add(rid)
+                        elif dec not in valid_decisions: inv_val=True; bad_ids.add(rid)
                         wt=d.get("output_weight")
                         try:
                             wt_num = float(wt) if wt is not None else None
@@ -4589,8 +4622,11 @@ class Handler(BaseHTTPRequestHandler):
                             try: datetime.strptime(datev[:10], "%Y-%m-%d")
                             except Exception: invalid_date=True
                         if invalid_date: counts["invalid_dates"]+=1; bad_ids.add(rid)
-                        if not str(d.get("defect_intensity") or "").strip() or str(d.get("defect_intensity") or "").strip().upper() == "NONE": counts["missing_intensity"]+=1; bad_ids.add(rid)
-                        if not str(d.get("work_center") or "").strip() or (not str(d.get("main_defect") or "").strip()): counts["invalid_values"]+=1; bad_ids.add(rid)
+                        _mdef=str(d.get("main_defect") or "").strip().upper()
+                        _dint=str(d.get("defect_intensity") or "").strip().upper()
+                        if _mdef and _mdef!="NO DEFECT" and (not _dint or _dint=="NONE"): counts["missing_intensity"]+=1; bad_ids.add(rid)
+                        if not str(d.get("work_center") or "").strip() or (not str(d.get("main_defect") or "").strip()): inv_val=True; bad_ids.add(rid)
+                        if inv_val: counts["invalid_values"]+=1
                         if batch: batches.setdefault(batch.upper(),[]).append(rid)  # BATCH NO must be unique — one coil, one batch
                     dup_groups=[]
                     for key,ids in batches.items():
@@ -4792,6 +4828,7 @@ class Handler(BaseHTTPRequestHandler):
                 env_login = bool(ADMIN_PASSWORD and hmac.compare_digest(username, ADMIN_USERNAME) and hmac.compare_digest(password, ADMIN_PASSWORD) and not row)
                 valid = env_login or bool(row and bool(row[5]) and row[4] in ("viewer", "admin") and _verify_password(password,row[3]))
                 if valid:
+                    _clear_login_failures(ip)
                     role = "admin" if env_login else row[4]
                     uid = row[0] if row else None
                     display = "Administrator" if env_login else row[2]
@@ -5019,9 +5056,13 @@ class Handler(BaseHTTPRequestHandler):
                 if direction not in ("higher","lower","neutral"): raise ValueError("Direction must be higher, lower or neutral")
                 def num(v):
                     if v in (None,""): return None
-                    return float(v)
+                    f=float(v)
+                    if not math.isfinite(f): raise ValueError("Target, Warning and Critical must be finite numbers")
+                    return f
                 target,warning,critical=num(body.get("target")),num(body.get("warning")),num(body.get("critical"))
                 if target is None or warning is None or critical is None: raise ValueError("Target, Warning and Critical are required")
+                if direction=="higher" and not (critical<=warning<=target): raise ValueError("For 'Higher is better' the values must satisfy Critical <= Warning <= Target")
+                if direction=="lower" and not (target<=warning<=critical): raise ValueError("For 'Lower is better' the values must satisfy Target <= Warning <= Critical")
                 conn=get_conn(); oldrow=conn.execute("SELECT target,warning,critical,direction FROM kpi_targets WHERE label=?",(label,)).fetchone()
                 conn.execute("""INSERT INTO kpi_targets(label,target,warning,critical,direction) VALUES(?,?,?,?,?) ON CONFLICT(label) DO UPDATE SET target=excluded.target,warning=excluded.warning,critical=excluded.critical,direction=excluded.direction,updated_at=CURRENT_TIMESTAMP""",(label,target,warning,critical,direction))
                 meta=_admin_meta(self) or {}; changed_by=meta.get("username", "Admin")
@@ -5068,7 +5109,8 @@ class Handler(BaseHTTPRequestHandler):
                         try: _dt.datetime.fromisoformat(d[:10])
                         except Exception: err=err or "Invalid date"; invalid_dates+=1
                     else: err=err or "Missing inspection date"; invalid_dates+=1
-                    if not str(r.get("defect_intensity","")).strip(): missing_intensity+=1
+                    _md=str(r.get("main_defect","")).strip().upper()
+                    if _md and _md!="NO DEFECT" and not str(r.get("defect_intensity","")).strip(): missing_intensity+=1
                     if wcs and str(r.get("work_center","")).strip() and str(r.get("work_center")).strip() not in wcs: unknown_wc+=1
                     if grades and str(r.get("grade","")).strip() and str(r.get("grade")).strip() not in grades: unknown_grade+=1
                     key=str(r.get("batch_no","")).strip().upper()  # BATCH NO is the unique coil key
@@ -5393,7 +5435,7 @@ class Handler(BaseHTTPRequestHandler):
                         try: datetime.strptime(dv[:10], "%Y-%m-%d") if dv else (_ for _ in ()).throw(ValueError())
                         except Exception: bad.append(r)
                     conn.close(); self._send_json({"rows":bad[:limit],"total":len(bad),"issue":issue}); return
-                elif issue == "missing_intensity": clauses.append("TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE'")
+                elif issue == "missing_intensity": clauses.append(MISSING_INTENSITY_SQL)
                 elif issue == "invalid_values": clauses.append("TRIM(COALESCE(work_center,''))='' OR TRIM(COALESCE(main_defect,''))='' OR (TRIM(COALESCE(quality_decision,''))<>'' AND UPPER(TRIM(quality_decision)) NOT IN (%s))" % ','.join('?'*len(valid_decisions))); params.extend(valid_decisions)
                 elif issue == "duplicate_batch":
                     rows = [dict(r) for r in conn.execute(select + " WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT UPPER(TRIM(batch_no)) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1) ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
