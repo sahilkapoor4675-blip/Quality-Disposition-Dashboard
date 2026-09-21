@@ -1253,3 +1253,24 @@ No KPI formula, filter semantic, schema or stored data changed.
 - Release gate: node --check, py_compile, code_health, regression_smoke, http_smoke, smoke_test, regression_test,
   export_acceptance, export_stress — all PASS.
 
+---
+
+## V63.8
+
+# V63.8 — Table hover contrast fix, monthly trend simplification
+
+## Fixed
+- **Dark mode: hovering any dashboard table row made its text disappear.** `tbody tr:hover` had a
+  light-mode-only background (`#EEF7FC`) with no dark-theme override, so in dark mode the row's
+  background stayed light while the text stayed light-colored — white-on-white. Added
+  `html[data-theme="dark"] tbody tr:hover{background:#1B2740}` to match the existing dark hover
+  palette used elsewhere.
+
+## Removed
+- **"Compare to previous period" toggle on the Monthly Quality Trend chart.** It added a second
+  dashed line per metric showing the prior month's value at the current month's x-position — but the
+  chart is already a month-by-month line chart, so the previous month's value was already visible as
+  the preceding point on the same line. The toggle added no calculation the chart didn't already
+  convey, so it, its checkbox markup, and its `.compare-toggle*` CSS were removed.
+- Cache-buster bumped to `68.3`.
+

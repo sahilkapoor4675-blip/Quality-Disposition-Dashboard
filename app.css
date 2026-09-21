@@ -329,11 +329,6 @@ html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);borde
 .section-header{background:linear-gradient(90deg,#183A58,#245777);}
 .panel{border-color:#DDE6EF;box-shadow:0 5px 18px rgba(30,65,95,.055);}
 .panel h3{color:#1C3A55;}
-.compare-toggle{display:flex;align-items:center;gap:7px;margin:-6px 18px 12px;font:700 13px Manrope,sans-serif;color:var(--muted);cursor:pointer;width:fit-content;}
-.compare-toggle input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
-.compare-toggle-swatch{width:16px;height:0;border-top:2px dashed var(--muted);display:inline-block;}
-html[data-theme="dark"] .compare-toggle{color:#9AABC2;}
-html[data-theme="dark"] .compare-toggle-swatch{border-top-color:#9AABC2;}
 .tabs{gap:7px;}
 .tab-btn{background:#fff;border-color:#DCE6EF;color:var(--muted);box-shadow:0 2px 6px rgba(30,65,95,.035);}
 .tab-btn.active{background:#183A58;border-color:#183A58;box-shadow:0 5px 14px rgba(24,58,88,.16);}
@@ -1190,6 +1185,10 @@ html[data-theme="dark"] td{border-color:#2A3B54;}
 html[data-theme="dark"] thead th{background:#101827;color:#E8EDF6;}
 html[data-theme="dark"] .sortable-th:hover{background:#1B2740!important;}
 html[data-theme="dark"] tbody tr:nth-child(even){background:#101827;}
+/* Same invisible-text bug as above: tbody tr:hover had no dark override,
+   so hovering a row fell back to the light theme's #EEF7FC background
+   while the text stayed light-colored — white-on-white. */
+html[data-theme="dark"] tbody tr:hover{background:#1B2740;}
 
 /* The drill-down table's sticky header (and its grand-total row) hard-code a
    light background with !important for the light theme's sticky-header
@@ -1449,7 +1448,7 @@ html[data-theme="dark"] .cmdk-kbd{background:#0F1626;border-color:#2A3B54;color:
   html[data-theme="dark"]{--bg:#fff;--card:#fff;--text:#1c2b3a;--muted:#5b6c82;--border:#e3e8f0;--heading:#183A58;}
   body{background:#fff!important;}
   header,.tabs,.filters,.global-search-wrap,.toast-host,.drill-modal,
-  .compare-toggle,.sfx-toggle-btn,.theme-toggle-btn,.admin-link,
+  .sfx-toggle-btn,.theme-toggle-btn,.admin-link,
   .live-status,.filter-summary-bar,.export-btn,.reset-all,.kbd-hint,
   .sortable-th::after,.qcr-fishbone-chips,.qcr-problem-actions{display:none!important;}
   .container{max-width:none!important;padding:0!important;}

@@ -1405,33 +1405,14 @@ async function loadDefectAnalysis(signal){
 // ---------- Tab: Monthly Trend ----------
 let _monthlyTrendRows = [];
 function renderMonthlyLineChart(){
-  const compare = document.getElementById("monthlyCompareToggle")?.checked;
   const series = [
     {key:"defect_pct", label:"Defect %", color:"#DC2626", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"first_pass_yield_pct", label:"First Pass Yield % (Prime%)", color:"#16A34A", fmt: v => (v*100).toFixed(1)+"%"},
     {key:"reject_pct_qty", label:"Reject % Qty", color:"#D97706", fmt: v => (v*100).toFixed(1)+"%"},
   ];
-  // "Compare to previous period": an extra dotted line per metric, built
-  // client-side from data already on hand — each point is that same row's
-  // value shifted back by one month, so the dashed line always trails one
-  // step behind the solid one and the gap between them at any given month
-  // reads directly as "how much did this move since last month".
-  let rows = _monthlyTrendRows;
-  if(compare){
-    rows = _monthlyTrendRows.map((row,i)=>{
-      const prev = _monthlyTrendRows[i-1];
-      const withPrev = Object.assign({}, row);
-      series.forEach(s=>{ withPrev[s.key+"_prev"] = prev ? prev[s.key] : row[s.key]; });
-      return withPrev;
-    });
-    series.slice().forEach(s=>{
-      series.push({key:s.key+"_prev", label:s.label+" (Prev. Month)", color:s.color, fmt:s.fmt, dashed:true});
-    });
-  }
-  makeLineChart(document.getElementById("monthlyLineChart"), rows, "name", series,
+  makeLineChart(document.getElementById("monthlyLineChart"), _monthlyTrendRows, "name", series,
     {axisFmt: v => (v*100).toFixed(0)+"%", yLabel: "%", xLabel: "Month"});
 }
-document.getElementById("monthlyCompareToggle")?.addEventListener("change", renderMonthlyLineChart);
 async function loadMonthlyTrend(signal){
   const params = new URLSearchParams(currentFilters).toString();
   const res = await fetch("/api/monthly_trend?" + params, {signal});
