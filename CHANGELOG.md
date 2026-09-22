@@ -1,6 +1,48 @@
+# V64.5 — Admin audit fixes: freshness, performance, concurrency and security
+
+## Fixed
+- **Admin freshness was measuring the wrong thing.** `/api/admin/service_health` previously used `MAX(import_history.created_at, activity_log.created_at)`, so a steady stream of anonymous viewer heartbeats could keep an old dataset looking “fresh”. Freshness is now calculated from the latest non-empty `disposition.insp_lot_date`. The response exposes `latest_data_date`, `freshness_age_days`, `data_revision` and `data_changed_at`; `latest_activity` remains informational only.
+- **Freshness UI could contradict the status.** The service-health chip previously displayed `latest_import || latest_activity` while the status used the maximum of both. The chip now displays the same source-date value used by the freshness calculation and explicitly labels it “Data through”. Unknown/no-data state is a warning rather than healthy.
+- **Admin initial-load request fan-out was excessive.** Multiple historical `showAdmin()` wrappers delayed and fired secondary loader groups independently. These are now replaced by one central IntersectionObserver-based loader. Overview, Data Quality, Latest Records and Database status remain immediate; deeper sections load when first viewed.
+- **Duplicate 60-second Admin polling was removed.** Activity/database/backups, production safety, ops monitoring, performance/recovery/command-center and V38 safety each had their own timers. V64.5 uses one central visible-page poll for already-open live monitoring sections.
+- **Backup list parsing caused repeated CPU/IO work.** `/api/admin/backup/list` used to gzip-decompress, JSON-parse and integrity-check every retained backup on each call. It now caches derived metadata against a filename/size/mtime signature and invalidates the cache when backups are created or pruned.
+- **Viewer heartbeat write frequency was too high.** Public heartbeat moved from every 20 seconds to every 30 seconds and only runs while the tab is visible. `/api/activity/live` now caches the active-user count briefly and uses a 90-second window. Heavy exports also default to a concurrency of 1 via `EXPORT_CONCURRENCY` unless explicitly overridden.
+- **Admin Data Quality used multiple table scans.** The endpoint is now a conditional-aggregate query with one duplicate-group result query; duplicate correction remains a distinct-record metric.
+- **Admin quality-record invalid-date investigation loaded the entire table into Python.** Invalid-date filtering now occurs in SQL. Duplicate-batch investigation uses a CTE rather than repeating the grouping expression in the returned rows query.
+- **Admin Records repeatedly counted the full table.** The unfiltered `grand_total` is now briefly cached and invalidated by disposition writes.
+- **Import Preview → Confirm could become stale.** An `app_state` revision now records the last disposition mutation. Preview stores the revision and Confirm rejects the operation if the dataset changed between the two steps.
+- **Disabled users could retain existing sessions.** A shared `_revoke_user_sessions()` helper now invalidates all in-memory sessions for the affected user. Viewer session authentication also checks the session’s active flag.
+- **Several sensitive GET endpoints relied on the broad `_is_admin()` role group.** Users, security session status, backup list/verify/download, and audit analytics/export now require the `admin` role server-side.
+- **Admin Security fetched the same session-status endpoint twice.** The session table is now rendered directly from the primary security-status response.
+
+## Runtime metadata
+- Added idempotent `app_state(key,value)` schema entries for `disposition_revision` and `disposition_changed_at`. This table is runtime metadata and is intentionally excluded from backup snapshots.
+- Inserts/updates, deletes, bulk deletes and backup restores advance the disposition revision inside the same transaction as the data mutation.
+
+## Documentation / re-audit support
+- `README.md` now documents the V64.5 behavior, Admin performance architecture, freshness semantics, security boundaries and exact re-audit checkpoints.
+- `regression_v64_5.py` was added as a targeted regression check; it uses a temporary SQLite copy and never changes the repository seed database.
+- The final V64.5 verification also re-ran legacy regression coverage, HTTP/Admin UX smoke checks, export acceptance, and the export stress fixture; all passed.
+- `VERSION.txt` and the runtime version fallback were bumped to `V64.5`.
+
+## Verification
+- Python compile check: PASS
+- Admin/index inline JavaScript syntax checks: PASS
+- `regression_test.py`: PASS
+- `smoke_test.py`: PASS
+- `http_smoke.py`: PASS (47 routes/endpoints)
+- `admin_ux_audit.py`: PASS (21 Admin sections)
+- `export_acceptance.py`: PASS
+- `regression_v64_5.py`: PASS
+
+## Security research note
+- Current dependency research did not justify an unsafe mass upgrade. The app does not accept arbitrary PPTX uploads; it generates PPTX files. A current upstream python-pptx security issue remains an upstream watch item, so this release documents it rather than claiming it is fixed in application code.
+
+---
+
 # Quality Disposition Dashboard — Changelog
 
-Consolidated release/fix history for the current V64.4 release. Everything lives in
+Consolidated release/fix history for the current V64.5 release. Everything lives in
 this one file now instead of separate `CHANGELOG_V*.md` files, to keep the repo
 from accumulating a changelog file per release.
 

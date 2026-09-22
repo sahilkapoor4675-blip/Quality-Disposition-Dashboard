@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.4
+# Quality Disposition Control Dashboard — V64.5
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -7,30 +7,48 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## What changed in V64.4 (admin performance + chart/theme polish)
-- Admin console `data_integrity` check (missing heat/batch/grade/decision/date, duplicate batches, invalid weights) is now one query instead of 8 full-table scans, no longer fetched twice on every login, and is briefly cached — the main cause of a slow-loading admin console.
-- Added an `activity_log(event_type, created_at)` index used by the admin home/security/error-monitor panels.
-- Bar/donut charts now show real hover feedback (scale-up + opacity) — previously drilldown-click worked but hovering gave no visual response.
-- Donut center "TOTAL" glow, the KPI card corner accent, and chart legend dots are strengthened to actually be visible (they existed in code but were too subtle — a flat color instead of a gradient, or an opacity fade too small to see at their size).
-- Dark mode table headers and Grand Total rows now use the same blue gradient (previously the header went flat dark navy while the totals row stayed the light theme's blue, so the two didn't match).
+## What changed in V64.5 (Admin correctness, performance, freshness + security hardening)
+- **Data freshness fixed:** Admin service health and Overview now measure freshness from the latest `disposition.insp_lot_date` (“Data Through”), never from dashboard activity/heartbeat timestamps. Activity remains monitoring-only metadata.
+- **Freshness mismatch fixed:** the Admin header chip and Overview KPI use the same source-date definition and show the data age in days. Missing source dates are reported as a warning instead of a healthy state.
+- **Admin request storm reduced:** the old chain of delayed `showAdmin()` wrappers and duplicated 60-second timers was replaced by one centralized lazy loader. Overview/Data Quality/Latest Records are loaded first; deeper sections load when first viewed.
+- **Polling consolidated:** background Admin polling now refreshes only the already-used live monitoring sections once per minute while the page is visible. Deep governance/backup/report sections are not re-fetched unless opened.
+- **Backup list performance fixed:** `/api/admin/backup/list` no longer decompresses and parses every retained backup on every refresh. Validated metadata is cached with a file signature and invalidated whenever backups change.
+- **Viewer heartbeat load reduced:** public dashboard heartbeat cadence changed from 20 seconds to 30 seconds and only runs while the tab is visible. The live-user window is 90 seconds and the live-user count is briefly cached to absorb concurrent requests.
+- **Data Quality query optimized:** the old set of independent full-table scans and repeated duplicate subqueries is now one conditional aggregate plus a small duplicate-group query. Duplicate correction counts still represent distinct records.
+- **Quality Records invalid-date check optimized:** invalid dates are filtered in SQL instead of loading the entire disposition table into Python. Duplicate-batch grouping is handled through a CTE.
+- **Records total optimized:** the unfiltered live record count used by Admin Records is cached briefly and cleared after data mutations.
+- **Import preview race fixed:** previews store the disposition mutation revision. Confirm refuses to proceed when the underlying disposition dataset changed after Preview, forcing a fresh preview rather than applying stale review numbers.
+- **Mutation revision tracking added:** an idempotent `app_state` table tracks `disposition_revision` and `disposition_changed_at`; inserts/updates, deletes, bulk deletes and restores advance the revision atomically.
+- **Session revocation fixed:** disabling a user immediately removes all of that user’s in-memory sessions. Viewer authentication also rejects sessions marked inactive.
+- **Sensitive Admin authorization tightened:** Users, security session status, backup list/verify/download and audit analytics/export are now Super Admin-only at the backend. UI visibility remains a convenience, not the security boundary.
+- **Security-status duplicate request removed:** the Admin Security panel now renders its session list from the same API response instead of requesting `/api/admin/security_status` twice.
+- **Admin refresh behavior clarified:** the main refresh button now refreshes only sections already opened/loaded, avoiding a full-console request burst. New sections load automatically when viewed.
+- **Audit/recheck tooling added:** `regression_v64_5.py` verifies mutation revisions, inactive-session rejection, user-session revocation, backup-list caching and bundled-data invariants without modifying the repository seed database.
+- **Version bumped:** `VERSION.txt` and runtime `APP_VERSION` now report `V64.5`.
 
-## What changed in V64.3 (bug-fix release)
-- One HTTP response per request (a mis-chained `if` made every normal route also send a stray `404`).
-- Hand-edited or stale filter values (`month=garbage`, `financial_year=junk`, `month=ALL`) no longer cause HTTP 500; they simply have no previous-period comparison.
-- Admin Data Quality Monitor tiles now read the keys the server actually returns, and "records require correction" is filled in.
-- Defect Intensity is only required for coils that actually have a defect (`NO DEFECT` coils are no longer flagged).
-- Drill-down totals and rows use one shared filter builder; bad `page` / `page_size` fall back to defaults.
-- Quarterly trend groups by financial year (labels become `Q1 (FY 2026-27)` once more than one FY exists).
-- QCR executive trend arrow now compares monthly First Pass Yield correctly.
-- KPI target save rejects NaN/infinite values and inverted Target/Warning/Critical bands.
-- CSV import accepts Windows-1252 files saved by Excel.
-- Switching dashboard tabs always opens the new tab scrolled to the top (previously kept the old tab's scroll position).
-- Restoring a backup containing fishbone-import history no longer fails.
-- KPI cards no longer show a dead gap on the right; admin danger buttons (Logout/Delete) are readable in light theme; sound effects no longer fail to load when browser storage is blocked.
-- Donut/bar/Pareto charts and the 6M Fishbone diagram now use a subtle gradient + soft shadow instead of flat color fills, and the fishbone has a faint watermark behind the spine. Each chart instance has its own gradient/shadow id namespace so charts on the same page never collide.
-- That same gradient/depth language is now applied consistently across the rest of the UI: KPI card accent bars, chart legend dots, the donut's center glow, table headers (incl. Grand Total, RCA and compare tables), status pills/badges, and the toast notification accent bar. Drillable bars/slices now show a hover response, the live-status/live-users pills and empty-state icon carry a soft glow, and secondary buttons (Export, Reset, Investigate, drill-down actions) now lift on hover like the tab buttons already did.
-- Admin: Database panel loads at login; background polling stops while logged out; QA Manager sessions are listed in Security.
-- `VERSION.txt` now matches the release.
+### Re-audit checkpoints
+For the next audit/review, check these exact invariants:
+1. `/api/admin/service_health` → `latest_data_date`, `freshness_age_days`, `data_revision`; `latest_activity` must not determine freshness.
+2. `/api/admin/home` → `last_data_update` must be the latest disposition inspection date; `last_import_at` is informational only.
+3. `app_state` → `disposition_revision` changes only when disposition data is inserted/updated/deleted/restored.
+4. `/api/admin/backup/list` → unchanged backup files must not be decompressed/JSON-parsed on every call.
+5. Admin login/scroll → deep sections are lazy-loaded; there are no chained `showAdmin()` wrappers creating duplicate timer bursts.
+6. Disabled users → existing `qdash_admin`/`qdash_user` sessions no longer authorize access.
+7. Backup/user/security GET APIs → non-Super-Admin roles receive HTTP 403.
+
+### Verification performed for V64.5
+- `python3 -m py_compile server.py`
+- `node --check` on all inline scripts in `admin.html` and `index.html`
+- `python3 regression_test.py`
+- `python3 regression_v64_3.py`
+- `python3 smoke_test.py`
+- `python3 http_smoke.py`
+- `python3 admin_ux_audit.py`
+- `python3 export_acceptance.py`
+- `python3 export_stress.py` (PASS; ~30.8s wall, ~545 MB peak RSS on the repository stress fixture)
+- `python3 regression_v64_5.py`
+
+The bundled `quality.db` remains unchanged. Its current seed invariants remain 4,936 disposition rows, 0 duplicate batch groups, and no missing/invalid core disposition fields.
 
 ## Admin console navigation
 - Sidebar navigation is grouped into a canonical 21-section sequence; sidebar and content use the same order.
@@ -71,7 +89,7 @@ fails closed if `DATABASE_URL` is missing; it never silently falls back to SQLit
 | `PORT` | Listen port (default 8000) |
 | `PGSSLMODE`, `PG_POOL_MIN`, `PG_POOL_MAX` | PostgreSQL SSL mode and pool size |
 | `BACKUP_SCHEDULE_HOURS`, `BACKUP_KEEP` | Automatic backup interval and retention |
-| `EXPORT_CONCURRENCY`, `EXPORT_WAIT_TIMEOUT_S` | Heavy report export throttling on small hosts |
+| `EXPORT_CONCURRENCY`, `EXPORT_WAIT_TIMEOUT_S` | Heavy report export throttling on small hosts (`EXPORT_CONCURRENCY` defaults to `1`) |
 | `TRUST_PROXY_HEADERS` | Honour `X-Forwarded-*` behind Render's proxy |
 | `APP_VERSION` | Optional override; by default read from `VERSION.txt` |
 
@@ -92,7 +110,7 @@ a schedule. Restore verifies the checksum first and rolls back on failure. The b
 aid, not a substitute for provider-level backups: copy backups off the server periodically.
 
 ## Security
-- Admin APIs require an authenticated admin session plus CSRF validation; login attempts are rate-limited.
+- Admin APIs require an authenticated session plus CSRF validation; sensitive Users, Security, Backup and audit-export endpoints are Super Admin (`admin` role) only; login attempts are rate-limited.
 - Public activity endpoints are rate-limited separately; request bodies, sessions and import previews are
   size-bounded.
 - Server errors (HTTP 5xx) return only a reference id to the browser; the real message is in the server log.

@@ -2386,7 +2386,7 @@ async function refreshLiveUsers(){
 }
 function startLiveUserTracking(){
   sendLiveHeartbeat(); refreshLiveUsers();
-  setInterval(()=>{sendLiveHeartbeat();refreshLiveUsers();},20000);
+  setInterval(()=>{if(document.visibilityState==='visible'){sendLiveHeartbeat();refreshLiveUsers();}},30000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){sendLiveHeartbeat();refreshLiveUsers();}});
 }
 

@@ -55,7 +55,7 @@ if sys.getrecursionlimit() < 10000:
 # (RecursionError / OOM-flavored failures) -- the failure mode this was
 # actually reported as. Cap how many heavy report builds run at the same
 # time; extra requests wait briefly for a slot instead of piling on.
-EXPORT_CONCURRENCY = max(1, int(os.environ.get("EXPORT_CONCURRENCY", "2")))
+EXPORT_CONCURRENCY = max(1, int(os.environ.get("EXPORT_CONCURRENCY", "1")))
 EXPORT_WAIT_TIMEOUT_S = float(os.environ.get("EXPORT_WAIT_TIMEOUT_S", "20"))
 _EXPORT_SEMAPHORE = threading.BoundedSemaphore(EXPORT_CONCURRENCY)
 
@@ -117,7 +117,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.4"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.5"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -233,6 +233,13 @@ RESPONSE_CACHE_MAX_ENTRIES = 100
 RESPONSE_CACHE_MAX_BYTES = 2 * 1024 * 1024
 RESPONSE_CACHE_BYTES = 0
 RESPONSE_CACHE_LOCK = threading.RLock()
+# Backup listing used to decompress + fully parse every retained snapshot on
+# every Admin refresh. Cache the derived metadata separately and invalidate it
+# whenever the backup directory changes. The actual backup file remains the
+# source of truth for download/verify/restore operations.
+BACKUP_LIST_CACHE_TTL = float(os.environ.get("BACKUP_LIST_CACHE_TTL", "30") or "30")
+BACKUP_LIST_CACHE = {"expires": 0.0, "signature": None, "payload": None}
+BACKUP_LIST_CACHE_LOCK = threading.RLock()
 SESSION_LOCK = threading.RLock()
 LOGIN_LOCK = threading.RLock()
 ACTIVITY_RATE_LOCK = threading.RLock()
@@ -1464,6 +1471,19 @@ def _require_role(handler, *roles):
     return True
 
 
+def _revoke_user_sessions(user_id):
+    """Invalidate every in-memory session belonging to a database user."""
+    if user_id is None:
+        return 0
+    removed=0
+    with SESSION_LOCK:
+        for tok, smeta in list(SESSIONS.items()):
+            if smeta.get("user_id") == user_id:
+                SESSIONS.pop(tok, None)
+                removed += 1
+    return removed
+
+
 def _viewer_meta(handler):
     _cleanup_sessions()
     token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_user")
@@ -1472,6 +1492,9 @@ def _viewer_meta(handler):
         if not meta or meta.get("role") not in ("viewer", "admin", "qa_manager", "qa_engineer", "importer", "auditor"):
             return None
         if meta.get("expires", 0) < _dt.datetime.now().timestamp():
+            SESSIONS.pop(token, None)
+            return None
+        if not bool(meta.get("active", True)):
             SESSIONS.pop(token, None)
             return None
         return dict(meta)
@@ -1757,11 +1780,58 @@ def _parse_uploaded_file(filename, data):
     return rows
 
 
+def _backup_list_cache_clear():
+    with BACKUP_LIST_CACHE_LOCK:
+        BACKUP_LIST_CACHE["expires"] = 0.0
+        BACKUP_LIST_CACHE["signature"] = None
+        BACKUP_LIST_CACHE["payload"] = None
+
+
+def _disposition_state(conn=None):
+    """Return the current data mutation revision/timestamp.
+
+    The revision is runtime/application metadata, not a replacement for the
+    source inspection date used for freshness. It exists to detect a change
+    between import preview and confirm, including concurrent Admin writes.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = get_conn()
+    try:
+        row = conn.execute("SELECT value FROM app_state WHERE key='disposition_revision'").fetchone()
+        changed = conn.execute("SELECT value FROM app_state WHERE key='disposition_changed_at'").fetchone()
+        try:
+            revision = int(row[0]) if row and row[0] is not None else 0
+        except (TypeError, ValueError):
+            revision = 0
+        changed_at = str(changed[0]) if changed and changed[0] is not None else ""
+        return {"revision": revision, "changed_at": changed_at}
+    finally:
+        if own_conn:
+            try: conn.close()
+            except Exception: pass
+
+
+def _mark_disposition_changed(conn):
+    """Increment disposition revision atomically inside the caller's transaction."""
+    row = conn.execute("SELECT value FROM app_state WHERE key='disposition_revision'").fetchone()
+    try:
+        revision = int(row[0]) if row and row[0] is not None else 0
+    except (TypeError, ValueError):
+        revision = 0
+    revision += 1
+    changed_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    conn.execute("UPDATE app_state SET value=? WHERE key='disposition_revision'", (str(revision),))
+    conn.execute("UPDATE app_state SET value=? WHERE key='disposition_changed_at'", (changed_at,))
+    return {"revision": revision, "changed_at": changed_at}
+
+
 def _cache_clear():
     global RESPONSE_CACHE_BYTES
     with RESPONSE_CACHE_LOCK:
         RESPONSE_CACHE.clear()
         RESPONSE_CACHE_BYTES = 0
+    _backup_list_cache_clear()
 
 def _cache_get(key):
     global RESPONSE_CACHE_BYTES
@@ -1832,6 +1902,8 @@ def _insert_records(records):
                 inserted=len(good)
             for r,rid in updates:
                 cur.execute("""UPDATE disposition SET heat_no=?,work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
+            if inserted or updated:
+                _mark_disposition_changed(conn)
             conn.commit()
             result={"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
         except Exception:
@@ -2129,8 +2201,12 @@ def _backup_prune():
             (f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_") and f.endswith(".json.gz")),
             key=lambda f: os.path.getmtime(os.path.join(BACKUP_DIR, f)),
         )
+        changed = False
         while len(files) > BACKUP_KEEP:
             os.remove(os.path.join(BACKUP_DIR, files.pop(0)))
+            changed = True
+        if changed:
+            _backup_list_cache_clear()
     except Exception:
         pass
 
@@ -2263,6 +2339,7 @@ def _write_backup_file(reason="manual"):
                 raw.flush()
                 os.fsync(raw.fileno())
             os.replace(tmp_path, fpath)
+            _backup_list_cache_clear()
             _backup_prune()
             return {"filename": fname, "counts": data["counts"], "created_at": data["created_at"], "app_version": APP_VERSION}
     except Exception as e:
@@ -2323,11 +2400,29 @@ def _scheduled_backup_loop():
         time.sleep(check_every)
 
 def _list_backups():
+    """Return backup metadata without reparsing unchanged snapshot payloads."""
     try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        names = [
+            f for f in os.listdir(BACKUP_DIR)
+            if f.startswith("backup_") and f.endswith(".json.gz") and os.path.isfile(os.path.join(BACKUP_DIR, f))
+        ]
+        names.sort(reverse=True)
+        signature = []
+        for f in names:
+            fp = os.path.join(BACKUP_DIR, f)
+            st = os.stat(fp)
+            signature.append((f, int(st.st_size), int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))))
+        signature = tuple(signature)
+        now = time.time()
+        with BACKUP_LIST_CACHE_LOCK:
+            if (BACKUP_LIST_CACHE.get("payload") is not None
+                    and BACKUP_LIST_CACHE.get("signature") == signature
+                    and now < float(BACKUP_LIST_CACHE.get("expires", 0))):
+                return [dict(x) for x in BACKUP_LIST_CACHE["payload"]]
+
         out = []
-        for f in os.listdir(BACKUP_DIR):
-            if not (f.startswith("backup_") and f.endswith(".json.gz")):
-                continue
+        for f in names:
             fp = os.path.join(BACKUP_DIR, f)
             m = re.match(r"backup_(\d{8})_(\d{6})_(.+)\.json\.gz", f)
             reason = m.group(3) if m else "unknown"
@@ -2340,8 +2435,19 @@ def _list_backups():
                 valid, _why = _backup_is_valid(obj)
             except Exception:
                 valid = False
-            out.append({"filename": f, "reason": reason, "size_kb": round(os.path.getsize(fp)/1024, 1), "modified_at": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%b-%Y %H:%M:%S"), "valid": valid, "backup_version": backup_version})
+            out.append({
+                "filename": f,
+                "reason": reason,
+                "size_kb": round(os.path.getsize(fp) / 1024, 1),
+                "modified_at": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%b-%Y %H:%M:%S"),
+                "valid": valid,
+                "backup_version": backup_version,
+            })
         out.sort(key=lambda x: x["filename"], reverse=True)
+        with BACKUP_LIST_CACHE_LOCK:
+            BACKUP_LIST_CACHE["signature"] = signature
+            BACKUP_LIST_CACHE["payload"] = [dict(x) for x in out]
+            BACKUP_LIST_CACHE["expires"] = time.time() + max(0.0, BACKUP_LIST_CACHE_TTL)
         return out
     except Exception:
         return []
@@ -2486,6 +2592,7 @@ def _restore_backup_data(data):
                         % (repr(table), table, table)
                     )
 
+        _mark_disposition_changed(conn)
         conn.commit()
     except Exception:
         try:
@@ -2735,6 +2842,14 @@ def _ensure_admin_schema():
             record_id INTEGER, details TEXT DEFAULT '{}', ip_address TEXT DEFAULT '', user_agent TEXT DEFAULT '',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    # Runtime mutation metadata used for optimistic import-confirm validation.
+    # It is intentionally kept out of backups because it has meaning only for
+    # the current database instance and is re-created idempotently on startup.
+    conn.execute("CREATE TABLE IF NOT EXISTS app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
+    for key, default_value in (("disposition_revision", "0"), ("disposition_changed_at", "")):
+        exists = conn.execute("SELECT 1 FROM app_state WHERE key=?", (key,)).fetchone()
+        if not exists:
+            conn.execute("INSERT INTO app_state (key,value) VALUES (?,?)", (key, default_value))
     # Commit before attempting the guarded ALTER below: if that ALTER times
     # out and gets rolled back, the rollback must not also wipe out the
     # CREATE TABLE IF NOT EXISTS statements for users/activity_log/audit_trail
@@ -4043,15 +4158,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/activity/live":
             try:
-                conn = get_conn()
+                cache_key="activity:live_users"
+                cached=_cache_get(cache_key)
+                if cached is not None:
+                    self._send_json(cached)
+                    return
+                conn=get_conn()
                 if USE_POSTGRES:
-                    row = conn.execute("SELECT COUNT(DISTINCT COALESCE(NULLIF(visitor_id,''), NULLIF(ip_address,''))) AS active FROM activity_log WHERE event_type='viewer_heartbeat' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '75 seconds'").fetchone()
+                    row=conn.execute("SELECT COUNT(DISTINCT COALESCE(NULLIF(visitor_id,''), NULLIF(ip_address,''))) AS active FROM activity_log WHERE event_type='viewer_heartbeat' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 seconds'").fetchone()
                 else:
-                    row = conn.execute("SELECT COUNT(DISTINCT CASE WHEN COALESCE(visitor_id,'')<>'' THEN visitor_id ELSE ip_address END) AS active FROM activity_log WHERE event_type='viewer_heartbeat' AND datetime(created_at) >= datetime('now','-75 seconds')").fetchone()
+                    row=conn.execute("SELECT COUNT(DISTINCT CASE WHEN COALESCE(visitor_id,'')<>'' THEN visitor_id ELSE ip_address END) AS active FROM activity_log WHERE event_type='viewer_heartbeat' AND datetime(created_at) >= datetime('now','-90 seconds')").fetchone()
                 conn.close()
-                self._send_json({"active_users": int((row[0] if row else 0) or 0), "window_seconds": 75})
+                payload={"active_users":int((row[0] if row else 0) or 0),"window_seconds":90}
+                _cache_put(cache_key,payload)
+                self._send_json(payload)
             except Exception as e:
-                self._send_json({"active_users": 0, "error": str(e)}, status=200)
+                self._send_json({"active_users":0,"error":str(e)},status=200)
         elif path == "/api/drilldown":
             filters = _filters_from_qs(qs)
             try:
@@ -4343,6 +4465,7 @@ class Handler(BaseHTTPRequestHandler):
                         latest_activity=conn.execute("SELECT MAX(created_at) FROM activity_log").fetchone()[0]
                     except Exception:
                         conn.rollback()
+                    latest_data_date = conn.execute("SELECT MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition").fetchone()[0]
                     conn.close(); conn=None
                     backups=_list_backups()
                     session_ok=bool(_cookie_value(self.headers.get("Cookie",""),"qdash_admin"))
@@ -4352,22 +4475,20 @@ class Handler(BaseHTTPRequestHandler):
                         {"key":"backup","label":"Backup","status":"healthy" if backups else "warning","detail":f"{len(backups)} snapshot(s) available" if backups else "No snapshot available"},
                         {"key":"monitoring","label":"Monitoring","status":"healthy","detail":"Read-only checks active"},
                     ]
-                    latest_candidates=[x for x in (latest_import, latest_activity) if x]
-                    latest_dt=max(latest_candidates) if latest_candidates else None
-                    freshness_status="unknown"; freshness_age_hours=None
-                    if latest_dt:
+                    state = _disposition_state()
+                    freshness_status="unknown"; freshness_age_days=None
+                    if latest_data_date:
                         try:
-                            txt=str(latest_dt).replace("Z","+00:00")
-                            dt=_dt.datetime.fromisoformat(txt)
-                            if dt.tzinfo is None: dt=dt.replace(tzinfo=_dt.timezone.utc)
-                            freshness_age_hours=round(max(0,(_dt.datetime.now(_dt.timezone.utc)-dt.astimezone(_dt.timezone.utc)).total_seconds()/3600),1)
-                            freshness_status="fresh" if freshness_age_hours < 24 else ("stale" if freshness_age_hours < 72 else "very_stale")
+                            data_day = _dt.date.fromisoformat(str(latest_data_date)[:10])
+                            age_days = (_dt.date.today() - data_day).days
+                            freshness_age_days = max(0, age_days)
+                            freshness_status = "future" if age_days < 0 else ("fresh" if age_days <= 1 else ("stale" if age_days <= 3 else "very_stale"))
                         except Exception:
                             freshness_status="unknown"
-                    freshness_detail=(f"Last activity {freshness_age_hours:.1f}h ago" if freshness_age_hours is not None else "No import/activity timestamp")
-                    if freshness_status in ("stale","very_stale"): freshness_detail += " · review freshness"
-                    checks.append({"key":"freshness","label":"Data freshness","status":"healthy" if freshness_status in ("fresh","unknown") else "warning","detail":freshness_detail})
-                    self._send_json({"ok":True,"provider":"PostgreSQL" if USE_POSTGRES else "SQLite","checks":checks,"record_count":total,"db_latency_ms":db_ms,"latest_import":str(latest_import) if latest_import is not None else "","latest_activity":str(latest_activity) if latest_activity is not None else "","freshness_status":freshness_status,"freshness_age_hours":freshness_age_hours,"checked_at":datetime.now().strftime("%d-%b-%Y %H:%M:%S")})
+                    freshness_detail=(f"Data through {latest_data_date} · {freshness_age_days}d old" if latest_data_date and freshness_age_days is not None else "No inspection-date data available")
+                    if freshness_status in ("stale","very_stale","future"): freshness_detail += " · review source freshness"
+                    checks.append({"key":"freshness","label":"Data freshness","status":"healthy" if freshness_status=="fresh" else "warning","detail":freshness_detail})
+                    self._send_json({"ok":True,"provider":"PostgreSQL" if USE_POSTGRES else "SQLite","checks":checks,"record_count":total,"db_latency_ms":db_ms,"latest_import":str(latest_import) if latest_import is not None else "","latest_activity":str(latest_activity) if latest_activity is not None else "","latest_data_date":str(latest_data_date) if latest_data_date is not None else "","data_age_days":freshness_age_days,"data_changed_at":state.get("changed_at", ""),"data_revision":state.get("revision",0),"freshness_status":freshness_status,"freshness_age_days":freshness_age_days,"checked_at":datetime.now().strftime("%d-%b-%Y %H:%M:%S")})
                 except Exception as e:
                     try:
                         if conn: conn.close()
@@ -4516,7 +4637,9 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     conn=get_conn()
                     total=conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
-                    last=conn.execute("SELECT MAX(created_at) FROM import_history").fetchone()[0] or conn.execute("SELECT MAX(insp_lot_date) FROM disposition WHERE insp_lot_date <> ''").fetchone()[0]
+                    last=conn.execute("SELECT MAX(NULLIF(TRIM(COALESCE(insp_lot_date,'')),'')) FROM disposition").fetchone()[0]
+                    last_import=conn.execute("SELECT MAX(created_at) FROM import_history").fetchone()[0]
+                    data_state=_disposition_state(conn)
                     admins=conn.execute("SELECT COUNT(*) FROM users WHERE active=TRUE AND role='admin'").fetchone()[0]
                     last_login=conn.execute("SELECT MAX(created_at) FROM activity_log WHERE event_type='admin_login'").fetchone()[0]
                     failed=conn.execute("SELECT COUNT(*) FROM activity_log WHERE event_type='admin_login_failed'").fetchone()[0]
@@ -4524,10 +4647,10 @@ class Handler(BaseHTTPRequestHandler):
                     imports=conn.execute("SELECT COUNT(*) FROM import_history").fetchone()[0]
                     conn.close()
                     ds=database_status()
-                    self._send_json({"total_records":total,"last_data_update":last or "—","database_size_mb":ds.get("used_mb",0),"active_admins":admins,"dashboard_views":views,"last_login":last_login or "—","failed_login_attempts":failed,"imports":imports})
+                    self._send_json({"total_records":total,"last_data_update":last or "—","last_import_at":last_import or "","data_changed_at":data_state.get("changed_at", ""),"data_revision":data_state.get("revision",0),"database_size_mb":ds.get("used_mb",0),"active_admins":admins,"dashboard_views":views,"last_login":last_login or "—","failed_login_attempts":failed,"imports":imports})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/audit_analytics":
-            if not _is_admin(self): _auth_error(self)
+            if not _require_role(self, "admin"): return
             else:
                 try:
                     conn=get_conn()
@@ -4539,7 +4662,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json({"total":total,"last_24h":recent,"actions":[dict(r) for r in actions],"users":[dict(r) for r in users]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/backup/verify":
-            if not _is_admin(self): _auth_error(self)
+            if not _require_role(self, "admin"): return
             else:
                 try:
                     name=os.path.basename(str(qs.get("name",""))); fpath=os.path.join(BACKUP_DIR,name)
@@ -4562,7 +4685,7 @@ class Handler(BaseHTTPRequestHandler):
                     {"id":"workcenter_defect","name":"Work Center + Defect required","severity":"Medium","field":"work_center/main_defect","description":"Work Center and Main Defect should be populated."}
                 ]})
         elif path == "/api/admin/security_status":
-            if not _is_admin(self): _auth_error(self)
+            if not _require_role(self, "admin"): return
             else:
                 try:
                     _cleanup_sessions()
@@ -4577,75 +4700,63 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/admin/data_quality":
             if not _is_admin(self): _auth_error(self)
             else:
-                # Computed entirely in SQL (single-pass aggregates instead of pulling every
-                # row into Python and looping): this used to fetch the whole disposition
-                # table and iterate it in the request handler, which got slower every month
-                # as the table grew. All the same rules are preserved below.
                 try:
                     conn=get_conn()
-                    dec_list = DECISION_ORDER
-                    dec_placeholders = ",".join(["?"] * len(dec_list))
-                    weight_invalid_sql = ("output_weight IS NULL OR output_weight<=0 OR output_weight::text IN ('NaN','Infinity','-Infinity')"
-                                           if USE_POSTGRES else
-                                           "output_weight IS NULL OR output_weight<=0 OR output_weight!=output_weight")
-                    date_invalid_sql = ("TRIM(COALESCE(insp_lot_date,''))='' OR NOT (insp_lot_date ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')"
-                                         if USE_POSTGRES else
-                                         # date() silently rolls over out-of-range days (e.g. Feb 30 -> Mar 1)
-                                         # instead of failing, so also reject any value whose round-trip
-                                         # through date() doesn't match the original YYYY-MM-DD text.
-                                         "TRIM(COALESCE(insp_lot_date,''))='' OR date(substr(insp_lot_date,1,10)) IS NULL "
-                                         "OR date(substr(insp_lot_date,1,10)) <> substr(insp_lot_date,1,10)")
-                    decision_invalid_sql = f"TRIM(COALESCE(quality_decision,''))<>'' AND UPPER(TRIM(quality_decision)) NOT IN ({dec_placeholders})"
-                    invalid_values_sql = (f"TRIM(COALESCE(work_center,''))='' OR TRIM(COALESCE(main_defect,''))='' OR ({decision_invalid_sql})")
-
-                    def q1(sql, params=()):
-                        r = conn.execute(sql, params).fetchone(); return int(r[0] or 0) if r else 0
-
-                    total = q1("SELECT COUNT(*) FROM disposition")
-                    counts = {}
-                    counts["missing_heat_no"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(heat_no,''))=''")
-                    counts["missing_batch_no"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(batch_no,''))=''")
-                    counts["missing_grade"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(grade,''))=''")
-                    counts["missing_decision"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(quality_decision,''))=''")
-                    counts["missing_weight"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {weight_invalid_sql}")
-                    counts["invalid_dates"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {date_invalid_sql}")
-                    counts["missing_intensity"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {MISSING_INTENSITY_SQL}")
-                    counts["invalid_values"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {invalid_values_sql}", tuple(dec_list))
-
-                    # Duplicate batch numbers: every row beyond the first in a batch group.
-                    dup_rows = conn.execute(
-                        "SELECT UPPER(TRIM(batch_no)) b, COUNT(*) c FROM disposition "
-                        "WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1"
-                    ).fetchall()
-                    counts["duplicate_batch"] = sum(int(r[1]) - 1 for r in dup_rows)
-                    dup_groups = sorted(
-                        [{"batch_no": r[0], "count": int(r[1])} for r in dup_rows],
-                        key=lambda x: x["count"], reverse=True
-                    )[:20]
-
-                    # records_require_correction = distinct rows failing ANY single check
-                    # (a row with two problems is still one record to fix, not two).
-                    corrections = q1(f"""
-                        SELECT COUNT(*) FROM disposition d WHERE
-                            TRIM(COALESCE(d.heat_no,''))=''
-                            OR TRIM(COALESCE(d.batch_no,''))=''
-                            OR TRIM(COALESCE(d.grade,''))=''
-                            OR TRIM(COALESCE(d.quality_decision,''))=''
-                            OR ({weight_invalid_sql})
-                            OR ({date_invalid_sql})
-                            OR ({MISSING_INTENSITY_SQL})
-                            OR ({invalid_values_sql})
-                            OR (TRIM(COALESCE(d.batch_no,''))<>'' AND UPPER(TRIM(d.batch_no)) IN (
-                                SELECT UPPER(TRIM(batch_no)) FROM disposition
-                                WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1
-                            ) AND d.id NOT IN (
-                                SELECT MIN(id) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no))
-                            ))
-                    """, tuple(dec_list))
+                    dec_list=DECISION_ORDER
+                    dec_placeholders=",".join(["?"]*len(dec_list))
+                    weight_invalid_sql=("output_weight IS NULL OR output_weight<=0 OR output_weight::text IN ('NaN','Infinity','-Infinity')"
+                                       if USE_POSTGRES else
+                                       "output_weight IS NULL OR output_weight<=0 OR output_weight!=output_weight")
+                    date_invalid_sql=("TRIM(COALESCE(n.insp_lot_date,''))='' OR NOT (n.insp_lot_date ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')"
+                                      if USE_POSTGRES else
+                                      "TRIM(COALESCE(n.insp_lot_date,''))='' OR date(substr(n.insp_lot_date,1,10)) IS NULL OR date(substr(n.insp_lot_date,1,10)) <> substr(n.insp_lot_date,1,10)")
+                    decision_invalid_sql=f"TRIM(COALESCE(n.quality_decision,''))<>'' AND UPPER(TRIM(n.quality_decision)) NOT IN ({dec_placeholders})"
+                    invalid_values_sql=f"TRIM(COALESCE(n.work_center,''))='' OR TRIM(COALESCE(n.main_defect,''))='' OR ({decision_invalid_sql})"
+                    correction_sql=(
+                        "TRIM(COALESCE(n.heat_no,''))='' OR TRIM(COALESCE(n.batch_no,''))='' OR "
+                        "TRIM(COALESCE(n.grade,''))='' OR TRIM(COALESCE(n.quality_decision,''))='' OR "
+                        f"({weight_invalid_sql}) OR ({date_invalid_sql}) OR ({MISSING_INTENSITY_SQL}) OR ({invalid_values_sql}) OR "
+                        "(dg.batch_key IS NOT NULL AND n.id<>dg.keep_id)"
+                    )
+                    sql=f"""
+                        WITH normalized AS (
+                            SELECT d.*, UPPER(TRIM(COALESCE(d.batch_no,''))) AS batch_key
+                            FROM disposition d
+                        ), duplicate_groups AS (
+                            SELECT batch_key, COUNT(*) AS cnt, MIN(id) AS keep_id
+                            FROM normalized
+                            WHERE batch_key<>''
+                            GROUP BY batch_key
+                            HAVING COUNT(*)>1
+                        )
+                        SELECT
+                            COUNT(*) AS total,
+                            SUM(CASE WHEN TRIM(COALESCE(n.heat_no,''))='' THEN 1 ELSE 0 END) AS missing_heat_no,
+                            SUM(CASE WHEN TRIM(COALESCE(n.batch_no,''))='' THEN 1 ELSE 0 END) AS missing_batch_no,
+                            SUM(CASE WHEN TRIM(COALESCE(n.grade,''))='' THEN 1 ELSE 0 END) AS missing_grade,
+                            SUM(CASE WHEN TRIM(COALESCE(n.quality_decision,''))='' THEN 1 ELSE 0 END) AS missing_decision,
+                            SUM(CASE WHEN {weight_invalid_sql} THEN 1 ELSE 0 END) AS missing_weight,
+                            SUM(CASE WHEN {date_invalid_sql} THEN 1 ELSE 0 END) AS invalid_dates,
+                            SUM(CASE WHEN {MISSING_INTENSITY_SQL} THEN 1 ELSE 0 END) AS missing_intensity,
+                            SUM(CASE WHEN {invalid_values_sql} THEN 1 ELSE 0 END) AS invalid_values,
+                            (SELECT COUNT(*) FROM duplicate_groups) AS duplicate_groups,
+                            (SELECT COALESCE(SUM(cnt-1),0) FROM duplicate_groups) AS duplicate_batch,
+                            SUM(CASE WHEN {correction_sql} THEN 1 ELSE 0 END) AS records_require_correction
+                        FROM normalized n
+                        LEFT JOIN duplicate_groups dg ON dg.batch_key=n.batch_key
+                    """
+                    params=tuple(dec_list)+tuple(dec_list)
+                    row=conn.execute(sql,params).fetchone()
+                    duplicate_groups=conn.execute("""SELECT UPPER(TRIM(batch_no)) AS batch_key,COUNT(*) c FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1 ORDER BY c DESC LIMIT 20""").fetchall()
                     conn.close()
-                    issue_total=sum(counts.values())
+                    vals={k:int(row[idx] or 0) for idx,k in enumerate((
+                        "total","missing_heat_no","missing_batch_no","missing_grade","missing_decision","missing_weight",
+                        "invalid_dates","missing_intensity","invalid_values","duplicate_groups","duplicate_batch","records_require_correction"
+                    ))}
+                    total=vals["total"]; corrections=vals["records_require_correction"]
+                    counts={k:vals[k] for k in ("missing_heat_no","missing_batch_no","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values","duplicate_batch")}
                     score=round(max(0,100*(1-(corrections/max(total,1)))),1)
-                    self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_batch_rows":dup_groups})
+                    self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_batch_rows":[{"batch_no":r[0],"count":int(r[1])} for r in duplicate_groups]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/import_history":
             if not _is_admin(self): _auth_error(self)
@@ -4701,10 +4812,9 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json({"rows": out, "master_defects": master_names})
                 except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/admin/users":
-            # The admin page loads the user table with a plain GET; only the POST
-            # form of this route existed, so the request 404'd and the Users
-            # panel stayed empty.
-            if not _is_admin(self): _auth_error(self)
+            # User directory is a Super Admin function; hiding the panel in the
+            # browser is not an access-control boundary.
+            if not _require_role(self, "admin"): return
             else:
                 conn = None
                 try:
@@ -4723,7 +4833,7 @@ class Handler(BaseHTTPRequestHandler):
                 try: self._send_json({"targets": get_kpi_targets()})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/export_audit":
-            if not _is_admin(self): _auth_error(self)
+            if not _require_role(self, "admin"): return
             else:
                 try:
                     conn=get_conn(); rows=conn.execute("SELECT COALESCE(NULLIF(a.ip_address,''),'Unknown') ip_address,COALESCE(u.username,'Anonymous') username,a.event_type,a.tab,a.created_at,a.user_agent FROM activity_log a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 5000").fetchall(); conn.close()
@@ -4744,16 +4854,14 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self._send_json({"error": str(e)}, status=500)
         elif path == "/api/admin/backup/list":
-            if not _is_admin(self):
-                _auth_error(self)
+            if not _require_role(self, "admin"): return
             else:
                 try:
                     self._send_json({"backups": _list_backups(), "backup_dir": BACKUP_DIR, "keep": BACKUP_KEEP})
                 except Exception as e:
                     self._send_json({"error": str(e)}, status=500)
         elif path == "/api/admin/backup/download":
-            if not _is_admin(self):
-                _auth_error(self)
+            if not _require_role(self, "admin"): return
             else:
                 try:
                     name = os.path.basename(str(qs.get("name", "")))
@@ -4941,7 +5049,12 @@ class Handler(BaseHTTPRequestHandler):
                     current_meta=dict(SESSIONS.get(current_token) or {})
                 if not active and row[1] == current_meta.get("username"):
                     conn.close(); self._send_json({"error":"You cannot disable your own active administrator account."},status=400); return
-                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close(); _audit(self,"user_toggle",record_id=uid,details={"active":active}); self._send_json({"ok":True})
+                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close()
+                if not active:
+                    _revoke_user_sessions(uid)
+                # Re-enabling an account never restores an old session token;
+                # a fresh login is required to establish a new session.
+                _audit(self,"user_toggle",record_id=uid,details={"active":active}); self._send_json({"ok":True})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -4959,10 +5072,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not row: conn.close(); self._send_json({"error":"User not found"},status=404); return
                 temp_password=_generate_temp_password()
                 conn.execute("UPDATE users SET password_hash=?, must_reset_password=? WHERE id=?", (_hash_password(temp_password), (True if USE_POSTGRES else 1), uid)); conn.commit(); conn.close()
-                with SESSION_LOCK:
-                    for tok, smeta in list(SESSIONS.items()):
-                        if smeta.get("username") == row[1]:
-                            SESSIONS.pop(tok, None)
+                _revoke_user_sessions(row[0])
                 _audit(self,"admin_password_reset",record_id=uid,details={"username":row[1]})
                 self._send_json({"ok":True,"username":row[1],"temp_password":temp_password,"message":"Temporary password generated. Share it with the user through a secure channel — it will not be shown again — and they must set their own password on next admin login."})
             except Exception as e: self._send_json({"error":str(e)},status=400)
@@ -5109,7 +5219,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not uploaded: raise ValueError("No file was uploaded")
                 records=_parse_uploaded_file(uploaded[0],uploaded[1])
                 if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
-                conn=get_conn(); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={str(r[1] or "").strip().upper():r for r in existing_rows};
+                conn=get_conn(); existing_state=_disposition_state(conn); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={str(r[1] or "").strip().upper():r for r in existing_rows};
                 wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()
                 valid=[]; errors=[]; duplicates=0; updated=0; updated_details=[]; seen=set(); missing_intensity=0; unknown_wc=0; unknown_grade=0; invalid_dates=0
                 for idx,r in enumerate(records,start=2):
@@ -5150,7 +5260,7 @@ class Handler(BaseHTTPRequestHandler):
                         oldest = sorted(IMPORT_PREVIEWS.items(), key=lambda kv: kv[1].get("created", 0))[:max(1, len(IMPORT_PREVIEWS)-MAX_IMPORT_PREVIEWS+1)]
                         for old_token, _ in oldest:
                             IMPORT_PREVIEWS.pop(old_token, None)
-                    IMPORT_PREVIEWS[token]={"created":now_preview,"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"updated":updated,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade}}
+                    IMPORT_PREVIEWS[token]={"created":now_preview,"filename":uploaded[0],"records":valid,"summary":{"detected":len(records),"valid":len(valid),"duplicates":duplicates,"updated":updated,"errors":len(errors),"error_rows":errors[:100],"missing_intensity":missing_intensity,"invalid_dates":invalid_dates,"unknown_work_centers":unknown_wc,"unknown_grades":unknown_grade},"disposition_revision":existing_state.get("revision",0)}
                 self._send_json({"ok":True,"preview_id":token,"filename":uploaded[0],**IMPORT_PREVIEWS[token]["summary"],"updated_details":updated_details,"sample":[{k:r.get(k,"") for k in ["insp_lot_date","heat_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision"]} for r in valid[:25]]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
@@ -5158,11 +5268,21 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/admin/import_confirm":
             if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
-                body=_json_body(self); pid=str(body.get("preview_id","")); item=IMPORT_PREVIEWS.get(pid)
-                if not item or time.time()-item.get("created",0)>IMPORT_PREVIEW_TTL: IMPORT_PREVIEWS.pop(pid,None); raise ValueError("Import preview expired. Please upload the file again.")
-                _require_safety_backup("before_disposition_import")
-                result=_insert_records(item["records"]); meta=_admin_meta(self) or {};
-                conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close(); IMPORT_PREVIEWS.pop(pid,None); _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]}); _audit(self,"data_import_confirm",details={"filename":item["filename"],"inserted":result["inserted"],"updated":result.get("updated",0)})
+                body=_json_body(self); pid=str(body.get("preview_id",""))
+                with DISPOSITION_WRITE_LOCK:
+                    with IMPORT_PREVIEW_LOCK:
+                        item=IMPORT_PREVIEWS.get(pid)
+                    if not item or time.time()-item.get("created",0)>IMPORT_PREVIEW_TTL:
+                        with IMPORT_PREVIEW_LOCK: IMPORT_PREVIEWS.pop(pid,None)
+                        raise ValueError("Import preview expired. Please upload the file again.")
+                    current_state=_disposition_state()
+                    if int(item.get("disposition_revision",0)) != int(current_state.get("revision",0)):
+                        raise ValueError("The database changed after this preview was generated. Please preview the import again before confirming.")
+                    _require_safety_backup("before_disposition_import")
+                    result=_insert_records(item["records"]); meta=_admin_meta(self) or {}
+                    conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close()
+                    with IMPORT_PREVIEW_LOCK: IMPORT_PREVIEWS.pop(pid,None)
+                    _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]}); _audit(self,"data_import_confirm",details={"filename":item["filename"],"inserted":result["inserted"],"updated":result.get("updated",0)})
                 _write_backup_file("disposition_import")
                 self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"updated":result.get("updated",item["summary"].get("updated",0)),"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"]})
             except Exception as e: self._send_json({"error":str(e)},status=400)
@@ -5364,7 +5484,10 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         exact_base = "SELECT id,insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition"
                         row = conn.execute(exact_base + " WHERE id=?", (exact_id,)).fetchone()
-                        grand_total = conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                        grand_total = _cache_get("admin:records:grand_total")
+                        if grand_total is None:
+                            grand_total = int(conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0] or 0)
+                            _cache_put("admin:records:grand_total", grand_total)
                     finally:
                         conn.close()
                     rows = [dict(row)] if row else []
@@ -5412,7 +5535,13 @@ class Handler(BaseHTTPRequestHandler):
                 # grand_total is the true, unfiltered live record count — kept separate from
                 # "total" (the filtered match count) so the frontend's global "Total Records"
                 # stat doesn't get overwritten with a filtered number when an admin searches.
-                grand_total = total if not where else conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
+                if where:
+                    grand_total = _cache_get("admin:records:grand_total")
+                    if grand_total is None:
+                        grand_total = int(conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0] or 0)
+                        _cache_put("admin:records:grand_total", grand_total)
+                else:
+                    grand_total = total
                 conn.close()
                 # "total" here is every record matching the current search/date filter — not
                 # capped by "limit". The frontend pages through it (limit+offset) instead of
@@ -5442,19 +5571,19 @@ class Handler(BaseHTTPRequestHandler):
                 elif issue == "invalid_weights":
                     clauses.append("output_weight IS NULL OR output_weight <= 0" if not USE_POSTGRES else "output_weight IS NULL OR output_weight::text IN ('NaN','Infinity','-Infinity') OR output_weight <= 0")
                 elif issue == "invalid_dates":
-                    all_rows=[dict(r) for r in conn.execute(select).fetchall()]
-                    bad=[]
-                    for r in all_rows:
-                        dv=str(r.get("insp_lot_date") or "").strip()
-                        try: datetime.strptime(dv[:10], "%Y-%m-%d") if dv else (_ for _ in ()).throw(ValueError())
-                        except Exception: bad.append(r)
-                    conn.close(); self._send_json({"rows":bad[:limit],"total":len(bad),"issue":issue}); return
+                    date_sql=("TRIM(COALESCE(insp_lot_date,''))='' OR NOT (insp_lot_date ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')"
+                              if USE_POSTGRES else
+                              "TRIM(COALESCE(insp_lot_date,''))='' OR date(substr(insp_lot_date,1,10)) IS NULL OR date(substr(insp_lot_date,1,10)) <> substr(insp_lot_date,1,10)")
+                    rows=[dict(r) for r in conn.execute(select+" WHERE "+date_sql+" ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+                    total=conn.execute("SELECT COUNT(*) FROM disposition WHERE "+date_sql).fetchone()[0]
+                    conn.close(); self._send_json({"rows":rows,"total":int(total or 0),"issue":issue}); return
                 elif issue == "missing_intensity": clauses.append(MISSING_INTENSITY_SQL)
                 elif issue == "invalid_values": clauses.append("TRIM(COALESCE(work_center,''))='' OR TRIM(COALESCE(main_defect,''))='' OR (TRIM(COALESCE(quality_decision,''))<>'' AND UPPER(TRIM(quality_decision)) NOT IN (%s))" % ','.join('?'*len(valid_decisions))); params.extend(valid_decisions)
                 elif issue == "duplicate_batch":
-                    rows = [dict(r) for r in conn.execute(select + " WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT UPPER(TRIM(batch_no)) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1) ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
-                    total = conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT UPPER(TRIM(batch_no)) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1)").fetchone()[0]
-                    conn.close(); self._send_json({"rows":rows,"total":total,"issue":issue}); return
+                    dup_cte="""WITH dup AS (SELECT UPPER(TRIM(batch_no)) AS batch_key FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1) """
+                    rows=[dict(r) for r in conn.execute(dup_cte+select+" WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT batch_key FROM dup) ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+                    total=conn.execute("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' AND UPPER(TRIM(batch_no)) IN (SELECT UPPER(TRIM(batch_no)) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1)").fetchone()[0]
+                    conn.close(); self._send_json({"rows":rows,"total":int(total or 0),"issue":issue}); return
                 else:
                     conn.close(); self._send_json({"error":"Unknown quality issue"},status=400); return
                 where=' WHERE '+ ' AND '.join(clauses) if clauses else ''
@@ -5476,6 +5605,8 @@ class Handler(BaseHTTPRequestHandler):
                 _require_safety_backup("before_record_delete")
                 conn = get_conn()
                 cur = conn.execute("DELETE FROM disposition WHERE id=?", (record_id,))
+                if cur.rowcount:
+                    _mark_disposition_changed(conn)
                 conn.commit()
                 conn.close()
                 _audit(self,"record_delete",record_id=record_id)
@@ -5501,6 +5632,8 @@ class Handler(BaseHTTPRequestHandler):
                 conn = get_conn()
                 placeholders = ",".join("?" for _ in ids)
                 cur = conn.execute(f"DELETE FROM disposition WHERE id IN ({placeholders})", ids)
+                if cur.rowcount:
+                    _mark_disposition_changed(conn)
                 conn.commit()
                 conn.close()
                 _audit(self,"record_bulk_delete",details={"record_ids":ids,"count":cur.rowcount})

@@ -14,6 +14,7 @@ python http_smoke.py            # health/readiness + every public, export and ad
 python smoke_test.py            # bundled dataset unchanged, core tabs/API respond
 python regression_test.py       # core endpoints + filter contract
 python regression_v64_3.py      # single response, malformed filters, drill totals, per-FY quarters, data-quality wiring
+python regression_v64_5.py      # freshness semantics, session revocation, backup cache, mutation revision
 python admin_ux_audit.py        # admin navigation contract
 python export_acceptance.py     # Excel/PDF/PPTX completeness + chart/table pairing
 python export_stress.py         # high-cardinality export stress
@@ -26,5 +27,5 @@ python export_stress.py         # high-cardinality export stress
 
 ## Production discipline
 Keep `DATABASE_URL` pointed at the production PostgreSQL service. Any schema or business-logic change
-must be followed by the complete gate. After deploying, hard-refresh the browser (Ctrl+Shift+R) once so
+must be followed by the complete gate. After deploying, verify `/api/admin/service_health` reports `latest_data_date` and `freshness_age_days`, then hard-refresh the browser (Ctrl+Shift+R) once so
 the new CSS/JS is loaded.

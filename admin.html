@@ -9,7 +9,7 @@
 <link href="/site.webmanifest?v=qa1" rel="manifest"/>
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1" name="viewport"/>
-<meta name="app-version" content="V64.3">
+<meta name="app-version" content="V64.5">
 <title>Quality Intelligence — Admin</title>
 <style>
 :root{--navy:#16324F;--blue:#2388C9;--bg:#F5F8FB;--card:#fff;--border:#DCE6EF;--text:#24364B;--muted:#5c6b7d;--red:#D94A4A;--green:#1B9A63}
@@ -466,7 +466,7 @@ body{min-width:0;}
 
 
 
-<div aria-labelledby="homePanel-title" class="panel full admin-section" data-admin-section-order="1" id="homePanel"><h2 id="homePanel-title" tabindex="-1">🏠 Admin Control Center</h2><p class="desc">System overview, data health, usage and security at a glance.</p><div class="admin-kpi-grid"><div class="admin-kpi"><div class="label">Total Records (Live)</div><div class="value" id="hTotalRecords">—</div></div><div class="admin-kpi"><div class="label">Last Data Update</div><div class="value" id="hLastData">—</div></div><div class="admin-kpi"><div class="label">Database Size</div><div class="value" id="hDbSize">—</div></div><div class="admin-kpi"><div class="label">Active Admins</div><div class="value" id="hAdmins">—</div></div><div class="admin-kpi"><div class="label">Dashboard Views</div><div class="value" id="hViews">—</div></div><div class="admin-kpi"><div class="label">Last Login</div><div class="value" id="hLastLogin">—</div></div><div class="admin-kpi"><div class="label">Failed Login Attempts</div><div class="value" id="hFailed">—</div></div></div><div class="admin-prod-grid full">
+<div aria-labelledby="homePanel-title" class="panel full admin-section" data-admin-section-order="1" id="homePanel"><h2 id="homePanel-title" tabindex="-1">🏠 Admin Control Center</h2><p class="desc">System overview, data health, usage and security at a glance.</p><div class="admin-kpi-grid"><div class="admin-kpi"><div class="label">Total Records (Live)</div><div class="value" id="hTotalRecords">—</div></div><div class="admin-kpi"><div class="label">Data Through (Source Date)</div><div class="value" id="hLastData">—</div></div><div class="admin-kpi"><div class="label">Database Size</div><div class="value" id="hDbSize">—</div></div><div class="admin-kpi"><div class="label">Active Admins</div><div class="value" id="hAdmins">—</div></div><div class="admin-kpi"><div class="label">Dashboard Views</div><div class="value" id="hViews">—</div></div><div class="admin-kpi"><div class="label">Last Login</div><div class="value" id="hLastLogin">—</div></div><div class="admin-kpi"><div class="label">Failed Login Attempts</div><div class="value" id="hFailed">—</div></div></div><div class="admin-prod-grid full">
 <div class="admin-prod-card" id="prodHealthCard">
 <div class="prod-head"><div><span class="v29-kicker">PRODUCTION HEALTH</span><b>Live database connection</b></div><span class="prod-badge" id="prodHealthBadge">Checking…</span></div>
 <div class="prod-metrics"><div><span>Provider</span><b id="prodProvider">—</b></div><div><span>Round-trip</span><b id="prodLatency">—</b></div><div><span>DB Version</span><b id="prodVersion">—</b></div></div>
@@ -527,7 +527,7 @@ body{min-width:0;}
 </div>
 <div class="db-meter"><div class="db-meter-fill" id="dbMeter"></div></div>
 <div class="db-status" id="dbStatus">Checking database…</div>
-<button class="btn" id="refreshBtn">Refresh Records</button> <button class="btn" id="backupBtn">⬇ Export Disposition CSV</button></div><div aria-labelledby="performancePanel-title" class="panel full admin-section" data-admin-section-order="12" id="performancePanel"><h2 id="performancePanel-title" tabindex="-1">⚡ PostgreSQL / DB Performance</h2><p class="desc">Safe read-only latency checks. No query plans, locks or session termination are requested, so this panel remains compatible with restricted hosted PostgreSQL permissions.</p><div class="stats"><div class="stat">🔌 Provider<b id="perfProvider">—</b></div><div class="stat">⚡ Round-trip<b id="perfLatency">—</b></div><div class="stat">🔁 Second Check<b id="perfLatency2">—</b></div><div class="stat">📈 Status<b id="perfStatus">—</b></div></div><div class="perf-bar"><span id="perfBar"></span></div><div class="submit-row"><button class="btn" id="refreshPerformanceBtn" type="button">🔄 Refresh Performance</button></div><div class="msg" id="perfMsg"></div></div><div aria-labelledby="backupsPanel-title" class="panel full admin-section" data-admin-section-order="13" id="backupsPanel"><h2 id="backupsPanel-title" tabindex="-1">🗄️ Backups</h2><p class="desc">A full snapshot (disposition data + 6M Fishbone Master + aliases + KPI targets) is saved automatically after every import. Download copies to your own computer regularly for true off-server safety — a local database file alone can't protect against losing the whole server.</p>
+<button class="btn" id="refreshBtn">Refresh Records</button> <button class="btn" id="backupBtn">⬇ Export Disposition CSV</button></div><div aria-labelledby="performancePanel-title" class="panel full admin-section" data-admin-section-order="12" id="performancePanel"><h2 id="performancePanel-title" tabindex="-1">⚡ PostgreSQL / DB Performance</h2><p class="desc">Safe read-only latency checks. No query plans, locks or session termination are requested, so this panel remains compatible with restricted hosted PostgreSQL permissions.</p><div class="stats"><div class="stat">🔌 Provider<b id="perfProvider">—</b></div><div class="stat">⚡ Round-trip<b id="perfLatency">—</b></div><div class="stat">🔁 Second Check<b id="perfLatency2">—</b></div><div class="stat">📈 Status<b id="perfStatus">—</b></div></div><div class="perf-bar"><span id="perfBar"></span></div><div class="submit-row"><button class="btn" id="refreshPerformanceBtn" type="button">🔄 Refresh Performance</button></div><div class="msg" id="perfMsg"></div></div><div aria-labelledby="backupsPanel-title" class="panel full admin-section" data-admin-section-order="13" id="backupsPanel"><h2 id="backupsPanel-title" tabindex="-1">🗄️ Backups</h2><p class="desc">A full snapshot (disposition data + users + activity/audit history + 6M Fishbone Master + aliases + KPI targets) is saved automatically after every import. Download copies to your own computer regularly for true off-server safety — a local database file alone can't protect against losing the whole server.</p>
 <div class="submit-row"><button class="btn primary" id="createBackupBtn">🗄️ Create Backup Now</button> <label class="btn" style="cursor:pointer">⬆ Restore From File<input accept=".gz,.json" id="restoreFileInput" style="display:none" type="file"/></label></div>
 <div class="msg" id="backupMsg"></div>
 <div class="table-wrap" style="max-height:320px"><table style="min-width:700px"><thead><tr><th>Backup</th><th>Reason</th><th>Size</th><th>Created</th><th>Action</th></tr></thead><tbody id="backupsBody"></tbody></table></div>
@@ -607,15 +607,18 @@ function syncSidebarRole(){document.querySelectorAll('.sidebar-link').forEach(b=
 async function boot(){const s=await status();if(s.authenticated){if(s.must_reset_password)showForceReset();else showAdmin(s.role)}else {showLogin();connectionStatus()}}
 function showLogin(){$('loginBox').classList.remove('hidden');$('forceResetBox').classList.add('hidden');$('adminApp').classList.add('hidden');$('logoutBtn').classList.add('hidden')}
 function showForceReset(){$('loginBox').classList.add('hidden');$('forceResetBox').classList.remove('hidden');$('adminApp').classList.add('hidden');$('logoutBtn').classList.add('hidden')}
-async function loadSecurityStatus(){try{const d=await api('/api/admin/security_status');$('secActiveSessions').textContent=Number(d.active_sessions||0).toLocaleString();$('secSessionTTL').textContent=Number(d.session_ttl_hours||0).toFixed(0)+' hours';$('secLoginLimit').textContent=Number(d.login_max_attempts||0)+' / window';}catch(e){if($('secActiveSessions'))$('secActiveSessions').textContent='Unavailable'}}
+async function loadSecurityStatus(){try{const d=await api('/api/admin/security_status');$('secActiveSessions').textContent=Number(d.active_sessions||0).toLocaleString();$('secSessionTTL').textContent=Number(d.session_ttl_hours||0).toFixed(0)+' hours';$('secLoginLimit').textContent=Number(d.login_max_attempts||0)+' / window';const body=$('securitySessionsBody');if(body)body.innerHTML=(d.sessions||[]).map(s=>`<tr><td>${esc(s.display_name||s.username||'')}</td><td>${esc(s.role||'')}</td><td>${s.current?'Yes':'No'}</td><td>${Math.round(Number(s.expires_in||0)/60).toLocaleString()} min</td><td>${s.current?'Current device':'Active'}</td></tr>`).join('')||'<tr><td colspan="5">No active sessions.</td></tr>';}catch(e){if($('secActiveSessions'))$('secActiveSessions').textContent='Unavailable'}}
 $('refreshSecurityStatus')?.addEventListener('click',loadSecurityStatus);
-function showAdmin(role){$('loginBox').classList.add('hidden');$('forceResetBox').classList.add('hidden');$('adminApp').classList.remove('hidden');$('logoutBtn').classList.remove('hidden');applyRoleUI(role||'admin');syncSidebarRole();
-  // Everything used to fire in one burst of 17 simultaneous requests on login. Browsers only
-  // run a handful of connections per host at once, so the panels people actually look at first
-  // (Overview + Data Quality + Latest Records) were queued behind ones far down the page.
-  // Load those first, then the rest a beat later — same data, just prioritised.
+function showAdmin(role){
+  window.__adminRole=role||'admin';
+  $('loginBox').classList.add('hidden');$('forceResetBox').classList.add('hidden');$('adminApp').classList.remove('hidden');$('logoutBtn').classList.remove('hidden');
+  applyRoleUI(window.__adminRole);syncSidebarRole();
+  // Keep first paint small: only the overview, quality summary and records are
+  // loaded immediately. Deeper sections are loaded when first scrolled into view
+  // by the central loader below, instead of firing ~30 requests at login.
   loadHome();loadDataQuality();loadRecords();connectionStatus();loadDbStatus();
-  setTimeout(()=>{loadUsers();loadActivity();loadKpiTargetsAdmin();loadImportHistory();loadKpiHistory();loadAuditTrail();loadFishboneMaster();loadFishboneHistory();loadFishboneAlias();loadFishboneUnmapped();loadBackups();loadSecurityStatus();},250)}
+  setTimeout(()=>window.__adminWarmPanels&&window.__adminWarmPanels(window.__adminRole),0);
+}
 $('loginBtn').onclick=async()=>{setMsg('loginMsg','');try{const d=await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value,password:$('password').value})});if(d.must_reset_password)showForceReset();else showAdmin(d.role||'admin')}catch(e){setMsg('loginMsg',e.message,'err')}};
 $('frSubmitBtn').onclick=async()=>{setMsg('frMsg','');const cur=$('frCurrent').value,n=$('frNew').value,c=$('frConfirm').value;if(n!==c){setMsg('frMsg','New password and confirmation do not match.','err');return}try{await api('/api/admin/change_password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_password:cur,new_password:n})});$('frCurrent').value='';$('frNew').value='';$('frConfirm').value='';const s=await status();showAdmin(s.role||'admin')}catch(e){setMsg('frMsg',e.message,'err')}};
 $('password').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click()});
@@ -713,7 +716,6 @@ $('backupBtn').onclick=()=>{window.location.href='/api/admin/export_csv'};boot()
   window.goToRecords=()=>window.goAdminSection?.('recordsPanel');
   $('showShortcutsBtn')?.addEventListener('click',()=>$('shortcutPanel').classList.toggle('hidden'));
   document.addEventListener('keydown',e=>{const tag=(document.activeElement?.tagName||'').toLowerCase();if(e.key==='Escape'){$('shortcutPanel')?.classList.add('hidden');return;}if(e.key==='?'&&!['input','textarea','select'].includes(tag)){e.preventDefault();$('shortcutPanel')?.classList.toggle('hidden');return;}if(e.key.toLowerCase()==='r'&&!e.ctrlKey&&!e.metaKey&&!['input','textarea','select'].includes(tag)){$('refreshBtn')?.click();}});
-  setInterval(()=>{if(!$('adminApp')?.classList.contains('hidden')){loadActivity();loadDbStatus();loadBackups();}},60000);
 })();
 </script>
 <style id="admin-v29-upgrades">
@@ -801,9 +803,7 @@ html[data-theme="dark"] .import-diff{background:#0F1626;border-color:#2A3B54}htm
 <script>
 async function loadValidationRules(){try{const d=await api('/api/admin/validation_rules');const h=$('validationRulesBody');if(h)h.innerHTML=(d.rules||[]).map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.field)}</td><td><span class="badge ${r.severity==='High'?'bad':'warn'}">${esc(r.severity)}</span></td><td>${esc(r.description)}</td><td><span class="badge ok">Active</span></td></tr>`).join('')}catch(e){console.error(e)}}
 async function loadAuditAnalytics(){try{const d=await api('/api/admin/audit_analytics');$('aaTotal').textContent=Number(d.total||0).toLocaleString();$('aa24h').textContent=Number(d.last_24h||0).toLocaleString();$('aaActionsBody').innerHTML=(d.actions||[]).map(r=>`<tr><td>${esc(r.action||'')}</td><td>${Number(r.c||0).toLocaleString()}</td></tr>`).join('');$('aaUsersBody').innerHTML=(d.users||[]).map(r=>`<tr><td>${esc(r.username||'Unknown')}</td><td>${Number(r.c||0).toLocaleString()}</td></tr>`).join('')}catch(e){console.error(e)}}
-const __oldLoadSecurityStatus=loadSecurityStatus; loadSecurityStatus=async function(){await __oldLoadSecurityStatus();try{const d=await api('/api/admin/security_status');const h=$('securitySessionsBody');if(h)h.innerHTML=(d.sessions||[]).map(s=>`<tr><td>${esc(s.display_name||s.username)}</td><td>${esc(s.role)}</td><td>${s.current?'Yes':'No'}</td><td>${Math.round(Number(s.expires_in||0)/3600)}h</td><td>${s.current?'<span class="badge ok">Current</span>':`<button class="btn" type="button" onclick="revokeAdminSession('${escAttrJs(s.username)}')">Revoke</button>`}</td></tr>`).join('')}catch(e){console.error(e)}};
 async function revokeAdminSession(username){if(!confirm('Revoke all other sessions for '+username+'?'))return;try{await api('/api/admin/revoke_session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});loadSecurityStatus()}catch(e){alert(e.message)}}
-const __oldShowAdmin=showAdmin; showAdmin=function(role){__oldShowAdmin(role);setTimeout(()=>{loadValidationRules();loadAuditAnalytics()},250)};
 </script>
 <script>
 async function loadProductionSafety(){
@@ -820,8 +820,6 @@ async function loadProductionSafety(){
     const ib=$('integrityBadge'); if(ib){ib.textContent='Unavailable';ib.className='prod-badge bad'}
   }
 }
-const __oldShowAdminV32=showAdmin; showAdmin=function(role){__oldShowAdminV32(role);setTimeout(loadProductionSafety,350)};
-setInterval(()=>{if(!$('adminApp')?.classList.contains('hidden')) loadProductionSafety()},60000);
 </script>
 <style id="admin-v34-ops">
 .admin-ops-grid{margin-top:12px}.prod-error-list{margin-top:10px;max-height:118px;overflow:auto;font-size:12px;color:var(--muted);display:grid;gap:5px}.prod-error-item{display:flex;justify-content:space-between;gap:10px;padding:6px 8px;border:1px solid var(--admin-line);border-radius:8px;background:var(--admin-surface-2)}.prod-error-item b{color:var(--admin-heading);font-size:11.5px}.prod-error-item span{white-space:nowrap}.prod-error-empty{padding:7px 0;color:#15803d;font-weight:700}.prod-error-warn{color:#B45309;font-weight:700}
@@ -839,8 +837,7 @@ async function loadOpsMonitoring(){
     const list=$('errorRecentList'); const rows=e.recent||[]; list.innerHTML=rows.length?rows.map(r=>`<div class="prod-error-item"><b>${esc(r.event_type||'signal')}</b><span>${esc(r.created_at||'')}</span></div>`).join(''):'<div class="prod-error-empty">✓ No recent error/failure signals recorded.</div>';
   }catch(err){$('deployHealthBadge').textContent='Unavailable';$('deployHealthBadge').className='prod-badge bad';$('errorHealthBadge').textContent='Unavailable';$('errorHealthBadge').className='prod-badge bad'}
 }
-const __oldShowAdminV33=showAdmin; showAdmin=function(role){__oldShowAdminV33(role);setTimeout(loadOpsMonitoring,450)};
-setInterval(()=>{if(!$('adminApp')?.classList.contains('hidden')) loadOpsMonitoring()},60000);
+
 </script>
 <style id="admin-v35-command-center">
 .command-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:12px;margin-top:12px}.command-card{border:1px solid var(--admin-line);background:var(--admin-surface);border-radius:14px;padding:14px;text-align:left;display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center;cursor:pointer;box-shadow:0 5px 18px rgba(18,52,86,.06);transition:.18s transform,.18s box-shadow}.command-card:hover{transform:translateY(-2px);box-shadow:0 9px 24px rgba(18,52,86,.1)}.command-icon{font-size:23px;grid-row:span 2}.command-card b{font-size:14px;color:var(--admin-heading)}.command-card small{color:var(--muted);font-size:11.5px;margin-top:2px}.command-status{margin-top:14px;display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:10px;background:var(--admin-surface-2);border:1px solid var(--admin-line);font-size:12px}.status-led{width:9px;height:9px;border-radius:50%;background:#16A34A;box-shadow:0 0 0 4px rgba(22,163,74,.12)}.command-status span:last-child{margin-left:auto;color:var(--muted)}.perf-bar{height:9px;background:var(--admin-surface-2);border-radius:99px;overflow:hidden;margin:12px 0}.perf-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,#16A34A,#EAB308,#DC2626);transition:width .35s}.audit-filter-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-top:12px}.recovery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.recovery-card{display:flex;gap:12px;align-items:center;padding:14px;border:1px solid var(--admin-line);border-radius:12px;background:var(--admin-surface-2)}.recovery-card>span{font-size:24px}.recovery-card b{display:block;color:var(--admin-heading);font-size:13px}.recovery-card small{display:block;color:var(--muted);margin-top:3px}.recovery-note{margin-top:12px;padding:11px 13px;border:1px solid var(--admin-line);border-radius:10px;background:var(--admin-surface-2);font-size:12px;color:var(--muted)}
@@ -866,8 +863,10 @@ html[data-theme="dark"] .command-card,html[data-theme="dark"] .recovery-card{box
   // twice for no reason. It now reuses perf()'s latency reading and only fetches
   // the two things it actually needs (data_integrity, production_health).
   async function command(perfResult){try{const [i,h]=await Promise.all([api('/api/admin/data_integrity'),api('/api/admin/production_health')]);const p=perfResult||{latency_ms:Number(($id('perfLatency')?.textContent||'0').replace(/[^\d.]/g,''))||0,status:($id('perfStatus')?.textContent==='Healthy'?'healthy':'')};$id('ccQuality').textContent=Number(i.issues||0)?`🟠 ${Number(i.issues).toLocaleString()} issue group(s)`:'🟢 Clean';$id('ccDatabase').textContent=`🟢 ${Number(i.records||0).toLocaleString()} live records`;$id('ccPerformance').textContent=`${Number(p.latency_ms).toFixed(1)} ms • ${p.status}`;$id('ccSecurity').textContent=($id('hFailed')?.textContent||'0')==='0'?'🟢 No failed logins':'🟠 Review failed logins';$id('ccStatus').textContent='Production checks healthy';$id('ccStatusMeta').textContent=`${h.provider||'DB'} • ${Number(p.latency_ms).toFixed(1)} ms • read-only`; }catch(e){$id('ccStatus').textContent='Some checks unavailable';$id('ccLed').style.background='#EAB308'}}
-  const oldShow=showAdmin; showAdmin=function(role){oldShow(role);setTimeout(async()=>{const p=await perf();audit();recovery();command(p)},700)};
-  setInterval(async()=>{if($id('adminApp')&&!$id('adminApp').classList.contains('hidden')){const p=await perf();recovery();command(p)}},60000);
+  // Expose section loaders to the central lazy loader below. No independent
+  // showAdmin wrappers or polling timers are allowed here; that caused request
+  // fan-out and duplicate DB work on every Admin load/refresh cycle.
+  window.__adminPerf=perf; window.__adminAudit=audit; window.__adminRecovery=recovery; window.__adminCommand=command;
 })();
 </script>
 <style id="admin-v38-safety-ux">
@@ -876,8 +875,77 @@ html[data-theme="dark"] .live-db-badge{background:#102A21;color:#86EFAC;border-c
 @media(max-width:900px){.service-matrix{grid-template-columns:repeat(2,1fr)}.live-db-badge{display:none}}@media(max-width:600px){.service-matrix{grid-template-columns:1fr}.freshness-chip{width:100%;text-align:center}}
 </style>
 <script>
-async function loadV38Safety(){try{const d=await api('/api/admin/service_health');const badge=$('liveDbBadge');if(badge){badge.textContent=`🟢 LIVE ${d.provider||'DB'}`;badge.title=`Active database: ${d.provider||'unknown'} · ${Number(d.db_latency_ms||0).toFixed(1)} ms`;badge.className='live-db-badge'}const latest=d.latest_import||d.latest_activity||'';const fc=$('dataFreshnessChip');if(fc){const fs=d.freshness_status||'';fc.textContent=latest?`${fs==='stale'||fs==='very_stale'?'🟠':'🕒'} Last activity: ${latest}${fs==='stale'?' · stale':fs==='very_stale'?' · very stale':''}`:'🕒 Data freshness: no import/activity recorded';fc.title=fs==='stale'||fs==='very_stale'?'No recent import/activity detected; review the source freshness.':'Live database freshness check'}(d.checks||[]).forEach(c=>{const el=$('svc'+String(c.key||'').replace(/^./,x=>x.toUpperCase()));if(!el)return;el.className='service-cell '+(c.status||'');const sm=el.querySelector('small');if(sm)sm.textContent=(c.status==='healthy'?'✓ ':'')+(c.detail||c.status||'Unknown')});const bad=(d.checks||[]).filter(c=>c.status!=='healthy').length;const led=$('ccLed');if(led)led.style.background=bad?'#EAB308':'#16A34A';if($('ccStatus'))$('ccStatus').textContent=bad?'Review service status':'All core services healthy';if($('ccStatusMeta'))$('ccStatusMeta').textContent=`${d.provider||'DB'} • ${Number(d.db_latency_ms||0).toFixed(1)} ms • read-only`;}catch(e){const b=$('liveDbBadge');if(b){b.textContent='🟠 DB status unavailable';b.title=e.message;b.className='live-db-badge'}const fc=$('dataFreshnessChip');if(fc)fc.textContent='🟠 Data freshness unavailable'}}
-const __oldShowAdminV38=showAdmin;showAdmin=function(role){__oldShowAdminV38(role);setTimeout(loadV38Safety,900)};setInterval(()=>{if(!$('adminApp')?.classList.contains('hidden'))loadV38Safety()},60000);
+async function loadV38Safety(){try{const d=await api('/api/admin/service_health');const badge=$('liveDbBadge');if(badge){badge.textContent=`🟢 LIVE ${d.provider||'DB'}`;badge.title=`Active database: ${d.provider||'unknown'} · ${Number(d.db_latency_ms||0).toFixed(1)} ms`;badge.className='live-db-badge'}const latest=d.latest_data_date||'';const fc=$('dataFreshnessChip');if(fc){const fs=d.freshness_status||'';const age=d.freshness_age_days;fc.textContent=latest?`${fs==='stale'||fs==='very_stale'||fs==='future'?'🟠':'🕒'} Data through: ${latest}${Number.isFinite(Number(age))?` · ${Number(age).toLocaleString()}d old`:''}${fs==='stale'?' · stale':fs==='very_stale'?' · very stale':fs==='future'?' · future date':''}`:'🕒 Data freshness: no inspection-date data';fc.title=fs==='stale'||fs==='very_stale'?'Source data is older than the freshness threshold; review the latest inspection period.':'Freshness is based on the latest disposition inspection date, not dashboard activity.'}(d.checks||[]).forEach(c=>{const el=$('svc'+String(c.key||'').replace(/^./,x=>x.toUpperCase()));if(!el)return;el.className='service-cell '+(c.status||'');const sm=el.querySelector('small');if(sm)sm.textContent=(c.status==='healthy'?'✓ ':'')+(c.detail||c.status||'Unknown')});const bad=(d.checks||[]).filter(c=>c.status!=='healthy').length;const led=$('ccLed');if(led)led.style.background=bad?'#EAB308':'#16A34A';if($('ccStatus'))$('ccStatus').textContent=bad?'Review service status':'All core services healthy';if($('ccStatusMeta'))$('ccStatusMeta').textContent=`${d.provider||'DB'} • ${Number(d.db_latency_ms||0).toFixed(1)} ms • read-only`;}catch(e){const b=$('liveDbBadge');if(b){b.textContent='🟠 DB status unavailable';b.title=e.message;b.className='live-db-badge'}const fc=$('dataFreshnessChip');if(fc)fc.textContent='🟠 Data freshness unavailable'}}
+
+
+// V64.5 central Admin loader: one owner for lazy section loading and one
+// consolidated live poll. Hidden sections do not spend DB time until viewed.
+(function(){
+  const loadedFns=new Set([loadHome,loadDataQuality,loadRecords,loadDbStatus]);
+  const touched=new Set(['homePanel','dataQualityPanel','recordsPanel','databasePanel']);
+  const loaderMap={
+    homePanel: [loadHome,loadProductionSafety,loadOpsMonitoring,loadV38Safety],
+    dataQualityPanel: [loadDataQuality],
+    kpiPanel: [loadKpiTargetsAdmin,loadKpiHistory],
+    importHistoryPanel: [loadImportHistory],
+    recordsPanel: [loadRecords],
+    fishbonePanel: [loadFishboneMaster,loadFishboneHistory],
+    fishboneMapPanel: [loadFishboneUnmapped,loadFishboneAlias],
+    commandCenterPanel: [loadV38Safety,loadProductionSafety,loadOpsMonitoring,window.__adminPerf,window.__adminRecovery,window.__adminCommand],
+    databasePanel: [loadDbStatus],
+    performancePanel: [window.__adminPerf],
+    backupsPanel: [loadBackups],
+    recoveryPanel: [window.__adminRecovery,loadV38Safety],
+    securityPanel: [loadSecurityStatus],
+    validationPanel: [typeof loadValidationRules==='function'?loadValidationRules:null],
+    usersPanel: [loadUsers],
+    auditExplorerPanel: [window.__adminAudit],
+    auditTrailPanel: [loadAuditTrail],
+    auditAnalyticsPanel: [typeof loadAuditAnalytics==='function'?loadAuditAnalytics:null],
+    activityPanel: [loadActivity]
+  };
+  const roleAllows=(panel,role)=>{
+    const restricted={usersPanel:new Set(['admin']),securityPanel:new Set(['admin']),backupsPanel:new Set(['admin']),recoveryPanel:new Set(['admin']),performancePanel:new Set(['admin','qa_manager','qa_engineer']),auditAnalyticsPanel:new Set(['admin']),auditExplorerPanel:new Set(['admin','auditor']),auditTrailPanel:new Set(['admin','auditor'])};
+    return !restricted[panel]||restricted[panel].has(role);
+  };
+  const runPanel=async(id,role,force=false)=>{
+    if(!roleAllows(id,role)) return;
+    const fns=(loaderMap[id]||[]).filter(Boolean);
+    const pending=fns.filter(fn=>force||!loadedFns.has(fn));
+    if(!pending.length) return;
+    touched.add(id);
+    pending.forEach(fn=>loadedFns.add(fn));
+    await Promise.allSettled(pending.map(fn=>{try{return fn()}catch(e){return Promise.reject(e)}}));
+  };
+  window.__adminWarmPanels=async(role)=>{
+    const root=$('adminApp'); if(!root||root.classList.contains('hidden')) return;
+    const sections=Object.keys(loaderMap);
+    if('IntersectionObserver' in window){
+      const io=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting){runPanel(e.target.id,role);io.unobserve(e.target);}})},{root:null,rootMargin:'320px 0px'});
+      sections.forEach(id=>{const el=$(id);if(el&&!el.classList.contains('hidden'))io.observe(el)});
+      window.__adminObserver=io;
+    } else {
+      sections.forEach(id=>runPanel(id,role));
+    }
+  };
+  window.__adminRefreshLoaded=async()=>{
+    const role=window.__adminRole||'admin';
+    const active=[...touched];
+    await Promise.allSettled(active.map(id=>runPanel(id,role,true)));
+    setMsg('loginMsg','Admin data refreshed.','ok');
+  };
+  const oldRefresh=$('refreshBtn');
+  if(oldRefresh){oldRefresh.textContent='🔄 Refresh Loaded Admin Data';oldRefresh.onclick=()=>window.__adminRefreshLoaded();}
+  setInterval(async()=>{
+    if(document.hidden) return;
+    const root=$('adminApp'); if(!root||root.classList.contains('hidden')) return;
+    const role=window.__adminRole||'admin';
+    // Only live overview/health + already-open monitoring sections are polled.
+    const ids=['homePanel','dataQualityPanel','databasePanel','activityPanel'].filter(id=>touched.has(id));
+    await Promise.allSettled(ids.map(id=>runPanel(id,role,true)));
+  },60000);
+})();
+
 </script>
 <style id="admin-theme-readability-v36">
 /* V36: exhaustive readability guardrails for both themes */
