@@ -340,9 +340,17 @@
       </div>
       <div class="header-right-stack">
         <div class="digital-clock-block" aria-label="Current local date and time">
-          <div class="digital-clock-icon" aria-hidden="true">▦</div>
+          <div class="digital-clock-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="3" y="4.5" width="18" height="16.5" rx="3" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M3 9h18" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M8 2.5v3.5M16 2.5v3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <circle cx="15.5" cy="14.5" r="4" fill="currentColor" opacity=".16"/>
+              <circle cx="15.5" cy="14.5" r="4" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M15.5 12.3V14.5L17 15.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
           <div class="digital-clock-copy">
-            <div class="updated-label">Current Time</div>
             <div class="digital-clock-date" id="digitalClockDate">--, -- --- ----</div>
             <div class="digital-clock" id="digitalClock">--:--:-- --</div>
           </div>
