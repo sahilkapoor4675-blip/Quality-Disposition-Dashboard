@@ -12,11 +12,16 @@ version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
 assert version == "APP_VERSION=V64.6"
 assert 'const _tableNormalOrder = new Map()' in app_js
 assert 'Three-state cycle for the same column: ascending → descending → natural order.' in app_js
+assert 'rememberTableNormalOrder(tableId);' in app_js, 'metric-table natural-order snapshot missing'
+assert '3rd click: reset to normal order' in app_js
 assert '_tableSortState.delete(tableId);' in app_js
 assert 'aria-sort' in app_js and 'ascending' in app_js and 'descending' in app_js and "'none'" in app_js
 assert 'function fmtDonutQty3' in app_js
 assert 'function fmtDonutPct3' in app_js
 assert 'fmtDonutPct3(s.frac)' in app_js
+assert 'valFmt?opts.valFmt(s.val)' in app_js
+assert 'data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${fmtDonutPct3(s.frac)})"' in app_js
+assert '.dashboard-table td:not(:first-child)' in app_css
 assert re.search(r'valFmt: fmtDonutQty3', app_js)
 # Non-donut chart contracts must remain at their V64.5 precision.
 assert 'lineFmt: v => (v*100).toFixed(0)+"%"' in app_js
@@ -40,6 +45,6 @@ assert '#tab-dashboard .panel > h3::before' in app_css
 assert '#tab-weekly .panel > h3::before' in app_css
 assert 'Only dashboard analytics cards use this treatment' in app_css
 assert '<meta name="app-version" content="V64.6">' in index
-assert 'app.css?v=68.5' in index
-assert 'app.js?v=64.6' in index
+assert 'app.css?v=68.6' in index
+assert 'app.js?v=64.6.2' in index
 print('V64.6 UI REGRESSION PASS')

@@ -22,6 +22,27 @@
 
 ---
 
+
+## V64.6 — Follow-up precision/package correction
+
+### Fixed
+- **Decision Mix donut precision is now actually shipped:** the donut Qty (MT) values and percentage values use exactly 3 fractional digits in the center total, slice labels, and hover tooltips. `app.js` is explicitly included in this patch and its asset cache-buster is advanced so browsers cannot reuse the older V64.6 JS bundle.
+- **Other charts remain unchanged:** Work Center, Grade, Defect/Pareto, Intensity and Period Trend chart formatters retain their existing V64.5 precision contracts.
+
+### Deployment safety
+- JS cache-buster advanced from `64.6` to `64.6.1`; CSS cache-buster advanced from `68.5` to `68.6`. Runtime/application version remains **V64.6**.
+
+### UI polish
+- **Numeric alignment:** dashboard, drill-down and RCA table numeric cells use tabular numerals for cleaner column alignment without changing values or rounding.
+- Existing low-risk UI affordances are preserved: visible sort-state indicators, sticky filters, chart hover cues, and keyboard focus indicators.
+
+### Re-audit checkpoints
+1. Decision Mix donut: Qty and % labels/tooltips show 3 digits after the decimal point.
+2. Non-donut charts: no formatter changes beyond the existing V64.5 contracts.
+3. Table numeric columns align visually; displayed values remain unchanged.
+4. Runtime/version remains **V64.6**; this is a follow-up patch, not a version bump.
+
+
 # V64.5 — Admin audit fixes: freshness, performance, concurrency and security
 
 ## Fixed
@@ -1559,3 +1580,14 @@ No KPI formula, filter semantic, schema or stored data changed.
   and selectable to delete (with the existing single/bulk delete flow, itself backed by a safety
   backup + audit trail already in place before this release).
 
+
+## V64.6 — Sorting reset fix
+
+### Fixed
+- **All sortable tables now support the full 3-click cycle:** ascending → descending → reset to the table's current natural/server order.
+- Fixed `Work Center`, `Grade`, `Monthly`, `Weekly`, `Quarterly`, and `Yearly` tables not restoring their natural order on the third click because their freshly rendered row order was not being captured before the remembered sort was reapplied.
+- Added an explicit sort-cycle tooltip/accessibility label so the third-click reset behavior is discoverable without changing the table data or column values.
+
+### Verification
+- V64.6 targeted regression now asserts that metric tables capture natural order before reapplying remembered sorting.
+- Version remains **V64.6**; this is a corrective patch, not a new release version.

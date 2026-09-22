@@ -487,6 +487,11 @@ body > *{position:relative;z-index:1;}
   .filter-summary-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;padding:9px 12px;border:1px solid #dce6ef;border-radius:9px;background:#fbfdff;color:var(--muted);font:600 15.5px Manrope,sans-serif;}
   .filter-summary-bar .summary-label{font-weight:800;color:var(--heading);letter-spacing:.2px}.filter-summary-bar .summary-value{color:#2388c9}.filter-summary-bar .summary-sep{color:#a8b6c4}.filter-summary-bar .summary-actions{margin-left:auto;display:flex;gap:7px;align-items:center}.filter-summary-bar button{font:700 13.5px Manrope,sans-serif;border:1px solid #cbd8e4;background:#fff;border-radius:7px;padding:6px 9px;color:#31516b;cursor:pointer}.filter-summary-bar button:hover{background:#f2f7fb}.saved-view-select{max-width:190px;}
   .insights-panel{margin:0 0 16px;padding:13px 15px;border:1px solid #dbe6ef;border-radius:11px;background:linear-gradient(180deg,#fff 0%,#f9fbfd 100%);box-shadow:0 4px 14px rgba(20,55,85,.055)}
+/* V64.6 UI polish: keep numeric columns visually aligned without changing values. */
+.dashboard-table td:not(:first-child),
+.drill-table td:not(:first-child),
+.qcr-rca-table td{font-variant-numeric:tabular-nums;}
+
 /* ================================================================
    V64.6 CARD-HEADING FINISH
    Only dashboard analytics cards use this treatment. QCR, Admin, drills and

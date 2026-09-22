@@ -295,6 +295,10 @@ function fmtValue(v, fmt){
 // Used for table cells (Decision table, Defect table, trend tables, etc.)
 function fmtNum2(v){ return v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtPct(v){ return (v*100).toFixed(2) + "%"; }
+// Donut-only display precision: Qty and % values show 3 decimals.
+// Other charts intentionally retain their pre-V64.6 display precision.
+function fmtDonutQty3(v){ return Number(v||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3}) + " MT"; }
+function fmtDonutPct3(v){ return (Number(v||0)*100).toFixed(3) + "%"; }
 
 // ---- Report exports (Excel / PDF / PPT / raw CSV) ----
 // There are no export buttons any more (header is kept clean); the command palette (Ctrl+K) and the
@@ -490,21 +494,36 @@ function renderPeriodBanner(period){
 
 // ---- Click-to-sort table headers (desktop power-user feature) ----
 // Sort state is remembered per table (column + direction) so it survives a
-// filter-triggered data refresh: each render function calls
-// applyTableSort(tableId) after populating rows, which re-applies whatever
-// sort was last chosen instead of resetting to server order every time.
+// filter-triggered data refresh. Repeated clicks on the same header cycle
+// ascending → descending → natural/server order.
 // A "grand total" row (class="grand-total-row") is always pinned to the
 // bottom, whatever the sort.
 const SORTABLE_TABLE_IDS = ["decisionTable","defectTable","intensityTable","monthlyTable","wcTable","gradeTable","registerTable","weeklyTable","quarterlyTable","yearlyTable"];
-const _tableSortState = new Map(); // tableId -> {col, dir}
+const _tableSortState = new Map(); // tableId -> {col, dir}; absent = natural/server order
+const _tableNormalOrder = new Map(); // tableId -> {rows: HTMLElement[], totals: HTMLElement[]}
 function _parseSortCell(text){
   const t=text.trim().replace(/[,%]/g,'');
   const n=parseFloat(t);
   return (t!=='' && !isNaN(n) && /^-?[\d.]+$/.test(t)) ? n : null;
 }
-function applyTableSort(tableId){
-  const state=_tableSortState.get(tableId); if(!state) return;
+function rememberTableNormalOrder(tableId){
   const tbody=document.querySelector(`#${tableId} tbody`); if(!tbody) return;
+  const rows=[...tbody.querySelectorAll('tr')];
+  _tableNormalOrder.set(tableId,{
+    rows:rows.filter(r=>!r.classList.contains('grand-total-row')),
+    totals:rows.filter(r=>r.classList.contains('grand-total-row'))
+  });
+}
+function restoreTableNormalOrder(tableId){
+  const tbody=document.querySelector(`#${tableId} tbody`); if(!tbody) return;
+  const saved=_tableNormalOrder.get(tableId);
+  if(!saved) return;
+  saved.rows.concat(saved.totals).forEach(r=>tbody.appendChild(r));
+}
+function applyTableSort(tableId){
+  const tbody=document.querySelector(`#${tableId} tbody`); if(!tbody) return;
+  const state=_tableSortState.get(tableId);
+  if(!state){ restoreTableNormalOrder(tableId); return; }
   const rows=[...tbody.querySelectorAll('tr')];
   const totalRows=rows.filter(r=>r.classList.contains('grand-total-row'));
   const dataRows=rows.filter(r=>!r.classList.contains('grand-total-row'));
@@ -522,13 +541,26 @@ function initSortableTables(){
     const ths=[...table.querySelectorAll('thead th')];
     ths.forEach((th,col)=>{
       th.classList.add('sortable-th');
-      th.setAttribute('tabindex','0'); th.setAttribute('role','button'); th.setAttribute('aria-label',th.textContent.trim()+' — click to sort');
+      th.setAttribute('tabindex','0'); th.setAttribute('role','button'); th.setAttribute('aria-sort','none'); th.setAttribute('title','Click: ascending • 2nd click: descending • 3rd click: reset to normal order'); th.setAttribute('aria-label',th.textContent.trim()+' — click: ascending, again: descending, again: reset to normal order');
       const doSort=()=>{
         const cur=_tableSortState.get(tableId);
-        const dir=(cur && cur.col===col) ? -cur.dir : 1;
-        _tableSortState.set(tableId,{col,dir});
-        ths.forEach(t=>t.classList.remove('sort-asc','sort-desc'));
-        th.classList.add(dir===1?'sort-asc':'sort-desc');
+        // Three-state cycle for the same column: ascending → descending → natural order.
+        // Clicking a different column starts a fresh ascending sort.
+        if(cur && cur.col===col){
+          if(cur.dir===1){
+            _tableSortState.set(tableId,{col,dir:-1});
+          }else{
+            _tableSortState.delete(tableId);
+          }
+        }else{
+          _tableSortState.set(tableId,{col,dir:1});
+        }
+        ths.forEach(t=>{t.classList.remove('sort-asc','sort-desc');t.setAttribute('aria-sort','none');});
+        const next=_tableSortState.get(tableId);
+        if(next && next.col===col){
+          th.classList.add(next.dir===1?'sort-asc':'sort-desc');
+          th.setAttribute('aria-sort',next.dir===1?'ascending':'descending');
+        }
         applyTableSort(tableId);
         if(window.SFX) SFX.play('select');
       };
@@ -554,6 +586,7 @@ function renderDecisionTable(rows, total){
       <td>${fmtPct(total.pct_coils)}</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_qty)}</td>`;
     tbody.appendChild(tr);
   }
+  rememberTableNormalOrder("decisionTable");
   applyTableSort("decisionTable");
 }
 
@@ -574,6 +607,7 @@ function renderDefectTable(rows, total){
     const gt=document.createElement("tr"); gt.className="grand-total-row";
     gt.innerHTML=`<td>Grand Total</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(1)}</td><td>${fmtPct(1)}</td>`; tbody.appendChild(gt);
   }
+  rememberTableNormalOrder("defectTable");
   applyTableSort("defectTable");
 }
 
@@ -593,6 +627,7 @@ function renderIntensityTable(rows, total){
       <td>${fmtPct(total.pct_coils)}</td><td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_qty)}</td>`;
     tbody.appendChild(tr);
   }
+  rememberTableNormalOrder("intensityTable");
   applyTableSort("intensityTable");
 }
 
@@ -623,6 +658,10 @@ function renderMetricsTable(tableId, rows, total, ranked=false){
     <td>${fmtPct(Number(gt.output_qty)?Number(gt.reject_qty||0)/Number(gt.output_qty):0)}</td>
     <td>${fmtPct(Number(gt.output_qty)?Number(gt.prime_qty||0)/Number(gt.output_qty):0)}</td>`;
   tbody.appendChild(tr);
+  // Capture the freshly rendered server/natural order before applying any
+  // remembered sort. This is required for the third click (reset) to restore
+  // the table exactly to its current unsorted order after every data refresh.
+  rememberTableNormalOrder(tableId);
   applyTableSort(tableId);
 }
 
@@ -838,7 +877,7 @@ async function loadKpis(signal){
 
   const decisionRows = data.decision_table.filter(r => r.qty > 0);
   makePieChart(document.getElementById("decisionPie"), decisionRows, "qty", "decision",
-    {valFmt: v => v.toFixed(2) + " MT"});
+    {valFmt: fmtDonutQty3});
   makeGroupedBarChart(document.getElementById("decisionBarChart"), data.decision_table, "decision", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
@@ -1116,7 +1155,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
     const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path class="chart-slice" data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5" data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)"></path>`;
+    slices += `<path class="chart-slice" data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5" data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${fmtDonutPct3(s.frac)})"></path>`;
   });
 
   // Center label: grand total
@@ -1164,7 +1203,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
       out += `<polyline points="${edgeX},${edgeY} ${elbowX},${targetY} ${labelX-side*4},${targetY}" fill="none" stroke="var(--chart-leader)" stroke-width="1.2"/>`;
       out += `<circle cx="${edgeX}" cy="${edgeY}" r="3" fill="${s.color}"/>`;
       out += `<text x="${labelX}" y="${targetY-6}" font-size="21" font-weight="700" text-anchor="${anchor}" fill="var(--chart-strong)" data-tip="${escQcr(s.d[labelKey])}">${escQcr(s.d[labelKey])}</text>`;
-      out += `<text x="${labelX}" y="${targetY+11}" font-size="19" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
+      out += `<text x="${labelX}" y="${targetY+11}" font-size="19" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${fmtDonutPct3(s.frac)})</text>`;
     });
     return out;
   }
@@ -1506,6 +1545,7 @@ async function loadDefectAnalysis(signal){
       <td>${fmtNum2(total.qty)}</td><td>${fmtPct(total.pct_records)}</td>`;
     tbody.appendChild(tr);
   }
+  rememberTableNormalOrder("registerTable");
   applyTableSort("registerTable");
   markChartsReady();
 }

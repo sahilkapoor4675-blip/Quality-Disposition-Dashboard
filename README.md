@@ -13,12 +13,15 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - **Targeted chart precision:** only the Dashboard **Decision Mix donut chart** shows Qty (MT) and % values to exactly 3 decimal places. Pareto, Work Center, Grade, Intensity and Period Trend charts retain their prior display precision.
 - **QCR 6M Fishbone → RCA header:** the RCA table header uses the same blue-gradient palette as dashboard table headers in both light and dark themes.
 - **Dashboard card-heading polish:** only card headings in Dashboard, Work Center & Grade, Defect List and Period Trend use a subtle navy/blue gradient, very soft depth shadow and thin blue accent line. Existing heading text is unchanged. QCR/Admin headings are intentionally not restyled by this rule.
-- **No version bump:** this follow-up remains **V64.6**; runtime version metadata is unchanged. `index.html` only advances the CSS cache-buster so the new card-heading styling is loaded after deployment.
+- **No version bump:** this follow-up remains **V64.6**; runtime version metadata is unchanged. `app.js` is explicitly included so the Decision Mix donut formatter is actually deployed, and the JS/CSS asset cache-busters advance without changing the runtime version.
+- **UI polish:** numeric table cells use tabular numerals for cleaner visual alignment; existing sticky filters, chart hover/focus cues and sort-state indicators remain enabled.
 
 ### V64.6 re-audit checkpoints
 - Same table header, three clicks = ascending → descending → natural order.
 - Sorted header has `aria-sort="ascending"` or `"descending"`; reset returns the sortable headers to `aria-sort="none"`.
 - Decision Mix donut Qty/% values show 3 fractional digits; all other chart precision remains at the existing V64.5 contract.
+- `app.js` is part of the V64.6 follow-up patch; this is required for the donut formatter and three-state sort behavior to actually reach the browser.
+- Dashboard/drill/RCA numeric cells use tabular numerals; this changes alignment only, not numeric values.
 - QCR 6M Fishbone → RCA header uses the same blue gradient as dashboard tables in light and dark mode.
 - Dashboard, Work Center & Grade, Defect List and Period Trend card headings keep their original text and receive the scoped gradient/accent/shadow treatment in both themes.
 - QCR, Admin and drill-down headings are not affected by the new dashboard-card heading rule.
@@ -153,3 +156,7 @@ Before deploying, run every command in `RELEASE_GATE.md` (all must pass, on an i
   by version.
 - **Uptime monitor shows the service down** – point it at `/healthz` (GET or HEAD).
 - **Admin says login required after a restore** – expected: restore replaces the user/session tables; log in again.
+
+### V64.6 corrective sorting patch
+
+Sortable dashboard tables use a three-state click cycle: **ascending → descending → normal/natural order**. The normal state is the current server/render order for that table after filters refresh. This behavior is preserved across supported sortable tables, including Work Center, Grade, Monthly, Weekly, Quarterly, and Yearly.
