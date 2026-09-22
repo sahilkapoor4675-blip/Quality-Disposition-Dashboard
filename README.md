@@ -1,3 +1,12 @@
+### Latest V64.6 time/display patch
+
+- All visible UI time values now use **12-hour time with AM/PM**; operational timestamps show seconds only where useful.
+- The main dashboard header now includes a **live digital clock** with seconds. It refreshes every second while visible.
+- Admin server timestamps are parsed as UTC when they arrive without an explicit timezone, then displayed in the browser's local timezone to avoid timestamp drift caused by browser-local parsing.
+- Fixed the Admin `R` keyboard shortcut so it uses the canonical loaded-panel refresh path.
+- Static Admin version metadata is aligned to **V64.6**.
+- No database seed/data files were modified and no application version bump was made.
+
 
 ### Latest V64.6 full-audit patch
 
@@ -13,7 +22,6 @@ The following are intentionally **suggestions only** and are not implemented in 
 - optional chart label-density mode for crowded cards
 - single “Reset view” action for filters + sorting + saved views
 - remembered table-density presets
-- fullscreen analytics-card mode for presentation screens
 
 ### Full webapp re-audit verification
 - `code_health.py` — PASS

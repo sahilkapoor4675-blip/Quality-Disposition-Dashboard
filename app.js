@@ -2584,20 +2584,48 @@ function startLiveUserTracking(){
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){sendLiveHeartbeat();refreshLiveUsers();}});
 }
 
+function formatClockTime(date, withSeconds=true){
+  const d = date instanceof Date ? date : new Date(date);
+  if(Number.isNaN(d.getTime())) return '—';
+  let h=d.getHours();
+  const ampm=h>=12?'PM':'AM';
+  h=h%12||12;
+  const hh=String(h).padStart(2,'0');
+  const mm=String(d.getMinutes()).padStart(2,'0');
+  const ss=String(d.getSeconds()).padStart(2,'0');
+  return withSeconds ? `${hh}:${mm}:${ss} ${ampm}` : `${hh}:${mm} ${ampm}`;
+}
+function formatDateTime12(date, withSeconds=true){
+  const d=date instanceof Date ? date : new Date(date);
+  if(Number.isNaN(d.getTime())) return String(date||'—');
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const datePart=`${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  return `${datePart} • ${formatClockTime(d,withSeconds)}`;
+}
+function updateDigitalClock(){
+  const el=document.getElementById('digitalClock');
+  if(el) el.textContent=formatClockTime(new Date(),true);
+}
+let _digitalClockTimer=null;
+function startDigitalClock(){
+  updateDigitalClock();
+  if(_digitalClockTimer) clearInterval(_digitalClockTimer);
+  _digitalClockTimer=setInterval(()=>{
+    if(document.visibilityState==='visible') updateDigitalClock();
+  },1000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible') updateDigitalClock();},{passive:true});
+}
 function setRefreshed(){
   const now = new Date();
-  const d = String(now.getDate()).padStart(2,"0");
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const m = months[now.getMonth()];
-  const y = now.getFullYear();
-  const hh = String(now.getHours()).padStart(2,"0");
-  const mm = String(now.getMinutes()).padStart(2,"0");
-  document.getElementById("refreshed").textContent = `${d} ${m} ${y} • ${hh}:${mm}`;
-  document.getElementById("liveLabel").textContent = "LIVE DATA";
+  const el=document.getElementById("refreshed");
+  if(el) el.textContent = formatDateTime12(now,false);
+  const live=document.getElementById("liveLabel");
+  if(live) live.textContent = "LIVE DATA";
 }
 
 async function init(){
   setRefreshed();
+  startDigitalClock();
   startLiveUserTracking();
   // Dashboard is intentionally public for now. No username/password is required.
   // Every dashboard page load is logged server-side with the visitor IP address.

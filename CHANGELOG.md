@@ -1,3 +1,32 @@
+## V64.6 — 12-hour clock + live header clock + time-display audit (2026-09-22)
+
+### Fixed
+- **12-hour time format across the UI:** visible date/time values in the Admin console now use `hh:mm AM/PM` (with seconds where the source timestamp is an operational event). Raw 24-hour server timestamp strings are no longer shown directly to users.
+- **Server timestamp interpretation:** Admin display formatting now treats timezone-less database timestamps as UTC before converting them to the browser's local time, preventing the previous browser-local misinterpretation of SQLite/PostgreSQL server timestamps. Relative activity labels retain their friendly `just now / min ago / hr ago` form while their exact tooltip uses the same 12-hour format.
+- **Live digital clock:** added a seconds-updating current-time clock to the right side of the main dashboard header. It updates once per second while the tab is visible and catches up immediately when the tab becomes visible again.
+- **Admin shortcut bug:** the `R` keyboard shortcut now invokes the canonical loaded-panel refresh path instead of a legacy/non-existent refresh binding.
+- **Admin version metadata:** static Admin HTML metadata is aligned to the runtime V64.6 version.
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- Date-only fields remain date-only; only fields that carry a time are converted to 12-hour AM/PM display.
+- Sorting, presentation mode, drill-down behavior, chart precision and analytics calculations are unchanged.
+
+### Re-audit checkpoints
+1. Main header clock shows `hh:mm:ss AM/PM` and advances every second.
+2. Last Updated shows `DD Mon YYYY • hh:mm AM/PM`.
+3. Admin Activity, Audit, Import History, Fishbone History, KPI History, Backups and operational timestamps no longer display 24-hour clock strings.
+4. Admin server timestamps without an explicit timezone are parsed according to their source semantics (database timestamps as UTC; local compact backup/connection timestamps as local) before browser-local display conversion.
+5. Admin `R` shortcut refreshes loaded panels and preserves the Records view state.
+6. Runtime version stays V64.6 and asset cache-busters advance without a version bump.
+
+### Verification
+- `python3 regression_v64_6.py` — PASS.
+- Inline JavaScript syntax + clock/time-contract checks — PASS.
+- `code_health.py`, `regression_smoke.py`, `regression_v64_3.py`, `regression_v64_5.py`, `smoke_test.py`, `http_smoke.py`, `admin_ux_audit.py`, `export_acceptance.py` — PASS.
+- `export_stress.py` — PASS (Excel 3.40s, PDF 2.90s, PPTX 18.46s on the repository stress fixture).
+
+
 
 ## V64.6 — Full webapp re-audit + primary navigation patch (2026-09-22)
 
@@ -17,7 +46,6 @@
 - Add a user-selectable chart density/label mode for crowded analysis cards without changing the underlying values.
 - Add a persistent “Reset view” affordance that resets filters, sorting and saved-view state together.
 - Add table row density presets (Comfortable / Compact) with remembered preference.
-- Add an optional fullscreen mode for individual analytics cards for presentations/large screens.
 
 ### Re-audit checkpoints
 1. Main tabs remain blue-gradient in light and dark themes; QCR sub-tabs remain separately styled.

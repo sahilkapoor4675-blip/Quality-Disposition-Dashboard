@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=68.7">
+<link rel="stylesheet" href="/app.css?v=68.8">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -336,7 +336,11 @@
     <div class="executive-meta">
       <div class="updated-block">
         <div class="updated-label">Last Updated</div>
-        <div class="updated-time" id="refreshed">07 Sep 2026 • --:--</div>
+        <div class="updated-time" id="refreshed">07 Sep 2026 • --:-- --</div>
+      </div>
+      <div class="digital-clock-block" aria-label="Current local time">
+        <div class="updated-label">Current Time</div>
+        <div class="digital-clock" id="digitalClock">--:--:-- --</div>
       </div>
       <div class="header-actions">
         <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
@@ -654,6 +658,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=64.6.5" defer></script>
+<script src="/app.js?v=64.6.6" defer></script>
 </body>
 </html>
