@@ -4540,50 +4540,75 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/admin/data_quality":
             if not _is_admin(self): _auth_error(self)
             else:
+                # Computed entirely in SQL (single-pass aggregates instead of pulling every
+                # row into Python and looping): this used to fetch the whole disposition
+                # table and iterate it in the request handler, which got slower every month
+                # as the table grew. All the same rules are preserved below.
                 try:
                     conn=get_conn()
-                    rows=conn.execute("SELECT id,heat_no,batch_no,grade,quality_decision,output_weight,insp_lot_date,defect_intensity,work_center,main_defect FROM disposition").fetchall()
+                    dec_list = DECISION_ORDER
+                    dec_placeholders = ",".join(["?"] * len(dec_list))
+                    weight_invalid_sql = ("output_weight IS NULL OR output_weight<=0 OR output_weight::text IN ('NaN','Infinity','-Infinity')"
+                                           if USE_POSTGRES else
+                                           "output_weight IS NULL OR output_weight<=0 OR output_weight!=output_weight")
+                    date_invalid_sql = ("TRIM(COALESCE(insp_lot_date,''))='' OR NOT (insp_lot_date ~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')"
+                                         if USE_POSTGRES else
+                                         # date() silently rolls over out-of-range days (e.g. Feb 30 -> Mar 1)
+                                         # instead of failing, so also reject any value whose round-trip
+                                         # through date() doesn't match the original YYYY-MM-DD text.
+                                         "TRIM(COALESCE(insp_lot_date,''))='' OR date(substr(insp_lot_date,1,10)) IS NULL "
+                                         "OR date(substr(insp_lot_date,1,10)) <> substr(insp_lot_date,1,10)")
+                    decision_invalid_sql = f"TRIM(COALESCE(quality_decision,''))<>'' AND UPPER(TRIM(quality_decision)) NOT IN ({dec_placeholders})"
+                    invalid_values_sql = (f"TRIM(COALESCE(work_center,''))='' OR TRIM(COALESCE(main_defect,''))='' OR ({decision_invalid_sql})")
+
+                    def q1(sql, params=()):
+                        r = conn.execute(sql, params).fetchone(); return int(r[0] or 0) if r else 0
+
+                    total = q1("SELECT COUNT(*) FROM disposition")
+                    counts = {}
+                    counts["missing_heat_no"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(heat_no,''))=''")
+                    counts["missing_batch_no"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(batch_no,''))=''")
+                    counts["missing_grade"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(grade,''))=''")
+                    counts["missing_decision"] = q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(quality_decision,''))=''")
+                    counts["missing_weight"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {weight_invalid_sql}")
+                    counts["invalid_dates"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {date_invalid_sql}")
+                    counts["missing_intensity"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {MISSING_INTENSITY_SQL}")
+                    counts["invalid_values"] = q1(f"SELECT COUNT(*) FROM disposition WHERE {invalid_values_sql}", tuple(dec_list))
+
+                    # Duplicate batch numbers: every row beyond the first in a batch group.
+                    dup_rows = conn.execute(
+                        "SELECT UPPER(TRIM(batch_no)) b, COUNT(*) c FROM disposition "
+                        "WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1"
+                    ).fetchall()
+                    counts["duplicate_batch"] = sum(int(r[1]) - 1 for r in dup_rows)
+                    dup_groups = sorted(
+                        [{"batch_no": r[0], "count": int(r[1])} for r in dup_rows],
+                        key=lambda x: x["count"], reverse=True
+                    )[:20]
+
+                    # records_require_correction = distinct rows failing ANY single check
+                    # (a row with two problems is still one record to fix, not two).
+                    corrections = q1(f"""
+                        SELECT COUNT(*) FROM disposition d WHERE
+                            TRIM(COALESCE(d.heat_no,''))=''
+                            OR TRIM(COALESCE(d.batch_no,''))=''
+                            OR TRIM(COALESCE(d.grade,''))=''
+                            OR TRIM(COALESCE(d.quality_decision,''))=''
+                            OR ({weight_invalid_sql})
+                            OR ({date_invalid_sql})
+                            OR ({MISSING_INTENSITY_SQL})
+                            OR ({invalid_values_sql})
+                            OR (TRIM(COALESCE(d.batch_no,''))<>'' AND UPPER(TRIM(d.batch_no)) IN (
+                                SELECT UPPER(TRIM(batch_no)) FROM disposition
+                                WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no)) HAVING COUNT(*)>1
+                            ) AND d.id NOT IN (
+                                SELECT MIN(id) FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY UPPER(TRIM(batch_no))
+                            ))
+                    """, tuple(dec_list))
                     conn.close()
-                    valid_decisions={"PRIME","FOR NEXT PROCESS","SALVAGE","HOLD FOR DECISION","REJECT","RE-WORK","DIVERT"}
-                    counts={k:0 for k in ["missing_heat_no","missing_batch_no","duplicate_batch","missing_grade","missing_decision","missing_weight","invalid_dates","missing_intensity","invalid_values"]}
-                    bad_ids=set(); batches={}
-                    for r in rows:
-                        d=dict(r); rid=d.get("id"); inv_val=False
-                        heat=str(d.get("heat_no") or "").strip(); batch=str(d.get("batch_no") or "").strip()
-                        if not heat: counts["missing_heat_no"]+=1; bad_ids.add(rid)
-                        if not batch: counts["missing_batch_no"]+=1; bad_ids.add(rid)
-                        if not str(d.get("grade") or "").strip(): counts["missing_grade"]+=1; bad_ids.add(rid)
-                        dec=str(d.get("quality_decision") or "").strip().upper()
-                        if not dec: counts["missing_decision"]+=1; bad_ids.add(rid)
-                        elif dec not in valid_decisions: inv_val=True; bad_ids.add(rid)
-                        wt=d.get("output_weight")
-                        try:
-                            wt_num = float(wt) if wt is not None else None
-                        except Exception:
-                            wt_num = None
-                        if wt_num is None or not math.isfinite(wt_num) or wt_num <= 0: counts["missing_weight"]+=1; bad_ids.add(rid)
-                        datev=str(d.get("insp_lot_date") or "").strip()
-                        invalid_date=False
-                        if not datev: invalid_date=True
-                        else:
-                            try: datetime.strptime(datev[:10], "%Y-%m-%d")
-                            except Exception: invalid_date=True
-                        if invalid_date: counts["invalid_dates"]+=1; bad_ids.add(rid)
-                        _mdef=str(d.get("main_defect") or "").strip().upper()
-                        _dint=str(d.get("defect_intensity") or "").strip().upper()
-                        if _mdef and _mdef!="NO DEFECT" and (not _dint or _dint=="NONE"): counts["missing_intensity"]+=1; bad_ids.add(rid)
-                        if not str(d.get("work_center") or "").strip() or (not str(d.get("main_defect") or "").strip()): inv_val=True; bad_ids.add(rid)
-                        if inv_val: counts["invalid_values"]+=1
-                        if batch: batches.setdefault(batch.upper(),[]).append(rid)  # BATCH NO must be unique — one coil, one batch
-                    dup_groups=[]
-                    for key,ids in batches.items():
-                        if len(ids)>1:
-                            counts["duplicate_batch"] += len(ids)-1
-                            bad_ids.update(ids[1:]); dup_groups.append({"batch_no":key,"count":len(ids)})
-                    total=len(rows); corrections=len(bad_ids)
                     issue_total=sum(counts.values())
                     score=round(max(0,100*(1-(corrections/max(total,1)))),1)
-                    self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_batch_rows":[*sorted(dup_groups,key=lambda x:x["count"],reverse=True)[:20]]})
+                    self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_batch_rows":dup_groups})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/import_history":
             if not _is_admin(self): _auth_error(self)
@@ -5273,6 +5298,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body = _json_body(self)
                 limit = min(max(int(body.get("limit", 100)), 1), 500)
+                offset = max(int(body.get("offset", 0) or 0), 0)
                 query = str(body.get("q", "")).strip()
                 if len(query) > 200:
                     raise ValueError("Search text is limited to 200 characters")
@@ -5344,14 +5370,18 @@ class Handler(BaseHTTPRequestHandler):
                 if date_to:
                     clauses.append("insp_lot_date <= ?"); params.append(date_to)
                 where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-                rows = [dict(r) for r in conn.execute(base + where + " ORDER BY id DESC LIMIT ?", tuple(params) + (limit,)).fetchall()]
+                rows = [dict(r) for r in conn.execute(base + where + " ORDER BY id DESC LIMIT ? OFFSET ?", tuple(params) + (limit, offset)).fetchall()]
                 total = conn.execute("SELECT COUNT(*) FROM disposition" + where, tuple(params)).fetchone()[0]
                 # grand_total is the true, unfiltered live record count — kept separate from
                 # "total" (the filtered match count) so the frontend's global "Total Records"
                 # stat doesn't get overwritten with a filtered number when an admin searches.
                 grand_total = total if not where else conn.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
                 conn.close()
-                self._send_json({"rows": rows, "total": total, "grand_total": grand_total, "query": query})
+                # "total" here is every record matching the current search/date filter — not
+                # capped by "limit". The frontend pages through it (limit+offset) instead of
+                # silently truncating results at one page, so a date-filtered search always
+                # shows every matching record, just split across pages.
+                self._send_json({"rows": rows, "total": total, "grand_total": grand_total, "query": query, "limit": limit, "offset": offset})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
