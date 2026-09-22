@@ -1,3 +1,11 @@
+## V64.6 — Analytics presentation mode
+
+- Added an individual analytics-panel presentation mode opened with the new `⛶` control.
+- Uses the real chart/card DOM node (no duplicate rendering or extra API request) and restores it to its exact position on close.
+- Added Escape, close-button and backdrop-close behavior, body scroll lock, focus restoration and responsive light/dark presentation styling.
+- Presentation mode also traps keyboard focus inside the overlay and keeps the analytics heading treatment consistent in light and dark themes.
+- Presentation mode automatically redraws SVG charts for the expanded width and closes safely when switching tabs.
+
 # V64.6 — Dashboard card-heading polish follow-up
 
 ## Follow-up changes

@@ -1050,6 +1050,132 @@ function initChartTooltips(){
   }, {passive:true});
 }
 
+// ---------------------------------------------------------------------
+// ANALYTICS PRESENTATION MODE
+// Opens one analytics panel in a focused, fullscreen-style overlay without
+// creating a second chart instance or making another API request. The real
+// panel node is moved into the overlay and restored to the exact DOM position
+// on close, so existing delegated drill-down handlers, ResizeObserver wiring,
+// live data updates, filters and chart state remain intact.
+let _analyticsPresentation = null;
+let _analyticsPresentationState = null;
+
+function ensureAnalyticsPresentation(){
+  if(_analyticsPresentation) return _analyticsPresentation;
+  const overlay=document.createElement('div');
+  overlay.id='analyticsPresentation';
+  overlay.className='analytics-presentation';
+  overlay.hidden=true;
+  overlay.innerHTML=`<div class="analytics-presentation-backdrop" data-presentation-close="1"></div>
+    <section class="analytics-presentation-shell" role="dialog" aria-modal="true" aria-labelledby="analyticsPresentationTitle">
+      <div class="analytics-presentation-toolbar">
+        <div class="analytics-presentation-meta">
+          <span class="analytics-presentation-kicker">PRESENTATION MODE</span>
+          <h2 id="analyticsPresentationTitle"></h2>
+        </div>
+        <button type="button" class="analytics-presentation-close" aria-label="Close presentation mode" title="Close presentation mode (Esc)">×</button>
+      </div>
+      <div class="analytics-presentation-stage" tabindex="-1"></div>
+    </section>`;
+  document.body.appendChild(overlay);
+  const closeBtn=overlay.querySelector('.analytics-presentation-close');
+  closeBtn.addEventListener('click',closeAnalyticsPresentation);
+  overlay.addEventListener('click',e=>{ if(e.target.matches('[data-presentation-close]')) closeAnalyticsPresentation(); });
+  // Keep keyboard focus inside the presentation overlay while it is open.
+  overlay.addEventListener('keydown',e=>{
+    if(e.key!=="Tab" || !_analyticsPresentationState) return;
+    const focusables=[...overlay.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex=\"-1\"])')].filter(el=>{
+      const r=el.getBoundingClientRect();
+      return r.width>0 && r.height>0 && getComputedStyle(el).visibility!=="hidden";
+    });
+    if(!focusables.length) return;
+    const first=focusables[0], last=focusables[focusables.length-1], active=document.activeElement;
+    if(e.shiftKey){
+      if(active===first || !overlay.contains(active)){e.preventDefault();last.focus();}
+    }else if(active===last){e.preventDefault();first.focus();}
+  });
+  _analyticsPresentation=overlay;
+  return overlay;
+}
+
+function analyticsPanelTitle(panel){
+  return panel?.querySelector(':scope > h3')?.textContent?.trim() || 'Analytics';
+}
+
+function openAnalyticsPresentation(panel){
+  if(!panel || _analyticsPresentationState) return;
+  const overlay=ensureAnalyticsPresentation();
+  const stage=overlay.querySelector('.analytics-presentation-stage');
+  const title=overlay.querySelector('#analyticsPresentationTitle');
+  const closeBtn=overlay.querySelector('.analytics-presentation-close');
+  const parent=panel.parentNode;
+  const placeholder=document.createComment('qdash-analytics-presentation-placeholder');
+  const previousActive=document.activeElement;
+  panel.parentNode.insertBefore(placeholder,panel);
+  title.textContent=analyticsPanelTitle(panel);
+  _analyticsPresentationState={panel,placeholder,parent,previousActive};
+  panel.classList.add('analytics-presentation-panel');
+  stage.appendChild(panel);
+  document.documentElement.classList.add('analytics-presentation-open');
+  document.body.classList.add('analytics-presentation-open');
+  overlay.hidden=false;
+  requestAnimationFrame(()=>{
+    overlay.classList.add('is-open');
+    closeBtn.focus({preventScroll:true});
+    // Moving the real chart container changes its width, so give the
+    // ResizeObserver one frame to redraw at presentation dimensions.
+    panel.querySelectorAll('.chart-scroll').forEach(c=>{ c._qdRedraw?.(); });
+  });
+}
+
+function closeAnalyticsPresentation(){
+  const state=_analyticsPresentationState;
+  if(!state) return;
+  const overlay=_analyticsPresentation;
+  const panel=state.panel;
+  try{
+    state.placeholder.parentNode?.insertBefore(panel,state.placeholder);
+    state.placeholder.remove();
+  }catch(e){
+    try{state.parent.appendChild(panel);}catch(_e){}
+  }
+  panel.classList.remove('analytics-presentation-panel');
+  _analyticsPresentationState=null;
+  document.documentElement.classList.remove('analytics-presentation-open');
+  document.body.classList.remove('analytics-presentation-open');
+  overlay?.classList.remove('is-open');
+  if(overlay){
+    setTimeout(()=>{ if(!_analyticsPresentationState) overlay.hidden=true; },180);
+  }
+  requestAnimationFrame(()=>panel.querySelectorAll('.chart-scroll').forEach(c=>{ c._qdRedraw?.(); }));
+  const restore=state.previousActive;
+  if(restore && typeof restore.focus==='function' && document.contains(restore)){
+    requestAnimationFrame(()=>restore.focus({preventScroll:true}));
+  }
+}
+
+function wireAnalyticsPresentation(){
+  if(wireAnalyticsPresentation._wired) return;
+  wireAnalyticsPresentation._wired=true;
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape' && _analyticsPresentationState){ e.preventDefault(); closeAnalyticsPresentation(); }
+  });
+  document.querySelectorAll('.tab-panel .panel').forEach(panel=>{
+    if(!panel.querySelector('.chart-scroll,.qcr-fishbone-diagram')) return;
+    const heading=panel.querySelector(':scope > h3');
+    if(!heading || heading.querySelector('.analytics-expand-btn')) return;
+    heading.classList.add('analytics-panel-title');
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.className='analytics-expand-btn';
+    btn.setAttribute('aria-label',`Open ${analyticsPanelTitle(panel)} in presentation mode`);
+    btn.title='Open in presentation mode';
+    btn.textContent='⛶';
+    btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openAnalyticsPresentation(panel);});
+    heading.appendChild(btn);
+  });
+}
+
 function truncateLabel(s, n){
   if(!s) return "";
   return s.length > n ? s.substring(0, n-1) + "…" : s;
@@ -2318,6 +2444,7 @@ function resetPageScroll(){
   de.style.scrollBehavior=prev;
 }
 async function activateTab(tabName, fromHistory, opts){
+  if(_analyticsPresentationState) closeAnalyticsPresentation();
   fetch("/api/activity/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event_type:"tab_open",tab:tabName,filters:currentFilters})}).catch(()=>{});
   if(refreshController) refreshController.abort();
   refreshController = new AbortController();
@@ -2457,6 +2584,7 @@ async function init(){
   await loadFilters();
   syncFilterUiFromState();
   initSortableTables();
+  wireAnalyticsPresentation();
   wireCompareMode();
   initCommandPalette();
   initChartTooltips();

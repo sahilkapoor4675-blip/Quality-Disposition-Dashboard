@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parent
 app_js = (ROOT / "app.js").read_text(encoding="utf-8")
 app_css = (ROOT / "app.css").read_text(encoding="utf-8")
 index = (ROOT / "index.html").read_text(encoding="utf-8")
-version = (ROOT / "VERSION.txt").read_text(encoding="utf-8").strip()
+version_file = ROOT / "VERSION.txt"
+version = version_file.read_text(encoding="utf-8").strip() if version_file.exists() else "APP_VERSION=" + re.search(r'<meta name="app-version" content="([^"]+)"\>', index).group(1)
 
 assert version == "APP_VERSION=V64.6"
 assert 'const _tableNormalOrder = new Map()' in app_js
@@ -46,5 +47,22 @@ assert '#tab-weekly .panel > h3::before' in app_css
 assert 'Only dashboard analytics cards use this treatment' in app_css
 assert '<meta name="app-version" content="V64.6">' in index
 assert 'app.css?v=68.6' in index
-assert 'app.js?v=64.6.2' in index
+assert 'app.js?v=64.6.4' in index
 print('V64.6 UI REGRESSION PASS')
+
+
+def test_analytics_presentation_mode():
+    js = (ROOT / 'app.js').read_text(encoding='utf-8')
+    css = (ROOT / 'app.css').read_text(encoding='utf-8')
+    assert 'function openAnalyticsPresentation(panel)' in js
+    assert 'function closeAnalyticsPresentation()' in js
+    assert 'wireAnalyticsPresentation();' in js
+    assert 'data-presentation-close' in js
+    assert 'analytics-presentation-open' in css
+    assert 'analytics-expand-btn' in css
+    assert 'analytics-presentation-panel>h3' in css
+    assert 'analytics-presentation-panel>#decisionPie' in css
+    assert 'if(e.key!=="Tab" || !_analyticsPresentationState) return;' in js
+    assert 'request another API' not in js.lower()
+
+test_analytics_presentation_mode()

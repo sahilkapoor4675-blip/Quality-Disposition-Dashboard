@@ -1619,3 +1619,53 @@ html[data-theme="dark"] .plant-name{color:#5EEAD4;}
 html[data-theme="dark"] .tab-load-error{background:#3B1218;border-color:#7F1D1D;color:#FECACA;}
 html[data-theme="dark"] .tab-retry-btn{background:#1F2937;color:#FCA5A5;border-color:#F87171;}
 html[data-theme="dark"] .load-error-inline,html[data-theme="dark"] .load-error-row td{color:#FCA5A5;}
+
+
+/* ================================================================
+   ANALYTICS PRESENTATION MODE
+   The real analytics card is moved into this overlay (not cloned), so its
+   existing data, drill-down handlers and ResizeObserver wiring remain alive.
+   ================================================================ */
+html.analytics-presentation-open,
+html.analytics-presentation-open body,
+body.analytics-presentation-open{overflow:hidden!important;}
+.analytics-presentation{position:fixed;inset:0;z-index:20000;display:block;opacity:0;visibility:hidden;transition:opacity .18s ease,visibility .18s ease;}
+.analytics-presentation.is-open{opacity:1;visibility:visible;}
+.analytics-presentation-backdrop{position:absolute;inset:0;background:rgba(7,19,33,.68);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.analytics-presentation-shell{position:absolute;inset:18px;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 70px rgba(5,20,35,.32);}
+.analytics-presentation-toolbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 16px 12px 20px;background:linear-gradient(135deg,#183A58 0%,#245b80 58%,#287bab 100%);border-bottom:1px solid rgba(255,255,255,.14);color:#fff;}
+.analytics-presentation-meta{min-width:0;}
+.analytics-presentation-kicker{display:block;font-size:10.5px;font-weight:800;letter-spacing:1.35px;text-transform:uppercase;opacity:.72;margin-bottom:2px;}
+.analytics-presentation-toolbar h2{margin:0;max-width:calc(100vw - 110px);font:800 19px/1.25 var(--font-display);letter-spacing:.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.analytics-presentation-close{width:38px;height:38px;flex:0 0 38px;border:1px solid rgba(255,255,255,.24);border-radius:10px;background:rgba(255,255,255,.08);color:#fff;font:700 25px/1 Arial,sans-serif;cursor:pointer;display:grid;place-items:center;transition:background .15s ease,transform .15s ease,border-color .15s ease;}
+.analytics-presentation-close:hover{background:rgba(255,255,255,.16);transform:translateY(-1px);border-color:rgba(255,255,255,.42);}
+.analytics-presentation-close:focus-visible{outline:3px solid rgba(255,255,255,.55);outline-offset:2px;}
+.analytics-presentation-stage{flex:1 1 auto;min-width:0;min-height:0;overflow:auto;padding:14px;display:flex;align-items:stretch;justify-content:stretch;}
+.analytics-presentation-stage>.analytics-presentation-panel{width:100%;min-height:100%;margin:0;border-radius:14px;box-shadow:none;display:flex;flex-direction:column;}
+.analytics-presentation-panel>.panel-body{flex:1 1 auto;min-height:0;overflow:auto;}
+.analytics-presentation-panel>.chart-scroll{flex:1 1 auto;min-height:0;max-height:none;}
+.analytics-presentation-panel>h3{background:linear-gradient(135deg,#fbfdff 0%,#eef6ff 58%,#e5f0ff 100%) !important;color:var(--heading) !important;border-color:#d8e3ec !important;border-bottom-color:#b9cfdf !important;box-shadow:0 2px 5px rgba(15,42,74,.06),0 8px 18px rgba(15,42,74,.05),inset 0 1px 0 #fff;position:relative;}
+.analytics-presentation-panel>h3::before{content:"";position:absolute;left:10px;top:11px;bottom:11px;width:3px;border-radius:999px;background:linear-gradient(180deg,#5ab0ff 0%,#118DFF 52%,#1d5fa8 100%);box-shadow:0 0 7px rgba(17,141,255,.18);}
+.analytics-presentation-panel>#decisionPie{max-width:none !important;}
+.analytics-presentation-panel .chart-svg{max-width:100%;}
+.analytics-panel-title{position:relative;padding-right:62px!important;}
+.analytics-expand-btn{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:34px;height:34px;display:grid;place-items:center;border:1px solid #bfd0df;border-radius:9px;background:rgba(255,255,255,.72);color:#245b80;font:700 17px/1 Arial,sans-serif;cursor:pointer;box-shadow:0 2px 6px rgba(15,42,74,.08);transition:transform .15s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+.analytics-expand-btn:hover{transform:translateY(-50%) scale(1.035);background:#fff;border-color:#8fb0c7;box-shadow:0 4px 10px rgba(15,42,74,.12);}
+.analytics-expand-btn:focus-visible{outline:3px solid rgba(17,141,255,.25);outline-offset:2px;}
+html[data-theme="dark"] .analytics-presentation-backdrop{background:rgba(2,8,18,.78);}
+html[data-theme="dark"] .analytics-presentation-shell{background:#101827;border-color:#2A3B54;box-shadow:0 28px 80px rgba(0,0,0,.55);}
+html[data-theme="dark"] .analytics-presentation-stage{background:#0B1220;}
+html[data-theme="dark"] .analytics-expand-btn{background:rgba(20,27,44,.88);border-color:#3E5A80;color:#8EC8FF;box-shadow:none;}
+html[data-theme="dark"] .analytics-expand-btn:hover{background:#18263d;border-color:#5b84ad;}
+@media(max-width:700px){
+  .analytics-presentation-shell{inset:8px;border-radius:12px;}
+  .analytics-presentation-toolbar{padding:11px 12px 10px 14px;}
+  .analytics-presentation-toolbar h2{font-size:16px;}
+  .analytics-presentation-stage{padding:8px;}
+  .analytics-expand-btn{right:10px;width:31px;height:31px;font-size:16px;}
+  .analytics-panel-title{padding-right:52px!important;}
+}
+@media (prefers-reduced-motion:reduce){.analytics-presentation,.analytics-expand-btn,.analytics-presentation-close{transition:none!important;}}
+
+html[data-theme="dark"] .analytics-presentation-panel>h3{background:linear-gradient(135deg,#142541 0%,#173a63 62%,#194b78 100%) !important;color:#F2F7FF !important;border-color:#2A5A86 !important;border-bottom-color:#2A5A86 !important;box-shadow:0 2px 8px rgba(0,0,0,.22),0 5px 14px rgba(17,141,255,.09),inset 0 1px 0 rgba(255,255,255,.08);}
+html[data-theme="dark"] .analytics-presentation-panel>h3::before{background:linear-gradient(180deg,#8fd0ff 0%,#4DA3FF 52%,#2483ce 100%);box-shadow:0 0 8px rgba(77,163,255,.28);}

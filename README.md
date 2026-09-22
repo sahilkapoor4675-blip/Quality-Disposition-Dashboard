@@ -160,3 +160,6 @@ Before deploying, run every command in `RELEASE_GATE.md` (all must pass, on an i
 ### V64.6 corrective sorting patch
 
 Sortable dashboard tables use a three-state click cycle: **ascending → descending → normal/natural order**. The normal state is the current server/render order for that table after filters refresh. This behavior is preserved across supported sortable tables, including Work Center, Grade, Monthly, Weekly, Quarterly, and Yearly.
+
+### Analytics presentation mode (V64.6)
+Analytics panels with charts (including the Dashboard 6M Fishbone panel) now have an `⛶` action in the card header. It opens the existing panel in a focused presentation overlay without duplicating the chart instance or issuing a new data request. Closing with Escape, the close button, or the backdrop restores the original position and focus; keyboard focus remains contained inside the presentation view. Light and dark theme treatments are supported.
