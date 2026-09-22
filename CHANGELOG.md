@@ -9,7 +9,7 @@ from accumulating a changelog file per release.
 Release focus: full-application bug audit (server, dashboard, admin, exports, import/backup).
 
 ### Files changed
-`server.py`, `app.js`, `admin.html`, `index.html` (version meta only), `periods.py`, `VERSION.txt`, `README.md`, `CHANGELOG.md`, `RELEASE_GATE.md`, `DELETE_THESE_FILES.txt`, plus new `regression_v64_3.py`. `quality.db` and `reports.py` are unchanged.
+`server.py`, `app.js`, `app.css`, `admin.html`, `index.html` (version meta only), `periods.py`, `VERSION.txt`, `README.md`, `CHANGELOG.md`, `RELEASE_GATE.md`, `DELETE_THESE_FILES.txt`, plus new `regression_v64_3.py`. `quality.db` and `reports.py` are unchanged.
 
 ### Fixed
 - **Double HTTP response:** `do_GET` used `if path == "/api/activity"` where an `elif` was required, so every normal route (`/`, `/api/kpis`, exports, ...) also wrote a second `404 not found` response after the real one.
@@ -36,6 +36,19 @@ Release focus: full-application bug audit (server, dashboard, admin, exports, im
 - Donut, bar (horizontal/grouped), and Pareto charts now use a soft top-to-bottom gradient fill plus a low-opacity drop shadow instead of flat color chips — a restrained "lifted" look instead of flat paint, without a full 3D/bevel treatment (which distorts how donut/bar proportions read — a well-known data-viz readability problem).
 - The 6M Fishbone diagram gets the same gradient/shadow treatment on its branch pills and defect head box, plus a faint fish-silhouette watermark behind the spine — purely decorative, sits behind the live data, adapts to light/dark theme, never affects layout or text.
 - **Fixed while building this:** every chart's gradient/shadow used the *same* SVG element ids (e.g. `grad-118DFF`) keyed only by color. With several charts on one page, ids collide — the browser resolves `url(#id)` to whichever chart defined it *last* in the DOM, so the moment any one chart's container re-rendered (e.g. on a browser resize), other charts referencing that id could silently go transparent with no console error. Every chart instance now gets its own randomly-tagged id namespace, so charts can never collide. Verified with rects/fills enumerated across all 5 tabs before and after forced resize churn.
+
+### UI: chart depth extended to KPI cards, tables, legends, badges, pills and buttons
+CSS/JS-only follow-up to the chart depth work above (`app.css`, `app.js`); no backend, schema, or markup changes.
+- **KPI cards:** the colored corner accent bar (`.kpi-card::before`, good/bad/amber/neutral) is now the same top-to-bottom gradient used on chart fills instead of a flat color.
+- **Legend dots:** every chart's legend swatch (pie, bar, combo, Pareto) now echoes its bar/slice's own gradient via a shared `legendDotBg()` helper in `app.js`, instead of a flat color chip.
+- **Donut center:** a very soft radial glow now sits behind the "TOTAL" / grand-total text inside the donut hole, echoing the same low-opacity depth used on the slices.
+- **Table headers:** the base `th`, `tfoot`/Grand Total row, sortable-header hover state, the RCA table header, and the "What Changed?" compare-table header all use the same gradient treatment as the chart fills (previously flat).
+- **Status pills/badges:** KPI trend badges (`.trend.good/.bad/.equal/.info`), the KPI status pill, and the Quality Control Room status pills (`.qcr-status`) now use a same-hue two-tone gradient instead of a single flat pastel — a shade-deepening gradient rather than an opacity fade, since fading a pale pastel toward transparent would wash the chip out against the card.
+- **Toast notifications:** the colored left accent bar is now a gradient strip (a `::before`, the same technique as the KPI accent bar) instead of a flat `border-left-color`, which a plain CSS border can't render as a gradient.
+- **Hover feedback on charts:** every drillable bar/slice (anything with `data-drill-category`) now gives a small opacity + scale hover response, respecting `prefers-reduced-motion`; the existing SVG drop-shadow filter is left untouched so it isn't silently replaced by a CSS `filter` on hover.
+- **Live status/user-count pills:** the header's live indicator pill and the "N live users" pill now carry a very soft matching glow (`box-shadow`), and their dots gained a blurred glow (previously a hard-edged ring only), consistent in both light and dark theme.
+- **Secondary buttons:** Export, Reset filters, Investigate/mini-investigate, and the drill-down panel's header/export buttons now lift slightly (`translateY(-1px)` + soft shadow) on hover, matching the lift the tab buttons already had; several of these previously had no hover feedback at all.
+- **Empty states:** the "no data" icon now carries a soft drop-shadow glow instead of sitting flat.
 
 ### Verification
 Full `RELEASE_GATE.md` suite plus `regression_v64_3.py` (fails on pre-fix code, passes now). The bundled database is unchanged.

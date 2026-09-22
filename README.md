@@ -21,6 +21,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - Restoring a backup containing fishbone-import history no longer fails.
 - KPI cards no longer show a dead gap on the right; admin danger buttons (Logout/Delete) are readable in light theme; sound effects no longer fail to load when browser storage is blocked.
 - Donut/bar/Pareto charts and the 6M Fishbone diagram now use a subtle gradient + soft shadow instead of flat color fills, and the fishbone has a faint watermark behind the spine. Each chart instance has its own gradient/shadow id namespace so charts on the same page never collide.
+- That same gradient/depth language is now applied consistently across the rest of the UI: KPI card accent bars, chart legend dots, the donut's center glow, table headers (incl. Grand Total, RCA and compare tables), status pills/badges, and the toast notification accent bar. Drillable bars/slices now show a hover response, the live-status/live-users pills and empty-state icon carry a soft glow, and secondary buttons (Export, Reset, Investigate, drill-down actions) now lift on hover like the tab buttons already did.
 - Admin: Database panel loads at login; background polling stops while logged out; QA Manager sessions are listed in Security.
 - `VERSION.txt` now matches the release.
 

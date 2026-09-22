@@ -36,9 +36,9 @@
   .updated-block{text-align:right;min-width:150px;}
   .updated-label{font-size:13px;text-transform:uppercase;letter-spacing:1px;font-weight:800;opacity:.68;margin-bottom:3px;}
   .updated-time{font-size:14px;font-weight:600;letter-spacing:.2px;white-space:nowrap;}
-  .live-status{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);font-size:13px;font-weight:800;letter-spacing:.7px;white-space:nowrap;}
-  .live-users{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #CFE8DB;border-radius:999px;background:#F2FBF6;color:#1B7F58;font-size:13px;font-weight:800;letter-spacing:.55px;white-space:nowrap;}
-  .live-users .live-users-dot{width:6px;height:6px;border-radius:50%;background:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.12);}
+  .live-status{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);font-size:13px;font-weight:800;letter-spacing:.7px;white-space:nowrap;box-shadow:0 0 0 3px rgba(34,197,94,.07);}
+  .live-users{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #CFE8DB;border-radius:999px;background:#F2FBF6;color:#1B7F58;font-size:13px;font-weight:800;letter-spacing:.55px;white-space:nowrap;box-shadow:0 0 0 3px rgba(22,163,74,.06);}
+  .live-users .live-users-dot{width:6px;height:6px;border-radius:50%;background:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.12),0 0 8px rgba(22,163,74,.45);}
   @media(max-width:600px){.live-users{font-size:12px;padding:7px 8px;}}
   .live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.16),0 0 10px rgba(34,197,94,.65);animation:livePulse 1.8s ease-in-out infinite;}
   @keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.86)}}
@@ -184,7 +184,7 @@
   .legend-dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
   .no-data{color:var(--muted);font-size:14.5px;padding:16px;}
   .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:38px 20px;color:var(--muted);text-align:center;}
-  .empty-state-icon{width:52px;height:52px;color:var(--chart-leader,#94a3b8);opacity:.75;}
+  .empty-state-icon{width:52px;height:52px;color:var(--chart-leader,#94a3b8);opacity:.75;filter:drop-shadow(0 0 14px rgba(148,163,184,.35));}
   .empty-state-title{font:700 15px Manrope,sans-serif;color:var(--chart-label,#334155);}
   .empty-state-sub{font:600 13px Manrope,sans-serif;color:var(--muted);max-width:280px;}
   .subhead{font-size:14px;color:var(--muted);padding:0 16px;margin:-6px 0 10px 0;}
@@ -1012,6 +1012,20 @@ html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B
   .qcr-why-grid{grid-template-columns:1fr;}
 }
 
+/* Shared hover-lift for secondary action buttons (export/reset/investigate/
+   drill-down controls). Tab buttons already lift on hover (translateY(-2px)
+   + shadow) — this brings the same, slightly smaller, feedback to the other
+   clickable buttons that previously only changed background/border on
+   hover, so every button in the app now confirms a hover the same way. */
+.export-btn,.reset-all,.qcr-investigate-btn,.qcr-mini-investigate,
+.drill-head button,.drill-export{transition:transform .16s ease,box-shadow .16s ease,background .16s ease,border-color .16s ease;}
+.export-btn:hover,.reset-all:hover,.qcr-investigate-btn:hover,.qcr-mini-investigate:hover,
+.drill-head button:hover,.drill-export:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(15,42,74,.10);}
+@media (prefers-reduced-motion:reduce){
+  .export-btn,.reset-all,.qcr-investigate-btn,.qcr-mini-investigate,.drill-head button,.drill-export{transition:none!important;}
+  .export-btn:hover,.reset-all:hover,.qcr-investigate-btn:hover,.qcr-mini-investigate:hover,.drill-head button:hover,.drill-export:hover{transform:none!important;}
+}
+
 /* ================================================================
    DARK MODE
    Toggled via `data-theme="dark"` on <html> (see app.js dmToggle logic).
@@ -1145,7 +1159,7 @@ html[data-theme="dark"] .drill-breadcrumb-crumb:hover{background:#1B2740;color:v
 html[data-theme="dark"] .drill-breadcrumb-crumb.current{color:#E8EDF6;}
 html[data-theme="dark"] .drill-breadcrumb-sep{color:#3A4C68;}
 html[data-theme="dark"] .empty-state-title{color:#C7D2E3;}
-html[data-theme="dark"] .empty-state-icon{color:#7E90A8;}
+html[data-theme="dark"] .empty-state-icon{color:#7E90A8;filter:drop-shadow(0 0 14px rgba(126,144,168,.3));}
 html[data-theme="dark"] .section-header,
 html[data-theme="dark"] .panel h3,
 html[data-theme="dark"] .drill-head,
@@ -1385,7 +1399,7 @@ html[data-theme="dark"] .executive-brand{border-left-color:#2A3B54;}
 html[data-theme="dark"] .updated-block{border-right-color:#2A3B54;}
 /* "NOW ACTIVE" pill only had light-theme colours (a bright white pill on the dark header). */
 html[data-theme="dark"] .live-users{background:#0F2A21;border-color:#1F4A3A;color:#6EE7B7;}
-html[data-theme="dark"] .live-users .live-users-dot{background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.16);}
+html[data-theme="dark"] .live-users .live-users-dot{background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.16),0 0 8px rgba(52,211,153,.4);}
 .header-actions{display:flex;align-items:center;gap:10px;}
 /* live pills + palette button share one height so the right cluster reads as a single toolbar */
 header .live-status,header .live-users,header .cmdk-open-btn{box-sizing:border-box;height:36px;padding-top:0;padding-bottom:0;}
