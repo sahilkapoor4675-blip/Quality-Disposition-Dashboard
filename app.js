@@ -2603,8 +2603,15 @@ function formatDateTime12(date, withSeconds=true){
   return `${datePart} • ${formatClockTime(d,withSeconds)}`;
 }
 function updateDigitalClock(){
+  const now = new Date();
   const el=document.getElementById('digitalClock');
-  if(el) el.textContent=formatClockTime(new Date(),true);
+  if(el) el.textContent=formatClockTime(now,true);
+  const dateEl=document.getElementById('digitalClockDate');
+  if(dateEl){
+    const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    dateEl.textContent=`${days[now.getDay()]}, ${String(now.getDate()).padStart(2,'0')} ${months[now.getMonth()]} ${now.getFullYear()}`;
+  }
 }
 let _digitalClockTimer=null;
 function startDigitalClock(){

@@ -213,3 +213,6 @@ Sortable dashboard tables use a three-state click cycle: **ascending → descend
 - Presentation toolbar titles exclude the fullscreen control glyph.
 - Quality Decision Mix uses a decision-oriented `⚖️` icon.
 - Version remains **V64.6**; only the JS cache-buster is advanced.
+
+### Current Time
+The V64.6 header shows a compact calendar-style Current Time card at the top-right above Commands. It displays the local date and a live seconds clock in 12-hour AM/PM format in both light and dark themes.

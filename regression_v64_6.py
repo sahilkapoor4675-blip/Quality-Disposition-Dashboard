@@ -45,7 +45,7 @@ assert '#tab-dashboard .panel > h3::before' in app_css
 assert '#tab-weekly .panel > h3::before' in app_css
 assert 'Only dashboard analytics cards use this treatment' in app_css
 assert '<meta name="app-version" content="V64.6">' in index
-assert 'app.js?v=64.6.6' in index
+assert 'app.js?v=64.6.7' in index
 
 # Main navigation must use the dashboard's blue-gradient treatment in both themes.
 assert '.tabs > .tab-btn{' in app_css
@@ -53,12 +53,20 @@ assert 'background:linear-gradient(180deg,#4aa4d8 0%,#2b789f 100%) !important' i
 assert 'html[data-theme="dark"] .tabs > .tab-btn{' in app_css
 assert 'background:linear-gradient(180deg,#2f93cf 0%,#194e6e 100%) !important' in app_css
 assert 'html[data-theme="dark"] .tabs > .tab-btn.active' in app_css
-assert 'app.css?v=68.8' in index
-assert 'app.js?v=64.6.6' in index
+assert 'app.css?v=68.9' in index
+assert 'app.js?v=64.6.7' in index
 assert 'id="digitalClock"' in index
 assert 'function formatClockTime' in app_js
 assert 'startDigitalClock();' in app_js
 assert 'Current Time' in index
+assert 'class="header-right-stack"' in index
+assert 'class="digital-clock-icon"' in index
+assert 'id="digitalClockDate"' in index
+assert '<div class="header-actions">' in index
+assert index.index('class="digital-clock-block"') < index.index('id="cmdkOpenBtn"')
+assert 'digital-clock-date' in app_css and '.header-right-stack' in app_css
+assert 'dateEl.textContent=' in app_js
+assert 'h%12||12' in app_js
 admin_html=(ROOT / 'admin.html').read_text(encoding='utf-8')
 assert 'function formatClock12' in (ROOT / 'admin.html').read_text(encoding='utf-8')
 assert 'parseServerDateTime' in (ROOT / 'admin.html').read_text(encoding='utf-8')

@@ -1,3 +1,8 @@
+
+### V64.6 — Current Time card (selected #3 design)
+- Moved the current-time widget to the header top-right, directly above the Commands action.
+- Added calendar-style date + live seconds clock in 12-hour AM/PM format.
+- Added responsive light/dark styling for the selected card design.
 ## V64.6 — 12-hour clock + live header clock + time-display audit (2026-09-22)
 
 ### Fixed
