@@ -49,6 +49,7 @@ CSS/JS-only follow-up to the chart depth work above (`app.css`, `app.js`); no ba
 - **Live status/user-count pills:** the header's live indicator pill and the "N live users" pill now carry a very soft matching glow (`box-shadow`), and their dots gained a blurred glow (previously a hard-edged ring only), consistent in both light and dark theme.
 - **Secondary buttons:** Export, Reset filters, Investigate/mini-investigate, and the drill-down panel's header/export buttons now lift slightly (`translateY(-1px)` + soft shadow) on hover, matching the lift the tab buttons already had; several of these previously had no hover feedback at all.
 - **Empty states:** the "no data" icon now carries a soft drop-shadow glow instead of sitting flat.
+- **Fixed while building this:** the Grand Total row / `tfoot` had no dark-theme override at all, so in dark mode it kept the light theme's flat blue background while the column header above it correctly switched to dark — the two are meant to match (they share the identical background in light theme). Dark mode now gives the Grand Total row/`tfoot` the same dark background as the header.
 
 ### Verification
 Full `RELEASE_GATE.md` suite plus `regression_v64_3.py` (fails on pre-fix code, passes now). The bundled database is unchanged.

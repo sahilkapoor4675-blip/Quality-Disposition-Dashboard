@@ -1215,6 +1215,13 @@ html[data-theme="dark"] th,
 html[data-theme="dark"] td{border-color:#2A3B54;}
 html[data-theme="dark"] thead th{background:#101827;color:#E8EDF6;}
 html[data-theme="dark"] .sortable-th:hover{background:#1B2740!important;}
+/* Grand Total row / tfoot had no dark override at all, so it kept showing
+   the light theme's flat blue while the header above it correctly went
+   dark — header and footer are meant to match (they use the identical
+   background in light theme; see the un-themed rule this mirrors), so
+   this brings the footer back in line with the header in dark mode too. */
+html[data-theme="dark"] tfoot td,
+html[data-theme="dark"] tr.grand-total-row td{background:#101827;color:#E8EDF6;border-color:#2A3B54;}
 html[data-theme="dark"] tbody tr:nth-child(even){background:#101827;}
 /* Same invisible-text bug as above: tbody tr:hover had no dark override,
    so hovering a row fell back to the light theme's #EEF7FC background
