@@ -2970,11 +2970,16 @@ def _ensure_admin_schema():
         if USE_POSTGRES:
             conn.execute("ALTER TABLE activity_log ADD COLUMN IF NOT EXISTS ip_address TEXT DEFAULT ''")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_ip_time ON activity_log (ip_address, created_at)")
+            # Admin home/error-monitor/security queries all filter on event_type
+            # (login counts, dashboard_open counts, export_% counts, etc.) and
+            # used to run as full table scans since only ip_address was indexed.
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_event_time ON activity_log (event_type, created_at)")
         else:
             cols = {r[1] for r in conn.execute("PRAGMA table_info(activity_log)").fetchall()}
             if "ip_address" not in cols:
                 conn.execute("ALTER TABLE activity_log ADD COLUMN ip_address TEXT DEFAULT ''")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_ip_time ON activity_log (ip_address, created_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_activity_event_time ON activity_log (event_type, created_at)")
     except Exception:
         conn.rollback()
 
@@ -4414,26 +4419,49 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/admin/data_integrity":
             if not _is_admin(self): _auth_error(self)
             else:
+                # This used to run 8 separate COUNT(*) queries, each a full scan of
+                # `disposition` — slow on any non-trivial table, and doubly so
+                # because the admin UI calls this endpoint both right after login
+                # and again every 60s via the command-center poller, so the cost
+                # was paid twice on load and again every minute. It's now ONE
+                # query (conditional aggregation computes every check in a single
+                # pass) plus a short response cache so rapid repeat calls (the
+                # double-fetch on load, or several admins with the panel open)
+                # are free instead of re-scanning the table.
+                cache_key = "admin:data_integrity"
+                hit = _cache_get(cache_key)
+                if hit is not None:
+                    self._send_json(hit); return
                 conn=None
                 try:
                     conn=get_conn()
-                    def q1(sql):
-                        r=conn.execute(sql).fetchone(); return int(r[0] or 0) if r else 0
-                    total=q1("SELECT COUNT(*) FROM disposition")
-                    missing_heat=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(heat_no,''))='' ")
-                    missing_batch=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(batch_no,''))='' ")
-                    missing_grade=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(grade,''))='' ")
-                    missing_decision=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(quality_decision,''))='' ")
-                    missing_date=q1("SELECT COUNT(*) FROM disposition WHERE TRIM(COALESCE(insp_lot_date,''))='' ")
-                    duplicate_batch_groups=q1("SELECT COUNT(*) FROM (SELECT TRIM(batch_no) b, COUNT(*) c FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY TRIM(batch_no) HAVING COUNT(*)>1) x")
                     if USE_POSTGRES:
-                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight::text IN ('NaN','Infinity','-Infinity') OR output_weight<=0")
-                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE " + MISSING_INTENSITY_SQL)
+                        invalid_weight_cond = "output_weight IS NULL OR output_weight::text IN ('NaN','Infinity','-Infinity') OR output_weight<=0"
                     else:
-                        invalid_weight=q1("SELECT COUNT(*) FROM disposition WHERE output_weight IS NULL OR output_weight<=0 OR output_weight!=output_weight")
-                        missing_intensity=q1("SELECT COUNT(*) FROM disposition WHERE " + MISSING_INTENSITY_SQL)
+                        invalid_weight_cond = "output_weight IS NULL OR output_weight<=0 OR output_weight!=output_weight"
+                    sql = f"""
+                        SELECT
+                          COUNT(*) AS total,
+                          SUM(CASE WHEN TRIM(COALESCE(heat_no,''))='' THEN 1 ELSE 0 END) AS missing_heat,
+                          SUM(CASE WHEN TRIM(COALESCE(batch_no,''))='' THEN 1 ELSE 0 END) AS missing_batch,
+                          SUM(CASE WHEN TRIM(COALESCE(grade,''))='' THEN 1 ELSE 0 END) AS missing_grade,
+                          SUM(CASE WHEN TRIM(COALESCE(quality_decision,''))='' THEN 1 ELSE 0 END) AS missing_decision,
+                          SUM(CASE WHEN TRIM(COALESCE(insp_lot_date,''))='' THEN 1 ELSE 0 END) AS missing_date,
+                          SUM(CASE WHEN {invalid_weight_cond} THEN 1 ELSE 0 END) AS invalid_weight,
+                          SUM(CASE WHEN {MISSING_INTENSITY_SQL} THEN 1 ELSE 0 END) AS missing_intensity,
+                          (SELECT COUNT(*) FROM (SELECT TRIM(batch_no) b FROM disposition WHERE TRIM(COALESCE(batch_no,''))<>'' GROUP BY TRIM(batch_no) HAVING COUNT(*)>1) x) AS duplicate_batch_groups
+                        FROM disposition
+                    """
+                    r = conn.execute(sql).fetchone()
+                    conn.close(); conn=None
+                    def n(v): return int(v or 0)
+                    total=n(r[0]); missing_heat=n(r[1]); missing_batch=n(r[2]); missing_grade=n(r[3])
+                    missing_decision=n(r[4]); missing_date=n(r[5]); invalid_weight=n(r[6])
+                    missing_intensity=n(r[7]); duplicate_batch_groups=n(r[8])
                     issue_total=missing_heat+missing_batch+missing_grade+missing_decision+missing_date+duplicate_batch_groups+invalid_weight+missing_intensity
-                    self._send_json({"ok":True,"records":total,"issues":issue_total,"checks":{"missing_heat":missing_heat,"missing_batch":missing_batch,"missing_grade":missing_grade,"missing_decision":missing_decision,"missing_date":missing_date,"missing_intensity":missing_intensity,"duplicate_batch_groups":duplicate_batch_groups,"invalid_weight":invalid_weight}})
+                    payload = {"ok":True,"records":total,"issues":issue_total,"checks":{"missing_heat":missing_heat,"missing_batch":missing_batch,"missing_grade":missing_grade,"missing_decision":missing_decision,"missing_date":missing_date,"missing_intensity":missing_intensity,"duplicate_batch_groups":duplicate_batch_groups,"invalid_weight":invalid_weight}}
+                    _cache_put(cache_key, payload)
+                    self._send_json(payload)
                 except Exception as e:
                     self._send_json({"ok":False,"error":str(e)[:300]},status=500)
                 finally:

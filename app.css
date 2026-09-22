@@ -95,6 +95,14 @@
   .chart-scroll{padding:18px 18px 16px;min-height:390px;}
   .chart-svg{shape-rendering:geometricPrecision;transform-origin:center center;}
   .chart-ready .chart-svg{animation:chartEnter .62s cubic-bezier(.2,.75,.25,1) both;}
+  /* Hover feedback on bars/donut slices: a slight scale-up + opacity lift so
+     hovering reads as interactive, not just the click-to-drilldown cursor.
+     transform-box:fill-box scales each shape around its own center rather
+     than the SVG's (0,0) origin. */
+  .chart-bar,.chart-slice{transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:center;}
+  .chart-bar:hover{opacity:.86;transform:scale(1.035);}
+  .chart-slice:hover{opacity:.88;transform:scale(1.045);}
+  @media (prefers-reduced-motion:reduce){.chart-bar,.chart-slice{transition:none!important;}.chart-bar:hover,.chart-slice:hover{transform:none!important;}}
   .chart-ready .legend{animation:legendEnter .5s ease-out .08s both;}
   .chart-refreshing{opacity:.30;transform:translateY(5px) scale(.992);filter:saturate(.82);transition:opacity .18s ease,transform .18s ease,filter .18s ease;}
   .chart-ready{opacity:1;transform:translateY(0) scale(1);transition:opacity .25s ease,transform .25s ease;}
@@ -216,8 +224,8 @@
   .filter-empty{padding:10px 8px;color:#94a3b8;font-size:15.5px;}
   .kpi-grid{gap:12px;}
   .kpi-card{padding:13px 14px 12px;border-radius:11px;min-height:145px;box-shadow:0 2px 8px rgba(15,42,74,.055);}
-  .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#cbd5e1;border-radius:11px 0 0 11px;}
-  .kpi-card.status-good::before{background:#16a34a}.kpi-card.status-bad::before{background:#dc2626}.kpi-card.status-amber::before{background:#d97706}.kpi-card.status-neutral::before{background:#118dff}
+  .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#e2e8f0 0%,#cbd5e1 100%);border-radius:11px 0 0 11px;}
+  .kpi-card.status-good::before{background:linear-gradient(180deg,#4ade80 0%,#16a34a 100%)}.kpi-card.status-bad::before{background:linear-gradient(180deg,#f87171 0%,#dc2626 100%)}.kpi-card.status-amber::before{background:linear-gradient(180deg,#fbbf24 0%,#d97706 100%)}.kpi-card.status-neutral::before{background:linear-gradient(180deg,#5eb2ff 0%,#118dff 100%)}
   .kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
   .kpi-card .label{font-size:14px;letter-spacing:.35px;margin:0;text-transform:uppercase;font-weight:800;}
   .kpi-card .kpi-icon{font-size:18px;width:28px;height:28px;border-radius:8px;background:#f1f6fb;display:inline-flex;align-items:center;justify-content:center;}
@@ -332,7 +340,7 @@ html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);borde
 .tabs{gap:7px;}
 .tab-btn{background:#fff;border-color:#DCE6EF;color:var(--muted);box-shadow:0 2px 6px rgba(30,65,95,.035);}
 .tab-btn.active{background:#183A58;border-color:#183A58;box-shadow:0 5px 14px rgba(24,58,88,.16);}
-th{background:#2B78A8;border-color:#2B78A8;}
+th{background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%);border-color:#2B78A8;}
 .sortable-th{cursor:pointer;user-select:none;position:relative;padding-right:20px!important;}
 .sortable-th:hover{background:#256a94!important;}
 .sortable-th::after{content:"↕";position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;opacity:.55;}
@@ -341,7 +349,7 @@ th{background:#2B78A8;border-color:#2B78A8;}
 .sortable-th:focus-visible{outline:2px solid #fff;outline-offset:-2px;}
 tbody tr:nth-child(even){background:#F7FAFC;}
 tbody tr:hover{background:#EEF7FC;}
-tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
+tfoot td,tr.grand-total-row td{background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%);border-color:#2B78A8;}
 .chart-scroll{background:#fff;}
 .legend{color:#53697D;}
 .footer-note{color:#7A8B9B;}
@@ -1182,8 +1190,14 @@ html[data-theme="dark"] .qcr-defect-btn:hover{background:#1B2740;border-color:#2
 html[data-theme="dark"] table{color:var(--text);}
 html[data-theme="dark"] th,
 html[data-theme="dark"] td{border-color:#2A3B54;}
-html[data-theme="dark"] thead th{background:#101827;color:#E8EDF6;}
-html[data-theme="dark"] .sortable-th:hover{background:#1B2740!important;}
+/* Header/footer/grand-total use the same blue gradient as the light theme's
+   table header instead of flattening to dark navy — previously thead th went
+   dark here while tfoot/grand-total-row (no dark override) stayed the light
+   theme's flat blue, so the header and totals row visibly didn't match. */
+html[data-theme="dark"] thead th,
+html[data-theme="dark"] tfoot td,
+html[data-theme="dark"] tr.grand-total-row td{background:linear-gradient(180deg,#2f93cf 0%,#194e6e 100%);color:#F0F7FF;border-color:#1c5878;}
+html[data-theme="dark"] .sortable-th:hover{background:#256a94!important;}
 html[data-theme="dark"] tbody tr:nth-child(even){background:#101827;}
 /* Same invisible-text bug as above: tbody tr:hover had no dark override,
    so hovering a row fell back to the light theme's #EEF7FC background

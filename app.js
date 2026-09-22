@@ -895,7 +895,11 @@ function svgLift(tag){ return `url(#chartLift-${tag})`; }
 // Legend swatches echo the same top-to-bottom gradient (full color -> ~80%
 // opacity) used for the bar/slice fills above, so a legend dot reads as a
 // tiny sample of its chart color rather than a flat, disconnected chip.
-function legendDotBg(color){ return color ? `linear-gradient(180deg,${color},${color}CC)` : color; }
+// A top-to-bottom opacity fade (color -> 80% opacity) is nearly invisible at
+// the legend dot's 11px size, so the gradient is widened to a visible
+// light-to-dark sweep (a soft highlight fading into a darker shade of the
+// same color) instead — still clearly "that chart color", just with real depth.
+function legendDotBg(color){ return color ? `linear-gradient(180deg,color-mix(in srgb,${color} 65%,white) 0%,${color} 55%,color-mix(in srgb,${color} 78%,black) 100%)` : color; }
 const DESIGN_W = 720; // fallback only (chart container hidden / not measurable yet)
 
 // ---------------------------------------------------------------------
@@ -1112,7 +1116,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
     const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5" data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)"></path>`;
+    slices += `<path class="chart-slice" data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5" data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)"></path>`;
   });
 
   // Center label: grand total
@@ -1124,7 +1128,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
   // "lift" treatment used on the slices themselves — kept subtle so it reads
   // as depth, not a spotlight.
   const centerGlowId = `donutGlow-${_pieTag}`;
-  const centerGlowDefs = `<defs><radialGradient id="${centerGlowId}" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".16"/><stop offset="65%" stop-color="var(--accent)" stop-opacity=".05"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></radialGradient></defs>`;
+  const centerGlowDefs = `<defs><radialGradient id="${centerGlowId}" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".32"/><stop offset="55%" stop-color="var(--accent)" stop-opacity=".14"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></radialGradient></defs>`;
   const centerLabel = `${centerGlowDefs}
     <circle cx="${cx}" cy="${cy}" r="${(innerR*0.92).toFixed(1)}" fill="url(#${centerGlowId})"/>
     <text x="${cx}" y="${cy-10*cScale}" font-size="${(21*cScale).toFixed(1)}" font-weight="700" text-anchor="middle" fill="var(--chart-muted)">TOTAL</text>
@@ -1213,7 +1217,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const y = padT + i * rowH + rowH*0.2;
     const barH = rowH * 0.6;
     const barColor = opts.color || CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(barColor, _hbarTag)}" filter="${svgLift(_hbarTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}"></rect>`;
+    bars += `<rect class="chart-bar"${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(barColor, _hbarTag)}" filter="${svgLift(_hbarTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}"></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="var(--chart-strong)">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="var(--chart-label)" data-tip="${escQcr(d[labelKey])}">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
   });
@@ -1269,7 +1273,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const maxV = maxes[si];
       const barW = Math.max(0, (val / maxV) * plotW);
       const y = groupY + si * (barH + 5);
-      bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(s.color, _hgTag)}" filter="${svgLift(_hgTag)}" rx="3" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
+      bars += `<rect class="chart-bar"${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(s.color, _hgTag)}" filter="${svgLift(_hgTag)}" rx="3" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
       bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="12.5" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
@@ -1323,7 +1327,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const barH = Math.max(0, (val / maxV) * (h - padT - padB));
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
-      bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${svgFill(s.color, _vgTag)}" filter="${svgLift(_vgTag)}" rx="2" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
+      bars += `<rect class="chart-bar" data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${svgFill(s.color, _vgTag)}" filter="${svgLift(_vgTag)}" rx="2" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
       bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})" data-tip="${escQcr(d[labelKey])}">${escQcr(truncateLabel(d[labelKey], truncLen))}</text>`;
@@ -1422,7 +1426,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const val=Number(d[barKey])||0, barH=(val/maxBar)*plotH;
     const x=padL+i*gap+(gap-barW)/2, y=h-padB-barH;
     const barColor = opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${svgFill(barColor, _comboTag)}" filter="${svgLift(_comboTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}"></rect>`;
+    bars += `<rect class="chart-bar" data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${svgFill(barColor, _comboTag)}" filter="${svgLift(_comboTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}"></rect>`;
     bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${opts.barFmt?opts.barFmt(val):val}</text>`;
     const lineVal=Math.max(0,Math.min(maxLine,Number(d[lineKey])||0));
     const lineY=h-padB-(lineVal/maxLine)*plotH, px=x+barW/2;
