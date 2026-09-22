@@ -892,6 +892,10 @@ function svgDepthDefs(colors, tag){
 }
 function svgFill(color, tag){ return color ? `url(#grad-${tag}-${color.replace('#','')})` : color; }
 function svgLift(tag){ return `url(#chartLift-${tag})`; }
+// Legend swatches echo the same top-to-bottom gradient (full color -> ~80%
+// opacity) used for the bar/slice fills above, so a legend dot reads as a
+// tiny sample of its chart color rather than a flat, disconnected chip.
+function legendDotBg(color){ return color ? `linear-gradient(180deg,${color},${color}CC)` : color; }
 const DESIGN_W = 720; // fallback only (chart container hidden / not measurable yet)
 
 // ---------------------------------------------------------------------
@@ -1060,7 +1064,13 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
   // The centre text keeps its full size while the donut hole is big enough; when the donut has
   // shrunk (narrow container / high zoom) it scales down just enough to stay inside the hole.
   const cScale = Math.min(1, (innerR*2*0.8) / (Math.max(String(totalText).length, 6) * 0.62 * 29));
-  const centerLabel = `
+  // A very soft radial glow behind TOTAL/value, echoing the same low-opacity
+  // "lift" treatment used on the slices themselves — kept subtle so it reads
+  // as depth, not a spotlight.
+  const centerGlowId = `donutGlow-${_pieTag}`;
+  const centerGlowDefs = `<defs><radialGradient id="${centerGlowId}" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".16"/><stop offset="65%" stop-color="var(--accent)" stop-opacity=".05"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></radialGradient></defs>`;
+  const centerLabel = `${centerGlowDefs}
+    <circle cx="${cx}" cy="${cy}" r="${(innerR*0.92).toFixed(1)}" fill="url(#${centerGlowId})"/>
     <text x="${cx}" y="${cy-10*cScale}" font-size="${(21*cScale).toFixed(1)}" font-weight="700" text-anchor="middle" fill="var(--chart-muted)">TOTAL</text>
     <text x="${cx}" y="${cy+16*cScale}" font-size="${(29*cScale).toFixed(1)}" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${totalText}</text>`;
 
@@ -1106,7 +1116,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
   let legend = "";
   sorted.forEach((d, i) => {
     const color = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
-    legend += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escQcr(d[labelKey])}</div>`;
+    legend += `<div class="legend-item"><span class="legend-dot" style="background:${legendDotBg(color)}"></span>${escQcr(d[labelKey])}</div>`;
   });
 
   const pieDefs = svgDepthDefs(slicesData.map(s => s.color), _pieTag);
@@ -1155,7 +1165,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
   // key for the colorful Work Center / Grade chart (not a generic metric legend).
   const legend = rows.map((d,i) => {
     const c = opts.color || CHART_COLORS[i % CHART_COLORS.length];
-    return `<div class="legend-item"><span class="legend-dot" style="background:${c}"></span>${escQcr(d[labelKey])}</div>`;
+    return `<div class="legend-item"><span class="legend-dot" style="background:${legendDotBg(c)}"></span>${escQcr(d[labelKey])}</div>`;
   }).join("");
   const hbarDefs = svgDepthDefs(rows.map((d,i) => opts.color || CHART_COLORS[i % CHART_COLORS.length]), _hbarTag);
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
@@ -1193,7 +1203,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   }
   const _hgTag = svgDepthTag();
   seriesDefs.forEach(s => {
-    legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${escQcr(s.label)}</div>`;
+    legend += `<div class="legend-item"><span class="legend-dot" style="background:${legendDotBg(s.color)}"></span>${escQcr(s.label)}</div>`;
   });
 
   items.forEach((d, i) => {
@@ -1246,7 +1256,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
   }
   const _vgTag = svgDepthTag();
   seriesDefs.forEach(s => {
-    legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${escQcr(s.label)}</div>`;
+    legend += `<div class="legend-item"><span class="legend-dot" style="background:${legendDotBg(s.color)}"></span>${escQcr(s.label)}</div>`;
   });
 
   items.forEach((d, i) => {
@@ -1315,7 +1325,7 @@ function makeLineChart(container, items, labelKey, series, opts={}){
       }
     });
     svgParts += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="${s.dashed?2:2.5}" ${s.dashed?'stroke-dasharray="7 5" opacity=".72"':''}/>${dots}${valueLabels}`;
-    legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color};${s.dashed?'opacity:.72;border:1px dashed '+s.color+';background:transparent;':''}"></span>${escQcr(s.label)}</div>`;
+    legend += `<div class="legend-item"><span class="legend-dot" style="background:${legendDotBg(s.color)};${s.dashed?'opacity:.72;border:1px dashed '+s.color+';background:transparent;':''}"></span>${escQcr(s.label)}</div>`;
   });
 
   let xLabels = "";
@@ -1365,7 +1375,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     dots += `<text x="${px}" y="${Math.max(lineY-10,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="#DC2626">${opts.lineFmt?opts.lineFmt(lineVal):lineVal}</text>`;
     labels += `<text x="${px}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-35 ${px} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey],16))}<title>${escQcr(d[labelKey])}</title></text>`;
   });
-  const legend=`<div class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS[0]}"></span>${opts.barLegend||"Qty (MT)"}</div><div class="legend-item"><span class="legend-dot" style="background:#DC2626"></span>${opts.lineLegend||"Cumulative %"}</div>`;
+  const legend=`<div class="legend-item"><span class="legend-dot" style="background:${legendDotBg(CHART_COLORS[0])}"></span>${opts.barLegend||"Qty (MT)"}</div><div class="legend-item"><span class="legend-dot" style="background:${legendDotBg('#DC2626')}"></span>${opts.lineLegend||"Cumulative %"}</div>`;
   const comboBarColors = items.map((d,i) => opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length]);
   container.innerHTML=`<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
     ${svgDepthDefs(comboBarColors, _comboTag)}

@@ -163,6 +163,15 @@
 
   .chart-scroll{overflow:visible;padding:16px;}
   .chart-svg{display:block;width:100%;height:auto;overflow:visible;} /* overflow:visible: rotated first x-axis label used to be clipped at the left edge */
+  /* Hover feedback for bars/donut slices: every drillable shape carries
+     data-drill-category, so a single rule covers bars and pie/donut slices.
+     Only opacity + a light scale change — the SVG "lift" drop-shadow is set
+     via the presentation attribute filter="url(#chartLift-...)" per chart,
+     and a CSS `filter` here would silently replace (not add to) that, so
+     hover intentionally leaves `filter` alone. */
+  .chart-svg [data-drill-category]{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:center;}
+  .chart-svg [data-drill-category]:hover{opacity:.85;transform:scale(1.02);}
+  @media (prefers-reduced-motion:reduce){.chart-svg [data-drill-category]{transition:none!important}.chart-svg [data-drill-category]:hover{transform:none!important}}
   .legend{display:flex;gap:16px;font-size:14px;color:var(--text);margin:0 0 12px;flex-wrap:wrap;padding:0 16px;font-weight:600;align-items:center;}
   .legend-item{display:flex;align-items:center;gap:6px;}
 
@@ -216,8 +225,8 @@
   .filter-empty{padding:10px 8px;color:#94a3b8;font-size:15.5px;}
   .kpi-grid{gap:12px;}
   .kpi-card{padding:13px 14px 12px;border-radius:11px;min-height:145px;box-shadow:0 2px 8px rgba(15,42,74,.055);}
-  .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#cbd5e1;border-radius:11px 0 0 11px;}
-  .kpi-card.status-good::before{background:#16a34a}.kpi-card.status-bad::before{background:#dc2626}.kpi-card.status-amber::before{background:#d97706}.kpi-card.status-neutral::before{background:#118dff}
+  .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#cbd5e1,rgba(203,213,225,.8));border-radius:11px 0 0 11px;}
+  .kpi-card.status-good::before{background:linear-gradient(180deg,#16a34a,rgba(22,163,74,.8))}.kpi-card.status-bad::before{background:linear-gradient(180deg,#dc2626,rgba(220,38,38,.8))}.kpi-card.status-amber::before{background:linear-gradient(180deg,#d97706,rgba(217,119,6,.8))}.kpi-card.status-neutral::before{background:linear-gradient(180deg,#118dff,rgba(17,141,255,.8))}
   .kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
   .kpi-card .label{font-size:14px;letter-spacing:.35px;margin:0;text-transform:uppercase;font-weight:800;}
   .kpi-card .kpi-icon{font-size:18px;width:28px;height:28px;border-radius:8px;background:#f1f6fb;display:inline-flex;align-items:center;justify-content:center;}
@@ -332,7 +341,7 @@ html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);borde
 .tabs{gap:7px;}
 .tab-btn{background:#fff;border-color:#DCE6EF;color:var(--muted);box-shadow:0 2px 6px rgba(30,65,95,.035);}
 .tab-btn.active{background:#183A58;border-color:#183A58;box-shadow:0 5px 14px rgba(24,58,88,.16);}
-th{background:#2B78A8;border-color:#2B78A8;}
+th{background:linear-gradient(180deg,#2B78A8,rgba(43,120,168,.82));border-color:#2B78A8;}
 .sortable-th{cursor:pointer;user-select:none;position:relative;padding-right:20px!important;}
 .sortable-th:hover{background:#256a94!important;}
 .sortable-th::after{content:"↕";position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;opacity:.55;}
@@ -341,7 +350,7 @@ th{background:#2B78A8;border-color:#2B78A8;}
 .sortable-th:focus-visible{outline:2px solid #fff;outline-offset:-2px;}
 tbody tr:nth-child(even){background:#F7FAFC;}
 tbody tr:hover{background:#EEF7FC;}
-tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
+tfoot td,tr.grand-total-row td{background:linear-gradient(180deg,#2B78A8,rgba(43,120,168,.82));border-color:#2B78A8;}
 .chart-scroll{background:#fff;}
 .legend{color:#53697D;}
 .footer-note{color:#7A8B9B;}
