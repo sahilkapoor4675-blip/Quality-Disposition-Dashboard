@@ -17,6 +17,9 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - QCR executive trend arrow now compares monthly First Pass Yield correctly.
 - KPI target save rejects NaN/infinite values and inverted Target/Warning/Critical bands.
 - CSV import accepts Windows-1252 files saved by Excel.
+- Switching dashboard tabs always opens the new tab scrolled to the top (previously kept the old tab's scroll position).
+- Restoring a backup containing fishbone-import history no longer fails.
+- KPI cards no longer show a dead gap on the right; admin danger buttons (Logout/Delete) are readable in light theme; sound effects no longer fail to load when browser storage is blocked.
 - Admin: Database panel loads at login; background polling stops while logged out; QA Manager sessions are listed in Security.
 - `VERSION.txt` now matches the release.
 

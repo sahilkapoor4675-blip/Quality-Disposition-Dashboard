@@ -24,8 +24,16 @@ Release focus: full-application bug audit (server, dashboard, admin, exports, im
 - **Admin:** Database panel now loads at login; three 60-second pollers referenced a non-existent `#loginPanel`/`admin-authenticated` class and kept calling admin APIs while logged out; Security session list now includes `qa_manager`; viewer login clears failed-attempt counter on success.
 - **Housekeeping:** `VERSION.txt` (was V64.0) now matches; `import uuid` no longer precedes the shebang; `periods.py` synced with `server.py` (it lacked the quarter/FY guard); saving a view no longer throws if browser storage is blocked.
 
+### Also fixed (second pass)
+- **Restoring a backup crashed** whenever it contained fishbone-import history: the `INSERT` listed 9 columns but supplied only 8 values (`imported_by` was silently dropped), so `_restore_backup_data` raised `Incorrect number of bindings supplied` and the whole restore rolled back.
+- **Tab switching kept the old scroll position.** Scrolled down on one tab, then switching tabs (click, keyboard 1-5, or browser Back) reopened the new tab at the same scroll offset instead of the top. `activateTab()` now resets scroll to the top on every switch (Back/Forward still restore their own position, as expected).
+- **KPI cards had a dead 76px gap** on the right: `.kpi-bottom` reserved a column for the sparkline, which is `display:none`. Removed the reserved column.
+- **Admin danger buttons (Logout/Delete) were unreadable** on light theme: dark-red text on a crimson background. Text is now white.
+- **`sfx.js` could fail to load** when browser storage is blocked (private browsing, locked-down profiles), silencing all UI sound feedback; `localStorage` calls are now wrapped in `try/catch`.
+- Deleting a saved view no longer throws if browser storage is blocked.
+
 ### Verification
-Full `RELEASE_GATE.md` suite plus the new `regression_v64_3.py` (fails on V64.2, passes on V64.3). The bundled database is unchanged.
+Full `RELEASE_GATE.md` suite plus `regression_v64_3.py`, extended to also assert the scroll-reset contract and the fishbone-backup restore path (both fail on the pre-fix code, pass now). The bundled database is unchanged.
 
 ## V64.2
 

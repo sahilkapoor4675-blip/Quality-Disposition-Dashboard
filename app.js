@@ -641,7 +641,7 @@ function refreshFilterSummary(recordCount){
 function savedViews(){try{return JSON.parse(localStorage.getItem('qdash_saved_views')||'{}')}catch(e){return {}}}
 function renderSavedViews(){const sel=document.getElementById('savedViewSelect'); if(!sel)return; const views=savedViews(); sel.innerHTML='<option value="">Saved Views</option>'+Object.keys(views).sort().map(n=>`<option value="${escQcr(n)}">${escQcr(n)}</option>`).join('');}
 function saveCurrentView(){const name=prompt('Enter a name for this filter view:'); if(!name||!name.trim())return; const views=savedViews(); views[name.trim()]=Object.assign({},currentFilters); localStorage.setItem('qdash_saved_views',JSON.stringify(views)); renderSavedViews(); document.getElementById('savedViewSelect').value=name.trim();}
-function manageSavedViews(){const views=savedViews(); const names=Object.keys(views); if(!names.length){alert('No saved views yet.');return;} const name=prompt('Enter the exact saved view name to delete:\n\n'+names.join('\n')); if(name&&views[name]){delete views[name];localStorage.setItem('qdash_saved_views',JSON.stringify(views));renderSavedViews();}}
+function manageSavedViews(){const views=savedViews(); const names=Object.keys(views); if(!names.length){alert('No saved views yet.');return;} const name=prompt('Enter the exact saved view name to delete:\n\n'+names.join('\n')); if(name&&views[name]){delete views[name];try{localStorage.setItem('qdash_saved_views',JSON.stringify(views));}catch(e){}renderSavedViews();}}
 // ---- URL state: the current tab and every non-"All" filter are reflected
 // in the address bar (?tab=...&work_center=...), so the browser's own
 // back/forward buttons work between tabs/filter changes, and a person can
@@ -2149,13 +2149,26 @@ const TAB_LOADERS = {
   weekly: loadPeriodTrend,
 };
 
-async function activateTab(tabName, fromHistory){
+// Switching tabs must always start the new tab from the top. Without this the previous
+// tab's scroll offset carried over (the page is one long scroller shared by every panel).
+// The browser's own back/forward scroll restoration is switched off too, otherwise it
+// re-applies the old offset right after our popstate handler has scrolled to the top.
+try{ if('scrollRestoration' in history) history.scrollRestoration='manual'; }catch(e){}
+function resetPageScroll(){
+  const de=document.documentElement, prev=de.style.scrollBehavior;
+  de.style.scrollBehavior='auto';                      // no smooth-scroll animation: jump straight to the top
+  try{ window.scrollTo(0,0); }catch(e){}
+  de.scrollTop=0; if(document.body) document.body.scrollTop=0;
+  de.style.scrollBehavior=prev;
+}
+async function activateTab(tabName, fromHistory, opts){
   fetch("/api/activity/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event_type:"tab_open",tab:tabName,filters:currentFilters})}).catch(()=>{});
   if(refreshController) refreshController.abort();
   refreshController = new AbortController();
   const signal = refreshController.signal;
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tabName));
   document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.id !== "tab-" + tabName));
+  if(!(opts && opts.keepScroll)) resetPageScroll();
   showSkeletons(tabName);
   if(!fromHistory) writeUrlState(true); // fromHistory=true means popstate already changed the URL; don't push again
   try { await TAB_LOADERS[tabName](signal); if(tabName==='controlroom') scheduleQcrLayout(); finishTabLoad(tabName); } catch(e) { finishTabLoad(tabName, e); }
@@ -2191,7 +2204,7 @@ function showTabError(tabName, err){
     b.remove();
     panel.querySelectorAll('.load-error-inline').forEach(el=>{ el.parentElement && (el.parentElement.innerHTML=''); });
     panel.querySelectorAll('tbody .load-error-row').forEach(tr=>{ tr.closest('tbody').innerHTML=''; });
-    activateTab(tabName, true);
+    activateTab(tabName, true, {keepScroll:true});
   });
 }
 // Called after every tab load attempt: shows the error state on failure, and also when a loader

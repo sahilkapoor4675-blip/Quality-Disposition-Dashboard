@@ -19,7 +19,10 @@
   "use strict";
 
   var STORAGE_KEY = "jsl_qi_sfx_enabled";
-  var enabled = localStorage.getItem(STORAGE_KEY);
+  // Browsers with blocked storage (privacy mode, locked-down corporate profiles) throw on access:
+  // sound must still work for the session instead of the whole script failing to load.
+  var enabled = null;
+  try { enabled = localStorage.getItem(STORAGE_KEY); } catch (e) {}
   enabled = enabled === null ? true : enabled === "1";
 
   var ctx = null;
@@ -125,7 +128,7 @@
 
   function setEnabled(v) {
     enabled = !!v;
-    localStorage.setItem(STORAGE_KEY, enabled ? "1" : "0");
+    try { localStorage.setItem(STORAGE_KEY, enabled ? "1" : "0"); } catch (e) {}
     syncToggleButtons();
   }
 

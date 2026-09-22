@@ -2475,7 +2475,7 @@ def _restore_backup_data(data):
             if fishbone_history_rows:
                 conn.executemany(
                     "INSERT INTO fishbone_import_history (id,filename,detected,imported,imported_by,created_at,rca_detected,rca_imported,style_imported) VALUES (?,?,?,?,?,?,?,?,?)",
-                    [(r.get("id"),r.get("filename",""),r.get("detected",0),r.get("imported",0),r.get("created_at"),
+                    [(r.get("id"),r.get("filename",""),r.get("detected",0),r.get("imported",0),r.get("imported_by",""),r.get("created_at"),
                       r.get("rca_detected",0),r.get("rca_imported",0),r.get("style_imported",0)) for r in fishbone_history_rows],
                 )
 

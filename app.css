@@ -224,7 +224,7 @@
   .kpi-status{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.35px;padding:3px 6px;border-radius:999px;}
   .kpi-status.good{background:#dcfce7;color:#15803d}.kpi-status.bad{background:#fee2e2;color:#b91c1c}.kpi-status.amber{background:#fef3c7;color:#b45309}.kpi-status.neutral{background:#e0f2fe;color:#0369a1}
   .kpi-card .value{font-family:'Space Grotesk',sans-serif;font-size:31px;font-weight:700;letter-spacing:-.5px;margin-top:9px;line-height:1.1;}
-  .kpi-bottom{display:grid;grid-template-columns:1fr 76px;align-items:end;gap:8px;margin-top:7px;}
+  .kpi-bottom{display:grid;grid-template-columns:minmax(0,1fr);align-items:end;gap:8px;margin-top:7px;} /* sparkline is display:none, so no reserved 76px column (it left a dead gap on the right of every KPI card) */
   .kpi-meta{min-width:0}.kpi-target{font-size:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.kpi-trendline{display:flex;align-items:center;gap:7px;margin-top:4px;}
   .kpi-card .prev{font-size:14px}.kpi-card .trend{font-size:14px;padding:3px 7px;border-radius:6px;}
   .sparkline{display:none;}

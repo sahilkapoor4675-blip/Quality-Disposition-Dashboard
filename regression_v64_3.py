@@ -102,6 +102,32 @@ with tempfile.TemporaryDirectory(prefix='qdash_v643_') as td:
     if post('/api/admin/kpi_target', {'label': 'Defect Rate', 'target': 'nan', 'warning': 0.03, 'critical': 0.05, 'direction': 'lower'}) != 400: errors.append('NaN KPI target accepted')
     if post('/api/admin/kpi_target', {'label': 'Defect Rate', 'target': 0.05, 'warning': 0.03, 'critical': 0.01, 'direction': 'lower'}) != 400: errors.append('reversed KPI bands accepted')
 
+    # 7) scroll-to-top on tab switch: no server-side check possible headlessly here,
+    #    so assert the browser-facing contract in app.js instead - every activateTab
+    #    call resets scroll unless it explicitly opts out for back/forward navigation.
+    appjs = (ROOT / 'app.js').read_text(encoding='utf-8')
+    if 'function resetPageScroll(' not in appjs: errors.append('resetPageScroll() helper missing from app.js')
+    if 'if(!(opts && opts.keepScroll)) resetPageScroll();' not in appjs: errors.append('activateTab no longer resets scroll on switch')
+
+    # 8) restoring a backup that contains fishbone import history must not 500
+    #    (INSERT column count previously did not match the supplied values).
+    try:
+        import openpyxl
+        wb = __import__('io').BytesIO()
+        book = openpyxl.Workbook(); ws = book.active
+        ws.append(["Defect Name", "Man", "Machine", "Material", "Method", "Measurement", "Environment"])
+        ws.append(["STICKING", "Operator error", "Roll wear", "Batch impurity", "SOP gap", "Gauge drift", "Humidity"])
+        book.save(wb); wb.seek(0)
+        bundle = server._parse_fishbone_file('fb.xlsx', wb.read())
+        server._replace_fishbone_master(bundle, 'fb.xlsx', 'admin')
+    except ImportError:
+        pass  # openpyxl not installed in this environment; the restore check below still runs against whatever history exists
+    snap = server._backup_snapshot_transaction('test')
+    try:
+        server._restore_backup_data(snap)
+    except Exception as e:
+        errors.append(f'restoring a backup with fishbone_import_history failed: {e}')
+
     if errors:
         print('V64.3 REGRESSION FAIL'); [print(' -', e) for e in errors]; sys.exit(1)
-    print('V64.3 REGRESSION PASS — single response, safe filters, drill totals, per-FY quarters, data-quality wiring, KPI validation.')
+    print('V64.3 REGRESSION PASS — single response, safe filters, drill totals, per-FY quarters, data-quality wiring, KPI validation, scroll-reset, fishbone-backup restore.')
