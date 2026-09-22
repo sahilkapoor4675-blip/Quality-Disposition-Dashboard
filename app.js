@@ -723,7 +723,27 @@ function syncFilterUiFromState(){
 function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); syncFilterUiFromState(); writeUrlState(false); triggerFilterRefresh();}
 function drilldownFiltersQuery(extra={}){const p=new URLSearchParams(currentFilters); Object.keys(extra).forEach(k=>p.set(k,extra[k])); return p.toString();}
 let drillStack=[];
+let _presentationDrillState=null;
 function currentDrill(){return drillStack[drillStack.length-1]||{metric:'',title:'',extra:{},page:1};}
+
+function elevateDrillModalForPresentation(){
+  const modal=document.getElementById('drillModal');
+  if(!modal || !_analyticsPresentationState || modal.parentNode===document.body || _presentationDrillState) return;
+  const placeholder=document.createComment('qdash-presentation-drill-placeholder');
+  modal.parentNode.insertBefore(placeholder,modal);
+  document.body.appendChild(modal);
+  _presentationDrillState={modal,placeholder};
+}
+
+function restoreDrillModalAfterPresentation(){
+  const state=_presentationDrillState;
+  if(!state) return;
+  try{
+    state.placeholder.parentNode?.insertBefore(state.modal,state.placeholder);
+    state.placeholder.remove();
+  }catch(e){}
+  _presentationDrillState=null;
+}
 function renderDrillBreadcrumb(){
   const nav=document.getElementById('drillBreadcrumb'); if(!nav)return;
   if(drillStack.length<2){nav.innerHTML='';nav.style.display='none';return;}
@@ -764,14 +784,14 @@ function renderDrillPage(page=1){
 // Opens a fresh drill-down as the FIRST level (e.g. clicking a defect bar on
 // a chart) — resets any previous breadcrumb trail, since this is a new,
 // unrelated drill starting over from the top.
-function openDrilldown(metric,title,extra={},crumb){ drillStack=[{metric,title,extra,page:1,crumb:crumb||title}]; const modal=document.getElementById('drillModal'); if(!modal)return; modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('drill-modal-open'); renderDrillBreadcrumb(); renderDrillPage(1); }
+function openDrilldown(metric,title,extra={},crumb){ drillStack=[{metric,title,extra,page:1,crumb:crumb||title}]; const modal=document.getElementById('drillModal'); if(!modal)return; elevateDrillModalForPresentation(); modal.classList.add('open'); modal.setAttribute('aria-hidden','false'); document.body.classList.add('drill-modal-open'); renderDrillBreadcrumb(); renderDrillPage(1); }
 // Pushes ONE LEVEL DEEPER onto the existing trail (e.g. clicking a Heat No.
 // inside an already-open drill-down) — so "Defect: X" > "Heat H12345" both
 // stay visible and clickable in the breadcrumb, instead of the first level
 // being silently replaced and losing its context.
 function pushDrilldown(metric,title,extra={},crumb){ drillStack.push({metric,title,extra,page:1,crumb:crumb||title}); renderDrillBreadcrumb(); renderDrillPage(1); }
 
-function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open'); drillStack=[]; const d=document.getElementById('drillDialog'); if(d){d.style.cssText='';} /* reset any drag/resize back to default centered size for next open */}
+function closeDrilldown(){const m=document.getElementById('drillModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');} document.body.classList.remove('drill-modal-open'); drillStack=[]; const d=document.getElementById('drillDialog'); if(d){d.style.cssText='';} restoreDrillModalAfterPresentation(); /* reset any drag/resize back to default centered size for next open */}
 qcrWireProblemActions();
 // Desktop convenience: the drill-down modal can be dragged by its header
 // and resized from its bottom-right corner, like a real window, instead of
@@ -852,7 +872,7 @@ function wireDrilldown(){
   document.getElementById('drillModal')?.addEventListener('click',e=>{if(e.target.id==='drillModal')closeDrilldown();});
 document.getElementById('drillBreadcrumb')?.addEventListener('click',e=>{const b=e.target.closest('[data-drill-level]');if(b)goToDrillLevel(Number(b.dataset.drillLevel));});
 document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.target.closest('.heat-detail-btn');if(b){const heat=b.dataset.heat;if(heat)pushDrilldown('heat_detail',`Heat ${heat} — Complete History`,{drill_value:heat},`Heat ${heat}`);return;} const pg=e.target.closest('[data-drill-page]');if(pg&&!pg.disabled)renderDrillPage(Number(pg.dataset.drillPage));});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrilldown();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape' && document.getElementById('drillModal')?.classList.contains('open')){e.preventDefault();e.stopImmediatePropagation();closeDrilldown();}});
   document.getElementById('saveViewBtn')?.addEventListener('click',saveCurrentView);
   document.getElementById('clearViewsBtn')?.addEventListener('click',manageSavedViews);
   document.getElementById('savedViewSelect')?.addEventListener('change',e=>applySavedView(e.target.value));
@@ -1099,7 +1119,11 @@ function ensureAnalyticsPresentation(){
 }
 
 function analyticsPanelTitle(panel){
-  return panel?.querySelector(':scope > h3')?.textContent?.trim() || 'Analytics';
+  const heading=panel?.querySelector(':scope > h3');
+  if(!heading) return 'Analytics';
+  const clone=heading.cloneNode(true);
+  clone.querySelector('.analytics-expand-btn')?.remove();
+  return clone.textContent.trim() || 'Analytics';
 }
 
 function openAnalyticsPresentation(panel){
@@ -1158,7 +1182,10 @@ function wireAnalyticsPresentation(){
   if(wireAnalyticsPresentation._wired) return;
   wireAnalyticsPresentation._wired=true;
   document.addEventListener('keydown',e=>{
-    if(e.key==='Escape' && _analyticsPresentationState){ e.preventDefault(); closeAnalyticsPresentation(); }
+    if(e.key==='Escape' && _analyticsPresentationState){
+      if(document.getElementById('drillModal')?.classList.contains('open')) return;
+      e.preventDefault(); closeAnalyticsPresentation();
+    }
   });
   document.querySelectorAll('.tab-panel .panel').forEach(panel=>{
     if(!panel.querySelector('.chart-scroll,.qcr-fishbone-diagram')) return;

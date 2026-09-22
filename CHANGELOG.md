@@ -1,10 +1,38 @@
-## V64.6 — Analytics presentation mode
 
-- Added an individual analytics-panel presentation mode opened with the new `⛶` control.
-- Uses the real chart/card DOM node (no duplicate rendering or extra API request) and restores it to its exact position on close.
-- Added Escape, close-button and backdrop-close behavior, body scroll lock, focus restoration and responsive light/dark presentation styling.
-- Presentation mode also traps keyboard focus inside the overlay and keeps the analytics heading treatment consistent in light and dark themes.
-- Presentation mode automatically redraws SVG charts for the expanded width and closes safely when switching tabs.
+## V64.6 — Full webapp re-audit + primary navigation patch (2026-09-22)
+
+### Fixed
+- **Primary dashboard tabs:** all main `.tabs > .tab-btn` controls now use the same blue-gradient visual family as table headers, with dedicated light/dark variants. QCR contribution sub-tabs remain unaffected by this rule.
+- **Admin manual refresh regression:** a legacy `refreshBtn.onclick` assignment was overriding the V64.6 centralized lazy/loaded-panel refresh handler. The legacy all-panel request burst is removed.
+- **Admin live refresh tracking:** Home, Data Quality, Records and Database Status are explicitly tracked from initial paint so the 60-second live refresh loop actually refreshes the intended overview panels.
+- **Admin Records refresh UX:** manual loaded-panel refresh now preserves the current search query, date range, record-id filter and page offset instead of resetting the Records view.
+
+### Full-audit result
+- Re-ran Python/JavaScript syntax, code-health, deep regression, V64.3, V64.5, V64.6 UI regression, Admin UX, smoke, HTTP (47 routes), export acceptance and export stress. All checks passed.
+- Export stress completed successfully: Excel 3.75s, PDF 3.04s, PPTX 17.42s on the repository stress fixture.
+- No database seed files or application data were modified by this patch.
+
+### UI suggestions (not implemented in this patch)
+- Add a compact “data status” strip showing active filter count + data-through date + last refresh time.
+- Add a user-selectable chart density/label mode for crowded analysis cards without changing the underlying values.
+- Add a persistent “Reset view” affordance that resets filters, sorting and saved-view state together.
+- Add table row density presets (Comfortable / Compact) with remembered preference.
+- Add an optional fullscreen mode for individual analytics cards for presentations/large screens.
+
+### Re-audit checkpoints
+1. Main tabs remain blue-gradient in light and dark themes; QCR sub-tabs remain separately styled.
+2. Admin Refresh Loaded does not call the legacy all-panel list; it refreshes only already-loaded panels and preserves Records state.
+3. The 60-second Admin loop refreshes Home/Data Quality/Records/Database Status after login and any subsequently opened live panel.
+4. Sensitive Admin endpoints continue to enforce their documented server-side roles independent of UI visibility.
+
+
+## V64.6 — Main Navigation & Admin Refresh Audit Patch (2026-09-22)
+
+- Primary dashboard tabs now use the same family of blue-gradient treatment as table headers in both light and dark themes; QCR sub-tabs remain separately scoped.
+- Fixed a manual Admin refresh override that was rebinding `refreshBtn` to the legacy all-panels request burst, bypassing the V64.6 lazy/loaded-panel refresh architecture.
+- Initial live Admin panels are now explicitly tracked by the loaded-panel refresh loop, so the intended 60-second refresh actually covers Home, Data Quality, Records, and Database Status.
+- Admin manual refresh preserves the current Records search/date/record-id/page state instead of unexpectedly resetting the Records view.
+- Added V64.6 regression contracts for primary-tab gradient styling, cache-busting, refresh wiring, and loaded-panel freshness behavior.
 
 # V64.6 — Dashboard card-heading polish follow-up
 
@@ -1599,3 +1627,11 @@ No KPI formula, filter semantic, schema or stored data changed.
 ### Verification
 - V64.6 targeted regression now asserts that metric tables capture natural order before reapplying remembered sorting.
 - Version remains **V64.6**; this is a corrective patch, not a new release version.
+
+## V64.6 — Presentation drill-down z-order & decision icon patch
+
+- Fixed drill-down opened from Analytics Presentation Mode appearing behind the presentation overlay. The real drill modal is temporarily re-parented to `body` while Presentation Mode is active, then restored to its original DOM position on close.
+- Fixed `Esc` behavior so an open drill-down closes first without closing Presentation Mode.
+- Fixed Presentation Mode toolbar titles so the expand `⛶` control is not included in the copied heading text.
+- Quality Decision Mix now uses a decision-oriented `⚖️` icon instead of a chart-type pie icon.
+- Runtime/application version remains **V64.6**; only the frontend JS cache-buster advances to ensure the fix is loaded.

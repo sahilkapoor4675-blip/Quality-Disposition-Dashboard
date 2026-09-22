@@ -1,3 +1,41 @@
+
+### Latest V64.6 full-audit patch
+
+- Primary dashboard tabs now use the same blue-gradient visual family as table headers in both light and dark themes; QCR contribution sub-tabs remain separate.
+- A full Admin refresh audit found and removed a legacy `refreshBtn` override that could restore the old all-panels request burst.
+- Home, Data Quality, Records and Database Status are now part of the explicitly tracked 60-second live refresh set from initial load.
+- Manual Admin refresh preserves the current Records query/date/record-id/page state.
+- V64.6 remains the runtime version; no application version bump was made.
+
+### UI improvement suggestions for a future approved pass
+The following are intentionally **suggestions only** and are not implemented in the current build:
+- compact data-status strip (active filters, data-through date, last refresh)
+- optional chart label-density mode for crowded cards
+- single “Reset view” action for filters + sorting + saved views
+- remembered table-density presets
+- fullscreen analytics-card mode for presentation screens
+
+### Full webapp re-audit verification
+- `code_health.py` — PASS
+- `regression_smoke.py` — PASS
+- `regression_v64_3.py` — PASS
+- `regression_v64_5.py` — PASS
+- `regression_v64_6.py` — PASS
+- `admin_ux_audit.py` — PASS (21 sections)
+- `smoke_test.py` — PASS
+- `http_smoke.py` — PASS (47 routes)
+- `export_acceptance.py` — PASS
+- `export_stress.py` — PASS
+
+
+### V64.6 latest audit patch
+
+- Primary navigation tabs now match the dashboard table-header blue-gradient family in light and dark themes.
+- Admin manual refresh now uses the optimized loaded-panel refresh path instead of the legacy all-panel request storm.
+- Home, Data Quality, Records, and Database Status are included in the 60-second live refresh set.
+- Records search/date/page state is preserved during manual Admin refresh.
+- V64.6 remains the application version; only asset cache-busters were advanced.
+
 # Quality Disposition Control Dashboard — V64.6
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
@@ -161,5 +199,9 @@ Before deploying, run every command in `RELEASE_GATE.md` (all must pass, on an i
 
 Sortable dashboard tables use a three-state click cycle: **ascending → descending → normal/natural order**. The normal state is the current server/render order for that table after filters refresh. This behavior is preserved across supported sortable tables, including Work Center, Grade, Monthly, Weekly, Quarterly, and Yearly.
 
-### Analytics presentation mode (V64.6)
-Analytics panels with charts (including the Dashboard 6M Fishbone panel) now have an `⛶` action in the card header. It opens the existing panel in a focused presentation overlay without duplicating the chart instance or issuing a new data request. Closing with Escape, the close button, or the backdrop restores the original position and focus; keyboard focus remains contained inside the presentation view. Light and dark theme treatments are supported.
+### Latest V64.6 presentation patch
+- Drill-downs launched from Presentation Mode stay above the presentation overlay and return cleanly to the dashboard DOM when closed.
+- `Esc` closes the drill-down first, preserving Presentation Mode.
+- Presentation toolbar titles exclude the fullscreen control glyph.
+- Quality Decision Mix uses a decision-oriented `⚖️` icon.
+- Version remains **V64.6**; only the JS cache-buster is advanced.

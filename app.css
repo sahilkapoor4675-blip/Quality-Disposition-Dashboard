@@ -1620,6 +1620,41 @@ html[data-theme="dark"] .tab-load-error{background:#3B1218;border-color:#7F1D1D;
 html[data-theme="dark"] .tab-retry-btn{background:#1F2937;color:#FCA5A5;border-color:#F87171;}
 html[data-theme="dark"] .load-error-inline,html[data-theme="dark"] .load-error-row td{color:#FCA5A5;}
 
+/* V64.6 main navigation finish: align primary tab buttons with the dashboard table-header blue gradients.
+   Scoped to the primary .tabs only; QCR contribution tabs remain intentionally separate. */
+.tabs > .tab-btn{
+  background:linear-gradient(180deg,#4aa4d8 0%,#2b789f 100%) !important;
+  color:#fff !important;
+  border-color:#2b78a0 !important;
+  box-shadow:0 3px 8px rgba(24,75,105,.16),0 6px 16px rgba(35,136,201,.10),inset 0 1px 0 rgba(255,255,255,.22) !important;
+}
+.tabs > .tab-btn:hover{
+  background:linear-gradient(180deg,#3e9bd2 0%,#246f98 100%) !important;
+  border-color:#1f668f !important;
+  box-shadow:0 5px 10px rgba(24,75,105,.18),0 12px 24px rgba(35,136,201,.14),inset 0 1px 0 rgba(255,255,255,.24) !important;
+}
+.tabs > .tab-btn.active{
+  background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%) !important;
+  color:#fff !important;
+  border-color:#2b78a8 !important;
+  box-shadow:0 6px 16px rgba(31,102,144,.24),0 0 0 1px rgba(255,255,255,.08) inset !important;
+}
+html[data-theme="dark"] .tabs > .tab-btn{
+  background:linear-gradient(180deg,#2f93cf 0%,#194e6e 100%) !important;
+  color:#F0F7FF !important;
+  border-color:#1c5878 !important;
+  box-shadow:0 4px 12px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.12) !important;
+}
+html[data-theme="dark"] .tabs > .tab-btn:hover{
+  background:linear-gradient(180deg,#3b9fda 0%,#205d80 100%) !important;
+  border-color:#2b78a8 !important;
+}
+html[data-theme="dark"] .tabs > .tab-btn.active{
+  background:linear-gradient(180deg,#2f93cf 0%,#194e6e 100%) !important;
+  color:#fff !important;
+  border-color:#65b7ec !important;
+  box-shadow:0 7px 18px rgba(35,136,201,.28),0 0 0 1px rgba(255,255,255,.08) inset !important;
+}
 
 /* ================================================================
    ANALYTICS PRESENTATION MODE
@@ -1669,3 +1704,4 @@ html[data-theme="dark"] .analytics-expand-btn:hover{background:#18263d;border-co
 
 html[data-theme="dark"] .analytics-presentation-panel>h3{background:linear-gradient(135deg,#142541 0%,#173a63 62%,#194b78 100%) !important;color:#F2F7FF !important;border-color:#2A5A86 !important;border-bottom-color:#2A5A86 !important;box-shadow:0 2px 8px rgba(0,0,0,.22),0 5px 14px rgba(17,141,255,.09),inset 0 1px 0 rgba(255,255,255,.08);}
 html[data-theme="dark"] .analytics-presentation-panel>h3::before{background:linear-gradient(180deg,#8fd0ff 0%,#4DA3FF 52%,#2483ce 100%);box-shadow:0 0 8px rgba(77,163,255,.28);}
+
