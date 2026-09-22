@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.5
+# Quality Disposition Control Dashboard — V64.6
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -6,6 +6,22 @@ frontend CDN or build step.
 
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
+
+## What changed in V64.6 (sorting + targeted chart/QCR/card-heading refinement)
+- **Three-state table sorting:** click a dashboard table header once for ascending order, twice for descending order, and a third time to restore the natural/server order. Sort state is preserved through filter refreshes until the third click resets it.
+- **Accessible sort state:** sortable headers expose `aria-sort` as `ascending`, `descending`, or `none`.
+- **Targeted chart precision:** only the Dashboard **Decision Mix donut chart** shows Qty (MT) and % values to exactly 3 decimal places. Pareto, Work Center, Grade, Intensity and Period Trend charts retain their prior display precision.
+- **QCR 6M Fishbone → RCA header:** the RCA table header uses the same blue-gradient palette as dashboard table headers in both light and dark themes.
+- **Dashboard card-heading polish:** only card headings in Dashboard, Work Center & Grade, Defect List and Period Trend use a subtle navy/blue gradient, very soft depth shadow and thin blue accent line. Existing heading text is unchanged. QCR/Admin headings are intentionally not restyled by this rule.
+- **No version bump:** this follow-up remains **V64.6**; runtime version metadata is unchanged. `index.html` only advances the CSS cache-buster so the new card-heading styling is loaded after deployment.
+
+### V64.6 re-audit checkpoints
+- Same table header, three clicks = ascending → descending → natural order.
+- Sorted header has `aria-sort="ascending"` or `"descending"`; reset returns the sortable headers to `aria-sort="none"`.
+- Decision Mix donut Qty/% values show 3 fractional digits; all other chart precision remains at the existing V64.5 contract.
+- QCR 6M Fishbone → RCA header uses the same blue gradient as dashboard tables in light and dark mode.
+- Dashboard, Work Center & Grade, Defect List and Period Trend card headings keep their original text and receive the scoped gradient/accent/shadow treatment in both themes.
+- QCR, Admin and drill-down headings are not affected by the new dashboard-card heading rule.
 
 ## What changed in V64.5 (Admin correctness, performance, freshness + security hardening)
 - **Data freshness fixed:** Admin service health and Overview now measure freshness from the latest `disposition.insp_lot_date` (“Data Through”), never from dashboard activity/heartbeat timestamps. Activity remains monitoring-only metadata.
@@ -24,7 +40,8 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - **Security-status duplicate request removed:** the Admin Security panel now renders its session list from the same API response instead of requesting `/api/admin/security_status` twice.
 - **Admin refresh behavior clarified:** the main refresh button now refreshes only sections already opened/loaded, avoiding a full-console request burst. New sections load automatically when viewed.
 - **Audit/recheck tooling added:** `regression_v64_5.py` verifies mutation revisions, inactive-session rejection, user-session revocation, backup-list caching and bundled-data invariants without modifying the repository seed database.
-- **Version bumped:** `VERSION.txt` and runtime `APP_VERSION` now report `V64.5`.
+- `regression_v64_6.py` verifies the three-state table sort cycle, sortable-header ARIA state, donut-only 3-decimal chart formatting, dashboard card-heading scope/theme treatment, RCA header palette and V64.6 metadata.
+- **Version bumped:** `VERSION.txt` and runtime `APP_VERSION` now report `V64.6`.
 
 ### Re-audit checkpoints
 For the next audit/review, check these exact invariants:
@@ -36,7 +53,7 @@ For the next audit/review, check these exact invariants:
 6. Disabled users → existing `qdash_admin`/`qdash_user` sessions no longer authorize access.
 7. Backup/user/security GET APIs → non-Super-Admin roles receive HTTP 403.
 
-### Verification performed for V64.5
+### Verification performed for V64.6
 - `python3 -m py_compile server.py`
 - `node --check` on all inline scripts in `admin.html` and `index.html`
 - `python3 regression_test.py`

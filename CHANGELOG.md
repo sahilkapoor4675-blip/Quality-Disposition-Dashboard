@@ -1,3 +1,27 @@
+# V64.6 — Dashboard card-heading polish follow-up
+
+## Follow-up changes
+- **Dashboard card headings:** applied the approved subtle navy/blue gradient treatment to card headings only in Dashboard, Work Center & Grade, Defect List, and Period Trend. The existing heading text/content is unchanged. A thin blue accent line, restrained shadow, and theme-aware gradients were added without changing the surrounding card layout.
+- **Light + dark theme coverage:** the heading treatment has dedicated light/dark variants so text contrast, border, accent line and depth remain readable in both themes.
+- **6M Fishbone → RCA table header:** explicitly locked to the same blue-gradient header palette used by dashboard tables in both themes, including matching border/text treatment.
+- **Chart precision remains scoped:** only the Dashboard Decision Mix donut chart shows Qty (MT) and % values to exactly 3 decimal places. No other chart precision was changed.
+
+## No version bump
+- This is a visual follow-up on **V64.6**. `VERSION.txt` and runtime version metadata remain on V64.6; only the static CSS cache-buster is advanced so deployed browsers load the new styling.
+
+## Re-audit checkpoints
+1. Dashboard card headings keep the exact existing text and receive the subtle light-theme blue gradient + thin accent line + soft shadow.
+2. Switch to dark theme and confirm the same heading treatment remains readable without changing card layout.
+3. Work Center & Grade, Defect List and Period Trend use the same heading treatment; other QCR/Admin headings remain unaffected.
+4. QCR → 6M Fishbone → RCA table header matches the dashboard table blue gradient in light and dark themes.
+5. Decision Mix donut alone uses 3 decimal places for Qty/%; Pareto, Work Center, Grade, Intensity, Monthly and Period Trend charts keep their prior precision.
+
+## Verification
+- `python3 regression_v64_6.py`
+- V64.5 release-gate checks + HTML/JS syntax + Admin UX + HTTP + export acceptance/stress should be re-run before deployment.
+
+---
+
 # V64.5 — Admin audit fixes: freshness, performance, concurrency and security
 
 ## Fixed
