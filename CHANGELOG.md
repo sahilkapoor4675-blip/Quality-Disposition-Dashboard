@@ -32,6 +32,32 @@ Release focus: full-application bug audit (server, dashboard, admin, exports, im
 - **`sfx.js` could fail to load** when browser storage is blocked (private browsing, locked-down profiles), silencing all UI sound feedback; `localStorage` calls are now wrapped in `try/catch`.
 - Deleting a saved view no longer throws if browser storage is blocked.
 
+### Fixed: Defect Intensity Breakdown chart had no hover/drill-down
+The "Defect Intensity Breakdown — Coils & Quantity (MT)" chart (Dashboard
+tab) was the only chart never wired for click-to-drill-down: its bars had
+no `data-drill-category`/`data-drill-kind`, `wireChartDrilldown()` was never
+called for it, and the click handler's `kind` switch had no `'intensity'`
+branch at all — clicking a bar did nothing, and the server had no matching
+drill-down filter to call even if it had. Its bars already used `data-tip`
+so the hover tooltip worked; the missing piece was the click path. Fixed:
+- `server.py`: new `intensity_category` drill-down metric in `_drilldown_where` — filters by `defect_intensity`, with `"WITHOUT INTENSITY"` mapped to a blank/NULL column value (matching how the chart's own totals are bucketed) rather than a literal string match.
+- `app.js`: the chart's bars now carry `data-drill-category`/`data-drill-kind="intensity"`; `wireChartDrilldown('intensityChart','intensity')` is called; the click handler gained an `'intensity'` branch.
+- `regression_v64_3.py`: new check asserting the drill-down count for `LIGHT` and `WITHOUT INTENSITY` matches the chart's own row counts.
+
+### UI: styled custom tooltips (replacing the browser's native `<title>`)
+Every chart shape (donut slices, bar/grouped-bar bars, Pareto bars and its
+cumulative-% dots, line-chart dots) and every truncated axis/category label
+carried a plain SVG `<title>` before this, which shows the OS's own unstyled
+tooltip box after a browser-controlled delay. These are now a single shared
+floating `<div class="chart-tooltip">`, styled to match the app's own card
+design (background, border, shadow, theme-aware), positioned from the
+pointer with `pointerover`/`pointermove`/`pointerout` delegated on
+`document` — so a chart redraw (resize, filter change, tab switch) never
+needs to re-wire a listener. Content moved from an SVG `<title>` child to a
+plain-text `data-tip` attribute on the shape itself; `data-drill-category` /
+`data-drill-kind` (the click-to-drill-down attributes) are untouched, so
+hovering and clicking the same shape both still work as before.
+
 ### UI: subtle chart depth + refreshed fishbone diagram
 - Donut, bar (horizontal/grouped), and Pareto charts now use a soft top-to-bottom gradient fill plus a low-opacity drop shadow instead of flat color chips — a restrained "lifted" look instead of flat paint, without a full 3D/bevel treatment (which distorts how donut/bar proportions read — a well-known data-viz readability problem).
 - The 6M Fishbone diagram gets the same gradient/shadow treatment on its branch pills and defect head box, plus a faint fish-silhouette watermark behind the spine — purely decorative, sits behind the live data, adapts to light/dark theme, never affects layout or text.

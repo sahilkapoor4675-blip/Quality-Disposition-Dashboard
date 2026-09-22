@@ -36,9 +36,9 @@
   .updated-block{text-align:right;min-width:150px;}
   .updated-label{font-size:13px;text-transform:uppercase;letter-spacing:1px;font-weight:800;opacity:.68;margin-bottom:3px;}
   .updated-time{font-size:14px;font-weight:600;letter-spacing:.2px;white-space:nowrap;}
-  .live-status{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);font-size:13px;font-weight:800;letter-spacing:.7px;white-space:nowrap;box-shadow:0 0 0 3px rgba(34,197,94,.07);}
-  .live-users{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #CFE8DB;border-radius:999px;background:#F2FBF6;color:#1B7F58;font-size:13px;font-weight:800;letter-spacing:.55px;white-space:nowrap;box-shadow:0 0 0 3px rgba(22,163,74,.06);}
-  .live-users .live-users-dot{width:6px;height:6px;border-radius:50%;background:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.12),0 0 8px rgba(22,163,74,.45);}
+  .live-status{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);font-size:13px;font-weight:800;letter-spacing:.7px;white-space:nowrap;}
+  .live-users{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border:1px solid #CFE8DB;border-radius:999px;background:#F2FBF6;color:#1B7F58;font-size:13px;font-weight:800;letter-spacing:.55px;white-space:nowrap;}
+  .live-users .live-users-dot{width:6px;height:6px;border-radius:50%;background:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,.12);}
   @media(max-width:600px){.live-users{font-size:12px;padding:7px 8px;}}
   .live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.16),0 0 10px rgba(34,197,94,.65);animation:livePulse 1.8s ease-in-out infinite;}
   @keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.86)}}
@@ -123,15 +123,11 @@
   .kpi-card .trend{font-size:14px;font-weight:700;white-space:nowrap;text-align:right;
     padding:2px 8px;border-radius:5px;}
   /* Exact colors extracted from the workbook's real conditional-formatting
-     rules (x14 extLst on the Quality Dashboard sheet). Background is a soft
-     same-hue gradient (100->200 tint) rather than flat, echoing the
-     top-to-bottom depth used on the KPI accent bar/table headers/charts —
-     a shade-deepening gradient instead of an opacity fade, since fading a
-     pastel chip toward transparent would wash it out against the card. */
-  .kpi-card .trend.good{color:#15803D;background:linear-gradient(180deg,#DCFCE7,#BBF7D0);}
-  .kpi-card .trend.bad{color:#B91C1C;background:linear-gradient(180deg,#FEE2E2,#FECACA);}
-  .kpi-card .trend.equal{color:#475569;background:linear-gradient(180deg,#F3F4F6,#E2E8F0);}
-  .kpi-card .trend.info{color:#0369A1;background:linear-gradient(180deg,#E0F2FE,#BAE6FD);}
+     rules (x14 extLst on the Quality Dashboard sheet). */
+  .kpi-card .trend.good{color:#15803D;background:#DCFCE7;}
+  .kpi-card .trend.bad{color:#B91C1C;background:#FEE2E2;}
+  .kpi-card .trend.equal{color:#475569;background:#F3F4F6;}
+  .kpi-card .trend.info{color:#0369A1;background:#E0F2FE;}
 
   .period-banner{background:#eef4ff;border:1px solid #cfe0fb;border-radius:8px;padding:8px 14px;
                   font-size:14px;color:var(--navy);margin-bottom:16px;}
@@ -167,15 +163,6 @@
 
   .chart-scroll{overflow:visible;padding:16px;}
   .chart-svg{display:block;width:100%;height:auto;overflow:visible;} /* overflow:visible: rotated first x-axis label used to be clipped at the left edge */
-  /* Hover feedback for bars/donut slices: every drillable shape carries
-     data-drill-category, so a single rule covers bars and pie/donut slices.
-     Only opacity + a light scale change — the SVG "lift" drop-shadow is set
-     via the presentation attribute filter="url(#chartLift-...)" per chart,
-     and a CSS `filter` here would silently replace (not add to) that, so
-     hover intentionally leaves `filter` alone. */
-  .chart-svg [data-drill-category]{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:center;}
-  .chart-svg [data-drill-category]:hover{opacity:.85;transform:scale(1.02);}
-  @media (prefers-reduced-motion:reduce){.chart-svg [data-drill-category]{transition:none!important}.chart-svg [data-drill-category]:hover{transform:none!important}}
   .legend{display:flex;gap:16px;font-size:14px;color:var(--text);margin:0 0 12px;flex-wrap:wrap;padding:0 16px;font-weight:600;align-items:center;}
   .legend-item{display:flex;align-items:center;gap:6px;}
 
@@ -184,7 +171,7 @@
   .legend-dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
   .no-data{color:var(--muted);font-size:14.5px;padding:16px;}
   .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:38px 20px;color:var(--muted);text-align:center;}
-  .empty-state-icon{width:52px;height:52px;color:var(--chart-leader,#94a3b8);opacity:.75;filter:drop-shadow(0 0 14px rgba(148,163,184,.35));}
+  .empty-state-icon{width:52px;height:52px;color:var(--chart-leader,#94a3b8);opacity:.75;}
   .empty-state-title{font:700 15px Manrope,sans-serif;color:var(--chart-label,#334155);}
   .empty-state-sub{font:600 13px Manrope,sans-serif;color:var(--muted);max-width:280px;}
   .subhead{font-size:14px;color:var(--muted);padding:0 16px;margin:-6px 0 10px 0;}
@@ -229,13 +216,13 @@
   .filter-empty{padding:10px 8px;color:#94a3b8;font-size:15.5px;}
   .kpi-grid{gap:12px;}
   .kpi-card{padding:13px 14px 12px;border-radius:11px;min-height:145px;box-shadow:0 2px 8px rgba(15,42,74,.055);}
-  .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#cbd5e1,rgba(203,213,225,.8));border-radius:11px 0 0 11px;}
-  .kpi-card.status-good::before{background:linear-gradient(180deg,#16a34a,rgba(22,163,74,.8))}.kpi-card.status-bad::before{background:linear-gradient(180deg,#dc2626,rgba(220,38,38,.8))}.kpi-card.status-amber::before{background:linear-gradient(180deg,#d97706,rgba(217,119,6,.8))}.kpi-card.status-neutral::before{background:linear-gradient(180deg,#118dff,rgba(17,141,255,.8))}
+  .kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#cbd5e1;border-radius:11px 0 0 11px;}
+  .kpi-card.status-good::before{background:#16a34a}.kpi-card.status-bad::before{background:#dc2626}.kpi-card.status-amber::before{background:#d97706}.kpi-card.status-neutral::before{background:#118dff}
   .kpi-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
   .kpi-card .label{font-size:14px;letter-spacing:.35px;margin:0;text-transform:uppercase;font-weight:800;}
   .kpi-card .kpi-icon{font-size:18px;width:28px;height:28px;border-radius:8px;background:#f1f6fb;display:inline-flex;align-items:center;justify-content:center;}
   .kpi-status{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.35px;padding:3px 6px;border-radius:999px;}
-  .kpi-status.good{background:linear-gradient(180deg,#dcfce7,#bbf7d0);color:#15803d}.kpi-status.bad{background:linear-gradient(180deg,#fee2e2,#fecaca);color:#b91c1c}.kpi-status.amber{background:linear-gradient(180deg,#fef3c7,#fde68a);color:#b45309}.kpi-status.neutral{background:linear-gradient(180deg,#e0f2fe,#bae6fd);color:#0369a1}
+  .kpi-status.good{background:#dcfce7;color:#15803d}.kpi-status.bad{background:#fee2e2;color:#b91c1c}.kpi-status.amber{background:#fef3c7;color:#b45309}.kpi-status.neutral{background:#e0f2fe;color:#0369a1}
   .kpi-card .value{font-family:'Space Grotesk',sans-serif;font-size:31px;font-weight:700;letter-spacing:-.5px;margin-top:9px;line-height:1.1;}
   .kpi-bottom{display:grid;grid-template-columns:minmax(0,1fr);align-items:end;gap:8px;margin-top:7px;} /* sparkline is display:none, so no reserved 76px column (it left a dead gap on the right of every KPI card) */
   .kpi-meta{min-width:0}.kpi-target{font-size:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.kpi-trendline{display:flex;align-items:center;gap:7px;margin-top:4px;}
@@ -310,16 +297,12 @@ html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);borde
 
 /* ---- Toast notifications: top-right, stacked, auto-dismissing. ---- */
 .toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;pointer-events:none;}
-.toast{position:relative;overflow:hidden;pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid transparent;border-radius:10px;padding:12px 12px;box-shadow:0 10px 28px rgba(15,42,74,.16);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--slate);border-radius:10px;padding:12px 12px;box-shadow:0 10px 28px rgba(15,42,74,.16);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);}
 .toast.show{opacity:1;transform:translateX(0) scale(1);}
 .toast.hide{opacity:0;transform:translateX(12px) scale(.97);}
-/* The left accent bar is a gradient strip (::before), the same top-to-bottom
-   depth treatment as the KPI card corner accent, instead of a flat
-   border-left-color (a plain CSS border can't carry a gradient). */
-.toast::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:10px 0 0 10px;background:linear-gradient(180deg,var(--slate),rgba(100,116,139,.8));}
-.toast-success::before{background:linear-gradient(180deg,var(--green),rgba(27,154,99,.8));}
-.toast-error::before{background:linear-gradient(180deg,var(--red),rgba(217,74,74,.8));}
-.toast-info::before{background:linear-gradient(180deg,var(--accent),rgba(35,136,201,.8));}
+.toast-success{border-left-color:var(--green);}
+.toast-error{border-left-color:var(--red);}
+.toast-info{border-left-color:var(--accent);}
 .toast-icon{font-size:17px;line-height:1;margin-top:1px;}
 .toast-body{flex:1;min-width:0;}
 .toast-title{font:800 13.5px Manrope,sans-serif;color:var(--heading);}
@@ -349,16 +332,16 @@ html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);borde
 .tabs{gap:7px;}
 .tab-btn{background:#fff;border-color:#DCE6EF;color:var(--muted);box-shadow:0 2px 6px rgba(30,65,95,.035);}
 .tab-btn.active{background:#183A58;border-color:#183A58;box-shadow:0 5px 14px rgba(24,58,88,.16);}
-th{background:linear-gradient(180deg,#2B78A8,rgba(43,120,168,.82));border-color:#2B78A8;}
+th{background:#2B78A8;border-color:#2B78A8;}
 .sortable-th{cursor:pointer;user-select:none;position:relative;padding-right:20px!important;}
-.sortable-th:hover{background:linear-gradient(180deg,#256a94,rgba(37,106,148,.82))!important;}
+.sortable-th:hover{background:#256a94!important;}
 .sortable-th::after{content:"↕";position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;opacity:.55;}
 .sortable-th.sort-asc::after{content:"↑";opacity:1;}
 .sortable-th.sort-desc::after{content:"↓";opacity:1;}
 .sortable-th:focus-visible{outline:2px solid #fff;outline-offset:-2px;}
 tbody tr:nth-child(even){background:#F7FAFC;}
 tbody tr:hover{background:#EEF7FC;}
-tfoot td,tr.grand-total-row td{background:linear-gradient(180deg,#2B78A8,rgba(43,120,168,.82));border-color:#2B78A8;}
+tfoot td,tr.grand-total-row td{background:#2B78A8;border-color:#2B78A8;}
 .chart-scroll{background:#fff;}
 .legend{color:#53697D;}
 .footer-note{color:#7A8B9B;}
@@ -750,10 +733,10 @@ html[data-theme="dark"] .drill-resize-handle:hover::after{border-color:var(--acc
 .qcr-kpi-value.bad{color:#b91c1c;}
 .qcr-kpi-value.neutral{color:var(--heading);}
 .qcr-kpi .qcr-status{display:inline-block;margin-top:6px;border-radius:999px;padding:4px 8px;font:800 12.5px Manrope,sans-serif;}
-.qcr-status.good{background:linear-gradient(180deg,#dcfce7,#bbf7d0);color:#15803d;}
-.qcr-status.amber{background:linear-gradient(180deg,#fef3c7,#fde68a);color:#a16207;}
-.qcr-status.bad{background:linear-gradient(180deg,#fee2e2,#fecaca);color:#b91c1c;}
-.qcr-status.neutral{background:linear-gradient(180deg,#e0f2fe,#bae6fd);color:#0369a1;}
+.qcr-status.good{background:#dcfce7;color:#15803d;}
+.qcr-status.amber{background:#fef3c7;color:#a16207;}
+.qcr-status.bad{background:#fee2e2;color:#b91c1c;}
+.qcr-status.neutral{background:#e0f2fe;color:#0369a1;}
 .qcr-kpi-value.value-change-up{animation:qcrValueUp .65s ease-out;}
 .qcr-kpi-value.value-change-down{animation:qcrValueDown .65s ease-out;}
 @keyframes qcrValueUp{0%{transform:scale(1);opacity:.72}45%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
@@ -793,7 +776,7 @@ html[data-theme="dark"] .drill-resize-handle:hover::after{border-color:var(--acc
 html[data-theme="dark"] .qcr-rca-cause-filter{background:#141B2C;border-color:#2A3B54;color:var(--text);}
 .qcr-rca-table-wrap{overflow-x:auto;border:1px solid #E2E8F0;border-radius:12px;}
 .qcr-rca-table{width:100%;border-collapse:collapse;font:600 12.5px Manrope,sans-serif;min-width:760px;}
-.qcr-rca-table thead th{background:linear-gradient(180deg,#16324F,rgba(22,50,79,.82));color:#fff;font:800 11.5px Manrope,sans-serif;text-transform:uppercase;letter-spacing:.3px;padding:9px 10px;text-align:center;white-space:nowrap;}
+.qcr-rca-table thead th{background:#16324F;color:#fff;font:800 11.5px Manrope,sans-serif;text-transform:uppercase;letter-spacing:.3px;padding:9px 10px;text-align:center;white-space:nowrap;}
 .qcr-rca-table tbody td{padding:9px 10px;border-top:1px solid #EEF2F7;color:#324156;vertical-align:middle;text-align:center;line-height:1.4;}
 .qcr-rca-table tbody tr:nth-child(even){background:#F8FAFC;}
 .qcr-rca-chip{display:inline-flex;align-items:center;gap:5px;color:#fff;font:800 11.5px Manrope,sans-serif;padding:3px 9px;border-radius:999px;white-space:nowrap;}
@@ -853,7 +836,7 @@ html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B
 
 /* ---- What Changed? comparison + why-changed ---- */
 .qcr-compare{width:100%;border-collapse:collapse;table-layout:fixed;}
-.qcr-compare th{background:linear-gradient(180deg,#f3f7fa,rgba(243,247,250,.82));color:#38536a;font:800 13.5px Manrope,sans-serif;text-transform:uppercase;padding:9px;border:1px solid #dfe7ee;}
+.qcr-compare th{background:#f3f7fa;color:#38536a;font:800 13.5px Manrope,sans-serif;text-transform:uppercase;padding:9px;border:1px solid #dfe7ee;}
 .qcr-compare td{padding:9px;border:1px solid #e5edf3;font:700 14px Manrope,sans-serif;color:#334e63;}
 .qcr-compare td:not(:first-child){text-align:center;}
 .qcr-delta{font-weight:800;}
@@ -1012,20 +995,6 @@ html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B
   .qcr-why-grid{grid-template-columns:1fr;}
 }
 
-/* Shared hover-lift for secondary action buttons (export/reset/investigate/
-   drill-down controls). Tab buttons already lift on hover (translateY(-2px)
-   + shadow) — this brings the same, slightly smaller, feedback to the other
-   clickable buttons that previously only changed background/border on
-   hover, so every button in the app now confirms a hover the same way. */
-.export-btn,.reset-all,.qcr-investigate-btn,.qcr-mini-investigate,
-.drill-head button,.drill-export{transition:transform .16s ease,box-shadow .16s ease,background .16s ease,border-color .16s ease;}
-.export-btn:hover,.reset-all:hover,.qcr-investigate-btn:hover,.qcr-mini-investigate:hover,
-.drill-head button:hover,.drill-export:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(15,42,74,.10);}
-@media (prefers-reduced-motion:reduce){
-  .export-btn,.reset-all,.qcr-investigate-btn,.qcr-mini-investigate,.drill-head button,.drill-export{transition:none!important;}
-  .export-btn:hover,.reset-all:hover,.qcr-investigate-btn:hover,.qcr-mini-investigate:hover,.drill-head button:hover,.drill-export:hover{transform:none!important;}
-}
-
 /* ================================================================
    DARK MODE
    Toggled via `data-theme="dark"` on <html> (see app.js dmToggle logic).
@@ -1159,7 +1128,7 @@ html[data-theme="dark"] .drill-breadcrumb-crumb:hover{background:#1B2740;color:v
 html[data-theme="dark"] .drill-breadcrumb-crumb.current{color:#E8EDF6;}
 html[data-theme="dark"] .drill-breadcrumb-sep{color:#3A4C68;}
 html[data-theme="dark"] .empty-state-title{color:#C7D2E3;}
-html[data-theme="dark"] .empty-state-icon{color:#7E90A8;filter:drop-shadow(0 0 14px rgba(126,144,168,.3));}
+html[data-theme="dark"] .empty-state-icon{color:#7E90A8;}
 html[data-theme="dark"] .section-header,
 html[data-theme="dark"] .panel h3,
 html[data-theme="dark"] .drill-head,
@@ -1215,13 +1184,6 @@ html[data-theme="dark"] th,
 html[data-theme="dark"] td{border-color:#2A3B54;}
 html[data-theme="dark"] thead th{background:#101827;color:#E8EDF6;}
 html[data-theme="dark"] .sortable-th:hover{background:#1B2740!important;}
-/* Grand Total row / tfoot had no dark override at all, so it kept showing
-   the light theme's flat blue while the header above it correctly went
-   dark — header and footer are meant to match (they use the identical
-   background in light theme; see the un-themed rule this mirrors), so
-   this brings the footer back in line with the header in dark mode too. */
-html[data-theme="dark"] tfoot td,
-html[data-theme="dark"] tr.grand-total-row td{background:#101827;color:#E8EDF6;border-color:#2A3B54;}
 html[data-theme="dark"] tbody tr:nth-child(even){background:#101827;}
 /* Same invisible-text bug as above: tbody tr:hover had no dark override,
    so hovering a row fell back to the light theme's #EEF7FC background
@@ -1406,7 +1368,7 @@ html[data-theme="dark"] .executive-brand{border-left-color:#2A3B54;}
 html[data-theme="dark"] .updated-block{border-right-color:#2A3B54;}
 /* "NOW ACTIVE" pill only had light-theme colours (a bright white pill on the dark header). */
 html[data-theme="dark"] .live-users{background:#0F2A21;border-color:#1F4A3A;color:#6EE7B7;}
-html[data-theme="dark"] .live-users .live-users-dot{background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.16),0 0 8px rgba(52,211,153,.4);}
+html[data-theme="dark"] .live-users .live-users-dot{background:#34D399;box-shadow:0 0 0 3px rgba(52,211,153,.16);}
 .header-actions{display:flex;align-items:center;gap:10px;}
 /* live pills + palette button share one height so the right cluster reads as a single toolbar */
 header .live-status,header .live-users,header .cmdk-open-btn{box-sizing:border-box;height:36px;padding-top:0;padding-bottom:0;}

@@ -848,9 +848,9 @@ async function loadKpis(signal){
   makeHGroupedBarChart(document.getElementById("intensityChart"), data.intensity_table, "intensity", [
     {key:"coils", label:"Coils", color:"#118DFF", fmt: v => v.toFixed(0)},
     {key:"qty", label:"Qty (MT)", color:"#7C3AED", fmt: v => v.toFixed(1)},
-  ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Defect Intensity"});
+  ], {xLabel: "Coils  /  Qty (MT)", yLabel: "Defect Intensity", drillKind: 'intensity'});
 
-  wireChartDrilldown('decisionPie','decision'); wireChartDrilldown('decisionBarChart','decision'); wireChartDrilldown('pareto5Chart','defect');
+  wireChartDrilldown('decisionPie','decision'); wireChartDrilldown('decisionBarChart','decision'); wireChartDrilldown('pareto5Chart','defect'); wireChartDrilldown('intensityChart','intensity');
   await monthlyPromise;
 }
 
@@ -949,6 +949,62 @@ function chartRemember(container, redraw){
   container._qdRedraw = redraw;
   container._qdCw = chartAvailWidth(container);
   if(_chartResizeObserver && !container._qdObserved){ container._qdObserved = true; _chartResizeObserver.observe(container); }
+}
+
+// ---------------------------------------------------------------------
+// CUSTOM CHART TOOLTIP
+// Every hoverable chart shape carries a plain-text data-tip attribute
+// instead of an SVG <title> child, so the tooltip can be styled like the
+// rest of the app (card background, border, shadow) instead of showing the
+// browser's unstyled native box. One floating element is reused for every
+// chart; event delegation on document means it keeps working after a chart
+// redraws (resize, filter change, tab switch) with no per-chart rewiring.
+let _chartTooltipEl = null;
+function chartTooltipEl(){
+  if(!_chartTooltipEl){
+    _chartTooltipEl = document.createElement('div');
+    _chartTooltipEl.className = 'chart-tooltip';
+    _chartTooltipEl.setAttribute('role', 'tooltip');
+    document.body.appendChild(_chartTooltipEl);
+  }
+  return _chartTooltipEl;
+}
+function positionChartTooltip(x, y){
+  const el = chartTooltipEl(), pad = 14;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const rect = el.getBoundingClientRect();
+  let left = x + pad, top = y + pad;
+  if(left + rect.width > vw - 8) left = x - rect.width - pad;   // flip left of cursor near the right edge
+  if(top + rect.height > vh - 8) top = y - rect.height - pad;   // flip above the cursor near the bottom edge
+  el.style.left = Math.max(8, left) + 'px';
+  el.style.top = Math.max(8, top) + 'px';
+}
+function initChartTooltips(){
+  if(initChartTooltips._wired) return;
+  initChartTooltips._wired = true;
+  document.addEventListener('pointerover', e => {
+    const t = e.target.closest('[data-tip]');
+    if(!t || t.contains(e.relatedTarget)) return;
+    const el = chartTooltipEl();
+    el.textContent = t.getAttribute('data-tip');
+    el.classList.add('show');
+    positionChartTooltip(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointermove', e => {
+    if(!chartTooltipEl().classList.contains('show')) return;
+    if(!e.target.closest('[data-tip]')) return;
+    positionChartTooltip(e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerout', e => {
+    const t = e.target.closest('[data-tip]');
+    if(!t || t.contains(e.relatedTarget)) return; // moving within the same shape shouldn't hide it
+    chartTooltipEl().classList.remove('show');
+  });
+  // A tap on mobile fires pointerover with no matching pointerout until the
+  // next tap elsewhere; hide on the next touch outside any tipped shape.
+  document.addEventListener('touchstart', e => {
+    if(!e.target.closest('[data-tip]')) chartTooltipEl().classList.remove('show');
+  }, {passive:true});
 }
 
 function truncateLabel(s, n){
@@ -1056,7 +1112,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
     const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5"><title>${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
+    slices += `<path data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5" data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)"></path>`;
   });
 
   // Center label: grand total
@@ -1103,7 +1159,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
       const valText = opts.valFmt ? opts.valFmt(s.val) : s.val.toFixed(2);
       out += `<polyline points="${edgeX},${edgeY} ${elbowX},${targetY} ${labelX-side*4},${targetY}" fill="none" stroke="var(--chart-leader)" stroke-width="1.2"/>`;
       out += `<circle cx="${edgeX}" cy="${edgeY}" r="3" fill="${s.color}"/>`;
-      out += `<text x="${labelX}" y="${targetY-6}" font-size="21" font-weight="700" text-anchor="${anchor}" fill="var(--chart-strong)">${escQcr(s.d[labelKey])}<title>${escQcr(s.d[labelKey])}</title></text>`;
+      out += `<text x="${labelX}" y="${targetY-6}" font-size="21" font-weight="700" text-anchor="${anchor}" fill="var(--chart-strong)" data-tip="${escQcr(s.d[labelKey])}">${escQcr(s.d[labelKey])}</text>`;
       out += `<text x="${labelX}" y="${targetY+11}" font-size="19" font-weight="700" text-anchor="${anchor}" fill="${s.color}">${valText} (${(s.frac*100).toFixed(1)}%)</text>`;
     });
     return out;
@@ -1157,9 +1213,9 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const y = padT + i * rowH + rowH*0.2;
     const barH = rowH * 0.6;
     const barColor = opts.color || CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(barColor, _hbarTag)}" filter="${svgLift(_hbarTag)}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
+    bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(barColor, _hbarTag)}" filter="${svgLift(_hbarTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}"></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="var(--chart-strong)">${opts.fmt ? opts.fmt(val) : val}</text>`;
-    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}<title>${escQcr(d[labelKey])}</title></text>`;
+    labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="var(--chart-label)" data-tip="${escQcr(d[labelKey])}">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
   });
   // Each category gets the same color as its bar so the legend is a true
   // key for the colorful Work Center / Grade chart (not a generic metric legend).
@@ -1213,7 +1269,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const maxV = maxes[si];
       const barW = Math.max(0, (val / maxV) * plotW);
       const y = groupY + si * (barH + 5);
-      bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(s.color, _hgTag)}" filter="${svgLift(_hgTag)}" rx="3"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
+      bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(s.color, _hgTag)}" filter="${svgLift(_hgTag)}" rx="3" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
       bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="12.5" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
@@ -1267,10 +1323,10 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const barH = Math.max(0, (val / maxV) * (h - padT - padB));
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
-      bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${svgFill(s.color, _vgTag)}" filter="${svgLift(_vgTag)}" rx="2"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
+      bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${svgFill(s.color, _vgTag)}" filter="${svgLift(_vgTag)}" rx="2" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
       bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
-    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey], truncLen))}<title>${escQcr(d[labelKey])}</title></text>`;
+    labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})" data-tip="${escQcr(d[labelKey])}">${escQcr(truncateLabel(d[labelKey], truncLen))}</text>`;
   });
 
   const vgDefs = svgDepthDefs(seriesDefs.map(s => s.color), _vgTag);
@@ -1312,7 +1368,7 @@ function makeLineChart(container, items, labelKey, series, opts={}){
       const y = h - padB - (v / maxV) * (h - padT - padB);
       points += `${x},${y} `;
       const r = s.dashed ? 3 : 4;
-      dots += `<circle cx="${x}" cy="${y}" r="${r}" fill="${s.color}" stroke="var(--chart-halo)" stroke-width="1.5"${s.dashed?' opacity=".8"':''}><title>${escQcr(s.label)} — ${escQcr(items[i][labelKey])}: ${s.fmt ? s.fmt(v) : v}</title></circle>`;
+      dots += `<circle cx="${x}" cy="${y}" r="${r}" fill="${s.color}" stroke="var(--chart-halo)" stroke-width="1.5"${s.dashed?' opacity=".8"':''} data-tip="${escQcr(s.label)} — ${escQcr(items[i][labelKey])}: ${s.fmt ? s.fmt(v) : v}"></circle>`;
       // Show the actual value in bold near the point (skip some when crowded).
       // Dashed "compare to previous period" series get a smaller, lighter
       // label placed BELOW the point instead of above — keeps it clearly
@@ -1366,14 +1422,14 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const val=Number(d[barKey])||0, barH=(val/maxBar)*plotH;
     const x=padL+i*gap+(gap-barW)/2, y=h-padB-barH;
     const barColor = opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${svgFill(barColor, _comboTag)}" filter="${svgLift(_comboTag)}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}</title></rect>`;
+    bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${svgFill(barColor, _comboTag)}" filter="${svgLift(_comboTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}"></rect>`;
     bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${opts.barFmt?opts.barFmt(val):val}</text>`;
     const lineVal=Math.max(0,Math.min(maxLine,Number(d[lineKey])||0));
     const lineY=h-padB-(lineVal/maxLine)*plotH, px=x+barW/2;
     points += `${px},${lineY} `;
-    dots += `<circle cx="${px}" cy="${lineY}" r="4" fill="#DC2626" stroke="var(--chart-halo)" stroke-width="1.5"><title>Cumulative: ${opts.lineFmt?opts.lineFmt(lineVal):lineVal}</title></circle>`;
+    dots += `<circle cx="${px}" cy="${lineY}" r="4" fill="#DC2626" stroke="var(--chart-halo)" stroke-width="1.5" data-tip="Cumulative: ${opts.lineFmt?opts.lineFmt(lineVal):lineVal}"></circle>`;
     dots += `<text x="${px}" y="${Math.max(lineY-10,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="#DC2626">${opts.lineFmt?opts.lineFmt(lineVal):lineVal}</text>`;
-    labels += `<text x="${px}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-35 ${px} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey],16))}<title>${escQcr(d[labelKey])}</title></text>`;
+    labels += `<text x="${px}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-35 ${px} ${h-padB+20})" data-tip="${escQcr(d[labelKey])}">${escQcr(truncateLabel(d[labelKey],16))}</text>`;
   });
   const legend=`<div class="legend-item"><span class="legend-dot" style="background:${legendDotBg(CHART_COLORS[0])}"></span>${opts.barLegend||"Qty (MT)"}</div><div class="legend-item"><span class="legend-dot" style="background:${legendDotBg('#DC2626')}"></span>${opts.lineLegend||"Cumulative %"}</div>`;
   const comboBarColors = items.map((d,i) => opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length]);
@@ -1401,6 +1457,7 @@ function wireChartDrilldown(containerId, kind){
     else if(kind==='work_center')openDrilldown('quality_investigation',`Work Center: ${cat} — Underlying Records`,{work_center:cat});
     else if(kind==='grade')openDrilldown('quality_investigation',`Grade: ${cat} — Underlying Records`,{grade:cat});
     else if(kind==='month')openDrilldown('month_category',`Month: ${cat} — Underlying Records`,{drill_value:cat});
+    else if(kind==='intensity')openDrilldown('intensity_category',`Defect Intensity: ${cat} — Underlying Records`,{drill_value:cat});
   });
 }
 
@@ -2358,6 +2415,7 @@ async function init(){
   initSortableTables();
   wireCompareMode();
   initCommandPalette();
+  initChartTooltips();
   // No tab in the URL (a fresh visit, not a shared link)? Fall back to
   // whichever tab this person picked as their default landing tab (Command
   // Palette → "Set … as my Default Landing Tab"), before finally falling

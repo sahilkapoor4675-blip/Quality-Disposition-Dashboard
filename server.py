@@ -3731,6 +3731,15 @@ def _drilldown_where(filters, metric, drill_value=None):
         clauses.append("main_defect = ? AND main_defect <> '' AND main_defect <> 'NO DEFECT'"); extra.append(drill_value or '')
     elif metric == 'month_category':
         clauses.append("month = ?"); extra.append(drill_value or '')
+    elif metric == 'intensity_category':
+        # Mirrors the "WITHOUT INTENSITY" bucketing used to build intensity_table:
+        # blank/NULL defect_intensity groups under that label rather than under
+        # the literal (empty) value, for any level of defect (including none).
+        level = str(drill_value or '').strip()
+        if level.upper() == 'WITHOUT INTENSITY':
+            clauses.append("TRIM(COALESCE(defect_intensity,'')) = ''")
+        else:
+            clauses.append("defect_intensity = ?"); extra.append(level)
     elif metric == 'heat_detail':
         clauses.append("UPPER(TRIM(COALESCE(heat_no,''))) = UPPER(TRIM(?))"); extra.append(drill_value or '')
     elif metric == 'quality_investigation':

@@ -102,6 +102,15 @@ with tempfile.TemporaryDirectory(prefix='qdash_v643_') as td:
     if post('/api/admin/kpi_target', {'label': 'Defect Rate', 'target': 'nan', 'warning': 0.03, 'critical': 0.05, 'direction': 'lower'}) != 400: errors.append('NaN KPI target accepted')
     if post('/api/admin/kpi_target', {'label': 'Defect Rate', 'target': 0.05, 'warning': 0.03, 'critical': 0.01, 'direction': 'lower'}) != 400: errors.append('reversed KPI bands accepted')
 
+    # 9) the Defect Intensity Breakdown chart's drill-down (added after the
+    #    scroll/fishbone fixes above) must return the same counts the chart
+    #    itself displays, including the "WITHOUT INTENSITY" bucket which maps
+    #    to a blank/NULL column value rather than a literal string match.
+    for level, expect in (('LIGHT', 1), ('WITHOUT INTENSITY', 3)):
+        s, d = get('/api/drilldown?metric=intensity_category&drill_value=' + level.replace(' ', '%20'))
+        if s != 200 or d.get('count') != expect:
+            errors.append(f'intensity_category drilldown for {level!r}: status={s} count={d.get("count")} expected={expect}')
+
     # 7) scroll-to-top on tab switch: no server-side check possible headlessly here,
     #    so assert the browser-facing contract in app.js instead - every activateTab
     #    call resets scroll unless it explicitly opts out for back/forward navigation.
@@ -130,4 +139,4 @@ with tempfile.TemporaryDirectory(prefix='qdash_v643_') as td:
 
     if errors:
         print('V64.3 REGRESSION FAIL'); [print(' -', e) for e in errors]; sys.exit(1)
-    print('V64.3 REGRESSION PASS — single response, safe filters, drill totals, per-FY quarters, data-quality wiring, KPI validation, scroll-reset, fishbone-backup restore.')
+    print('V64.3 REGRESSION PASS — single response, safe filters, drill totals, per-FY quarters, data-quality wiring, KPI validation, scroll-reset, fishbone-backup restore, intensity drilldown.')
