@@ -1,8 +1,48 @@
 # Quality Disposition Dashboard — Changelog
 
-Consolidated release/fix history for the current V64.3 release. Everything lives in
+Consolidated release/fix history for the current V64.4 release. Everything lives in
 this one file now instead of separate `CHANGELOG_V*.md` files, to keep the repo
 from accumulating a changelog file per release.
+
+## V64.4
+
+Release focus: admin console load time, and re-fixing/strengthening the chart and
+theme polish that V64.3 claimed but had regressed or was too subtle to notice.
+
+### Files changed
+`server.py`, `app.js`, `app.css`, `admin.html`, `VERSION.txt`, `CHANGELOG.md`, `README.md`.
+
+### Fixed
+- **Admin console was slow to load / stayed slow.** `/api/admin/data_integrity`
+  ran 8 separate `COUNT(*)` queries, each a full scan of `disposition` — and the
+  admin UI called it *twice* on every login (`perf()`'s sibling `command()`
+  re-fetched `db_performance` for no reason, and both fetched `data_integrity`)
+  plus again every 60 seconds via the command-center poller for as long as the
+  admin tab stayed open. It's now a single query using conditional aggregation,
+  the duplicate `db_performance` fetch in `command()` is gone (it reuses
+  `perf()`'s result), and the endpoint has a short response cache so rapid
+  repeat calls don't re-scan the table. Also added a missing
+  `activity_log(event_type, created_at)` index — the home/security/error-monitor
+  panels all filter on `event_type` and had no index backing it.
+- **Bar/donut hover feedback was missing**, despite V64.3's changelog listing it
+  as done. No CSS for it ever existed — `.chart-bar`/`.chart-slice` classes are
+  now applied to every bar and pie/donut shape, with a hover scale-up + opacity
+  change (drilldown-on-click is unchanged).
+- **Donut center "TOTAL" glow was present but too faint to read as a glow**
+  (opacity capped at .16). Raised to .32 so the effect V64.3 described is
+  actually visible.
+- **KPI card corner accent was a flat status color**, not the gradient V64.3's
+  changelog claimed. Each status (good/bad/amber/neutral) now uses a real
+  top-to-bottom gradient.
+- **Legend dots' gradient was a same-color opacity fade** (full color to 80%
+  opacity), invisible at an 11px dot. Replaced with a visible light-to-dark
+  sweep of the same chart color.
+- **Dark mode table header and totals row didn't match.** `thead th` had a
+  dark-mode override to flat navy, but `tfoot`/`tr.grand-total-row` had no dark
+  override at all and kept the light theme's flat blue — so the header went
+  dark while the totals row stayed blue, right next to each other in the same
+  table. Both now share one blue gradient (also applied to the light-theme
+  header/totals, matching the gradient treatment used elsewhere in the UI).
 
 ## V64.3
 

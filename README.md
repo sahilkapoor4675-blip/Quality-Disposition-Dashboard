@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.3
+# Quality Disposition Control Dashboard — V64.4
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -6,6 +6,13 @@ frontend CDN or build step.
 
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
+
+## What changed in V64.4 (admin performance + chart/theme polish)
+- Admin console `data_integrity` check (missing heat/batch/grade/decision/date, duplicate batches, invalid weights) is now one query instead of 8 full-table scans, no longer fetched twice on every login, and is briefly cached — the main cause of a slow-loading admin console.
+- Added an `activity_log(event_type, created_at)` index used by the admin home/security/error-monitor panels.
+- Bar/donut charts now show real hover feedback (scale-up + opacity) — previously drilldown-click worked but hovering gave no visual response.
+- Donut center "TOTAL" glow, the KPI card corner accent, and chart legend dots are strengthened to actually be visible (they existed in code but were too subtle — a flat color instead of a gradient, or an opacity fade too small to see at their size).
+- Dark mode table headers and Grand Total rows now use the same blue gradient (previously the header went flat dark navy while the totals row stayed the light theme's blue, so the two didn't match).
 
 ## What changed in V64.3 (bug-fix release)
 - One HTTP response per request (a mis-chained `if` made every normal route also send a stray `404`).
