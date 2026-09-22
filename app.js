@@ -869,6 +869,29 @@ const DECISION_COLORS = {
   "PRIME": "#16A34A", "FOR NEXT PROCESS": "#118DFF", "SALVAGE": "#7C3AED",
   "HOLD FOR DECISION": "#D97706", "REJECT": "#0891B2", "RE-WORK": "#64748B", "DIVERT": "#6366F1",
 };
+// ---------------------------------------------------------------------
+// SUBTLE CHART DEPTH (gradient fill + soft lift shadow)
+// A flat color chip reads as generic; a full 3D/bevel treatment reads as
+// gimmicky and, on a donut/pie, actively distorts how big each slice looks
+// (a well-known data-viz readability problem). So depth here stays
+// restrained: one soft top-to-bottom gradient per color plus a single
+// shared low-opacity drop shadow, reused by every chart and the fishbone
+// diagram so the whole app reads as one consistent, gently "lifted" look.
+// Every chart on a page gets its OWN gradient/filter ids (suffixed with a random
+// per-render tag). Two charts sharing a plain id like "grad-118DFF" would silently
+// go transparent the moment either chart re-renders (e.g. on container resize) and
+// removes/replaces its <defs> — SVG/HTML ids are looked up document-wide, so a
+// url(#grad-118DFF) reference can resolve to WHATEVER chart on the page defined
+// that id last, including one that no longer exists.
+let _svgDepthSeq = 0;
+function svgDepthTag(){ return 'd' + (++_svgDepthSeq) + Math.random().toString(36).slice(2,6); }
+function svgDepthDefs(colors, tag){
+  const uniq=[...new Set((colors||[]).filter(Boolean))];
+  const grads=uniq.map(c=>`<linearGradient id="grad-${tag}-${c.replace('#','')}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${c}" stop-opacity="1"/><stop offset="100%" stop-color="${c}" stop-opacity=".8"/></linearGradient>`).join('');
+  return `<defs>${grads}<filter id="chartLift-${tag}" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#0b1c33" flood-opacity=".22"/></filter></defs>`;
+}
+function svgFill(color, tag){ return color ? `url(#grad-${tag}-${color.replace('#','')})` : color; }
+function svgLift(tag){ return `url(#chartLift-${tag})`; }
 const DESIGN_W = 720; // fallback only (chart container hidden / not measurable yet)
 
 // ---------------------------------------------------------------------
@@ -1019,6 +1042,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     const color = DECISION_COLORS[d[labelKey]] || CHART_COLORS[i % CHART_COLORS.length];
     return {d, val, frac, a0, a1, midAngle, color};
   });
+  const _pieTag = svgDepthTag();
 
   // Pass 2: draw donut segments (outer arc out, inner arc back)
   let slices = "";
@@ -1028,7 +1052,7 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
     const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${s.color}" stroke="var(--chart-halo)" stroke-width="2.5"><title>${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
+    slices += `<path data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5"><title>${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${(s.frac*100).toFixed(1)}%)</title></path>`;
   });
 
   // Center label: grand total
@@ -1085,8 +1109,9 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${escQcr(d[labelKey])}</div>`;
   });
 
+  const pieDefs = svgDepthDefs(slicesData.map(s => s.color), _pieTag);
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div>
-    <svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${slices}${centerLabel}${sliceLabels}</svg>`;
+    <svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${pieDefs}${slices}${centerLabel}${sliceLabels}</svg>`;
 }
 
 /* Vertical bar chart — used for SHORT category names only (Months etc). */
@@ -1107,6 +1132,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
   const h = rows.length * rowH + padT + padB;
   const maxV = niceMax(Math.max(...rows.map(d => Number(d[valueKey]) || 0), 0));
   const plotW = w - padL - padR;
+  const _hbarTag = svgDepthTag();
   let bars = "", labels = "", gridlines = "";
 
   for(let g=0; g<=4; g++){
@@ -1121,7 +1147,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const y = padT + i * rowH + rowH*0.2;
     const barH = rowH * 0.6;
     const barColor = opts.color || CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${barColor}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
+    bars += `<rect${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(barColor, _hbarTag)}" filter="${svgLift(_hbarTag)}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}</title></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="var(--chart-strong)">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}<title>${escQcr(d[labelKey])}</title></text>`;
   });
@@ -1131,7 +1157,9 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const c = opts.color || CHART_COLORS[i % CHART_COLORS.length];
     return `<div class="legend-item"><span class="legend-dot" style="background:${c}"></span>${escQcr(d[labelKey])}</div>`;
   }).join("");
+  const hbarDefs = svgDepthDefs(rows.map((d,i) => opts.color || CHART_COLORS[i % CHART_COLORS.length]), _hbarTag);
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${hbarDefs}
     ${gridlines}
     ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleH(opts.xLabel, w, h, padL, padR) : ""}
@@ -1163,6 +1191,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
     gridlines += `<line x1="${gx}" y1="${padT}" x2="${gx}" y2="${h-padB}" stroke="var(--chart-grid)" stroke-width="1"/>`;
     gridlines += `<text x="${gx}" y="${h-padB+18}" font-size="10.5" text-anchor="middle" fill="var(--chart-muted)">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(0)}</text>`;
   }
+  const _hgTag = svgDepthTag();
   seriesDefs.forEach(s => {
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${escQcr(s.label)}</div>`;
   });
@@ -1174,13 +1203,15 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const maxV = maxes[si];
       const barW = Math.max(0, (val / maxV) * plotW);
       const y = groupY + si * (barH + 5);
-      bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${s.color}" rx="3"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
+      bars += `<rect x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(s.color, _hgTag)}" filter="${svgLift(_hgTag)}" rx="3"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="12.5" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
   });
 
+  const hgDefs = svgDepthDefs(seriesDefs.map(s => s.color), _hgTag);
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${hgDefs}
     ${gridlines}
     ${opts.yLabel ? yAxisTitleH(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleH(opts.xLabel, w, h, padL, padR) : ""}
@@ -1213,6 +1244,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
     gridlines += `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--chart-grid)" stroke-width="1"/>`;
     gridlines += `<text x="${padL-8}" y="${gy+4}" font-size="10.5" text-anchor="end" fill="var(--chart-muted)">${opts.axisFmt ? opts.axisFmt(gv) : gv.toFixed(0)}</text>`;
   }
+  const _vgTag = svgDepthTag();
   seriesDefs.forEach(s => {
     legend += `<div class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${escQcr(s.label)}</div>`;
   });
@@ -1225,13 +1257,15 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const barH = Math.max(0, (val / maxV) * (h - padT - padB));
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
-      bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${s.color}" rx="2"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
+      bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${svgFill(s.color, _vgTag)}" filter="${svgLift(_vgTag)}" rx="2"><title>${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}</title></rect>`;
       bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey], truncLen))}<title>${escQcr(d[labelKey])}</title></text>`;
   });
 
+  const vgDefs = svgDepthDefs(seriesDefs.map(s => s.color), _vgTag);
   container.innerHTML = `<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${vgDefs}
     ${gridlines}
     ${opts.yLabel ? yAxisTitle(opts.yLabel, h, padT, padB) : ""}
     ${opts.xLabel ? xAxisTitleV(opts.xLabel, w, h, padL, padR) : ""}
@@ -1309,6 +1343,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
   const maxLine = opts.lineMax !== undefined ? opts.lineMax : 1;
   const gap = plotW / items.length;
   const barW = Math.min(52, gap * 0.58);
+  const _comboTag = svgDepthTag();
   let bars="", labels="", points="", dots="", gridlines="";
   for(let g=0; g<=4; g++){
     const ratio=g/4, gy=padT+plotH*(1-ratio);
@@ -1321,7 +1356,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const val=Number(d[barKey])||0, barH=(val/maxBar)*plotH;
     const x=padL+i*gap+(gap-barW)/2, y=h-padB-barH;
     const barColor = opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${barColor}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}</title></rect>`;
+    bars += `<rect data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${svgFill(barColor, _comboTag)}" filter="${svgLift(_comboTag)}" rx="3"><title>${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}</title></rect>`;
     bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${opts.barFmt?opts.barFmt(val):val}</text>`;
     const lineVal=Math.max(0,Math.min(maxLine,Number(d[lineKey])||0));
     const lineY=h-padB-(lineVal/maxLine)*plotH, px=x+barW/2;
@@ -1331,7 +1366,9 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     labels += `<text x="${px}" y="${h-padB+20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-35 ${px} ${h-padB+20})">${escQcr(truncateLabel(d[labelKey],16))}<title>${escQcr(d[labelKey])}</title></text>`;
   });
   const legend=`<div class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS[0]}"></span>${opts.barLegend||"Qty (MT)"}</div><div class="legend-item"><span class="legend-dot" style="background:#DC2626"></span>${opts.lineLegend||"Cumulative %"}</div>`;
+  const comboBarColors = items.map((d,i) => opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length]);
   container.innerHTML=`<div class="legend" style="justify-content:center;">${legend}</div><svg class="chart-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${svgDepthDefs(comboBarColors, _comboTag)}
     ${gridlines}
     ${yAxisTitle(opts.barAxisLabel||"Qty (MT)",h,padT,padB)}
     <text x="${w-16}" y="${padT+plotH/2}" font-size="11.5" font-weight="700" fill="#DC2626" text-anchor="middle" transform="rotate(-90 ${w-16} ${padT+plotH/2})">${opts.lineAxisLabel||"Cumulative %"}</text>
@@ -1748,7 +1785,15 @@ function buildFishboneSvg(item, availUnits){
   const H=spineY+TIP_DY_BOT+BOX_H+26;
   const W=spineX2+headW+30;
 
-  let svg='';
+  const _fbTag = svgDepthTag();
+  const branchDefs = svgDepthDefs(branchData.map(b => b.color), _fbTag);
+  const fbHeadGrad = `<linearGradient id="fbHeadGrad-${_fbTag}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" style="stop-color:var(--fb-head);stop-opacity:1"/><stop offset="100%" style="stop-color:var(--fb-head);stop-opacity:.82"/></linearGradient>`;
+  // A simple, static fish silhouette (body + tail) scaled to the diagram's own box and
+  // held at very low opacity — a nod to the classic "fishbone" shape without competing
+  // with the live data drawn on top of it.
+  const wmCx = spineX1 + (spineX2 - spineX1) * 0.52, wmCy = spineY, wmRx = (spineX2 - spineX1) * 0.46, wmRy = Math.min(TIP_DY_TOP, TIP_DY_BOT) * 0.82;
+  const watermark = `<g fill="var(--fb-spine)" fill-opacity=".05"><ellipse cx="${wmCx}" cy="${wmCy}" rx="${wmRx}" ry="${wmRy}"/><polygon points="${spineX1+8},${wmCy} ${spineX1-70},${wmCy-wmRy*0.55} ${spineX1-70},${wmCy+wmRy*0.55}"/></g>`;
+  let svg=`<defs>${branchDefs.replace('<defs>','').replace('</defs>','')}${fbHeadGrad}</defs>${watermark}`;
   svg+=`<line x1="${spineX1}" y1="${spineY}" x2="${spineX2}" y2="${spineY}" stroke="var(--fb-spine)" stroke-width="3"/>`;
   svg+=`<polygon points="${spineX2},${spineY} ${spineX2-20},${spineY-13} ${spineX2-20},${spineY+13}" fill="var(--fb-spine)"/>`;
 
@@ -1756,7 +1801,7 @@ function buildFishboneSvg(item, availUnits){
   const headFit=fbFitBox(item.defect, headW, {pad:22, baseSize:16, minSize:9, maxLines:4, charW:0.66, lineH:1.2});
   const headH=Math.max(80, 30+headFit.lines.length*headFit.lineHeight+18);
   const headY=spineY-headH/2;
-  svg+=`<rect x="${spineX2}" y="${headY}" width="${headW}" height="${headH}" rx="12" fill="var(--fb-head)"/>`;
+  svg+=`<rect x="${spineX2}" y="${headY}" width="${headW}" height="${headH}" rx="12" fill="url(#fbHeadGrad-${_fbTag})" filter="${svgLift(_fbTag)}"/>`;
   const hMidOffset=(headFit.lines.length-1)*headFit.lineHeight/2;
   svg+=headFit.lines.map((ln,i)=>`<text x="${spineX2+headW/2}" y="${spineY - hMidOffset + i*headFit.lineHeight + 5}" font-size="${headFit.fontSize}" font-weight="800" fill="#fff" text-anchor="middle">${escQcr(ln)}</text>`).join('');
 
@@ -1784,7 +1829,7 @@ function buildFishboneSvg(item, availUnits){
       });
     });
     const boxW=176,boxX=tipX-boxW/2, boxY=b.side==='top'?tipY-BOX_H:tipY;
-    svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${BOX_H}" rx="10" fill="${b.color}"/>`;
+    svg+=`<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${BOX_H}" rx="10" fill="${svgFill(b.color, _fbTag)}" filter="${svgLift(_fbTag)}"/>`;
     svg+=`<text x="${tipX}" y="${boxY+BOX_H/2+6}" font-size="17" font-weight="800" fill="#fff" text-anchor="middle">${b.icon} ${b.label}</text>`;
   });
   const SHIFT_X=70; // nudge the whole diagram right within its frame, per feedback

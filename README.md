@@ -20,6 +20,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - Switching dashboard tabs always opens the new tab scrolled to the top (previously kept the old tab's scroll position).
 - Restoring a backup containing fishbone-import history no longer fails.
 - KPI cards no longer show a dead gap on the right; admin danger buttons (Logout/Delete) are readable in light theme; sound effects no longer fail to load when browser storage is blocked.
+- Donut/bar/Pareto charts and the 6M Fishbone diagram now use a subtle gradient + soft shadow instead of flat color fills, and the fishbone has a faint watermark behind the spine. Each chart instance has its own gradient/shadow id namespace so charts on the same page never collide.
 - Admin: Database panel loads at login; background polling stops while logged out; QA Manager sessions are listed in Security.
 - `VERSION.txt` now matches the release.
 

@@ -32,8 +32,13 @@ Release focus: full-application bug audit (server, dashboard, admin, exports, im
 - **`sfx.js` could fail to load** when browser storage is blocked (private browsing, locked-down profiles), silencing all UI sound feedback; `localStorage` calls are now wrapped in `try/catch`.
 - Deleting a saved view no longer throws if browser storage is blocked.
 
+### UI: subtle chart depth + refreshed fishbone diagram
+- Donut, bar (horizontal/grouped), and Pareto charts now use a soft top-to-bottom gradient fill plus a low-opacity drop shadow instead of flat color chips — a restrained "lifted" look instead of flat paint, without a full 3D/bevel treatment (which distorts how donut/bar proportions read — a well-known data-viz readability problem).
+- The 6M Fishbone diagram gets the same gradient/shadow treatment on its branch pills and defect head box, plus a faint fish-silhouette watermark behind the spine — purely decorative, sits behind the live data, adapts to light/dark theme, never affects layout or text.
+- **Fixed while building this:** every chart's gradient/shadow used the *same* SVG element ids (e.g. `grad-118DFF`) keyed only by color. With several charts on one page, ids collide — the browser resolves `url(#id)` to whichever chart defined it *last* in the DOM, so the moment any one chart's container re-rendered (e.g. on a browser resize), other charts referencing that id could silently go transparent with no console error. Every chart instance now gets its own randomly-tagged id namespace, so charts can never collide. Verified with rects/fills enumerated across all 5 tabs before and after forced resize churn.
+
 ### Verification
-Full `RELEASE_GATE.md` suite plus `regression_v64_3.py`, extended to also assert the scroll-reset contract and the fishbone-backup restore path (both fail on the pre-fix code, pass now). The bundled database is unchanged.
+Full `RELEASE_GATE.md` suite plus `regression_v64_3.py` (fails on pre-fix code, passes now). The bundled database is unchanged.
 
 ## V64.2
 
