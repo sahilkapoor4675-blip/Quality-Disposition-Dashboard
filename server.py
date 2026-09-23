@@ -408,16 +408,55 @@ def _prev_fy_label(fy):
 
 
 def _prev_quarter_label(q, fy):
-    qnum = int(q[1:])
+    qnum = int(str(q).strip().upper().lstrip("Q"))
+    if qnum not in (1, 2, 3, 4):
+        raise ValueError("quarter must be Q1-Q4")
     if qnum == 1:
         return "Q4", (_prev_fy_label(fy) if fy != "All" else "All")
     return f"Q{qnum-1}", fy
 
 
-def _compute_prev_filters_unchecked(filters):
-    """Return the filter dict representing the 'previous period', following
-    the same priority as the workbook (Week > Month > Quarter > Year).
-    Returns None if no single time filter is active (comparison undefined)."""
+def _resolve_quarter_fy(filters, conn=None):
+    """Resolve the financial year for a Quarter-only selection.
+
+    Quarter values are stored as Q1..Q4 and are intentionally not unique across
+    financial years. When the user selects Quarter=Q2 but leaves Financial Year=All,
+    use the latest available financial year in the same non-time-filtered population.
+    This makes Quarter period-over-period comparison deterministic: Q2 compares with
+    Q1 in that same FY, while Q1 rolls back to Q4 of the previous FY.
+    """
+    fy = str(filters.get("financial_year") or "All").strip()
+    if fy and fy.lower() != "all":
+        return fy
+    q = str(filters.get("quarter") or "All").strip().upper()
+    if not q or q == "ALL":
+        return "All"
+    try:
+        where_sql, params = build_where(filters, exclude={"quarter", "financial_year", "month", "week"})
+        extra = where_sql + (" AND " if where_sql else "WHERE ") + "quarter = ? AND TRIM(COALESCE(financial_year,'')) <> ''"
+        own_conn = conn is None
+        db = conn or get_conn()
+        try:
+            row = db.execute(
+                f"SELECT financial_year FROM disposition {extra} ORDER BY financial_year DESC LIMIT 1",
+                list(params) + [q],
+            ).fetchone()
+        finally:
+            if own_conn:
+                db.close()
+        return str(row[0]).strip() if row and row[0] else "All"
+    except Exception:
+        return "All"
+
+
+def _compute_prev_filters_unchecked(filters, conn=None):
+    """Return the filter dict representing the previous period.
+
+    Time-filter priority remains Week > Month > Quarter > Financial Year. A
+    Quarter filter no longer requires a separately selected Financial Year: when
+    FY is All, the latest FY containing that quarter is resolved from the active
+    non-time filters, then the comparison is made within that FY (or rolls Q1 back
+    to Q4 of the previous FY)."""
     if filters.get("week", "All") != "All":
         pf = dict(filters)
         pf["week"] = _prev_week_label(filters["week"])
@@ -429,10 +468,11 @@ def _compute_prev_filters_unchecked(filters):
         pf["week"] = "All"; pf["quarter"] = "All"; pf["financial_year"] = "All"
         return pf
     if filters.get("quarter", "All") != "All":
-        if filters.get("financial_year", "All") == "All":
+        fy = _resolve_quarter_fy(filters, conn=conn)
+        if fy == "All":
             return None
         pf = dict(filters)
-        prev_q, prev_fy = _prev_quarter_label(filters["quarter"], filters.get("financial_year", "All"))
+        prev_q, prev_fy = _prev_quarter_label(filters["quarter"], fy)
         pf["quarter"] = prev_q; pf["financial_year"] = prev_fy
         pf["month"] = "All"; pf["week"] = "All"
         return pf
@@ -444,22 +484,23 @@ def _compute_prev_filters_unchecked(filters):
     return None
 
 
-def compute_prev_filters(filters):
+def compute_prev_filters(filters, conn=None):
     """Safe wrapper: a malformed period label (hand-edited URL, stale saved view)
     means "no comparison available" instead of an HTTP 500."""
     try:
-        return _compute_prev_filters_unchecked(filters)
+        return _compute_prev_filters_unchecked(filters, conn=conn)
     except (ValueError, AttributeError, TypeError, KeyError):
         return None
 
 
-def current_period_label(filters):
+def current_period_label(filters, conn=None):
     if filters.get("week", "All") != "All":
         return _week_display_label(filters["week"])
     if filters.get("month", "All") != "All":
         return filters["month"]
     if filters.get("quarter", "All") != "All":
-        return f'{filters["quarter"]} ({filters.get("financial_year","All")})'
+        fy = _resolve_quarter_fy(filters, conn=conn)
+        return f'{filters["quarter"]} ({fy})' if fy != "All" else filters["quarter"]
     if filters.get("financial_year", "All") != "All":
         return filters["financial_year"]
     return "All Periods"

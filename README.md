@@ -1,3 +1,9 @@
+### Latest V64.6 period-comparison patch (2026-09-23)
+
+Quarter and Financial Year filters now use the same KPI period-over-period comparison behavior as Month/Week. Quarter-only selections are resolved against the latest available Financial Year in the active non-time-filtered population; Q2→Q1 stays within the FY, while Q1→Q4 crosses the Financial Year boundary correctly. Financial Year selections compare against the immediately previous FY. Explicit Quarter + Financial Year selections remain supported.
+
+Regression coverage: `python3 regression_period_comparison.py` uses an isolated temporary database and verifies quarter-only, quarter + FY, Q1→previous-FY Q4, and FY→previous-FY KPI comparisons.
+
 ### Latest V64.6 Export dialog interaction patch (2026-09-23)
 
 - **Export now opens as a centered modal dialog**, matching the Command Palette-style interaction instead of using an anchored dropdown. This prevents the export UI from colliding with the sticky filters/controls below the header.

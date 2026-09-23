@@ -1,3 +1,15 @@
+## V64.6 — Quarter + Financial Year period-over-period comparison (2026-09-23)
+
+### Fixed
+- **Quarter KPI comparison:** Quarter selections now participate in the same previous-period KPI comparison used by Month and Week. A Quarter-only selection no longer requires the separate Financial Year filter; the latest available FY containing that quarter is resolved from the active non-time-filtered population.
+- **FY-boundary handling:** Q1 correctly compares with Q4 of the immediately previous Financial Year; Q2/Q3/Q4 compare with Q1/Q2/Q3 respectively within the same FY.
+- **Financial Year KPI comparison:** Financial Year selections compare with the immediately previous Financial Year, using the same KPI change metadata and card rendering already used for Month/Week.
+- **Compatibility:** Explicit Quarter + Financial Year selections retain their existing behavior, and malformed/ambiguous values remain safely non-comparable instead of causing a server error.
+
+### Regression
+- Added `regression_period_comparison.py` with an isolated SQLite fixture covering Quarter-only, Quarter + FY, Q1→Q4 FY-boundary, and Financial Year→previous-FY comparisons.
+- Application version remains **V64.6**; this is a corrective logic patch, not a version bump.
+
 ## V64.6 — Export button converted to modal dialog (2026-09-23)
 
 ### Fixed
