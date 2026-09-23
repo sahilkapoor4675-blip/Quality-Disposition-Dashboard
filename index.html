@@ -357,25 +357,11 @@
         </div>
         <div class="header-actions">
           <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
-          <!-- Visible export entry point: previously exports (Excel/PDF/PPT/CSV) were only reachable
-               via Ctrl+E or the Command Palette (Ctrl+K), with no visible affordance in the header, so
-               first-time users had no way to discover the feature just by looking at the page.
-               Now that this button exists, the old Ctrl+E shortcut and Command Palette entries have
-               been removed — this dropdown is the one and only way to export. -->
-          <div class="export-menu-wrap" id="exportMenuWrap">
-            <button class="cmdk-open-btn export-menu-btn" id="exportMenuBtn" type="button" aria-haspopup="menu" aria-controls="exportMenu" aria-expanded="false" title="Export the current view as a report">
-              <span class="cmdk-ico" aria-hidden="true">⬇</span><span class="cmdk-text">Export</span>
-            </button>
-            <div class="export-menu" id="exportMenu" role="menu" aria-label="Export format" aria-labelledby="exportMenuBtn">
-              <button type="button" class="export-menu-item" role="menuitem" data-fmt="excel"><span aria-hidden="true">📊</span> Excel report</button>
-              <button type="button" class="export-menu-item" role="menuitem" data-fmt="pdf"><span aria-hidden="true">📄</span> PDF report</button>
-              <button type="button" class="export-menu-item" role="menuitem" data-fmt="pptx"><span aria-hidden="true">📑</span> PowerPoint report</button>
-              <button type="button" class="export-menu-item" role="menuitem" data-fmt="csv"><span aria-hidden="true">🗂️</span> Raw data (CSV)</button>
-            </div>
-          </div>
-          <!-- Everything else (Admin panel, dark mode, sound, compact rows, tab
-               navigation...) lives in the Command Palette — this one button (or Ctrl+K / ⌘K) opens it.
-               Exports are NOT here any more — they're only in the "⬇ Export" button to its left. -->
+          <!-- Export opens as a modal dialog, matching the Command Palette interaction pattern. -->
+          <button class="cmdk-open-btn export-menu-btn" id="exportMenuBtn" type="button" aria-haspopup="dialog" aria-controls="exportDialogModal" aria-expanded="false" title="Export the current view as a report">
+            <span class="cmdk-ico" aria-hidden="true">⬇</span><span class="cmdk-text">Export</span>
+          </button>
+          <!-- Everything else (Admin panel, dark mode, sound, compact rows, tab navigation...) lives in the Command Palette. -->
           <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — Admin, dark mode, sound, compact rows, tab navigation and more" aria-label="Open command palette"><span class="cmdk-ico" aria-hidden="true">⌘</span><span class="cmdk-text">Commands</span><kbd class="cmdk-kbd" id="cmdkKbd">Ctrl K</kbd></button>
         </div>
       </div>
@@ -434,12 +420,48 @@
     </div>
   </div>
 
-  <!-- Command palette: Ctrl+K / Cmd+K. Ties together navigation, export,
-       filters and preferences in one searchable list, and doubles as a
-       discoverable index of every keyboard shortcut/toggle in the app. -->
+  <!-- Export dialog: uses the same modal/backdrop interaction pattern as the Command Palette. -->
+  <div class="export-dialog-modal" id="exportDialogModal" aria-hidden="true">
+    <div class="export-dialog" role="dialog" aria-modal="true" aria-labelledby="exportDialogTitle" aria-describedby="exportDialogDesc">
+      <div class="export-dialog-head">
+        <div>
+          <div class="export-dialog-eyebrow">REPORT EXPORT</div>
+          <h3 id="exportDialogTitle">Export current view</h3>
+          <p id="exportDialogDesc">Choose a format. The current dashboard filters are applied automatically.</p>
+        </div>
+        <button type="button" class="export-dialog-close" id="exportDialogCloseBtn" aria-label="Close export dialog" title="Close">×</button>
+      </div>
+      <div class="export-dialog-options" id="exportDialogOptions" role="group" aria-label="Export format">
+        <button type="button" class="export-dialog-option" data-fmt="excel">
+          <span class="export-dialog-option-icon" aria-hidden="true">📊</span>
+          <span class="export-dialog-option-copy"><strong>Excel report</strong><small>Spreadsheet with the current dashboard data.</small></span>
+          <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
+        </button>
+        <button type="button" class="export-dialog-option" data-fmt="pdf">
+          <span class="export-dialog-option-icon" aria-hidden="true">📄</span>
+          <span class="export-dialog-option-copy"><strong>PDF report</strong><small>Print-ready report of the current view.</small></span>
+          <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
+        </button>
+        <button type="button" class="export-dialog-option" data-fmt="pptx">
+          <span class="export-dialog-option-icon" aria-hidden="true">📑</span>
+          <span class="export-dialog-option-copy"><strong>PowerPoint report</strong><small>Presentation-ready slides from the dashboard.</small></span>
+          <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
+        </button>
+        <button type="button" class="export-dialog-option" data-fmt="csv">
+          <span class="export-dialog-option-icon" aria-hidden="true">🗂️</span>
+          <span class="export-dialog-option-copy"><strong>Raw data (CSV)</strong><small>Flat data export for analysis or downstream tools.</small></span>
+          <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
+        </button>
+      </div>
+      <div class="export-dialog-foot"><span>Esc to close</span><span>Exports respect the active filters</span></div>
+    </div>
+  </div>
+
+  <!-- Command palette: Ctrl+K / Cmd+K. Ties together navigation, filters and preferences
+       in one searchable list, and doubles as a discoverable index of every keyboard shortcut/toggle. -->
   <div class="cmdk-modal" id="cmdkModal" aria-hidden="true">
     <div class="cmdk-dialog" role="dialog" aria-modal="true" aria-label="Command palette">
-      <input type="text" id="cmdkInput" class="cmdk-input" placeholder="Type a command… (dark mode, sound, compact, export, tab name…)" autocomplete="off">
+      <input type="text" id="cmdkInput" class="cmdk-input" placeholder="Type a command… (dark mode, sound, compact, tab name…)" autocomplete="off">
       <div class="cmdk-list" id="cmdkList"></div>
       <div class="cmdk-foot"><span>↑↓ navigate</span><span>↵ select</span><span>esc close</span></div>
     </div>

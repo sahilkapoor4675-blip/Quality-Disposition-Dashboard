@@ -173,7 +173,7 @@ function initCommandPalette(){
     const cmds=[];
     Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),run:()=>activateTab(key)}));
     // Exports (Excel / PDF / PPT / CSV) live only in the header's "⬇ Export" button now
-    // (see #exportMenuBtn / wireExportMenu()) — no longer duplicated here or on Ctrl+E.
+    // Exports open through the dedicated dialog (#exportDialogModal) instead of the Command Palette.
     // Compare mode is desktop-only (its button is hidden on narrow screens), so only offer it when the button is actually shown.
     if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({icon:'⊞',label:'Compare Periods (side-by-side)',run:()=>document.getElementById('compareModeBtn')?.click()});
     cmds.push({icon:'↺',label:'Reset All Filters',run:()=>document.getElementById('resetAllBtn')?.click()});
@@ -308,7 +308,7 @@ function fmtDonutQty3(v){ return Number(v||0).toLocaleString(undefined,{minimumF
 function fmtDonutPct3(v){ return (Number(v||0)*100).toFixed(3) + "%"; }
 
 // ---- Report exports (Excel / PDF / PPT / raw CSV) ----
-// Triggered only from the header's "⬇ Export" button/dropdown (wireExportMenu()).
+// Triggered from the header's "⬇ Export" button via the export dialog.
 // Progress is shown as a toast, since large reports can take a while.
 const EXPORT_LABELS={excel:'Excel report',pdf:'PDF report',pptx:'PowerPoint report',csv:'Raw data (CSV)'};
 const _exportBusy={};
@@ -839,62 +839,53 @@ function wireDrillDialogDragResize(){
 // so each pane is a fully live, independent copy of this same dashboard at
 // a different filter value — not a simplified summary that needs its own
 // rendering path to maintain.
-function wireExportMenu(){
-  const wrap=document.getElementById('exportMenuWrap'), btn=document.getElementById('exportMenuBtn'), menu=document.getElementById('exportMenu');
-  if(!wrap||!btn||!menu) return;
-  const header=wrap.closest('header.app-header');
-  const container=header?.nextElementSibling?.classList.contains('container') ? header.nextElementSibling : null;
-  const items=[...menu.querySelectorAll('.export-menu-item')];
-  const syncHeaderSpace=()=>{
-    if(!header) return;
-    if(menu.classList.contains('open')){
-      // The menu is absolutely positioned so it stays attached to the button.
-      // Reserve its measured height in the page's normal flow so it can never
-      // cover the sticky filters or the next section of the page.
-      const menuHeight=Math.ceil(menu.getBoundingClientRect().height);
-      container?.style.setProperty('--export-menu-space',`${menuHeight+8}px`);
-      header.classList.add('export-menu-open');
-    }else{
-      header.classList.remove('export-menu-open');
-      container?.style.removeProperty('--export-menu-space');
-    }
+function wireExportDialog(){
+  const btn=document.getElementById('exportMenuBtn');
+  const modal=document.getElementById('exportDialogModal');
+  const closeBtn=document.getElementById('exportDialogCloseBtn');
+  const options=[...document.querySelectorAll('.export-dialog-option')];
+  if(!btn||!modal||!closeBtn||!options.length) return;
+
+  let restoreFocusEl=null;
+  const setOpenState=(open)=>{
+    modal.classList.toggle('open',open);
+    modal.setAttribute('aria-hidden',open?'false':'true');
+    btn.setAttribute('aria-expanded',open?'true':'false');
   };
   const close=({restoreFocus=false}={})=>{
-    const wasOpen=menu.classList.contains('open');
-    menu.classList.remove('open');
-    btn.setAttribute('aria-expanded','false');
-    syncHeaderSpace();
-    if(restoreFocus && wasOpen){ try{ btn.focus({preventScroll:true}); }catch(e){ btn.focus(); } }
-  };
-  const toggle=()=>{
-    const open=menu.classList.toggle('open');
-    btn.setAttribute('aria-expanded', open?'true':'false');
-    if(open){
-      syncHeaderSpace();
-    }else{
-      close();
+    const wasOpen=modal.classList.contains('open');
+    setOpenState(false);
+    if(restoreFocus && wasOpen){
+      const target=restoreFocusEl||btn;
+      try{ target.focus({preventScroll:true}); }catch(e){ target.focus(); }
     }
+    restoreFocusEl=null;
   };
-  btn.addEventListener('click', e=>{ e.stopPropagation(); toggle(); });
-  btn.addEventListener('keydown', e=>{
-    if(!menu.classList.contains('open') || !items.length) return;
-    if(e.key==='ArrowDown'){ e.preventDefault(); items[0].focus(); }
-    else if(e.key==='ArrowUp'){ e.preventDefault(); items[items.length-1].focus(); }
+  const open=()=>{
+    restoreFocusEl=document.activeElement;
+    setOpenState(true);
+    requestAnimationFrame(()=>options[0]?.focus());
+  };
+  const runExport=(format)=>{
+    close();
+    exportDashboard(format);
+  };
+
+  btn.addEventListener('click',e=>{ e.stopPropagation(); modal.classList.contains('open') ? close({restoreFocus:true}) : open(); });
+  closeBtn.addEventListener('click',()=>close({restoreFocus:true}));
+  options.forEach(item=>item.addEventListener('click',()=>runExport(item.dataset.fmt)));
+  modal.addEventListener('click',e=>{ if(e.target===modal) close({restoreFocus:true}); });
+  modal.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ e.preventDefault(); close({restoreFocus:true}); return; }
+    if(e.key!=='Tab') return;
+    const focusables=[closeBtn,...options];
+    const first=focusables[0], last=focusables[focusables.length-1];
+    if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
   });
-  items.forEach((item,index)=>{
-    item.addEventListener('click', ()=>{ close(); exportDashboard(item.dataset.fmt); });
-    item.addEventListener('keydown', e=>{
-      if(e.key==='ArrowDown'){ e.preventDefault(); items[(index+1)%items.length].focus(); }
-      else if(e.key==='ArrowUp'){ e.preventDefault(); items[(index-1+items.length)%items.length].focus(); }
-      else if(e.key==='Home'){ e.preventDefault(); items[0].focus(); }
-      else if(e.key==='End'){ e.preventDefault(); items[items.length-1].focus(); }
-      else if(e.key==='Escape'){ e.preventDefault(); close({restoreFocus:true}); }
-    });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape' && modal.classList.contains('open')){ e.preventDefault(); close({restoreFocus:true}); }
   });
-  document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && menu.classList.contains('open')) close({restoreFocus:true}); });
-  // Guard against late font loading changing the measured menu height.
-  if(document.fonts?.ready) document.fonts.ready.then(syncHeaderSpace).catch(()=>{});
 }
 function wireCompareMode(){
   const btn=document.getElementById('compareModeBtn'), modal=document.getElementById('compareModal');
@@ -2748,7 +2739,7 @@ async function init(){
   initSortableTables();
   wireAnalyticsPresentation();
   wireCompareMode();
-  wireExportMenu();
+  wireExportDialog();
   initCommandPalette();
   initChartTooltips();
   // No tab in the URL (a fresh visit, not a shared link)? Fall back to

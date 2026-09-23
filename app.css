@@ -1537,26 +1537,6 @@ html[data-theme="dark"] .cmdk-kbd{background:#0F1626;border-color:#2A3B54;color:
   .header-right-stack .header-actions{gap:6px;}
 }
 
-/* Header "Export" button + dropdown — reuses the .cmdk-open-btn pill styling (shared class) for
-   the trigger, so it matches the Commands button's size/border/hover/dark-mode treatment for free;
-   only the dropdown panel itself is new. */
-.export-menu-wrap{position:relative;}
-/* The export menu used to float outside the header while the content below
-   started immediately underneath it. On a populated dashboard that meant
-   the menu physically covered the sticky filter panel (the screenshot bug:
-   the first export item sat on top of Month / Work Center). When the menu is
-   open, JS adds .export-menu-open to the header and reserves exactly the menu
-   height in normal document flow, so the page content moves down instead of
-   being covered. The menu remains visually anchored to the Export button. */
-header.app-header.export-menu-open{z-index:10001;}
-header.app-header.export-menu-open + .container{margin-top:var(--export-menu-space,0px);}
-.export-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:196px;max-width:88vw;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-menu,0 14px 34px rgba(20,45,70,.16));padding:6px;z-index:10002;display:none;}
-.export-menu.open{display:block;}
-.export-menu-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;background:transparent;color:var(--text);font:700 13px/1.2 'Manrope','DM Sans',sans-serif;padding:9px 10px;border-radius:8px;cursor:pointer;}
-.export-menu-item:hover,.export-menu-item:focus-visible{background:var(--bg);outline:none;}
-.export-menu-item span{font-size:14px;}
-@media(max-width:420px){.export-menu{right:-8px;}}
-
 /* ================================================================
    FILTERS PANEL — slightly shorter now that the toolbar row moved
    out to the header; trimmed further so it takes up less vertical
@@ -1596,7 +1576,7 @@ header.app-header.export-menu-open + .container{margin-top:var(--export-menu-spa
   html[data-theme="dark"]{--bg:#fff;--card:#fff;--text:#1c2b3a;--muted:#5b6c82;--border:#e3e8f0;--heading:#183A58;}
   body{background:#fff!important;}
   header,.tabs,.filters,.global-search-wrap,.toast-host,.drill-modal,
-  .sfx-toggle-btn,.theme-toggle-btn,.admin-link,.export-menu-wrap,
+  .sfx-toggle-btn,.theme-toggle-btn,.admin-link,
   .live-status,.filter-summary-bar,.export-btn,.reset-all,.kbd-hint,
   .sortable-th::after,.qcr-fishbone-chips,.qcr-problem-actions{display:none!important;}
   .container{max-width:none!important;padding:0!important;}
@@ -1781,3 +1761,37 @@ html[data-theme="dark"] .analytics-presentation-panel>h3::before{background:line
 html[data-theme="dark"] .digital-clock-block{border-color:#2A3B54;background:linear-gradient(180deg,#18243A 0%,#111827 100%);box-shadow:0 5px 16px rgba(0,0,0,.28);}
 html[data-theme="dark"] .digital-clock-date{color:#9AABC2;}
 html[data-theme="dark"] .digital-clock{color:#F4F8FF;}
+
+/* ================================================================
+   EXPORT DIALOG
+   Mirrors the Command Palette's modal/backdrop behavior so Export
+   does not create an anchored dropdown that can collide with sticky UI.
+   ================================================================ */
+.export-dialog-modal{position:fixed;inset:0;z-index:210000;background:rgba(15,35,55,.45);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:24px;}
+.export-dialog-modal.open{display:flex;}
+.export-dialog{width:min(620px,94vw);background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 30px 80px rgba(12,34,55,.35);overflow:hidden;}
+.export-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:22px 24px 16px;border-bottom:1px solid var(--border);}
+.export-dialog-eyebrow{margin-bottom:4px;font:800 10.5px/1.2 Manrope,sans-serif;letter-spacing:1.2px;color:var(--muted);}
+.export-dialog-head h3{margin:0;font:800 20px/1.25 Manrope,sans-serif;color:var(--heading);}
+.export-dialog-head p{margin:7px 0 0;font:600 13px/1.45 Manrope,sans-serif;color:var(--muted);}
+.export-dialog-close{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;flex:none;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--muted);font:700 22px/1 system-ui,sans-serif;cursor:pointer;}
+.export-dialog-close:hover{background:var(--card);color:var(--text);}
+.export-dialog-close:focus-visible,.export-dialog-option:focus-visible{outline:3px solid rgba(37,99,235,.35);outline-offset:2px;}
+.export-dialog-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:18px 24px 20px;}
+.export-dialog-option{display:grid;grid-template-columns:38px minmax(0,1fr) 18px;align-items:center;gap:11px;text-align:left;min-width:0;padding:14px;border:1px solid var(--border);border-radius:11px;background:var(--bg);color:var(--text);cursor:pointer;transition:transform .12s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease;}
+.export-dialog-option:hover{transform:translateY(-1px);background:var(--card);border-color:#AFC9DC;box-shadow:0 6px 18px rgba(20,45,70,.08);}
+.export-dialog-option-icon{width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--card);border:1px solid var(--border);font-size:18px;}
+.export-dialog-option-copy{min-width:0;display:flex;flex-direction:column;gap:4px;}
+.export-dialog-option-copy strong{font:800 13.5px/1.25 Manrope,sans-serif;color:var(--heading);}
+.export-dialog-option-copy small{font:600 11.5px/1.35 Manrope,sans-serif;color:var(--muted);}
+.export-dialog-option-arrow{color:var(--muted);font:800 16px/1 system-ui,sans-serif;text-align:right;}
+.export-dialog-foot{display:flex;justify-content:space-between;gap:12px;padding:10px 24px;border-top:1px solid var(--border);font:700 11px/1.25 Manrope,sans-serif;color:var(--muted);}
+html[data-theme="dark"] .export-dialog-option:hover{border-color:#4A6380;box-shadow:none;}
+html[data-theme="dark"] .export-dialog-close:hover{background:#1B2A40;}
+@media(max-width:700px){
+  .export-dialog-modal{padding:16px;}
+  .export-dialog{width:min(620px,96vw);}
+  .export-dialog-options{grid-template-columns:1fr;padding:14px 16px 16px;}
+  .export-dialog-head{padding:18px 18px 14px;}
+  .export-dialog-foot{padding:10px 18px;flex-wrap:wrap;}
+}

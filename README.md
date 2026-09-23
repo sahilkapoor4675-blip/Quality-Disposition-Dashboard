@@ -1,3 +1,11 @@
+### Latest V64.6 Export dialog interaction patch (2026-09-23)
+
+- **Export now opens as a centered modal dialog**, matching the Command Palette-style interaction instead of using an anchored dropdown. This prevents the export UI from colliding with the sticky filters/controls below the header.
+- The dialog presents **Excel report, PDF report, PowerPoint report, and Raw data (CSV)** as dedicated options; the existing export generation paths and active-filter behavior are preserved.
+- Added modal accessibility behavior: dialog semantics/labels, `Esc` to close, outside-backdrop close, keyboard focus containment, and focus restoration to the Export button after closing.
+- Light and dark themes share the same responsive dialog behavior; the dialog is constrained to the viewport on narrow screens.
+- No application-version bump; this remains **V64.6**. See `CHANGELOG.md` for the full entry.
+
 ### Latest V64.6 dark-mode fix + Ctrl+E hint + orphaned-CSS lint (2026-09-23)
 
 - Fixed the Quality Health "Why?" breakdown losing its red/green coloring in dark mode (a shared "nested card" CSS rule was silently overriding it).
@@ -7,21 +15,21 @@
 
 ### Latest V64.6 export duplication cleanup + Quality Health "Why?" fix (2026-09-23)
 
-- Removed the now-redundant export paths: the Command Palette's four export entries and the `Ctrl+E` shortcut, both left over from before the header's "⬇ Export" button existed. The header button/dropdown is now the only way to export.
+- Removed the now-redundant export paths: the Command Palette's four export entries and the `Ctrl+E` shortcut, both left over from before the header's "⬇ Export" button existed. The header Export button is now the single entry point and opens the export dialog.
 - Fixed the Quality Health "Why?" breakdown (Quality Control Room tab): reason rows like "‑18.6 pts Defect Rate" were rendering oversized and in the wrong color, with longer labels getting cut off mid-word. Cause was leftover CSS from an older, now-deleted standalone "Quality Health Score" card whose class names got reused for the current popup — removed the dead rules and gave the popup its own explicit styling, so rows now render small, bold, and correctly red/green, and wrap instead of truncating. Also fixed the popup being able to overflow past its narrow parent card on small screens.
 - No app-version bump; see `CHANGELOG.md` for the full entry.
 
 ### Latest V64.6 export button + compare tablet view + Live Now pulse patch (2026-09-23)
 
 - Checked `quality.db` before suggesting a `.gitignore` change: it's intentionally committed (a one-time bundled seed DB, copied to the real persistent DB path outside the repo on first run only) with an empty `users` table — left as-is, changing this would break first-run seeding.
-- Added a visible "⬇ Export" button in the header (Excel/PDF/PowerPoint/CSV dropdown) — previously exports were only reachable via Ctrl+E or the Command Palette, with no visible affordance.
+- Added a visible "⬇ Export" button in the header; it opens a modal dialog with Excel/PDF/PowerPoint/CSV options. Previously exports were only reachable via Ctrl+E or the Command Palette, with no visible affordance.
 - Compare Mode now stacks the two dashboards top/bottom on tablet widths (551–900px) instead of hiding outright; still hidden below 550px.
 - Admin "Live Now" briefly pulses when its value actually changes, so its faster 18s poll is visible at a glance.
 - No app-version bump; see `CHANGELOG.md` for the full entry.
 
 ### Latest V64.6 Live Now polling + Last Updated relative-time patch (2026-09-23)
 
-- Verified dark mode is handled correctly for both export paths: browser Print/"Print to PDF" already forces the light palette (unchanged, confirmed working), and the in-app Export → PDF/Excel/PPT feature is generated server-side with a fixed style, independent of the on-screen theme either way. No code change was needed here.
+- Verified dark mode is handled correctly for both print/export paths: browser Print/"Print to PDF" already forces the light palette, while the in-app Export → PDF/Excel/PPT generation is server-side with a fixed style independent of the on-screen theme.
 - Admin → Dashboard Activity → "Live Now" now polls every 18s on its own lightweight endpoint, instead of waiting on the shared 60s full-panel refresh.
 - Header "Last Updated" now shows relative time ("2 min ago") instead of a second date+time next to the digital clock, with the exact timestamp on hover, and now updates on every real data refresh instead of only once at page load.
 - No app-version bump; see `CHANGELOG.md` for the full entry.

@@ -1,20 +1,22 @@
-## V64.6 — Export dropdown collision fix + light/dark UI audit (2026-09-23)
+## V64.6 — Export button converted to modal dialog (2026-09-23)
 
 ### Fixed
-- **Header Export dropdown no longer covers the Dashboard Filters panel.** The menu was absolutely positioned outside the header's layout flow, so opening it placed the menu on top of the sticky filter controls. The header now reserves the measured open-menu height while the dropdown remains anchored to the Export button, keeping the following content in normal flow at desktop, tablet, and mobile widths.
-- **Export menu keyboard navigation hardened.** Added Arrow Up/Down plus Home/End navigation across export items, Escape-to-close with focus restored to the Export button, and an explicit `aria-labelledby` relationship for the menu.
-
-### Audited
-- Checked the affected layout in both light and dark themes at 1440, 1366, 900, 600, and 390px viewport widths. The open menu now has zero geometric overlap with the filter panel at all tested widths and does not introduce horizontal overflow.
-- Re-ran the repository release-gate regression/smoke checks after the UI fix.
+- **Export/controls overlap:** the header Export action no longer opens an anchored dropdown that can sit over the sticky filters area. Export now opens a centered modal dialog using the same backdrop/dialog interaction pattern as the Command Palette.
 
 ### Changed
-- Bumped `app.css` cache-buster (`?v=69.5 → ?v=69.6`) and `app.js` cache-buster (`?v=64.6.12 → ?v=64.6.13`).
+- The header **⬇ Export** button is now an explicit dialog trigger (`aria-haspopup="dialog"`) and opens `#exportDialogModal`.
+- The dialog provides four export choices: **Excel report**, **PDF report**, **PowerPoint report**, and **Raw data (CSV)**. These continue to call the existing `exportDashboard()` flow, so export generation and active-filter handling are unchanged.
+- Added keyboard/accessibility behavior: initial focus moves into the dialog, `Tab` focus is contained within the dialog controls, `Esc` closes it, clicking the backdrop closes it, and focus is restored to the Export trigger after closing.
+- The dialog is responsive and styled for both light and dark themes, with viewport-safe sizing on narrow screens.
 
 ### Unchanged
 - No application-version bump: this remains **V64.6**.
-- No API, database, export generation, or data-calculation logic was changed.
+- No export endpoint, report-generation, database, or filter/data logic was changed by this UI patch.
+- The Command Palette remains the home for navigation, preferences, and other commands; export choices are intentionally kept in the dedicated Export dialog.
 
+### Verification
+- Checked the Export dialog in light and dark themes at desktop and narrow/mobile widths.
+- Confirmed the dialog opens/closes cleanly, does not overlap the sticky filter controls, and restores focus to the Export button after dismissal.
 
 ## V64.6 — Follow-up: dark-mode color fix + Ctrl+E migration hint + orphaned-CSS lint (2026-09-23)
 
