@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=69.3">
+<link rel="stylesheet" href="/app.css?v=69.4">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -359,7 +359,9 @@
           <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
           <!-- Visible export entry point: previously exports (Excel/PDF/PPT/CSV) were only reachable
                via Ctrl+E or the Command Palette (Ctrl+K), with no visible affordance in the header, so
-               first-time users had no way to discover the feature just by looking at the page. -->
+               first-time users had no way to discover the feature just by looking at the page.
+               Now that this button exists, the old Ctrl+E shortcut and Command Palette entries have
+               been removed — this dropdown is the one and only way to export. -->
           <div class="export-menu-wrap" id="exportMenuWrap">
             <button class="cmdk-open-btn export-menu-btn" id="exportMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Export the current view as a report">
               <span class="cmdk-ico" aria-hidden="true">⬇</span><span class="cmdk-text">Export</span>
@@ -372,8 +374,9 @@
             </div>
           </div>
           <!-- Everything else (Admin panel, dark mode, sound, compact rows, tab
-               navigation...) lives in the Command Palette — this one button (or Ctrl+K / ⌘K) opens it. -->
-          <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — reports &amp; exports, Admin, dark mode, sound, compact rows and more" aria-label="Open command palette"><span class="cmdk-ico" aria-hidden="true">⌘</span><span class="cmdk-text">Commands</span><kbd class="cmdk-kbd" id="cmdkKbd">Ctrl K</kbd></button>
+               navigation...) lives in the Command Palette — this one button (or Ctrl+K / ⌘K) opens it.
+               Exports are NOT here any more — they're only in the "⬇ Export" button to its left. -->
+          <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — Admin, dark mode, sound, compact rows, tab navigation and more" aria-label="Open command palette"><span class="cmdk-ico" aria-hidden="true">⌘</span><span class="cmdk-text">Commands</span><kbd class="cmdk-kbd" id="cmdkKbd">Ctrl K</kbd></button>
         </div>
       </div>
     </div>
@@ -687,6 +690,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=64.6.10" defer></script>
+<script src="/app.js?v=64.6.11" defer></script>
 </body>
 </html>

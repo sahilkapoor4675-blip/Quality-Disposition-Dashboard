@@ -1,4 +1,16 @@
 
+## V64.6 — Export duplication cleanup + Quality Health "Why?" readability fix (2026-09-23)
+
+### Fixed
+- **Duplicate export entry points removed.** The header's "⬇ Export" button/dropdown (added in the previous patch) was left running alongside two older, now-redundant paths to the exact same `exportDashboard()` calls: the Command Palette's four "Export Quality Report — …" entries and the global `Ctrl+E` keyboard shortcut. Both are now removed — the header button/dropdown is the one and only way to export. Updated the `?` keyboard-shortcuts toast, the Command Palette button's tooltip, and stale in-code comments (which still said "there are no export buttons" and "Ctrl+E") to match.
+- **Quality Health "Why?" breakdown was rendering oversized, wrong-colored, and clipped.** Each reason row (e.g. "‑18.6 pts Defect Rate") sits inside `.qcr-exec-item` (the executive-strip card), and `.qcr-exec-item b`/`span` — rules meant for that card's big "51/100"-style KPI numbers — were unintentionally leaking into the popup: the bold label rendered at 20px in the heading color with `nowrap` + ellipsis truncation instead of the intended small red/green 13px text, which is why longer labels (e.g. "First Pass Yield") were getting cut off mid-word. Root cause was a **leftover, orphaned CSS block** (`.qcr-health`, `.qcr-health-score`, `.qcr-health-label`, `.qcr-confidence-note`, plus a second, conflicting `.qcr-health-reasons`/`span`/`b` definition) from an older standalone "Quality Health Score" card that no longer exists in the markup — the class names were reused for the current popup without removing the old rules, so both silently applied at once. Removed the dead block entirely and rewrote the popup's `span`/`b` styling with explicit, sufficiently specific overrides (font, color, `white-space:normal`) so rows always render small, bold, and in the correct red (negative) / green (positive) color, and wrap normally instead of truncating.
+- **Popup could overflow/get cut off on narrow screens.** The "Why?" popup previously had a fixed `min-width:220px` while living inside a ~1/5-width (or, on mobile, half-width) executive-strip card — wider than its own container on small screens. Changed to `width:max-content;max-width:min(240px,80vw)` so it always sizes to its content and never exceeds the viewport.
+- Bumped `app.css` (`?v=69.3 → ?v=69.4`) and `app.js` (`?v=64.6.10 → ?v=64.6.11`) cache-busters.
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- No data logic or API changes; `exportDashboard()` and the export endpoints are untouched — only the redundant trigger paths were removed.
+
 ## V64.6 — Visible Export button + Compare Mode tablet view + Live Now pulse (2026-09-23)
 
 ### Investigated, no change made

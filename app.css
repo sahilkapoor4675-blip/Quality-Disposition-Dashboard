@@ -752,9 +752,15 @@ html[data-theme="dark"] .drill-resize-handle:hover::after{border-color:var(--acc
    into the executive strip) ---- */
 .qcr-exec-health{position:relative;}
 .qcr-exec-why{align-self:flex-start;margin-top:2px;border:none;background:none;padding:0;font:800 12px Manrope,sans-serif;color:#118DFF;cursor:pointer;}
-.qcr-health-reasons{position:absolute;top:100%;left:0;z-index:5;margin-top:6px;background:#fff;border:1px solid #dce6ef;border-radius:10px;box-shadow:0 8px 22px rgba(15,42,74,.12);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:220px;}
-.qcr-health-reasons .negative{font:700 13px Manrope,sans-serif;color:#b91c1c;}
-.qcr-health-reasons .positive{font:700 13px Manrope,sans-serif;color:#15803d;}
+.qcr-health-reasons{position:absolute;top:100%;left:0;z-index:5;margin-top:6px;background:#fff;border:1px solid #dce6ef;border-radius:10px;box-shadow:0 8px 22px rgba(15,42,74,.12);padding:10px 12px;display:flex;flex-direction:column;gap:6px;width:max-content;max-width:min(240px,80vw);}
+/* Reset font/color/wrap explicitly (with higher specificity than
+   .qcr-exec-item span/b, which this popup sits inside of) so the row text
+   doesn't inherit that rule's big 20px heading size + ellipsis-truncation
+   meant for the "51/100" style KPI numbers elsewhere in the exec strip. */
+.qcr-health-reasons span{display:block;font:700 13px Manrope,sans-serif;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35;}
+.qcr-health-reasons span b{font:inherit;font-weight:800;color:inherit;white-space:normal;overflow:visible;text-overflow:clip;}
+.qcr-health-reasons .negative{color:#b91c1c;}
+.qcr-health-reasons .positive{color:#15803d;}
 
 /* ---- Top Contributors tabs (merges Top Defects / Worst Work Centers /
    Worst Grades / Grade Concentration / Risk / Recurring into one card) ---- */
@@ -985,8 +991,6 @@ html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B
 .qcr-intelligence-toggle:not([open])>summary::after{content:'›';}
 .qcr-grid-intelligence{margin-top:16px;}
 
-/* ---- Quality Health Score: stabilized, self-contained layout ---- */
-.qcr-health{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 0 10px;}
 /* Work Center & Grade tab tables: Rank column stays centered (matches the
    sheet-wide default), but the Work Center / Grade name column reads better
    left-aligned since it's text, not a number. */
@@ -994,18 +998,6 @@ html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B
 #gradeTable th:nth-child(1),#gradeTable td:nth-child(1){text-align:center;}
 #wcTable th:nth-child(2),#wcTable td:nth-child(2),
 #gradeTable th:nth-child(2),#gradeTable td:nth-child(2){text-align:left;}
-.qcr-health-score{font:900 40px 'Space Grotesk',sans-serif;line-height:1;}
-.qcr-health-score.good{color:#15803d;}
-.qcr-health-score.amber{color:#a16207;}
-.qcr-health-score.bad{color:#b91c1c;}
-.qcr-health-score small{font-size:15px;font-weight:700;}
-.qcr-health-label{font:800 13.5px Manrope,sans-serif;margin-top:6px;color:#38536a;}
-.qcr-health-reasons{width:100%;display:grid;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #edf2f6;}
-.qcr-health-reasons span{padding:6px 8px;background:#fbfdff;border:1px solid #e1e9ef;border-radius:7px;font:800 15px Manrope,sans-serif;color:var(--muted);}
-.qcr-health-reasons span b{font-weight:800;}
-.qcr-health-reasons span.positive{color:#15803d;}
-.qcr-health-reasons span.negative{color:#b91c1c;}
-.qcr-confidence-note{width:100%;margin-top:8px;padding-top:8px;border-top:1px solid #edf2f6;font:600 15px Manrope,sans-serif;color:#8291a3;}
 
 /* ---- Risk matrix ---- */
 .qcr-risk-block{margin-bottom:10px;}

@@ -1,3 +1,9 @@
+### Latest V64.6 export duplication cleanup + Quality Health "Why?" fix (2026-09-23)
+
+- Removed the now-redundant export paths: the Command Palette's four export entries and the `Ctrl+E` shortcut, both left over from before the header's "⬇ Export" button existed. The header button/dropdown is now the only way to export.
+- Fixed the Quality Health "Why?" breakdown (Quality Control Room tab): reason rows like "‑18.6 pts Defect Rate" were rendering oversized and in the wrong color, with longer labels getting cut off mid-word. Cause was leftover CSS from an older, now-deleted standalone "Quality Health Score" card whose class names got reused for the current popup — removed the dead rules and gave the popup its own explicit styling, so rows now render small, bold, and correctly red/green, and wrap instead of truncating. Also fixed the popup being able to overflow past its narrow parent card on small screens.
+- No app-version bump; see `CHANGELOG.md` for the full entry.
+
 ### Latest V64.6 export button + compare tablet view + Live Now pulse patch (2026-09-23)
 
 - Checked `quality.db` before suggesting a `.gitignore` change: it's intentionally committed (a one-time bundled seed DB, copied to the real persistent DB path outside the repo on first run only) with an empty `users` table — left as-is, changing this would break first-run seeding.

@@ -172,10 +172,8 @@ function initCommandPalette(){
   function buildCommands(){
     const cmds=[];
     Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),run:()=>activateTab(key)}));
-    cmds.push({icon:'📊',label:'Export Quality Report — Excel',hint:'Ctrl+E',kw:'download report',run:()=>exportDashboard('excel')});
-    cmds.push({icon:'📄',label:'Export Quality Report — PDF',kw:'download report',run:()=>exportDashboard('pdf')});
-    cmds.push({icon:'📽️',label:'Export Quality Report — PPT',kw:'download report',run:()=>exportDashboard('pptx')});
-    cmds.push({icon:'📋',label:'Export Raw Data — CSV',kw:'download report',run:()=>exportDashboard('csv')});
+    // Exports (Excel / PDF / PPT / CSV) live only in the header's "⬇ Export" button now
+    // (see #exportMenuBtn / wireExportMenu()) — no longer duplicated here or on Ctrl+E.
     // Compare mode is desktop-only (its button is hidden on narrow screens), so only offer it when the button is actually shown.
     if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({icon:'⊞',label:'Compare Periods (side-by-side)',run:()=>document.getElementById('compareModeBtn')?.click()});
     cmds.push({icon:'↺',label:'Reset All Filters',run:()=>document.getElementById('resetAllBtn')?.click()});
@@ -266,11 +264,6 @@ let refreshController = null;
       document.getElementById('globalSearchInput')?.focus();
       return;
     }
-    if(!typing && (e.key==='e'||e.key==='E') && (e.ctrlKey||e.metaKey)){
-      e.preventDefault();
-      exportDashboard('excel');
-      return;
-    }
     if(!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-5]$/.test(e.key)){
       const tabName = TAB_ORDER[Number(e.key)-1];
       const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
@@ -279,7 +272,7 @@ let refreshController = null;
     }
     if(!typing && e.key==='?'){
       e.preventDefault();
-      showToast('info','Keyboard shortcuts','Ctrl+K command palette · / search · 1-5 switch tabs · Ctrl+E export Excel · Esc close');
+      showToast('info','Keyboard shortcuts','Ctrl+K command palette · / search · 1-5 switch tabs · Esc close');
     }
   });
 })();
@@ -301,8 +294,8 @@ function fmtDonutQty3(v){ return Number(v||0).toLocaleString(undefined,{minimumF
 function fmtDonutPct3(v){ return (Number(v||0)*100).toFixed(3) + "%"; }
 
 // ---- Report exports (Excel / PDF / PPT / raw CSV) ----
-// There are no export buttons any more (header is kept clean); the command palette (Ctrl+K) and the
-// Ctrl+E shortcut call this directly. Progress is shown as a toast, since large reports can take a while.
+// Triggered only from the header's "⬇ Export" button/dropdown (wireExportMenu()).
+// Progress is shown as a toast, since large reports can take a while.
 const EXPORT_LABELS={excel:'Excel report',pdf:'PDF report',pptx:'PowerPoint report',csv:'Raw data (CSV)'};
 const _exportBusy={};
 function exportDashboard(format){
@@ -337,8 +330,6 @@ async function loadFilters(){
   const options = await res.json();
   window._filterOptionsCache = options;
   const container = document.getElementById("filters");
-  // The Excel / PDF / PPT / CSV export buttons used to be built here into the header. They are now
-  // ONLY in the command palette (Ctrl+K), which calls exportDashboard() directly.
   container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">⊞ Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
