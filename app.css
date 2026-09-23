@@ -1210,6 +1210,14 @@ html[data-theme="dark"] .qcr-fb-branch,
 html[data-theme="dark"] .qcr-fb-note{background:#141B2C;border-color:#2A3B54;color:var(--text);}
 html[data-theme="dark"] .qcr-fb-branch{border-top-color:var(--fb-color,#94A3B8);}
 html[data-theme="dark"] .qcr-fb-note{color:#FCD9B8;border-color:#5A4326;}
+/* The container above resolves to a neutral light color (var(--text)) in
+   dark mode, which was also silently winning over the red/green row colors
+   below it (same bug class as the Quality Health readability fix above —
+   a shared rule reaching into a place it shouldn't). Restated explicitly
+   here with dark-mode-appropriate tints so the pts breakdown keeps its
+   negative/positive color-coding instead of going flat white/gray. */
+html[data-theme="dark"] .qcr-health-reasons .negative{color:#F5A3A3;}
+html[data-theme="dark"] .qcr-health-reasons .positive{color:#8FE3B5;}
 html[data-theme="dark"] .qcr-fb-ul li{color:#DCE6F5;}
 html[data-theme="dark"] .qcr-fb-empty{color:#8CA0B8;}
 html[data-theme="dark"] .qcr-fb-spine{color:#9AABC2;border-top-color:#2A3B54;}
@@ -1273,7 +1281,6 @@ html[data-theme="dark"] .qcr-kpi,
 html[data-theme="dark"] .qcr-grade-item,
 html[data-theme="dark"] .qcr-why-grid>div,
 html[data-theme="dark"] .qcr-opportunity,
-html[data-theme="dark"] .qcr-health-reasons span,
 html[data-theme="dark"] .qcr-risk-col,
 html[data-theme="dark"] .qcr-alert,
 html[data-theme="dark"] .qcr-repeat,

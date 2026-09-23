@@ -264,6 +264,20 @@ let refreshController = null;
       document.getElementById('globalSearchInput')?.focus();
       return;
     }
+    if(!typing && (e.key==='e'||e.key==='E') && (e.ctrlKey||e.metaKey)){
+      // Ctrl+E used to trigger an Excel export directly; that shortcut was removed once the
+      // header's visible "⬇ Export" button was added, so anyone still reaching for the old
+      // muscle-memory shortcut gets pointed at its replacement instead of the key doing nothing
+      // (or the browser's own Ctrl+E doing something unexpected). Shown once per browser via
+      // localStorage so it doesn't nag on every accidental press.
+      let seen=true; try{ seen=localStorage.getItem('qdash_seen_ctrle_moved')==='1'; }catch(err){}
+      if(!seen){
+        e.preventDefault();
+        showToast('info','Export moved','Ctrl+E no longer exports — use the ⬇ Export button in the header instead.');
+        try{ localStorage.setItem('qdash_seen_ctrle_moved','1'); }catch(err){}
+      }
+      return;
+    }
     if(!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-5]$/.test(e.key)){
       const tabName = TAB_ORDER[Number(e.key)-1];
       const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);

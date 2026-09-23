@@ -1,4 +1,18 @@
 
+## V64.6 — Follow-up: dark-mode color fix + Ctrl+E migration hint + orphaned-CSS lint (2026-09-23)
+
+### Fixed
+- **Quality Health "Why?" breakdown lost its red/green color-coding in dark mode.** `.qcr-health-reasons span` was swept into a large shared selector group used for QCR's "nested light card" pattern (root-cause paths, alert/repeat/contributor items, etc.), which set `color:var(--text)` — a neutral light color that, at higher specificity, silently overrode the `.negative`/`.positive` red/green from the light-theme rules. Removed it from that shared group and gave it its own dark-mode colors (`#F5A3A3` / `#8FE3B5`, matching the existing `kpi-target-item` dark convention) so the breakdown stays color-coded in both themes.
+
+### Added
+- **Ctrl+E migration hint.** Since last patch's removal of the `Ctrl+E` export shortcut (superseded by the header's "⬇ Export" button), pressing it now does nothing silently — anyone with old muscle memory would just be confused. It now shows a one-time toast ("Ctrl+E no longer exports — use the ⬇ Export button in the header instead"), remembered via `localStorage` so it doesn't repeat.
+- **`code_health.py` now reports orphaned CSS classes** — selectors with no matching reference anywhere in `index.html`, `admin.html`, or `app.js`. This is exactly the class of bug behind the Quality Health "Why?" fix two patches back (dead `.qcr-health-score`/`.qcr-health-reasons` rules from a removed card silently colliding with a later feature that reused one of the class names) — report-only (warns, doesn't fail the build), same convention as the existing duplicate-selector check. Currently reports 68 pre-existing orphans repo-wide; none were touched in this patch, this only adds visibility going forward.
+- Bumped `app.css` (`?v=69.4 → ?v=69.5`) and `app.js` (`?v=64.6.11 → ?v=64.6.12`) cache-busters.
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- The 68 pre-existing orphaned classes the new lint check surfaces were not cleaned up in this patch — flagged for a future pass, not fixed here, to keep this change scoped to what was asked.
+
 ## V64.6 — Export duplication cleanup + Quality Health "Why?" readability fix (2026-09-23)
 
 ### Fixed

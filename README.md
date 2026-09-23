@@ -1,3 +1,10 @@
+### Latest V64.6 dark-mode fix + Ctrl+E hint + orphaned-CSS lint (2026-09-23)
+
+- Fixed the Quality Health "Why?" breakdown losing its red/green coloring in dark mode (a shared "nested card" CSS rule was silently overriding it).
+- Pressing the old `Ctrl+E` export shortcut now shows a one-time toast pointing to the new "⬇ Export" button, instead of doing nothing.
+- `code_health.py` now flags CSS classes with no reference anywhere in the app (report-only) — the same category of bug behind the "Why?" readability fix, so it gets caught earlier next time.
+- No app-version bump; see `CHANGELOG.md` for the full entry.
+
 ### Latest V64.6 export duplication cleanup + Quality Health "Why?" fix (2026-09-23)
 
 - Removed the now-redundant export paths: the Command Palette's four export entries and the `Ctrl+E` shortcut, both left over from before the header's "⬇ Export" button existed. The header button/dropdown is now the only way to export.
