@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=69.5">
+<link rel="stylesheet" href="/app.css?v=69.6">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -363,10 +363,10 @@
                Now that this button exists, the old Ctrl+E shortcut and Command Palette entries have
                been removed — this dropdown is the one and only way to export. -->
           <div class="export-menu-wrap" id="exportMenuWrap">
-            <button class="cmdk-open-btn export-menu-btn" id="exportMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Export the current view as a report">
+            <button class="cmdk-open-btn export-menu-btn" id="exportMenuBtn" type="button" aria-haspopup="menu" aria-controls="exportMenu" aria-expanded="false" title="Export the current view as a report">
               <span class="cmdk-ico" aria-hidden="true">⬇</span><span class="cmdk-text">Export</span>
             </button>
-            <div class="export-menu" id="exportMenu" role="menu" aria-label="Export format">
+            <div class="export-menu" id="exportMenu" role="menu" aria-label="Export format" aria-labelledby="exportMenuBtn">
               <button type="button" class="export-menu-item" role="menuitem" data-fmt="excel"><span aria-hidden="true">📊</span> Excel report</button>
               <button type="button" class="export-menu-item" role="menuitem" data-fmt="pdf"><span aria-hidden="true">📄</span> PDF report</button>
               <button type="button" class="export-menu-item" role="menuitem" data-fmt="pptx"><span aria-hidden="true">📑</span> PowerPoint report</button>
@@ -690,6 +690,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=64.6.12" defer></script>
+<script src="/app.js?v=64.6.13" defer></script>
 </body>
 </html>

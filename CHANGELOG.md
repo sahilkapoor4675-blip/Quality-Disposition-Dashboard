@@ -1,3 +1,20 @@
+## V64.6 — Export dropdown collision fix + light/dark UI audit (2026-09-23)
+
+### Fixed
+- **Header Export dropdown no longer covers the Dashboard Filters panel.** The menu was absolutely positioned outside the header's layout flow, so opening it placed the menu on top of the sticky filter controls. The header now reserves the measured open-menu height while the dropdown remains anchored to the Export button, keeping the following content in normal flow at desktop, tablet, and mobile widths.
+- **Export menu keyboard navigation hardened.** Added Arrow Up/Down plus Home/End navigation across export items, Escape-to-close with focus restored to the Export button, and an explicit `aria-labelledby` relationship for the menu.
+
+### Audited
+- Checked the affected layout in both light and dark themes at 1440, 1366, 900, 600, and 390px viewport widths. The open menu now has zero geometric overlap with the filter panel at all tested widths and does not introduce horizontal overflow.
+- Re-ran the repository release-gate regression/smoke checks after the UI fix.
+
+### Changed
+- Bumped `app.css` cache-buster (`?v=69.5 → ?v=69.6`) and `app.js` cache-buster (`?v=64.6.12 → ?v=64.6.13`).
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- No API, database, export generation, or data-calculation logic was changed.
+
 
 ## V64.6 — Follow-up: dark-mode color fix + Ctrl+E migration hint + orphaned-CSS lint (2026-09-23)
 

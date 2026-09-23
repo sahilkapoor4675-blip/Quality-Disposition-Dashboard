@@ -842,14 +842,59 @@ function wireDrillDialogDragResize(){
 function wireExportMenu(){
   const wrap=document.getElementById('exportMenuWrap'), btn=document.getElementById('exportMenuBtn'), menu=document.getElementById('exportMenu');
   if(!wrap||!btn||!menu) return;
-  const close=()=>{ menu.classList.remove('open'); btn.setAttribute('aria-expanded','false'); };
-  const toggle=()=>{ const open=menu.classList.toggle('open'); btn.setAttribute('aria-expanded', open?'true':'false'); };
+  const header=wrap.closest('header.app-header');
+  const container=header?.nextElementSibling?.classList.contains('container') ? header.nextElementSibling : null;
+  const items=[...menu.querySelectorAll('.export-menu-item')];
+  const syncHeaderSpace=()=>{
+    if(!header) return;
+    if(menu.classList.contains('open')){
+      // The menu is absolutely positioned so it stays attached to the button.
+      // Reserve its measured height in the page's normal flow so it can never
+      // cover the sticky filters or the next section of the page.
+      const menuHeight=Math.ceil(menu.getBoundingClientRect().height);
+      container?.style.setProperty('--export-menu-space',`${menuHeight+8}px`);
+      header.classList.add('export-menu-open');
+    }else{
+      header.classList.remove('export-menu-open');
+      container?.style.removeProperty('--export-menu-space');
+    }
+  };
+  const close=({restoreFocus=false}={})=>{
+    const wasOpen=menu.classList.contains('open');
+    menu.classList.remove('open');
+    btn.setAttribute('aria-expanded','false');
+    syncHeaderSpace();
+    if(restoreFocus && wasOpen){ try{ btn.focus({preventScroll:true}); }catch(e){ btn.focus(); } }
+  };
+  const toggle=()=>{
+    const open=menu.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open?'true':'false');
+    if(open){
+      syncHeaderSpace();
+    }else{
+      close();
+    }
+  };
   btn.addEventListener('click', e=>{ e.stopPropagation(); toggle(); });
-  menu.querySelectorAll('.export-menu-item').forEach(item=>{
+  btn.addEventListener('keydown', e=>{
+    if(!menu.classList.contains('open') || !items.length) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); items[0].focus(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); items[items.length-1].focus(); }
+  });
+  items.forEach((item,index)=>{
     item.addEventListener('click', ()=>{ close(); exportDashboard(item.dataset.fmt); });
+    item.addEventListener('keydown', e=>{
+      if(e.key==='ArrowDown'){ e.preventDefault(); items[(index+1)%items.length].focus(); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); items[(index-1+items.length)%items.length].focus(); }
+      else if(e.key==='Home'){ e.preventDefault(); items[0].focus(); }
+      else if(e.key==='End'){ e.preventDefault(); items[items.length-1].focus(); }
+      else if(e.key==='Escape'){ e.preventDefault(); close({restoreFocus:true}); }
+    });
   });
   document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && menu.classList.contains('open')) close(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && menu.classList.contains('open')) close({restoreFocus:true}); });
+  // Guard against late font loading changing the measured menu height.
+  if(document.fonts?.ready) document.fonts.ready.then(syncHeaderSpace).catch(()=>{});
 }
 function wireCompareMode(){
   const btn=document.getElementById('compareModeBtn'), modal=document.getElementById('compareModal');

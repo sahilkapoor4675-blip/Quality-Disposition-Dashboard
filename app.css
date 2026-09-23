@@ -1541,7 +1541,16 @@ html[data-theme="dark"] .cmdk-kbd{background:#0F1626;border-color:#2A3B54;color:
    the trigger, so it matches the Commands button's size/border/hover/dark-mode treatment for free;
    only the dropdown panel itself is new. */
 .export-menu-wrap{position:relative;}
-.export-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:196px;max-width:88vw;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-menu,0 14px 34px rgba(20,45,70,.16));padding:6px;z-index:5000;display:none;}
+/* The export menu used to float outside the header while the content below
+   started immediately underneath it. On a populated dashboard that meant
+   the menu physically covered the sticky filter panel (the screenshot bug:
+   the first export item sat on top of Month / Work Center). When the menu is
+   open, JS adds .export-menu-open to the header and reserves exactly the menu
+   height in normal document flow, so the page content moves down instead of
+   being covered. The menu remains visually anchored to the Export button. */
+header.app-header.export-menu-open{z-index:10001;}
+header.app-header.export-menu-open + .container{margin-top:var(--export-menu-space,0px);}
+.export-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:196px;max-width:88vw;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-menu,0 14px 34px rgba(20,45,70,.16));padding:6px;z-index:10002;display:none;}
 .export-menu.open{display:block;}
 .export-menu-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;background:transparent;color:var(--text);font:700 13px/1.2 'Manrope','DM Sans',sans-serif;padding:9px 10px;border-radius:8px;cursor:pointer;}
 .export-menu-item:hover,.export-menu-item:focus-visible{background:var(--bg);outline:none;}
