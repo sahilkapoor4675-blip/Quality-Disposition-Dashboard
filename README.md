@@ -1,3 +1,10 @@
+### Latest V64.6 Live Now polling + Last Updated relative-time patch (2026-09-23)
+
+- Verified dark mode is handled correctly for both export paths: browser Print/"Print to PDF" already forces the light palette (unchanged, confirmed working), and the in-app Export → PDF/Excel/PPT feature is generated server-side with a fixed style, independent of the on-screen theme either way. No code change was needed here.
+- Admin → Dashboard Activity → "Live Now" now polls every 18s on its own lightweight endpoint, instead of waiting on the shared 60s full-panel refresh.
+- Header "Last Updated" now shows relative time ("2 min ago") instead of a second date+time next to the digital clock, with the exact timestamp on hover, and now updates on every real data refresh instead of only once at page load.
+- No app-version bump; see `CHANGELOG.md` for the full entry.
+
 ### Latest V64.6 header alignment + Live Users relocation patch (2026-09-23)
 
 - Fixed the header's "Last Updated" block floating unevenly relative to the clock/Live Data/Commands cluster — it now bottom-aligns with that row, matching how the header looked before the digital clock was added.

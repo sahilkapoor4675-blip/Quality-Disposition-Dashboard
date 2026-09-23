@@ -1,4 +1,17 @@
 
+## V64.6 — Live Now independent refresh + Last Updated as relative time (2026-09-23)
+
+### Verified, no change needed
+- **Dark mode vs. print/export:** confirmed the browser's native Print / "Print to PDF" (`Ctrl+P`) is the only path that runs `@media print`, and that block already forces the light palette even when the dashboard is in dark mode (`html[data-theme="dark"]` is overridden inside the `@media print` rule in `app.css`). The app's own **Export → PDF** (and Excel/PPT) feature is generated entirely server-side (`reports.py`, via matplotlib/reportlab/openpyxl) with a fixed navy/white branded style — it was never driven by the on-screen theme, so it was never at risk here either way. A manual OS/browser screenshot doesn't trigger any print media query, so it naturally captures whatever theme is on screen at the time, which is expected screenshot behavior rather than a bug.
+
+### Changed
+- **Admin → Dashboard Activity → "Live Now" now refreshes independently, every 18s**, instead of waiting on the shared 60s full-panel refresh. It's a second, lightweight `setInterval` that only calls `/api/activity/live` (the same tiny endpoint the dashboard's own heartbeat feeds) and updates just the `aLiveNow` stat — it does not touch the heavier `/api/activity` summary+tables query that the rest of the Activity panel (and the other 60s-polled panels) still use, so this doesn't add meaningful load. Runs only while the tab is visible and the Activity panel has actually been opened at least once.
+- **Header "Last Updated" is now relative time** ("Just now", "12 min ago", "2 hr ago", falling back to the absolute date/time past 24h) instead of a second static date+time sitting next to the digital clock — the two blocks now read as distinct signals ("what time is it" vs. "how fresh is this data") rather than duplicating each other. The exact date/time is still available as a hover tooltip. It also now updates on every real data refresh (initial load and every filter change), not just once at page load as before, and ticks forward every 30s while the tab is visible.
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- No HTML structure beyond the header's default placeholder text, no data logic, and no other CSS/JS was touched.
+
 ## V64.6 — Header clock cleanup + card elevation consistency (2026-09-23)
 
 ### Fixed

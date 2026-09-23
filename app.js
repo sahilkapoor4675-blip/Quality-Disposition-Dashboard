@@ -2538,7 +2538,7 @@ function finishTabLoad(tabName, err){
   if(err){ console.error(err); showTabError(tabName, err); return; }
   const panel=document.getElementById('tab-'+tabName);
   if(panel && panel.querySelector('.skeleton-chart,.skeleton-row')) showTabError(tabName, new Error('No data was returned for this view.'));
-  else clearTabError(tabName);
+  else { clearTabError(tabName); setRefreshed(); }
 }
 const SKELETON_BAR_HEIGHTS=[58,88,42,96,68,52,80,64];
 function showSkeletons(tabName){
@@ -2636,13 +2636,37 @@ function startDigitalClock(){
   },1000);
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible') updateDigitalClock();},{passive:true});
 }
-function setRefreshed(){
-  const now = new Date();
+// "Last Updated" (header, top-left of the meta block) used to show a static absolute
+// date+time set once at page load and never touched again — identical in shape to the
+// digital clock next to it, and stale after the first filter change since nothing ever
+// called this again. It's now driven by every real data refresh and rendered as relative
+// time ("2 min ago"), with the exact date+time kept as a hover tooltip, so it reads as a
+// distinct "when was this data last refreshed" signal instead of a second clock.
+let _lastRefreshedAt=null;
+function timeAgoShort(date){
+  const d=date instanceof Date?date:new Date(date);
+  if(Number.isNaN(d.getTime())) return '—';
+  const diff=Math.max(0,Date.now()-d.getTime()), m=Math.floor(diff/60000);
+  if(m<1) return 'Just now';
+  if(m<60) return `${m} min ago`;
+  const h=Math.floor(m/60);
+  if(h<24) return `${h} hr ago`;
+  return formatDateTime12(d,false);
+}
+function renderLastUpdatedLabel(){
+  if(!_lastRefreshedAt) return;
   const el=document.getElementById("refreshed");
-  if(el) el.textContent = formatDateTime12(now,false);
+  if(!el) return;
+  el.textContent=timeAgoShort(_lastRefreshedAt);
+  el.title=formatDateTime12(_lastRefreshedAt,true);
+}
+function setRefreshed(){
+  _lastRefreshedAt = new Date();
+  renderLastUpdatedLabel();
   const live=document.getElementById("liveLabel");
   if(live) live.textContent = "LIVE DATA";
 }
+setInterval(()=>{ if(document.visibilityState==='visible') renderLastUpdatedLabel(); }, 30000);
 
 async function init(){
   setRefreshed();

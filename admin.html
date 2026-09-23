@@ -988,6 +988,16 @@ async function loadV38Safety(){try{const d=await api('/api/admin/service_health'
     const ids=['homePanel','dataQualityPanel','databasePanel','activityPanel'].filter(id=>touched.has(id));
     await Promise.allSettled(ids.map(id=>runPanel(id,role,true)));
   },60000);
+  // "Live Now" gets its own faster, independent poll (18s) instead of waiting on the 60s
+  // full-panel refresh above. It only hits the lightweight /api/activity/live endpoint (the
+  // same one the dashboard heartbeat feeds) — not the heavier /api/activity summary+tables
+  // query loadActivity() runs — so a tighter interval here doesn't add real load.
+  setInterval(async()=>{
+    if(document.hidden) return;
+    const root=$('adminApp'); if(!root||root.classList.contains('hidden')) return;
+    if(!touched.has('activityPanel')) return;
+    try{const live=await api('/api/activity/live');const el=$('aLiveNow');if(el)el.textContent=Number(live.active_users||0).toLocaleString();}catch(e){}
+  },18000);
 })();
 
 </script>
