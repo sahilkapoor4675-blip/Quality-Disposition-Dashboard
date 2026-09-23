@@ -1,3 +1,14 @@
+## V64.7 — Follow-up: Data Status Strip removed, Manage Presets popover z-index fix (2026-09-23)
+
+### Removed
+- **Data Status Strip:** the compact `Data through: … • Last refreshed: … • Active filters: N • Comparing to: …` row added below the filter summary bar earlier in V64.7 has been removed per feedback. Its HTML block and dedicated CSS (`.data-status-strip`, `.dss-*`, light/dark theme rules) were deleted; the print-mode selector list was cleaned up to drop the now-nonexistent class. The JS that fed it (`statusDataThrough`/`statusLastRefreshed`/`statusActiveFilters`/`statusComparingTo` element updates) was already null-safe, so no other behavior changed.
+
+### Fixed
+- **Manage Presets popover hidden behind sticky controls:** the "Save Preset"/"Manage Presets" popover (`.view-popover`) had `z-index: 60`, well below the sticky filters/tabs bar (`z-index: 1000`–`9999`) that sits directly beneath it, so the sticky bar could render on top of and hide part of the popover. Raised the popover's `z-index` to `10050` so it always displays above the sticky controls while still staying below modal dialogs (Export, Command Palette, Compare, Drilldown).
+
+### Notes
+- No version bump — this stays **V64.7** since no version-drift or data/schema change is involved, only a UI element removal and a stacking-order fix.
+
 ## V64.7 — Data Status Strip, Import Column Mapping, named Saved Filter Presets (2026-09-23)
 
 ### Added
