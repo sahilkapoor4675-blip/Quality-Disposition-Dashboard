@@ -1,14 +1,26 @@
-## V64.6 — Quarter + Financial Year period-over-period comparison (2026-09-23)
+## V64.6 — Deep webapp audit + live data/filter refresh hardening (2026-09-23)
 
 ### Fixed
-- **Quarter KPI comparison:** Quarter selections now participate in the same previous-period KPI comparison used by Month and Week. A Quarter-only selection no longer requires the separate Financial Year filter; the latest available FY containing that quarter is resolved from the active non-time-filtered population.
-- **FY-boundary handling:** Q1 correctly compares with Q4 of the immediately previous Financial Year; Q2/Q3/Q4 compare with Q1/Q2/Q3 respectively within the same FY.
-- **Financial Year KPI comparison:** Financial Year selections compare with the immediately previous Financial Year, using the same KPI change metadata and card rendering already used for Month/Week.
-- **Compatibility:** Explicit Quarter + Financial Year selections retain their existing behavior, and malformed/ambiguous values remain safely non-comparable instead of causing a server error.
+- **Runtime version drift:** `VERSION.txt` and the server fallback are now aligned to `V64.6`, matching the dashboard/admin metadata and current release documentation.
+- **Live filter freshness:** added a lightweight `/api/data_revision` probe driven by the existing committed `disposition_revision`. The open dashboard now checks it every 30 seconds while visible (and immediately when returning to the tab); when data changes, filter options refresh in place without rebuilding the whole toolbar, the global-search index is invalidated, and the active dashboard refreshes automatically.
+- **Stale filter selections:** if an import/edit removes a currently selected filter value, the selection safely falls back to `All`, the URL state is updated, and the dashboard reloads against the new valid state.
+- **Public connection-status leakage:** unauthenticated `/api/connection_status` failures now return a generic message instead of raw database/driver exception text. The detailed exception remains server-side under the response request id.
+- **Brittle V64.6 regression:** the UI regression no longer expects one hard-coded `app.js` cache-buster value; the server now derives asset versions from file modification time, so the test validates the actual versioned asset contract instead.
 
-### Regression
-- Added `regression_period_comparison.py` with an isolated SQLite fixture covering Quarter-only, Quarter + FY, Q1→Q4 FY-boundary, and Financial Year→previous-FY comparisons.
-- Application version remains **V64.6**; this is a corrective logic patch, not a version bump.
+### Verified
+- Python syntax / compile checks: PASS
+- Inline JavaScript syntax checks (`index.html`, `admin.html`): PASS
+- V64.3 regression: PASS
+- V64.5 targeted regression: PASS
+- Unified `regression.py` (all 6 embedded suites): PASS
+- Quarter/FY period comparison regression: PASS
+- Deep regression + legacy regression + app smoke: PASS
+- HTTP smoke, Admin UX, export acceptance: see audit release-gate results
+
+### Notes
+- Regression coverage is consolidated in the repository root `regression.py`; the six deleted legacy `regression_*.py` files are no longer required.
+- The new live refresh only reacts to mutations that go through the app's existing disposition write paths, which already advance `disposition_revision` after commit. Direct external database writes that bypass the application will not change this runtime revision.
+- No production seed/database files were modified.
 
 ## V64.6 — Export button converted to modal dialog (2026-09-23)
 
@@ -154,9 +166,9 @@
 6. Runtime version stays V64.6 and asset cache-busters advance without a version bump.
 
 ### Verification
-- `python3 regression_v64_6.py` — PASS.
+- `python3 regression.py` — PASS (all 6 embedded suites).
 - Inline JavaScript syntax + clock/time-contract checks — PASS.
-- `code_health.py`, `regression_smoke.py`, `regression_v64_3.py`, `regression_v64_5.py`, `smoke_test.py`, `http_smoke.py`, `admin_ux_audit.py`, `export_acceptance.py` — PASS.
+- `code_health.py`, `regression.py`, `smoke_test.py`, `http_smoke.py`, `admin_ux_audit.py`, `export_acceptance.py` — PASS.
 - `export_stress.py` — PASS (Excel 3.40s, PDF 2.90s, PPTX 18.46s on the repository stress fixture).
 
 
@@ -214,7 +226,7 @@
 5. Decision Mix donut alone uses 3 decimal places for Qty/%; Pareto, Work Center, Grade, Intensity, Monthly and Period Trend charts keep their prior precision.
 
 ## Verification
-- `python3 regression_v64_6.py`
+- `python3 regression.py`
 - V64.5 release-gate checks + HTML/JS syntax + Admin UX + HTTP + export acceptance/stress should be re-run before deployment.
 
 ---

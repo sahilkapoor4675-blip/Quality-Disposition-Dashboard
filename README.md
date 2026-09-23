@@ -1,8 +1,16 @@
-### Latest V64.6 period-comparison patch (2026-09-23)
+### Latest V64.6 deep webapp audit + live data refresh hardening (2026-09-23)
 
-Quarter and Financial Year filters now use the same KPI period-over-period comparison behavior as Month/Week. Quarter-only selections are resolved against the latest available Financial Year in the active non-time-filtered population; Q2→Q1 stays within the FY, while Q1→Q4 crosses the Financial Year boundary correctly. Financial Year selections compare against the immediately previous FY. Explicit Quarter + Financial Year selections remain supported.
+- **Filters now auto-update on an open dashboard.** The app uses the existing committed `disposition_revision` plus a lightweight `/api/data_revision` check every 30 seconds while the page is visible. After an Admin import/edit, new Month/Week/Quarter/Financial Year/etc. values appear without a full page reload, the current filter selection is preserved when still valid, removed values fall back safely to `All`, and the active view refreshes automatically.
+- Global search is invalidated on the same revision event so newly imported defects/grades/work centers are included the next time search is used.
+- Fixed a **V64.6 runtime-version mismatch**: `VERSION.txt` and the server fallback now both resolve to `V64.6`, matching the dashboard/admin metadata and current release docs.
+- Hardened the unauthenticated connection-status endpoint so database/driver exception details are not disclosed to the browser; detailed diagnostics remain in the server log under the request ID.
+- Updated the V64.6 regression to validate the server's versioned asset contract rather than one stale hard-coded asset query string.
 
-Regression coverage: `python3 regression_period_comparison.py` uses an isolated temporary database and verifies quarter-only, quarter + FY, Q1→previous-FY Q4, and FY→previous-FY KPI comparisons.
+### Suggested next UI improvements (not implemented)
+- **Data status strip:** one compact row showing `Data through`, `Last refreshed`, `Active filters`, and `Compared to` so the context of every KPI is visible without opening another panel.
+- **Smart dependent filters:** make Quarter/FY/Month/Week option lists narrow contextually after a time filter is chosen, while keeping a clear `Show all` escape. This reduces long option lists as the dataset grows.
+- **One-click Reset View:** merge Reset All + saved-view state cleanup into a single, clearly labeled action that restores the default dashboard context in one click.
+- **Chart density toggle:** an optional “labels: normal / compact” presentation mode for dense bar/Pareto charts, keeping mobile screens readable without changing the underlying data.
 
 ### Latest V64.6 Export dialog interaction patch (2026-09-23)
 
@@ -90,10 +98,7 @@ The following are intentionally **suggestions only** and are not implemented in 
 
 ### Full webapp re-audit verification
 - `code_health.py` — PASS
-- `regression_smoke.py` — PASS
-- `regression_v64_3.py` — PASS
-- `regression_v64_5.py` — PASS
-- `regression_v64_6.py` — PASS
+- `regression.py` (all 6 embedded suites) — PASS
 - `admin_ux_audit.py` — PASS (21 sections)
 - `smoke_test.py` — PASS
 - `http_smoke.py` — PASS (47 routes)
@@ -153,8 +158,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - **Sensitive Admin authorization tightened:** Users, security session status, backup list/verify/download and audit analytics/export are now Super Admin-only at the backend. UI visibility remains a convenience, not the security boundary.
 - **Security-status duplicate request removed:** the Admin Security panel now renders its session list from the same API response instead of requesting `/api/admin/security_status` twice.
 - **Admin refresh behavior clarified:** the main refresh button now refreshes only sections already opened/loaded, avoiding a full-console request burst. New sections load automatically when viewed.
-- **Audit/recheck tooling added:** `regression_v64_5.py` verifies mutation revisions, inactive-session rejection, user-session revocation, backup-list caching and bundled-data invariants without modifying the repository seed database.
-- `regression_v64_6.py` verifies the three-state table sort cycle, sortable-header ARIA state, donut-only 3-decimal chart formatting, dashboard card-heading scope/theme treatment, RCA header palette and V64.6 metadata.
+- **Unified regression tooling:** `regression.py` embeds and runs the six regression suites (including the V64.5/V64.6 and Quarter+FY targeted checks) in isolated child processes without modifying the repository seed database.
 - **Version bumped:** `VERSION.txt` and runtime `APP_VERSION` now report `V64.6`.
 
 ### Re-audit checkpoints
@@ -170,14 +174,12 @@ For the next audit/review, check these exact invariants:
 ### Verification performed for V64.6
 - `python3 -m py_compile server.py`
 - `node --check` on all inline scripts in `admin.html` and `index.html`
-- `python3 regression_test.py`
-- `python3 regression_v64_3.py`
+- `python3 regression.py`
 - `python3 smoke_test.py`
 - `python3 http_smoke.py`
 - `python3 admin_ux_audit.py`
 - `python3 export_acceptance.py`
 - `python3 export_stress.py` (PASS; ~30.8s wall, ~545 MB peak RSS on the repository stress fixture)
-- `python3 regression_v64_5.py`
 
 The bundled `quality.db` remains unchanged. Its current seed invariants remain 4,936 disposition rows, 0 duplicate batch groups, and no missing/invalid core disposition fields.
 
@@ -256,11 +258,12 @@ aid, not a substitute for provider-level backups: copy backups off the server pe
 | `admin.html` | Admin console (single file) |
 | `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
 | `code_health.py` | Maintenance helpers |
-| `regression_smoke.py`, `http_smoke.py`, `smoke_test.py`, `regression_test.py`, `regression_v64_3.py`, `export_acceptance.py`, `export_stress.py`, `admin_ux_audit.py` | Release-gate tests |
+| `regression.py`, `http_smoke.py`, `smoke_test.py`, `export_acceptance.py`, `export_stress.py`, `admin_ux_audit.py` | Release-gate tests |
 | `quality.db` | First-run SQLite seed (4,936 disposition records) |
 
 ## Release gate
 Before deploying, run every command in `RELEASE_GATE.md` (all must pass, on an isolated database).
+The regression suite is consolidated into a single `regression.py`; deleted legacy `regression_*.py` files are not required at runtime.
 
 ## Troubleshooting
 - **Old look / dark mode wrong after a deploy** – hard-refresh once (Ctrl+Shift+R); CSS and JS are cached

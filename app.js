@@ -78,6 +78,8 @@ let kpiAnimationToken = 0;
     }
   }
 
+  window.addEventListener("qdash:data-revision-changed", () => { searchIndex = null; });
+
   input.addEventListener("focus", async () => {
     await loadSearchIndex();
     if (input.value.trim()) input.dispatchEvent(new Event("input"));
@@ -359,9 +361,11 @@ async function loadFilters(){
     const raw = options[f.key] || ["All"];
     const items = raw.map(item => ({value:(item&&typeof item==='object')?item.value:item, label:(item&&typeof item==='object')?item.label:item}));
     if(!items.some(x=>x.value==="All")) items.unshift({value:"All",label:"All"});
+    field._filterItems = items;
     const renderOptions = (term="") => {
       const q=term.trim().toLowerCase(); list.innerHTML="";
-      const filtered=items.filter(x=>String(x.label).toLowerCase().includes(q));
+      const source=field._filterItems || items;
+      const filtered=source.filter(x=>String(x.label).toLowerCase().includes(q));
       filtered.forEach((x,i)=>{
         const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
         opt.textContent=x.label;
@@ -371,6 +375,7 @@ async function loadFilters(){
       });
       if(!filtered.length) list.innerHTML='<div class="filter-empty">No matching options</div>';
     };
+    field._filterRenderOptions = renderOptions;
     trigger.addEventListener("click",()=>{document.querySelectorAll('.filter-control.open').forEach(c=>{if(c!==control)c.classList.remove('open')}); control.classList.toggle('open'); if(control.classList.contains('open')){search.focus();renderOptions(search.value);}});
     search.addEventListener("input",()=>renderOptions(search.value));
     renderOptions();
@@ -384,6 +389,103 @@ function updateActiveFilterBadge(){
   const n=FILTER_DEFS.filter(f=>currentFilters[f.key] && currentFilters[f.key]!=="All").length;
   const b=document.getElementById('activeFilterBadge'); if(!b)return; b.textContent=`${n} Active`; b.classList.toggle('show',n>0);
 }
+
+let _dataRevision = null;
+let _dataRevisionTimer = null;
+let _dataRevisionChecking = false;
+
+async function fetchDataRevision(){
+  const res = await fetch('/api/data_revision',{cache:'no-store'});
+  if(!res.ok) throw new Error(`Revision check failed (HTTP ${res.status}).`);
+  return res.json();
+}
+
+function _normaliseFilterItems(raw){
+  const items=(raw||['All']).map(item => ({
+    value:(item&&typeof item==='object')?String(item.value):String(item),
+    label:(item&&typeof item==='object')?String(item.label):String(item)
+  }));
+  if(!items.some(x=>x.value==='All')) items.unshift({value:'All',label:'All'});
+  return items;
+}
+
+async function refreshFilterOptionsAfterDataChange(){
+  const res=await fetch('/api/filters',{cache:'no-store'});
+  if(!res.ok) throw new Error(`Filter refresh failed (HTTP ${res.status}).`);
+  const options=await res.json();
+  window._filterOptionsCache=options;
+  let selectionChanged=false;
+
+  FILTER_DEFS.forEach(f=>{
+    const items=_normaliseFilterItems(options[f.key]);
+    const valid=new Set(items.map(x=>x.value));
+    if(currentFilters[f.key]!=="All" && !valid.has(String(currentFilters[f.key]))){
+      currentFilters[f.key]="All";
+      selectionChanged=true;
+    }
+    const field=document.querySelector(`.filter-field[data-filter-key="${f.key}"]`);
+    if(!field) return;
+    field._filterItems=items;
+    const search=field.querySelector('.filter-search');
+    if(typeof field._filterRenderOptions==='function') field._filterRenderOptions(search?search.value:'');
+    const span=field.querySelector('.filter-trigger span');
+    const selected=items.find(x=>x.value===String(currentFilters[f.key]||'All')) || items[0] || {label:'All'};
+    if(span) span.textContent=selected.label;
+    field.classList.toggle('filter-active', currentFilters[f.key]!=="All");
+  });
+
+  updateActiveFilterBadge();
+  if(selectionChanged) writeUrlState(false);
+  window.dispatchEvent(new CustomEvent('qdash:data-revision-changed'));
+  return selectionChanged;
+}
+
+async function checkDataRevision(){
+  if(_dataRevisionChecking) return;
+  _dataRevisionChecking=true;
+  try{
+    const state=await fetchDataRevision();
+    if(state && state.available===false) return;
+    const revision=Number(state?.revision);
+    if(!Number.isFinite(revision)) return;
+    if(_dataRevision===null){
+      _dataRevision=revision;
+      return;
+    }
+    if(revision===_dataRevision) return;
+    const previous=_dataRevision;
+    _dataRevision=revision;
+    try{
+      await refreshFilterOptionsAfterDataChange();
+      showToast('info','Data updated','New or changed records are now reflected in this dashboard.');
+      await triggerFilterRefresh();
+    }catch(err){
+      console.warn('Live data refresh failed',err);
+      // Roll back only the observed marker so the next poll retries the refresh.
+      _dataRevision=previous;
+    }
+  }catch(e){
+    // Background freshness is best-effort; never surface polling noise to users.
+  }finally{
+    _dataRevisionChecking=false;
+  }
+}
+
+async function startDataRevisionPolling(){
+  if(_dataRevisionTimer) clearInterval(_dataRevisionTimer);
+  try{
+    const state=await fetchDataRevision();
+    const revision=Number(state?.revision);
+    if(Number.isFinite(revision)) _dataRevision=revision;
+  }catch(e){}
+  _dataRevisionTimer=setInterval(()=>{
+    if(document.visibilityState==='visible') checkDataRevision();
+  },30000);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible') checkDataRevision();
+  });
+}
+
 async function triggerFilterRefresh(){
   // Cancel an older in-flight dashboard request when filters are changed again.
   if(refreshController) refreshController.abort();
@@ -2736,6 +2838,7 @@ async function init(){
   Object.assign(currentFilters, restored.filters);
   await loadFilters();
   syncFilterUiFromState();
+  startDataRevisionPolling();
   initSortableTables();
   wireAnalyticsPresentation();
   wireCompareMode();

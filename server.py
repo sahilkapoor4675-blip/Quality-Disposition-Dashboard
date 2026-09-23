@@ -117,7 +117,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.5"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.6"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -4184,6 +4184,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"authenticated": False, "username":"", "display_name":"", "role":""})
         elif path == "/api/filters":
             self._send_json(get_filter_options())
+        elif path == "/api/data_revision":
+            # Lightweight public revision probe used by the dashboard to detect
+            # Admin imports/edits without rebuilding the full filter payload on
+            # every poll. The revision only advances after a committed data
+            # mutation, so unchanged data is cheap to detect.
+            try:
+                self._send_json(_disposition_state())
+            except Exception:
+                # The revision endpoint is a background freshness hint; a
+                # transient database error must not expose driver/file details.
+                self._send_json({"revision": 0, "changed_at": "", "available": False})
         elif path == "/api/fishbone":
             try:
                 defects = [d for d in (qs.get("defects", "") or "").split("|") if d.strip()]
@@ -4438,11 +4449,15 @@ class Handler(BaseHTTPRequestHandler):
                     "checked_at": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
                 })
             except Exception as e:
+                # This endpoint is intentionally public (the Admin login shell
+                # uses it before authentication). Never send raw database/driver
+                # exception text to an unauthenticated browser; _send_json also
+                # records the real exception server-side under a request id.
                 self._send_json({
                     "connected": False,
                     "provider": "PostgreSQL" if USE_POSTGRES else "SQLite",
                     "persistent": bool(USE_POSTGRES or os.path.abspath(DB_PATH) != os.path.abspath(_BUNDLED_SEED_DB)),
-                    "error": str(e)[:180],
+                    "error": "Database connection unavailable.",
                     "checked_at": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
                 }, status=503)
         elif path == "/api/activity":

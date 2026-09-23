@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Unified regression entrypoint for Quality-Disposition-Dashboard.
 
-The six legacy ``regression_*.py`` suites are consolidated here so the repository
-has one regression command. Each legacy suite is executed in a short-lived child
-process to preserve its original isolation, environment and temporary-database
-behavior. No production database is used by these suites.
+The six regression suites are embedded here so the repository has one
+regression command. Each suite is executed in a short-lived child process to
+preserve its original isolation, environment and temporary-database behavior.
+No production database is used by these suites.
 
 Usage:
-    python3 regression.py             # run all six regression suites
+    python3 regression.py             # run all six embedded regression suites
     python3 regression.py --list      # list suites
     python3 regression.py --suite ... # run one suite by name
 """
@@ -45,7 +45,7 @@ SUITES = {
 
 
 def _run_suite(name: str, source: str) -> int:
-    """Run one embedded legacy suite from a temporary script in the repo root."""
+    """Run one embedded suite from a temporary script in the repo root."""
     # The temp script intentionally lives beside server.py/app.js/etc. so every
     # suite's original ``Path(__file__).resolve().parent`` still points at repo root.
     fd, temp_name = tempfile.mkstemp(prefix=f'.{name}_', suffix='.py', dir=ROOT)
