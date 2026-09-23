@@ -1,4 +1,18 @@
 
+## V64.6 — Header clock cleanup + card elevation consistency (2026-09-23)
+
+### Fixed
+- **Header clock widget:** removed the redundant "Current Time" text label above the digital clock (the icon + live time already communicate this). Replaced the generic `▦` glyph with an inline calendar/clock SVG icon and re-colored its badge to the header's blue brand palette (`#2388C9 → #16324F`) instead of the previous off-palette purple-blue gradient. Position is unchanged: the clock stays directly above the Commands button in both themes.
+- **Card/panel radius inconsistency:** `.kpi-card`, `.panel`, `.insights-panel`, `.qcr-hero` and `.filters` previously resolved to three different border-radius values at runtime (10px / 11px / 12px) because of overlapping legacy rules from earlier passes. All surface-level cards and panels now read from a single `--radius-card` token (12px), so corners are visually consistent across the dashboard. `.filter-menu` uses a distinct, intentionally smaller `--radius-menu` (10px) since it's a floating menu, not a card; `.drill-dialog` uses `--radius-modal` (16px) as the modal tier.
+- **Card/panel shadow inconsistency:** replaced ~15 ad-hoc `box-shadow` values (different blur/spread/opacity combinations with no shared logic) with a small elevation scale: `--shadow-card`, `--shadow-card-hover`, `--shadow-sticky`, `--shadow-menu`, `--shadow-modal`.
+- **Dark-mode shadow bug:** `.panel`, `.filters`, `.insights-panel` and `.filter-menu` had no dark-mode shadow override, so they rendered with a light, blue-tinted shadow (`rgba(15,42,74,…)`) on a near-black background in dark mode — barely visible and the wrong hue. Because the new shadow tokens are CSS custom properties re-declared inside `html[data-theme="dark"]`, every surface that uses them now automatically gets a correct dark shadow (`rgba(0,0,0,…)`) with no per-element override needed.
+- **Dark-mode muted-text contrast:** raised `--muted` in dark mode from `#9AABC2` to `#A9B8CE` (contrast vs. the dark card background improves from ≈6.6:1 to ≈8.5:1, comfortably clearing WCAG AA for normal text and AAA for large text). This is the color used by the header kicker/sub-lines, KPI labels, table sub-text and other secondary copy throughout the app.
+- Bumped the `app.css` cache-buster (`?v=68.9 → ?v=69.0`) so browsers pick up the updated stylesheet instead of a cached copy.
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- No HTML structure, JS behavior, data logic, or non-card CSS (buttons, tabs, badges, dots, etc.) was touched.
+
 ### V64.6 — Current Time card (selected #3 design)
 - Moved the current-time widget to the header top-right, directly above the Commands action.
 - Added calendar-style date + live seconds clock in 12-hour AM/PM format.

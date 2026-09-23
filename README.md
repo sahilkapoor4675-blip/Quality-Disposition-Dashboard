@@ -1,3 +1,12 @@
+### Latest V64.6 header clock + card elevation patch (2026-09-23)
+
+- Removed the redundant "Current Time" label text from the header clock widget; it now shows just a calendar/clock icon, date and live time, colored to match the header's blue brand palette. Position unchanged — still directly above the Commands button.
+- Introduced a shared elevation design-token scale (`--radius-card`, `--radius-menu`, `--radius-modal`, `--shadow-card`, `--shadow-card-hover`, `--shadow-sticky`, `--shadow-menu`, `--shadow-modal`) and applied it to every card/panel surface (`.kpi-card`, `.panel`, `.insights-panel`, `.qcr-hero`, `.filters`, `.filter-menu`, `.drill-dialog`), fixing a corner-radius mismatch (10/11/12px) between panels and KPI cards.
+- Fixed a dark-mode bug where panels, filters, and the insights banner kept a light, blue-tinted shadow instead of a proper dark one; the token-based approach fixes this automatically for every surface that uses it.
+- Raised dark-mode secondary/muted text color for better contrast (≈6.6:1 → ≈8.5:1 against the dark card background), improving legibility of the header kicker/sub-lines and other muted text in dark mode.
+- Bumped the `app.css` cache-buster so the update isn't served from a stale browser cache.
+- No app-version bump; see `CHANGELOG.md` for the full entry.
+
 ### Latest V64.6 time/display patch
 
 - All visible UI time values now use **12-hour time with AM/PM**; operational timestamps show seconds only where useful.
