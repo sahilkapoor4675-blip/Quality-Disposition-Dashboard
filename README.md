@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.6
+# Quality Disposition Control Dashboard — V64.7
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -6,6 +6,18 @@ frontend CDN or build step.
 
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
+
+## What changed in V64.7 (Data Status Strip, import column mapping, named filter presets)
+- **Data Status Strip:** a compact row under the filter summary bar — `Data through • Last refreshed • Active filters • Comparing to` — always visible, no click required. Suggested and documented as a "not implemented in this patch" item in V64.6's audit; now implemented, reusing the existing freshness/refresh/filter-count signals rather than adding new polling.
+- **Import column mapping:** before validating an uploaded file, the Monthly Data Import Wizard now reads its header row and auto-matches it against the expected fields. If a required column (Heat No, Batch No, Insp Lot Date, Quality Decision) can't be auto-matched — e.g. a plant's export uses renamed headers — a "Map your columns" step opens so the user points each field at the right column before Validate & Preview runs. A "🧭 Map your columns" control is always available for a manual review even when auto-matching succeeded. Well-formed files that already match are unaffected.
+- **Named, dropdown-managed filter presets:** the existing "Saved Views" feature already stored the full filter combination (date range, work center, PRIME/decision, etc.), not just layout — but saving/deleting went through browser `prompt()`/`alert()` dialogs. It's now an inline popover: type a name under "Save Preset", or open "Manage Presets" for a list of saved presets with one-click Load/Delete. Same `qdash_saved_views` storage, no migration needed for existing saved views.
+- **No version-drift risk:** `VERSION.txt` and the `server.py` runtime fallback constant were bumped together, per the drift check V64.6 already added.
+
+### V64.7 checkpoints
+- Data Status Strip is visible on every tab, hidden from print output, and its "Data through" value updates whenever the Dashboard/QCR tab's core data loads; "Active filters" and "Last refreshed" update immediately on any filter change or data write.
+- Uploading a file whose headers already match the built-in aliases (`HEAT NO`, `BATCH NO`, …) previews exactly as before — no mapping step forced.
+- Uploading a file with unrecognized headers for a required field opens "Map your columns" and blocks Validate & Preview until the required fields are mapped; the chosen mapping is sent with the preview request and used for the actual import.
+- Saved filter presets: Save Preset / Manage Presets open an inline popover (no native browser dialogs); Load and Delete both work per-preset from the Manage Presets list; the Saved Views dropdown continues to work unchanged for presets saved before this update.
 
 ## What changed in V64.6 (sorting + targeted chart/QCR/card-heading refinement)
 - **Three-state table sorting:** click a dashboard table header once for ascending order, twice for descending order, and a third time to restore the natural/server order. Sort state is preserved through filter refreshes until the third click resets it.

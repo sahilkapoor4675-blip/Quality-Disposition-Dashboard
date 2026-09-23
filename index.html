@@ -467,7 +467,21 @@
     </div>
   </div>
 
-  <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save View</button><button id="clearViewsBtn" type="button">Manage Views</button></div></div>
+  <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions" style="position:relative"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save Preset</button><button id="clearViewsBtn" type="button">Manage Presets</button><div class="view-popover hidden" id="viewPopover" role="dialog" aria-label="Filter presets"></div></div></div>
+
+  <!-- Data Status Strip: a compact, always-visible line giving instant context on
+       what the numbers on screen actually represent — how current the source data
+       is, when this session's data last changed, how many filters are narrowing
+       the view, and (when Compare Periods is active) what's being compared. -->
+  <div class="data-status-strip" id="dataStatusStrip" role="status" aria-live="off">
+    <span class="dss-item"><span class="dss-label">Data through:</span> <span id="statusDataThrough">—</span></span>
+    <span class="dss-sep">•</span>
+    <span class="dss-item"><span class="dss-label">Last refreshed:</span> <span id="statusLastRefreshed">—</span></span>
+    <span class="dss-sep">•</span>
+    <span class="dss-item"><span class="dss-label">Active filters:</span> <span id="statusActiveFilters">0</span></span>
+    <span class="dss-sep">•</span>
+    <span class="dss-item"><span class="dss-label">Comparing to:</span> <span id="statusComparingTo">None</span></span>
+  </div>
 
   <div class="sticky-controls" id="stickyControls">
     <div class="filters" id="filters"></div>

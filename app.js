@@ -387,7 +387,8 @@ async function loadFilters(){
 }
 function updateActiveFilterBadge(){
   const n=FILTER_DEFS.filter(f=>currentFilters[f.key] && currentFilters[f.key]!=="All").length;
-  const b=document.getElementById('activeFilterBadge'); if(!b)return; b.textContent=`${n} Active`; b.classList.toggle('show',n>0);
+  const b=document.getElementById('activeFilterBadge'); if(b){ b.textContent=`${n} Active`; b.classList.toggle('show',n>0); }
+  const s=document.getElementById('statusActiveFilters'); if(s) s.textContent=String(n);
 }
 
 let _dataRevision = null;
@@ -793,8 +794,52 @@ function refreshFilterSummary(recordCount){
 }
 function savedViews(){try{return JSON.parse(localStorage.getItem('qdash_saved_views')||'{}')}catch(e){return {}}}
 function renderSavedViews(){const sel=document.getElementById('savedViewSelect'); if(!sel)return; const views=savedViews(); sel.innerHTML='<option value="">Saved Views</option>'+Object.keys(views).sort().map(n=>`<option value="${escQcr(n)}">${escQcr(n)}</option>`).join('');}
-function saveCurrentView(){const name=prompt('Enter a name for this filter view:'); if(!name||!name.trim())return; const views=savedViews(); views[name.trim()]=Object.assign({},currentFilters); localStorage.setItem('qdash_saved_views',JSON.stringify(views)); renderSavedViews(); document.getElementById('savedViewSelect').value=name.trim();}
-function manageSavedViews(){const views=savedViews(); const names=Object.keys(views); if(!names.length){alert('No saved views yet.');return;} const name=prompt('Enter the exact saved view name to delete:\n\n'+names.join('\n')); if(name&&views[name]){delete views[name];try{localStorage.setItem('qdash_saved_views',JSON.stringify(views));}catch(e){}renderSavedViews();}}
+function saveCurrentView(){
+  // Replaces the old window.prompt() flow with an inline, named-preset
+  // popover: type a name, hit Save — no browser dialog.
+  const pop=document.getElementById('viewPopover'); if(!pop) return;
+  pop.innerHTML=`<div class="view-pop-title">Save current filters as…</div><input type="text" id="viewPopSaveName" maxlength="60" placeholder="e.g. This Month + Work Center A + PRIME"><div class="view-pop-actions"><button class="btn" id="viewPopCancelBtn" type="button">Cancel</button><button class="btn primary" id="viewPopSaveBtn" type="button">Save Preset</button></div>`;
+  pop.classList.remove('hidden');
+  const input=document.getElementById('viewPopSaveName'); input.focus();
+  function doSave(){
+    const name=input.value.trim(); if(!name) { input.focus(); return; }
+    const views=savedViews(); views[name]=Object.assign({},currentFilters);
+    try{ localStorage.setItem('qdash_saved_views',JSON.stringify(views)); }catch(e){}
+    renderSavedViews(); document.getElementById('savedViewSelect').value=name; closeViewPopover();
+  }
+  document.getElementById('viewPopSaveBtn').onclick=doSave;
+  document.getElementById('viewPopCancelBtn').onclick=closeViewPopover;
+  input.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); doSave(); } else if(e.key==='Escape'){ closeViewPopover(); } });
+}
+function closeViewPopover(){ document.getElementById('viewPopover')?.classList.add('hidden'); }
+function renderManagePresetsList(){
+  const pop=document.getElementById('viewPopover'); if(!pop) return;
+  const views=savedViews(); const names=Object.keys(views).sort();
+  const listHtml = names.length
+    ? `<div class="view-pop-list">${names.map(n=>`<div class="view-pop-row" data-name="${escQcr(n)}"><span class="view-pop-name">${escQcr(n)}</span><button class="view-pop-load" type="button" title="Load this preset">Load</button><button class="view-pop-del" type="button" title="Delete this preset">🗑</button></div>`).join('')}</div>`
+    : `<div class="view-pop-empty">No saved presets yet — use “Save Preset” to name your current filter combination.</div>`;
+  pop.innerHTML=`<div class="view-pop-title">Saved filter presets</div>${listHtml}<div class="view-pop-actions"><button class="btn" id="viewPopCloseBtn" type="button">Close</button></div>`;
+  pop.classList.remove('hidden');
+  pop.querySelectorAll('.view-pop-load').forEach(b=>b.addEventListener('click',e=>{
+    const name=e.target.closest('.view-pop-row').dataset.name;
+    applySavedView(name); const sel=document.getElementById('savedViewSelect'); if(sel) sel.value=name;
+    closeViewPopover();
+  }));
+  pop.querySelectorAll('.view-pop-del').forEach(b=>b.addEventListener('click',e=>{
+    const row=e.target.closest('.view-pop-row'); const name=row.dataset.name;
+    const v=savedViews(); delete v[name];
+    try{ localStorage.setItem('qdash_saved_views',JSON.stringify(v)); }catch(err){}
+    renderSavedViews(); renderManagePresetsList();
+  }));
+  document.getElementById('viewPopCloseBtn').onclick=closeViewPopover;
+}
+function manageSavedViews(){ renderManagePresetsList(); }
+document.addEventListener('click',e=>{
+  const pop=document.getElementById('viewPopover'); if(!pop || pop.classList.contains('hidden')) return;
+  if(pop.contains(e.target) || e.target.id==='saveViewBtn' || e.target.id==='clearViewsBtn') return;
+  closeViewPopover();
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeViewPopover(); });
 // ---- URL state: the current tab and every non-"All" filter are reflected
 // in the address bar (?tab=...&work_center=...), so the browser's own
 // back/forward buttons work between tabs/filter changes, and a person can
@@ -1006,9 +1051,10 @@ function wireCompareMode(){
   dimSelect.addEventListener('change',populateValues);
   populateValues();
   function openSetup(){ modal.classList.add('open'); document.getElementById('compareView').classList.add('hidden'); document.getElementById('compareSetup').style.display='block'; }
+  function clearComparingToStatus(){ const s=document.getElementById('statusComparingTo'); if(s) s.textContent='None'; }
   btn.addEventListener('click',openSetup);
-  document.getElementById('compareCancelBtn').addEventListener('click',()=>modal.classList.remove('open'));
-  document.getElementById('compareCloseBtn').addEventListener('click',()=>modal.classList.remove('open'));
+  document.getElementById('compareCancelBtn').addEventListener('click',()=>{ modal.classList.remove('open'); clearComparingToStatus(); });
+  document.getElementById('compareCloseBtn').addEventListener('click',()=>{ modal.classList.remove('open'); clearComparingToStatus(); });
   document.getElementById('compareEditBtn').addEventListener('click',openSetup);
   document.getElementById('compareGoBtn').addEventListener('click',()=>{
     const key=dimSelect.value, a=valA.value, b=valB.value;
@@ -1027,6 +1073,7 @@ function wireCompareMode(){
     document.getElementById('compareViewTitle').textContent=`Comparing ${dimLabel.replace(/^\S+\s/,'')}: ${a}  vs  ${b}`;
     document.getElementById('compareSetup').style.display='none';
     document.getElementById('compareView').classList.remove('hidden');
+    const s=document.getElementById('statusComparingTo'); if(s) s.textContent=`${a} vs ${b}`;
   });
 }
 function wireDrilldown(){
@@ -2546,6 +2593,7 @@ async function loadControlRoom(signal){
   try{
     const data=await fetchQcrCore(filterSnapshot,signal); const {k,d,w,m,fr}=data;
     document.getElementById('qcrFreshness').textContent=`Data Through: ${fr.data_through_display||'—'} • Filtered Records: ${Number(fr.filtered_records||0).toLocaleString()}`;
+    const dssThrough=document.getElementById('statusDataThrough'); if(dssThrough) dssThrough.textContent=fr.data_through_display||'—';
     const criticalLabels=['First Pass Yield % (Prime%)','Defect Rate','Reject % Qty','Hold for Decision % Qty','Salvage % Qty','Rework % Qty'];
     const critical=(k.kpis||[]).filter(x=>criticalLabels.includes(x.label));
     // Worst-first ordering + inline target/gap folds in what used to be a
@@ -2811,9 +2859,11 @@ function timeAgoShort(date){
 function renderLastUpdatedLabel(){
   if(!_lastRefreshedAt) return;
   const el=document.getElementById("refreshed");
-  if(!el) return;
-  el.textContent=timeAgoShort(_lastRefreshedAt);
-  el.title=formatDateTime12(_lastRefreshedAt,true);
+  if(el){ el.textContent=timeAgoShort(_lastRefreshedAt); el.title=formatDateTime12(_lastRefreshedAt,true); }
+  // Data Status Strip mirrors the same "when did this session's data last
+  // change" signal, so the two never drift out of sync.
+  const s=document.getElementById("statusLastRefreshed");
+  if(s){ s.textContent=timeAgoShort(_lastRefreshedAt); s.title=formatDateTime12(_lastRefreshedAt,true); }
 }
 function setRefreshed(){
   _lastRefreshedAt = new Date();

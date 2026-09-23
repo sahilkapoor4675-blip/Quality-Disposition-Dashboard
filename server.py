@@ -117,7 +117,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.6"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.7"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -1623,7 +1623,34 @@ HEADER_ALIASES = {
 }
 
 
-def _map_headers(headers):
+HEADER_FIELD_LABELS = {
+    "heat_no": "Heat No",
+    "batch_no": "Batch No",
+    "work_center": "Work Center",
+    "grade": "Grade",
+    "output_weight": "Output Weight",
+    "main_defect": "Main Defect",
+    "defect_intensity": "Defect Intensity",
+    "quality_decision": "Quality Decision",
+    "insp_lot_date": "Insp Lot Date",
+    "ud_date": "UD Date",
+    "month": "Month",
+    "week": "Week",
+    "quarter": "Quarter",
+    "financial_year": "Financial Year",
+}
+
+# Fields the importer cannot do without (or that materially degrade the
+# preview/validation quality if missing). batch_no is the unique coil key;
+# heat_no/insp_lot_date/quality_decision are required by _validate_record.
+HEADER_REQUIRED_FIELDS = ["heat_no", "batch_no", "insp_lot_date", "quality_decision"]
+
+
+def _map_headers(headers, overrides=None):
+    """Auto-detect which uploaded column feeds each known field, via
+    HEADER_ALIASES. `overrides` (field_key -> header text chosen by the user
+    in the "map your columns" step) takes precedence over auto-detection,
+    so a plant with renamed headers doesn't get stuck on the alias list."""
     normalized = {_norm_header(h): i for i, h in enumerate(headers)}
     mapping = {}
     for key, aliases in HEADER_ALIASES.items():
@@ -1631,7 +1658,56 @@ def _map_headers(headers):
             if _norm_header(alias) in normalized:
                 mapping[key] = normalized[_norm_header(alias)]
                 break
+    if overrides:
+        for key, header_text in overrides.items():
+            if key not in HEADER_FIELD_LABELS:
+                continue
+            text = str(header_text or "").strip()
+            if not text:
+                continue
+            idx = normalized.get(_norm_header(text))
+            if idx is not None:
+                mapping[key] = idx
     return mapping
+
+
+def _detect_headers_only(filename, data):
+    """Read just the header row of an uploaded file (no full parse/validation)
+    so the import wizard can show a column-mapping step before committing to
+    the whole preview flow. Returns (headers, auto_map)."""
+    ext = os.path.splitext(filename.lower())[1]
+    if ext in (".xlsx", ".xlsm"):
+        try:
+            import openpyxl
+        except ImportError:
+            raise ValueError("Excel import requires openpyxl. Please use TSV/CSV or install openpyxl.")
+        _reject_zip_bomb(data)
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        ws = wb["Disposition Data"] if "Disposition Data" in wb.sheetnames else wb[wb.sheetnames[0]]
+        iterator = ws.iter_rows(values_only=True)
+        try:
+            headers = list(next(iterator))
+        except StopIteration:
+            raise ValueError("The uploaded Excel file is empty")
+        wb.close()
+    else:
+        try:
+            text = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = data.decode("cp1252", errors="replace")
+        sample = text[:4096]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters="\t,;")
+        except csv.Error:
+            dialect = csv.excel_tab if "\t" in sample else csv.excel
+        reader = csv.reader(io.StringIO(text), dialect)
+        try:
+            headers = next(reader)
+        except StopIteration:
+            raise ValueError("The uploaded file is empty")
+    headers = [str(h).strip() if h is not None else "" for h in headers]
+    auto_map = _map_headers(headers)
+    return headers, auto_map
 
 
 def _parse_date(v):
@@ -1771,7 +1847,11 @@ def _reject_zip_bomb(data, max_ratio=200, max_uncompressed=300 * 1024 * 1024):
     except zipfile.BadZipFile:
         raise ValueError("The uploaded file is not a valid Excel (.xlsx/.xlsm) file.")
 
-def _parse_uploaded_file(filename, data):
+def _parse_uploaded_file(filename, data, column_map=None):
+    """column_map (optional): field_key -> header text, as chosen by the user
+    in the import wizard's column-mapping step. It overrides auto-detection
+    for whichever fields the user mapped explicitly; anything left unmapped
+    still falls back to HEADER_ALIASES."""
     ext = os.path.splitext(filename.lower())[1]
     rows = []
     if ext in (".xlsx", ".xlsm"):
@@ -1787,9 +1867,9 @@ def _parse_uploaded_file(filename, data):
             headers = list(next(iterator))
         except StopIteration:
             raise ValueError("The uploaded Excel file is empty")
-        mapping = _map_headers(headers)
+        mapping = _map_headers(headers, column_map)
         if "heat_no" not in mapping:
-            raise ValueError("Could not find HEAT NO column in the uploaded file")
+            raise ValueError("Could not find a HEAT NO column in the uploaded file. Use \u201cMap your columns\u201d to point it at the right column.")
         for values in iterator:
             if not any(v not in (None, "") for v in values):
                 continue
@@ -1811,14 +1891,36 @@ def _parse_uploaded_file(filename, data):
             headers = next(reader)
         except StopIteration:
             raise ValueError("The uploaded file is empty")
-        mapping = _map_headers(headers)
+        mapping = _map_headers(headers, column_map)
         if "heat_no" not in mapping:
-            raise ValueError("Could not find HEAT NO column in the uploaded file")
+            raise ValueError("Could not find a HEAT NO column in the uploaded file. Use \u201cMap your columns\u201d to point it at the right column.")
         for values in reader:
             if not any(str(v).strip() for v in values):
                 continue
             rows.append(_record_from_values(values, mapping))
     return rows
+
+
+def _multipart_text_field(msg, field_name):
+    """Pull a plain (non-file) form field's text value out of a parsed
+    multipart message, e.g. the JSON-encoded column_map the import wizard
+    sends alongside the uploaded file."""
+    if not msg.is_multipart():
+        return None
+    for part in msg.iter_parts():
+        disp = part.get("Content-Disposition", "")
+        if "filename=" in disp:
+            continue
+        if part.get_param("name", header="Content-Disposition") != field_name:
+            continue
+        payload = part.get_payload(decode=True)
+        if payload is None:
+            return None
+        try:
+            return payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return payload.decode("utf-8", errors="replace")
+    return None
 
 
 def _backup_list_cache_clear():
@@ -5264,6 +5366,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, status=400)
             return
 
+        if path == "/api/admin/import_headers":
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
+            try:
+                ctype=self.headers.get("Content-Type",""); length=int(self.headers.get("Content-Length","0") or 0); raw=self.rfile.read(length)
+                msg=BytesParser(policy=default).parsebytes((f"Content-Type: {ctype}\r\nMIME-Version: 1.0\r\n\r\n").encode()+raw); uploaded=None
+                if msg.is_multipart():
+                    for part in msg.iter_parts():
+                        if "filename=" in part.get("Content-Disposition",""): uploaded=(part.get_filename() or "upload",part.get_payload(decode=True) or b""); break
+                if not uploaded: raise ValueError("No file was uploaded")
+                headers, auto_map = _detect_headers_only(uploaded[0], uploaded[1])
+                fields=[{"key":k,"label":HEADER_FIELD_LABELS[k],"required":k in HEADER_REQUIRED_FIELDS,"detected":headers[auto_map[k]] if k in auto_map else None} for k in HEADER_ALIASES.keys()]
+                unmapped_required=[f["key"] for f in fields if f["required"] and f["detected"] is None]
+                self._send_json({"ok":True,"filename":uploaded[0],"headers":headers,"fields":fields,"needs_mapping":bool(unmapped_required)})
+            except Exception as e: self._send_json({"error":str(e)},status=400)
+            return
+
         if path == "/api/admin/import_preview":
             if not _require_role(self, "admin", "qa_engineer", "importer"): return
             try:
@@ -5273,7 +5391,12 @@ class Handler(BaseHTTPRequestHandler):
                     for part in msg.iter_parts():
                         if "filename=" in part.get("Content-Disposition",""): uploaded=(part.get_filename() or "upload",part.get_payload(decode=True) or b""); break
                 if not uploaded: raise ValueError("No file was uploaded")
-                records=_parse_uploaded_file(uploaded[0],uploaded[1])
+                column_map=None
+                raw_map=_multipart_text_field(msg,"column_map")
+                if raw_map:
+                    try: column_map=json.loads(raw_map)
+                    except (TypeError, ValueError): column_map=None
+                records=_parse_uploaded_file(uploaded[0],uploaded[1],column_map)
                 if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
                 conn=get_conn(); existing_state=_disposition_state(conn); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={str(r[1] or "").strip().upper():r for r in existing_rows};
                 wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()

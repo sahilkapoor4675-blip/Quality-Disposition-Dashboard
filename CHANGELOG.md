@@ -1,3 +1,16 @@
+## V64.7 — Data Status Strip, Import Column Mapping, named Saved Filter Presets (2026-09-23)
+
+### Added
+- **Data Status Strip:** a compact, always-visible row under the filter summary bar — `Data through: … • Last refreshed: … • Active filters: N • Comparing to: …` — so it's always obvious how current the numbers on screen are and what's narrowing them. Documented as a suggestion since V64.6's audit; now implemented. Reuses the existing freshness (`/api/data_freshness`), last-refreshed and active-filter-count signals rather than adding new polling.
+- **Import column mapping:** the Monthly Data Import Wizard now reads the uploaded file's header row up front (new `/api/admin/import_headers` endpoint) and auto-matches it against the known fields. When a plant's export uses renamed headers and a required column (Heat No, Batch No, Insp Lot Date, Quality Decision) can't be auto-matched, a "Map your columns" step opens so the user points each field at the right column before Validate & Preview runs — instead of the import failing outright with a generic "column not found" error. Well-formed files that already auto-match are unaffected; the panel stays out of the way and is always available via "🧭 Map your columns" for a manual review.
+- **Named, dropdown-managed filter presets:** "Save View"/"Manage Views" (which already stored the full filter combination, not just layout) now use an inline popover instead of browser `prompt()`/`alert()` dialogs — type a name and save, or open "Manage Presets" to load or delete any saved preset from a proper list. Same `qdash_saved_views` localStorage store, no migration needed.
+
+### Changed
+- Relabeled the filter-summary-bar buttons "Save View" → "Save Preset" and "Manage Views" → "Manage Presets" to match the above.
+
+### Notes
+- No database schema or seed data changed. `VERSION.txt` and the `server.py` fallback constant bumped together to keep runtime version reporting in sync (per the V64.6 fix for version drift).
+
 ## V64.6 — Deep webapp audit + live data/filter refresh hardening (2026-09-23)
 
 ### Fixed
