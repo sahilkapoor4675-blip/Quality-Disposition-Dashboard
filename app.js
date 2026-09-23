@@ -834,6 +834,18 @@ function wireDrillDialogDragResize(){
 // so each pane is a fully live, independent copy of this same dashboard at
 // a different filter value — not a simplified summary that needs its own
 // rendering path to maintain.
+function wireExportMenu(){
+  const wrap=document.getElementById('exportMenuWrap'), btn=document.getElementById('exportMenuBtn'), menu=document.getElementById('exportMenu');
+  if(!wrap||!btn||!menu) return;
+  const close=()=>{ menu.classList.remove('open'); btn.setAttribute('aria-expanded','false'); };
+  const toggle=()=>{ const open=menu.classList.toggle('open'); btn.setAttribute('aria-expanded', open?'true':'false'); };
+  btn.addEventListener('click', e=>{ e.stopPropagation(); toggle(); });
+  menu.querySelectorAll('.export-menu-item').forEach(item=>{
+    item.addEventListener('click', ()=>{ close(); exportDashboard(item.dataset.fmt); });
+  });
+  document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && menu.classList.contains('open')) close(); });
+}
 function wireCompareMode(){
   const btn=document.getElementById('compareModeBtn'), modal=document.getElementById('compareModal');
   if(!btn||!modal) return;
@@ -2686,6 +2698,7 @@ async function init(){
   initSortableTables();
   wireAnalyticsPresentation();
   wireCompareMode();
+  wireExportMenu();
   initCommandPalette();
   initChartTooltips();
   // No tab in the URL (a fresh visit, not a shared link)? Fall back to

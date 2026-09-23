@@ -565,6 +565,15 @@ html[data-theme="dark"] .global-search-input{background:#0F1626!important;color:
 const $=id=>document.getElementById(id);
 function csrfToken(){const m=document.cookie.match(/(?:^|; )qdash_csrf=([^;]+)/);return m?decodeURIComponent(m[1]):''}
 async function api(url,opts={}){opts=opts||{};if((opts.method||'GET').toUpperCase()!=='GET' && url.startsWith('/api/admin/')){opts.headers=Object.assign({},opts.headers||{}, {'X-CSRF-Token':csrfToken()});}const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{};if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
+// Shared by loadActivity() and the faster independent "Live Now" poll below — only plays the
+// pulse animation when the number actually changed, not on every poll tick.
+let _lastLiveNowVal=null;
+function setLiveNowValue(n){
+  const el=$('aLiveNow'); if(!el) return;
+  const val=Number(n||0), text=val.toLocaleString();
+  if(_lastLiveNowVal!==null && _lastLiveNowVal!==val){ el.classList.remove('live-pulse'); void el.offsetWidth; el.classList.add('live-pulse'); }
+  el.textContent=text; _lastLiveNowVal=val;
+}
 async function status(){try{return await api('/api/auth/status')}catch{return {authenticated:false}}}
 function setMsg(id,text,kind=''){const e=$(id);e.textContent=text;e.className='msg '+kind;if(window.SFX){if(kind==='err')SFX.play('error');else if(kind==='ok')SFX.play('success');}}
 async function connectionStatus(){const dot=document.querySelector('#loginConnection .connection-dot');const txt=$('loginConnectionText');dot.className='connection-dot checking';txt.textContent='Checking connection…';try{const d=await api('/api/connection_status');dot.className='connection-dot connected';txt.textContent=`${d.provider} • Connected • ${d.latency_ms} ms • ${formatDateTime12(d.checked_at,true)}`;return true}catch(e){let msg='Database unavailable';try{const r=await fetch('/api/connection_status');const d=await r.json();if(d.error)msg=d.error}catch{}dot.className='connection-dot failed';txt.textContent=msg;return false}}
@@ -582,7 +591,7 @@ async function resetUserPassword(id,username){
 async function loadActivity(){try{const d=await api('/api/activity');const s=d.summary;$('aTotalUsers').textContent=s.total_users.toLocaleString();$('aUniqueIps').textContent=s.unique_ips.toLocaleString();$('aActiveToday').textContent=s.active_today.toLocaleString();$('aOpensToday').textContent=s.opens_today.toLocaleString();$('aOpens7').textContent=s.opens_7d.toLocaleString();$('aExports30').textContent=s.exports_30d.toLocaleString();$('activityUsersBody').innerHTML=d.users.map(r=>`<tr><td>${esc(r.ip_address||'Unknown')}</td><td>${Number(r.opens||0).toLocaleString()}</td><td data-ts="${esc(r.last_seen||'')}">${timeAgo(r.last_seen)}</td><td>${esc(r.user_agent||'—')}</td></tr>`).join('');$('recentActivityBody').innerHTML=d.recent.map(r=>`<tr><td>${esc(r.ip_address||'Unknown')}</td><td>${esc(r.username||'Anonymous')}</td><td>${esc(r.event_type||'')}</td><td>${esc(r.tab||'')}</td><td>${formatDateTime12(r.created_at,true)}</td></tr>`).join('');const icon=e=>e.includes('login')?'🔐':e.includes('export')?'⬇':e.includes('import')?'📥':e.includes('delete')?'🗑️':e.includes('backup')?'🗄️':e.includes('kpi')?'🎯':'•';const tl=$('activityTimeline');if(tl)tl.innerHTML=(d.recent||[]).slice(0,8).map(r=>`<div class="activity-event"><div class="activity-icon">${icon(r.event_type||'')}</div><div class="activity-main"><b>${esc(r.event_type||'Activity')}</b><span>${esc(r.username||'Anonymous')} · ${esc(r.tab||'Dashboard')}</span></div><div class="activity-time" data-ts="${esc(r.created_at||'')}">${timeAgo(r.created_at)}</div></div>`).join('')}catch(e){console.error(e)}
   // "Live Now" moved here from the main dashboard header (was the "NOW ACTIVE" pill) — same
   // /api/activity/live endpoint the dashboard's own heartbeat feeds, just surfaced in Admin instead.
-  try{const live=await api('/api/activity/live');const el=$('aLiveNow');if(el)el.textContent=Number(live.active_users||0).toLocaleString();}catch(e){const el=$('aLiveNow');if(el)el.textContent='—';}
+  try{const live=await api('/api/activity/live');setLiveNowValue(live.active_users);}catch(e){const el=$('aLiveNow');if(el)el.textContent='—';}
 }
 $('addUserBtn').onclick=async()=>{setMsg('userMsg','Creating…');try{await api('/api/admin/user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('u_username').value,display_name:$('u_display_name').value,password:$('u_password').value,role:$('u_role').value})});setMsg('userMsg','User created successfully.','ok');$('u_username').value='';$('u_display_name').value='';$('u_password').value='';loadUsers()}catch(e){setMsg('userMsg',e.message,'err')}};
 let KPI_TARGETS_ADMIN={};
@@ -996,11 +1005,19 @@ async function loadV38Safety(){try{const d=await api('/api/admin/service_health'
     if(document.hidden) return;
     const root=$('adminApp'); if(!root||root.classList.contains('hidden')) return;
     if(!touched.has('activityPanel')) return;
-    try{const live=await api('/api/activity/live');const el=$('aLiveNow');if(el)el.textContent=Number(live.active_users||0).toLocaleString();}catch(e){}
+    try{const live=await api('/api/activity/live');setLiveNowValue(live.active_users);}catch(e){}
   },18000);
 })();
 
 </script>
+<style id="admin-live-now-pulse">
+/* A short pulse on the "Live Now" number itself whenever it actually changes value, so a
+   refresh (now every 18s, see the poll above) is visible at a glance instead of requiring
+   someone to stare at the number waiting for it to change. */
+@keyframes liveNowPulse{0%{transform:scale(1.28);color:#16A34A;}100%{transform:scale(1);}}
+#aLiveNow.live-pulse{display:inline-block;animation:liveNowPulse .6s ease-out;}
+html[data-theme="dark"] #aLiveNow.live-pulse{color:#4ADE80;}
+</style>
 <style id="admin-theme-readability-v36">
 /* V36: exhaustive readability guardrails for both themes */
 html[data-theme="light"] .admin-authenticated .panel,

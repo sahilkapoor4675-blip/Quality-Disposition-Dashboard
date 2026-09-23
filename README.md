@@ -1,3 +1,11 @@
+### Latest V64.6 export button + compare tablet view + Live Now pulse patch (2026-09-23)
+
+- Checked `quality.db` before suggesting a `.gitignore` change: it's intentionally committed (a one-time bundled seed DB, copied to the real persistent DB path outside the repo on first run only) with an empty `users` table — left as-is, changing this would break first-run seeding.
+- Added a visible "⬇ Export" button in the header (Excel/PDF/PowerPoint/CSV dropdown) — previously exports were only reachable via Ctrl+E or the Command Palette, with no visible affordance.
+- Compare Mode now stacks the two dashboards top/bottom on tablet widths (551–900px) instead of hiding outright; still hidden below 550px.
+- Admin "Live Now" briefly pulses when its value actually changes, so its faster 18s poll is visible at a glance.
+- No app-version bump; see `CHANGELOG.md` for the full entry.
+
 ### Latest V64.6 Live Now polling + Last Updated relative-time patch (2026-09-23)
 
 - Verified dark mode is handled correctly for both export paths: browser Print/"Print to PDF" already forces the light palette (unchanged, confirmed working), and the in-app Export → PDF/Excel/PPT feature is generated server-side with a fixed style, independent of the on-screen theme either way. No code change was needed here.

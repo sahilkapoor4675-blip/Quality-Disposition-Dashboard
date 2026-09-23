@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=69.2">
+<link rel="stylesheet" href="/app.css?v=69.3">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -357,7 +357,21 @@
         </div>
         <div class="header-actions">
           <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
-          <!-- Everything else (Excel / PDF / PPT / CSV exports, Admin panel, dark mode, sound, compact rows, tab
+          <!-- Visible export entry point: previously exports (Excel/PDF/PPT/CSV) were only reachable
+               via Ctrl+E or the Command Palette (Ctrl+K), with no visible affordance in the header, so
+               first-time users had no way to discover the feature just by looking at the page. -->
+          <div class="export-menu-wrap" id="exportMenuWrap">
+            <button class="cmdk-open-btn export-menu-btn" id="exportMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Export the current view as a report">
+              <span class="cmdk-ico" aria-hidden="true">⬇</span><span class="cmdk-text">Export</span>
+            </button>
+            <div class="export-menu" id="exportMenu" role="menu" aria-label="Export format">
+              <button type="button" class="export-menu-item" role="menuitem" data-fmt="excel"><span aria-hidden="true">📊</span> Excel report</button>
+              <button type="button" class="export-menu-item" role="menuitem" data-fmt="pdf"><span aria-hidden="true">📄</span> PDF report</button>
+              <button type="button" class="export-menu-item" role="menuitem" data-fmt="pptx"><span aria-hidden="true">📑</span> PowerPoint report</button>
+              <button type="button" class="export-menu-item" role="menuitem" data-fmt="csv"><span aria-hidden="true">🗂️</span> Raw data (CSV)</button>
+            </div>
+          </div>
+          <!-- Everything else (Admin panel, dark mode, sound, compact rows, tab
                navigation...) lives in the Command Palette — this one button (or Ctrl+K / ⌘K) opens it. -->
           <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — reports &amp; exports, Admin, dark mode, sound, compact rows and more" aria-label="Open command palette"><span class="cmdk-ico" aria-hidden="true">⌘</span><span class="cmdk-text">Commands</span><kbd class="cmdk-kbd" id="cmdkKbd">Ctrl K</kbd></button>
         </div>
@@ -379,7 +393,9 @@
        default), running in their own iframes. This reuses the URL-state
        feature (?tab=...&month=...) rather than duplicating any rendering
        code, so each side is the real, fully-interactive dashboard — not a
-       simplified read-only summary. Desktop-only (needs real width). -->
+       simplified read-only summary. Side-by-side on desktop; stacked
+       top/bottom on tablet widths (551–900px, see app.css); hidden below
+       that where there isn't room for two full dashboards either way. -->
   <div class="compare-modal" id="compareModal" aria-hidden="true">
     <div class="compare-setup" id="compareSetup">
       <h3>⊞ Compare Two Periods Side-by-Side</h3>
@@ -671,6 +687,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=64.6.9" defer></script>
+<script src="/app.js?v=64.6.10" defer></script>
 </body>
 </html>

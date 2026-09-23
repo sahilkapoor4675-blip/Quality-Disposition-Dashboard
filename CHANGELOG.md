@@ -1,4 +1,18 @@
 
+## V64.6 — Visible Export button + Compare Mode tablet view + Live Now pulse (2026-09-23)
+
+### Investigated, no change made
+- **`quality.db` in the repo:** checked before touching `.gitignore`. This is intentionally committed — it's the app's one-time bundled seed database (`_BUNDLED_SEED_DB` in `server.py`), copied once into the real persistent `DB_PATH` (outside the repo) on first run only; the existing `.gitignore` already has an explicit comment guarding it from being accidentally excluded. The `users` table in it is empty (no shipped credentials); `disposition` holds ~4,936 rows of seed/demo data. Gitignoring it would break first-run seeding, so left as-is.
+
+### Added
+- **Visible "⬇ Export" button in the header**, next to Commands — opens a small dropdown (Excel / PDF / PowerPoint / raw CSV), each calling the same `exportDashboard()` used by the Command Palette and `Ctrl+E`. Previously exports had no visible entry point at all; a first-time user had no way to discover the feature just by looking at the page.
+- **Compare Mode now has a tablet-width fallback.** Below 900px there's no room for two full dashboards side-by-side, but between 551–900px there's enough height for them stacked top/bottom instead — each pane is still the same fully-interactive dashboard iframe, just arranged vertically. Only hidden outright below 550px, where there isn't reasonably enough room stacked either.
+- **"Live Now" (Admin → Dashboard Activity) pulses briefly when its value actually changes** — a quick scale/color flash on the number itself, not a full re-render — so the independent 18s poll (added in the previous patch) is visible at a glance instead of requiring someone to stare at a static-looking number.
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- No data logic or API changes; `exportDashboard()`, `/api/activity/live` and the export endpoints are all reused as-is, not modified.
+
 ## V64.6 — Live Now independent refresh + Last Updated as relative time (2026-09-23)
 
 ### Verified, no change needed
