@@ -25,14 +25,14 @@
      underneath. The taller line-height plus the h1's own bottom margin
      above give that flourish room to breathe without touching the text
      below it. */
-  .quality-intelligence-title{font-family:'Allura',cursive!important;font-size:42px!important;font-weight:700!important;letter-spacing:.9px!important;line-height:1.42!important;padding-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:0;white-space:nowrap;}
+  .quality-intelligence-title{font-family:'Allura','Brush Script MT',Georgia,'Times New Roman',serif!important;font-size:42px!important;font-weight:700!important;letter-spacing:.9px!important;line-height:1.42!important;padding-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:0;white-space:nowrap;}
   .qi-quality,.qi-intelligence{display:inline-block;}
   .qi-quality{color:#c62828;text-shadow:1px 1px 0 rgba(139,0,0,.38),2px 2px 0 rgba(255,255,255,.72),0 4px 8px rgba(198,40,40,.14);}
   .qi-intelligence{color:#1565c0;text-shadow:1px 1px 0 rgba(10,55,110,.38),2px 2px 0 rgba(255,255,255,.78),0 4px 8px rgba(21,101,192,.14);}
   .qi-space{width:8px;}
   header .sub{font-size:14px;opacity:.86;}
   .executive-kicker{font-size:13.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#b9d9ff;margin-top:11px;}
-  .executive-meta{display:flex;align-items:center;gap:14px;margin-left:auto;}
+  .executive-meta{display:flex;align-items:flex-end;gap:14px;margin-left:auto;}
   .header-right-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;margin-left:auto;min-width:0;}
   .updated-block{text-align:right;min-width:150px;}
   .updated-label{font-size:13px;text-transform:uppercase;letter-spacing:1px;font-weight:800;opacity:.68;margin-bottom:3px;}
@@ -69,14 +69,14 @@
 
   .kpi-card{position:relative;overflow:hidden;transition:transform .18s ease,box-shadow .25s ease,border-color .25s ease;}
   .kpi-card::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;border-radius:inherit;}
-  .kpi-card.kpi-up{animation:kpiUp .65s ease-out;}
-  .kpi-card.kpi-down{animation:kpiDown .65s ease-out;}
-  .kpi-card.kpi-pulse{animation:kpiPulse .45s ease-out;}
+  .kpi-card.kpi-up{animation:kpiUp .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-down{animation:kpiDown .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-pulse{animation:kpiPulse .45s ease-out var(--kpi-stagger,0s) both;}
   .kpi-card .value{font-variant-numeric:tabular-nums;transition:color .2s ease,transform .25s ease,text-shadow .25s ease;}
-  .kpi-card.kpi-up .value{animation:valueUp .65s ease-out;}
-  .kpi-card.kpi-down .value{animation:valueDown .65s ease-out;}
-  .kpi-card.kpi-up::after{animation:flashUp .65s ease-out;}
-  .kpi-card.kpi-down::after{animation:flashDown .65s ease-out;}
+  .kpi-card.kpi-up .value{animation:valueUp .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-down .value{animation:valueDown .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-up::after{animation:flashUp .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-down::after{animation:flashDown .65s ease-out var(--kpi-stagger,0s) both;}
   .dashboard-refreshing{opacity:.72;transition:opacity .18s ease;}
   @keyframes kpiUp{0%{transform:translateY(2px);box-shadow:0 1px 2px rgba(0,0,0,.03)}35%{transform:translateY(-2px);box-shadow:0 8px 22px rgba(22,163,74,.16)}100%{transform:translateY(0);box-shadow:0 1px 2px rgba(0,0,0,.03)}}
   @keyframes kpiDown{0%{transform:translateY(2px);box-shadow:0 1px 2px rgba(0,0,0,.03)}35%{transform:translateY(-2px);box-shadow:0 8px 22px rgba(220,38,38,.14)}100%{transform:translateY(0);box-shadow:0 1px 2px rgba(0,0,0,.03)}}
@@ -269,7 +269,7 @@
 /* Premium executive typography */
 html,body{font-family:'Manrope','Segoe UI','Helvetica Neue',Arial,sans-serif;}
 header h1,.section-title,.section-header,.panel h3,.tab-btn{font-family:'DM Sans','Manrope',sans-serif;}
-.quality-intelligence-title{font-family:'Allura',cursive!important;}
+.quality-intelligence-title{font-family:'Allura','Brush Script MT',Georgia,'Times New Roman',serif!important;}
 header h1{font-weight:800;letter-spacing:1.1px;}
 .kpi-card .label,.kpi-status,.kpi-target,.kpi-target-item,.kpi-trendline,.filters,.filters .field label,button,select{font-family:'Space Grotesk',sans-serif;}
 .kpi-card .label{font-weight:800;letter-spacing:.42px;}
@@ -317,8 +317,12 @@ header .sub{font-weight:800!important;letter-spacing:.2px;}
 @keyframes exportSpin{to{transform:rotate(360deg);}}
 html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);border-top-color:#E8EDF6;}
 
-/* ---- Toast notifications: top-right, stacked, auto-dismissing. ---- */
-.toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;pointer-events:none;}
+/* ---- Toast notifications: top-right, stacked, auto-dismissing. ----
+   max-height + overflow-y keeps a long stack from spilling past the viewport
+   edge (JS also caps how many can be visible at once — see showToast). */
+.toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;pointer-events:none;}
+.toast-host::-webkit-scrollbar{width:6px;}
+.toast-host::-webkit-scrollbar-thumb{background:rgba(120,140,160,.35);border-radius:6px;}
 .toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--slate);border-radius:10px;padding:12px 12px;box-shadow:0 10px 28px rgba(15,42,74,.16);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);}
 .toast.show{opacity:1;transform:translateX(0) scale(1);}
 .toast.hide{opacity:0;transform:translateX(12px) scale(.97);}
@@ -583,9 +587,9 @@ html[data-theme="dark"] .qcr-rca-table thead th{
    GLOBAL TYPOGRAPHY (shared across dashboard + QCR)
    ================================================================ */
 :root{
-  --font-body:'Inter','Segoe UI',Arial,sans-serif;
-  --font-display:'DM Sans','Segoe UI',Arial,sans-serif;
-  --font-metric:'Space Grotesk','Segoe UI',Arial,sans-serif;
+  --font-body:'Inter',system-ui,'Segoe UI',Arial,sans-serif;
+  --font-display:'DM Sans',system-ui,'Segoe UI',Arial,sans-serif;
+  --font-metric:'Space Grotesk',system-ui,'Segoe UI',Arial,sans-serif;
 }
 html,body{font-family:var(--font-body);font-size:16px;}
 header h1,.quality-intelligence-title,.section-title,.section-header,.panel h3,.tab-btn,
@@ -1479,7 +1483,7 @@ html[data-theme="dark"] header.app-header{background:linear-gradient(135deg,#0B1
 .header-logo{height:64px;width:auto;max-width:240px;margin:0 22px 0 0;flex:none;object-fit:contain;}
 .executive-brand{min-width:0;padding-left:22px;border-left:1px solid #DCE7F0;}
 html[data-theme="dark"] .executive-brand{border-left-color:#2A3B54;}
-.executive-meta{display:flex;align-items:center;gap:18px;margin-left:auto;}
+.executive-meta{display:flex;align-items:flex-end;gap:18px;margin-left:auto;}
 .updated-block{text-align:right;min-width:0;padding-right:18px;border-right:1px solid #DCE7F0;}
 html[data-theme="dark"] .updated-block{border-right-color:#2A3B54;}
 /* "NOW ACTIVE" pill only had light-theme colours (a bright white pill on the dark header). */

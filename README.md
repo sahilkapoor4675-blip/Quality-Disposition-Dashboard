@@ -1,3 +1,17 @@
+### Latest V64.6 header alignment + Live Users relocation patch (2026-09-23)
+
+- Fixed the header's "Last Updated" block floating unevenly relative to the clock/Live Data/Commands cluster — it now bottom-aligns with that row, matching how the header looked before the digital clock was added.
+- Removed the "NOW ACTIVE" live-user pill from the header. The same live count now shows as "🟢 Live Now" inside Admin → Activity, next to the other activity stats. Heartbeat tracking from the dashboard is unchanged — only the display location moved.
+- No app-version bump; see `CHANGELOG.md` for the full entry.
+
+### Latest V64.6 KPI stagger / toast cap / font fallback patch (2026-09-23)
+
+- KPI cards now animate in with a subtle stagger on refresh instead of all flashing at once (respects reduced-motion).
+- Toast notifications are capped at 4 visible at a time (oldest auto-dismisses when more arrive) and the toast stack now scrolls instead of overflowing the viewport if it ever gets long.
+- The "QUALITY INTELLIGENCE" script-font title now falls back to a real serif (Georgia/Times New Roman) instead of the unpredictable generic `cursive` keyword if the Allura webfont fails to load.
+- Checked and confirmed already in place: filter dropdown search, Google Fonts `display=swap`, and `fonts.gstatic.com` preconnect.
+- No app-version bump; see `CHANGELOG.md` for the full entry.
+
 ### Latest V64.6 header clock + card elevation patch (2026-09-23)
 
 - Removed the redundant "Current Time" label text from the header clock widget; it now shows just a calendar/clock icon, date and live time, colored to match the header's blue brand palette. Position unchanged — still directly above the Commands button.

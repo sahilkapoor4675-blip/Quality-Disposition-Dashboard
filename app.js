@@ -451,9 +451,14 @@ function sparklineSvg(oldValue,currentValue,status){
 }
 function renderKpis(kpis){
   const grid=document.getElementById('kpiGrid'); const nextValues=new Map(); const token=++kpiAnimationToken; grid.innerHTML='';
-  kpis.forEach(k=>{
+  const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  kpis.forEach((k,idx)=>{
     const card=document.createElement('div'); const oldValue=previousKpiValues.get(k.label); const cur=Number(k.value)||0; const changed=Number.isFinite(oldValue)&&Math.abs(oldValue-cur)>1e-12; const direction=changed?(cur>oldValue?'up':'down'):''; const status=kpiStatus(k.label,k);
     card.className=`kpi-card status-${status} kpi-pulse`; if(direction)card.classList.add(direction==='up'?'kpi-up':'kpi-down');
+    // Stagger each card's entrance/refresh animation so a full-grid refresh reads as a
+    // gentle left-to-right ripple instead of every card flashing in lockstep.
+    const staggerMs=reduceMotion?0:Math.min(idx,7)*65;
+    if(staggerMs) card.style.setProperty('--kpi-stagger',`${staggerMs}ms`);
     let trendHtml=''; if(k.arrow!==null && k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; let changeText=''; if(k.change_type==='pts') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`; else if(k.change_type==='new') changeText='New'; else if(k.change_type==='pct') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; else changeText='No change'; trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
     const statusText=status==='good'?'ON TARGET':status==='amber'?'WATCH':status==='bad'?'ACTION':'REFERENCE';
     const valueColor=(k.label==='Total Coils'||k.label==='Output Quantity (MT)')?'#2388C9':(k.color||'#16324F');
@@ -462,7 +467,9 @@ function renderKpis(kpis){
     const targetText=targetCfg ? fmtValue(targetCfg.target,k.fmt) : 'Not set';
     const prevText=(k.prev!==null && k.prev!==undefined) ? fmtValue(k.prev,k.fmt) : 'N/A';
     card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${escQcr(k.label)}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
-    card.setAttribute('role','button'); card.setAttribute('tabindex','0'); card.setAttribute('aria-label',`Drill down into ${k.label}`); card.addEventListener('click',()=>openDrilldown(k.label,`${k.label} — Underlying Records`)); card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDrilldown(k.label,`${k.label} — Underlying Records`);}}); grid.appendChild(card); const valueEl=card.querySelector('.value'); if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)animateKpiValue(valueEl,oldValue,cur,k.fmt,token); nextValues.set(k.label,cur);
+    card.setAttribute('role','button'); card.setAttribute('tabindex','0'); card.setAttribute('aria-label',`Drill down into ${k.label}`); card.addEventListener('click',()=>openDrilldown(k.label,`${k.label} — Underlying Records`)); card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDrilldown(k.label,`${k.label} — Underlying Records`);}}); grid.appendChild(card); const valueEl=card.querySelector('.value');
+    if(changed&&!reduceMotion){ if(staggerMs) setTimeout(()=>{ if(token===kpiAnimationToken) animateKpiValue(valueEl,oldValue,cur,k.fmt,token); },staggerMs); else animateKpiValue(valueEl,oldValue,cur,k.fmt,token); }
+    nextValues.set(k.label,cur);
   }); previousKpiValues=nextValues;
 }
 async function loadKpiTargets(){try{const d=await fetch('/api/kpi_targets',{cache:'no-store'}).then(r=>r.json());KPI_TARGETS=d.targets||{};}catch(e){KPI_TARGETS={};}}
@@ -1264,6 +1271,13 @@ function showToast(kind,title,message,opts={}){
   const dur=opts.duration||(kind==='error'?6500:4200);
   let dismissed=false;
   const dismiss=()=>{ if(dismissed)return; dismissed=true; el.classList.remove('show'); el.classList.add('hide'); setTimeout(()=>el.remove(),260); };
+  el._dismiss=dismiss;
+  // Cap how many toasts can be stacked/visible at once — if a burst of calls fires in quick
+  // succession (bulk export, multiple failed rows, etc.) the oldest ones are dismissed early
+  // instead of silently piling up the whole screen height.
+  const MAX_VISIBLE_TOASTS=4;
+  const active=[...host.children].filter(c=>c!==el&&!c.classList.contains('hide'));
+  if(active.length>=MAX_VISIBLE_TOASTS){ active.slice(0,active.length-MAX_VISIBLE_TOASTS+1).forEach(old=>{ if(old._dismiss) old._dismiss(); }); }
   const timer=setTimeout(dismiss,dur);
   el.querySelector('.toast-close').addEventListener('click',()=>{clearTimeout(timer);dismiss();});
   return ()=>{clearTimeout(timer);dismiss();};

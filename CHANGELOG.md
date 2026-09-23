@@ -13,6 +13,36 @@
 - No application-version bump: this remains **V64.6**.
 - No HTML structure, JS behavior, data logic, or non-card CSS (buttons, tabs, badges, dots, etc.) was touched.
 
+## V64.6 — KPI stagger, toast cap, font fallback hardening (2026-09-23)
+
+### Added
+- **KPI card refresh stagger:** when the KPI grid re-renders, cards now animate in with a small ripple (0ms, 65ms, 130ms… up to 7 cards) instead of every card flashing/counting up at the exact same instant. Implemented via a `--kpi-stagger` CSS custom property set per-card in `renderKpis()`, referenced by the pulse/up/down/value/flash animations in `app.css` so the child `.value` text and the `::after` flash overlay stay in sync with the card's own entrance. Respects `prefers-reduced-motion` (stagger and animation both skipped).
+- **Toast notification cap + scroll safety:** `.toast-host` now has `max-height:calc(100vh - 36px)` with `overflow-y:auto` (thin scrollbar) so a long burst of toasts scrolls within the viewport instead of silently overflowing past the bottom edge. `showToast()` also caps visible toasts at 4 — if a new one arrives while 4+ are already showing, the oldest is dismissed immediately instead of letting the stack grow unbounded (e.g. during a bulk export or a batch of failed rows).
+- **Script-font fallback:** `.quality-intelligence-title` and the intro screen's headline used `'Allura', cursive` as their font stack. The bare `cursive` generic renders wildly differently across OS/browser combinations (confirmed while testing this patch: with the Google Fonts request blocked, the header title rendered in an unrelated serif face, not a script face). Fallback is now `'Allura','Brush Script MT',Georgia,'Times New Roman',serif` — a deliberate, predictable degradation instead of a generic keyword.
+- Added `system-ui` into the three shared typography tokens (`--font-body`, `--font-display`, `--font-metric`) as a smoother, closer-to-native intermediate fallback before the hard-coded `Segoe UI`/`Arial` stack.
+- Bumped `app.css` (`?v=69.0 → ?v=69.1`) and `app.js` (`?v=64.6.7 → ?v=64.6.8`) cache-busters.
+
+### Checked, no change needed
+- **Filter dropdown search:** already implemented (`.filter-search` input inside `.filter-menu`, filters the option list on every keystroke). No changes made here.
+- **Google Fonts loading:** `display=swap` was already present on the Google Fonts request and a `preconnect` to `fonts.gstatic.com` (with `crossorigin`) was already in place — both are covered.
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- No data logic, API calls, or non-listed CSS/JS was touched.
+
+## V64.6 — Header alignment fix + Live Users moved to Admin (2026-09-23)
+
+### Fixed
+- **Header vertical misalignment:** `.executive-meta` (the "Last Updated" block + the clock/status/Commands cluster) used `align-items:center`. That was fine before the digital clock existed, when both sides were a single row of similar height — but once the clock stacked on top of the status row, the taller right-hand stack pushed "Last Updated" to float in the vertical middle instead of lining up with anything, which is what looked "upar-niche" / uneven. Changed to `align-items:flex-end` so "Last Updated" now bottom-aligns with the Live Data / Commands row exactly as it did before the clock was added, with the clock sitting cleanly above just that row. Verified at 1600px, 1300px (wrapped), 800px, and 650px in both themes.
+
+### Changed
+- **"NOW ACTIVE" moved out of the header, into Admin → Activity.** The header no longer shows the live active-user pill. The same real-time count (from `/api/activity/live`, the same endpoint the dashboard's own heartbeat feeds) now appears as a **"🟢 Live Now"** stat at the top of the Admin panel's existing **Dashboard Activity** section, alongside the other activity stats (Unique IPs, Active IPs Today, etc.) rather than as a separate one-off pill. The heartbeat itself (`sendLiveHeartbeat` / `startLiveUserTracking`) still runs from the main dashboard unchanged — only where the number is *displayed* changed, not how it's collected.
+- Bumped `app.css` cache-buster (`?v=69.1 → ?v=69.2`).
+
+### Unchanged
+- No application-version bump: this remains **V64.6**.
+- "LIVE DATA" pill and the Commands button stay in the header exactly as before.
+
 ### V64.6 — Current Time card (selected #3 design)
 - Moved the current-time widget to the header top-right, directly above the Commands action.
 - Added calendar-style date + live seconds clock in 12-hour AM/PM format.
