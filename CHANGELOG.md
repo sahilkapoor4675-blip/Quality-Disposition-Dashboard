@@ -1,3 +1,10 @@
+## V64.9 — Insight strip moved to Quality Control Room, KPI cards show percentage-point delta (2026-09-25)
+
+### Changed
+- **Insight strip relocated:** the "💡 Reject changed from X% to Y% (…)" one-liner introduced in V64.8 was showing on the Dashboard tab; it's now shown only on the Quality Control Room tab, placed right under the QCR header (above the Quality Health strip), where the rest of the "why did it change" analysis already lives. Same >5pp significance gate as before — still renders nothing when there's no real driver.
+- **KPI cards now show the percentage-point delta alongside the existing percent change, for every percentage-valued KPI** (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty). Previously these cards only showed the *relative* change (e.g. Reject% moving 0.35%→0.44% displayed as a confusing "+25.7%"); now it reads "+25.7% (+0.09 pp)" — the pp figure is what actually matters operationally. Quantity/count KPIs (Total Coils, Output Quantity, Reject Qty (MT), etc.) are unaffected and continue to show only the relative % change, since a "percentage point" isn't a meaningful concept for a raw quantity.
+- Sign and color coding on the new pp figure follow the same rules already in place for the rest of the card: the sign (+/−) reflects the raw numeric direction (value went up or down), and the color (green/red) reflects whether that direction is *good* for that specific KPI — a Reject% decrease shows green even though the number itself is negative, exactly as it already did for the existing percent figure. No frontend logic needed to change here; it was already direction-aware, the new pp number simply inherits it.
+
 ## V64.8 — KPI card depth + glass control layer + chart entrance + insight strip (2026-09-24)
 
 Full pass on all three suggestion buckets from the "next level UI" ask — everything under Glass (A), 3D (B), and the new-direction bucket (C), not just a subset. No layout, data, or API changes.

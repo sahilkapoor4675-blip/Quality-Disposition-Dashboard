@@ -117,7 +117,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.8"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.9"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -950,10 +950,20 @@ def compute_kpis(filters, _skip_prev=False):
                 k["prev"] = None
                 k["change_value"] = None
                 k["change_type"] = "none"
+                k["change_value_pp"] = None
                 k["arrow"] = None
                 k["trend_color"] = "equal"
                 continue
             k["prev"] = prev_v
+            # For a KPI whose own value is already a percentage (fmt=="pct"),
+            # the relative "% of change" below is a percent-of-a-percent (Reject%
+            # moving 0.35%->0.44% reads as a confusing "+25.7%"), so also compute
+            # the plain percentage-point delta -- what actually matters on the
+            # shop floor -- and send it alongside, whenever prev_v is available
+            # at all (independent of whether the relative change below is
+            # computable, e.g. a KPI going from exactly 0% is a "new" value for
+            # the relative branch but its pp delta is still perfectly defined).
+            k["change_value_pp"] = (cur_v - prev_v) if k.get("fmt") == "pct" else None
             if meta["change"] == "pts":
                 diff = cur_v - prev_v
                 k["change_value"] = diff

@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.8
+# Quality Disposition Control Dashboard — V64.9
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -7,7 +7,19 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## What changed in V64.8 (glass control layer, 3D depth, chart entrance, OLED dark mode, insight strip)
+## What changed in V64.9 (insight strip moved to Quality Control Room, KPI cards show pp delta)
+- **Insight strip relocated:** the V64.8 "💡 …" one-liner now shows only on the Quality Control Room tab (under the header, above Quality Health), not on the Dashboard tab. Same >5pp significance gate — still renders nothing without a real driver.
+- **KPI cards show percentage-point delta:** every percentage-valued KPI card (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty) now shows the pp change alongside the existing relative % change — e.g. "+25.7% (+0.09 pp)" instead of just "+25.7%". Quantity/count KPIs are unchanged; a percentage point isn't a meaningful concept for a raw quantity.
+- Sign (+/−) and color (green = good, red = bad, per that KPI's own better-direction) on the new pp figure follow the same already-existing direction-aware logic as the rest of the card — nothing new needed there.
+
+### V64.9 checkpoints
+- Dashboard tab: no insight-strip banner appears above the KPI grid.
+- Quality Control Room tab: the insight-strip banner appears right under the header when a significant driver exists for the current filter selection; absent otherwise.
+- A percentage KPI card (e.g. Reject % Qty) shows both the relative % change and a "(±X.XX pp)" figure in its trend line.
+- A quantity KPI card (e.g. Output Quantity (MT)) shows only the relative % change, no "pp" text.
+- The pp figure's sign and color match the existing % figure's — both green together for a good move, both red together for a bad one, per that KPI's own direction.
+
+## What changed in V64.8 (KPI card depth, glass control layer, chart entrance, insight strip)
 Full pass on all three suggestion buckets from the "next level UI" ask — Glass (A), 3D (B), and a
 new distinctive direction (C) — implemented in full rather than a subset. No layout, data, or API changes.
 
