@@ -7,17 +7,18 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## What changed in V64.9 (insight strip moved to Quality Control Room, KPI cards show pp delta)
-- **Insight strip relocated:** the V64.8 "💡 …" one-liner now shows only on the Quality Control Room tab (under the header, above Quality Health), not on the Dashboard tab. Same >5pp significance gate — still renders nothing without a real driver.
-- **KPI cards show percentage-point delta:** every percentage-valued KPI card (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty) now shows the pp change alongside the existing relative % change — e.g. "+25.7% (+0.09 pp)" instead of just "+25.7%". Quantity/count KPIs are unchanged; a percentage point isn't a meaningful concept for a raw quantity.
-- Sign (+/−) and color (green = good, red = bad, per that KPI's own better-direction) on the new pp figure follow the same already-existing direction-aware logic as the rest of the card — nothing new needed there.
+## What changed in V64.9 (insight strip moved to Quality Control Room then removed, all KPI cards show a delta)
+- **Insight strip relocated, then removed:** the V64.8 "💡 …" one-liner first moved from the Dashboard tab to the Quality Control Room tab (under the header, above Quality Health). It's since been removed there too — its driver defect and its "% of positive defect-quantity increase" figure were computed from two different slices of the data (biggest *share* swing vs. share of only the *quantity-increasing* defects), so a driver whose own quantity had actually fallen — e.g. while Reject % was improving — could be named "primary driver" and still show "0%", reading as self-contradictory. The rest of QCR's "Why Changed" panel (FPY/Reject pp + Top Contributors) is unaffected and still explains what moved.
+- **All 12 KPI cards now show a delta, not just the six percentage ones:** percentage-valued KPI cards (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty) show the pp change alongside the existing relative % change — e.g. "+25.7% (+0.09 pp)" instead of just "+25.7%". The other six — Total Coils, Output Quantity (MT), Defect Coils, Hold For Decision Qty (MT), Reject Qty (MT), Salvage + Divert Qty (MT) — now show a matching plain unit delta instead of a pp figure, since a "percentage point" isn't meaningful for a raw quantity: coil-count cards show `(+5 coils)`, MT-based cards show `(+12.500 MT)`.
+- Sign (+/−) and color (green = good, red = bad, per that KPI's own better-direction) on the pp/unit figure follow the same already-existing direction-aware logic as the rest of the card — nothing new needed there.
 
 ### V64.9 checkpoints
 - Dashboard tab: no insight-strip banner appears above the KPI grid.
-- Quality Control Room tab: the insight-strip banner appears right under the header when a significant driver exists for the current filter selection; absent otherwise.
+- Quality Control Room tab: no "💡 …" banner appears anywhere, in any filter state.
 - A percentage KPI card (e.g. Reject % Qty) shows both the relative % change and a "(±X.XX pp)" figure in its trend line.
-- A quantity KPI card (e.g. Output Quantity (MT)) shows only the relative % change, no "pp" text.
-- The pp figure's sign and color match the existing % figure's — both green together for a good move, both red together for a bad one, per that KPI's own direction.
+- A quantity/count KPI card (e.g. Output Quantity (MT), Total Coils) shows both the relative % change and a plain unit delta — `(+N.NNN MT)` or `(+N coils)` — in its trend line.
+- The pp/unit figure's sign and color match the existing % figure's — both green together for a good move, both red together for a bad one, per that KPI's own direction.
+- The QCR "Why Changed" section (FPY/Reject pp figures + statement) still renders as before.
 
 ## What changed in V64.8 (KPI card depth, glass control layer, chart entrance, insight strip)
 Full pass on all three suggestion buckets from the "next level UI" ask — Glass (A), 3D (B), and a

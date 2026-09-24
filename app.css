@@ -371,12 +371,6 @@ html[data-theme="dark"] .export-spinner{border-color:rgba(255,255,255,.22);borde
    a KPI move (same >5pp significance bar the backend already uses to decide
    whether a change is worth flagging as a "problem") — unlike a persistent
    status row, it takes zero space when there's nothing worth saying. */
-.kpi-insight-strip{display:flex;align-items:center;gap:9px;margin-bottom:14px;padding:9px 14px;border-radius:9px;background:linear-gradient(90deg,#eef6ff,#f7fbff);border:1px solid #d3e6f7;color:#2A4E6E;font:600 13.5px Manrope,sans-serif;}
-.kpi-insight-strip.hidden{display:none;}
-.kpi-insight-strip .kis-icon{font-size:15px;}
-.kpi-insight-strip .kis-text b{color:#16324F;}
-html[data-theme="dark"] .kpi-insight-strip{background:linear-gradient(90deg,#141B2C,#101827);border-color:#2A3B54;color:#AEBBD1;}
-html[data-theme="dark"] .kpi-insight-strip .kis-text b{color:#E8EDF6;}
 .section-header{background:linear-gradient(90deg,#183A58,#245777);}
 .panel{border-color:#DDE6EF;box-shadow:var(--shadow-card);}
 .panel h3{color:#1C3A55;}

@@ -583,7 +583,7 @@ function renderKpis(kpis){
     // gentle left-to-right ripple instead of every card flashing in lockstep.
     const staggerMs=reduceMotion?0:Math.min(idx,7)*65;
     if(staggerMs) card.style.setProperty('--kpi-stagger',`${staggerMs}ms`);
-    let trendHtml=''; if(k.arrow!==null && k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; let changeText=''; if(k.change_type==='pts') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`; else if(k.change_type==='new') changeText='New'; else if(k.change_type==='pct') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; else changeText='No change'; if(k.change_value_pp!==null && k.change_value_pp!==undefined){const ppVal=k.change_value_pp*100; changeText+=` (${ppVal>=0?'+':''}${ppVal.toFixed(2)} pp)`;} trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
+    let trendHtml=''; if(k.arrow!==null && k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; let changeText=''; if(k.change_type==='pts') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`; else if(k.change_type==='new') changeText='New'; else if(k.change_type==='pct') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; else changeText='No change'; if(k.change_value_pp!==null && k.change_value_pp!==undefined){const ppVal=k.change_value_pp*100; changeText+=` (${ppVal>=0?'+':''}${ppVal.toFixed(2)} pp)`;} else if(k.change_value_abs!==null && k.change_value_abs!==undefined){const absUnit=k.fmt==='int'?'coils':(k.fmt==='num2'?'MT':''); changeText+=` (${k.change_value_abs>=0?'+':''}${fmtValue(k.change_value_abs,k.fmt)}${absUnit?' '+absUnit:''})`;} trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
     const statusText=status==='good'?'ON TARGET':status==='amber'?'WATCH':status==='bad'?'ACTION':'REFERENCE';
     const valueColor=(k.label==='Total Coils'||k.label==='Output Quantity (MT)')?'#2388C9':(k.color||'#16324F');
     const targetCfg=KPI_TARGETS[k.label]||null;
@@ -2519,20 +2519,6 @@ function qcrRenderWhyDecomposition(intel){
   if(!z||!z.current||!z.previous){el.innerHTML='<div class="qcr-empty">Previous period comparison is not available for this selection.</div>';return;}
   el.innerHTML=`<div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b></div></div><div class="qcr-story-text">${escQcr(z.statement||'')}</div>`;
 }
-function renderKpiInsightStrip(intel){
-  // A glanceable one-liner — "why did the numbers move" — shown only when a
-  // real, meaningful driver was found (mirrors the >5pp bar the backend uses
-  // to decide whether a defect-mix shift is worth flagging at all), so it
-  // never sits there as filler text when nothing notable happened.
-  const el=document.getElementById('kpiInsightStrip'); if(!el) return;
-  const z=intel?.why_changed;
-  const drv=z?.defect_contributor;
-  if(!z || !drv || Math.abs(Number(drv.change_pp)||0)<=5 || !z.statement){
-    el.classList.add('hidden'); el.innerHTML=''; return;
-  }
-  el.innerHTML=`<span class="kis-icon">💡</span><span class="kis-text">${escQcr(z.statement)}</span>`;
-  el.classList.remove('hidden');
-}
 function qcrInvestigation(extra={}, title='QCR Investigation'){
   const p={};
   Object.entries(extra||{}).forEach(([k,v])=>{
@@ -2674,7 +2660,6 @@ async function loadControlRoom(signal){
     qcrRenderQualityStory(intel,intelErr);
     qcrRenderQualityImprovements(intel);
     qcrRenderWhyDecomposition(intel);
-    renderKpiInsightStrip(intel);
     qcrRenderHealthReasons(intel);
     qcrRenderTopContributors(topDefects,defectTotalQty,worstWc,worstGr,intel);
     const loadToken=++window.qcrLoadToken;

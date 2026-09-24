@@ -5,7 +5,22 @@
 - **KPI cards now show the percentage-point delta alongside the existing percent change, for every percentage-valued KPI** (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty). Previously these cards only showed the *relative* change (e.g. Reject% moving 0.35%→0.44% displayed as a confusing "+25.7%"); now it reads "+25.7% (+0.09 pp)" — the pp figure is what actually matters operationally. Quantity/count KPIs (Total Coils, Output Quantity, Reject Qty (MT), etc.) are unaffected and continue to show only the relative % change, since a "percentage point" isn't a meaningful concept for a raw quantity.
 - Sign and color coding on the new pp figure follow the same rules already in place for the rest of the card: the sign (+/−) reflects the raw numeric direction (value went up or down), and the color (green/red) reflects whether that direction is *good* for that specific KPI — a Reject% decrease shows green even though the number itself is negative, exactly as it already did for the existing percent figure. No frontend logic needed to change here; it was already direction-aware, the new pp number simply inherits it.
 
+### Changed (follow-up, same version — no version bump, per feedback: only bump on a major change)
+- **Every KPI card now shows an absolute delta, not just the six "%" ones above.** The other six cards — Total Coils, Output Quantity (MT), Defect Coils, Hold For Decision Qty (MT), Reject Qty (MT), Salvage + Divert Qty (MT) — still showed only the relative % change. They now get the same treatment with a plain unit delta instead of a pp figure, since a "percentage point" isn't meaningful for a raw quantity: coil-count cards show `(+5 coils)`, MT-based cards show `(+12.500 MT)`. Backend sends this as a new `change_value_abs` field (mirrors `change_value_pp`, just for the non-`pct`-format KPIs); frontend picks whichever of the two is present when building the trend line.
+
+### Removed
+- **"💡 Primary visible driver…" insight strip removed** from the Quality Control Room tab (the same strip relocated there earlier in this version). Its driver-selection and its "% of positive defect-quantity increase" figure were computed independently of each other: the driver was whichever defect's *share* of total output moved the most (up or down), while the percentage was that driver's slice of only the defects whose *quantity* increased. When the chosen driver's own quantity had actually fallen — e.g. during a period where Reject % improved — it contributed 0 to that "positive increase" total, so the strip read something like "Reject changed … (−0.47 pp). Primary visible driver is X … It accounts for about 0% of the positive defect-quantity increase," implying a driver of an increase that was, in that reading, not increasing at all. Removed the strip (`renderKpiInsightStrip()` in `app.js`, the `#kpiInsightStrip` element in `index.html`, and its `.kpi-insight-strip`/`.kis-*` styles in `app.css`). The fuller "Why Changed" panel elsewhere on the QCR tab (FPY/Reject pp figures + the same underlying statement, with the Top Contributors table for context) is unaffected.
+
+### V64.9 checkpoints
+- Dashboard tab: no insight-strip banner appears above the KPI grid.
+- Quality Control Room tab: no "💡 …" banner appears anywhere (it was relocated here earlier in this version, then removed in the follow-up above).
+- A percentage KPI card (e.g. Reject % Qty) shows both the relative % change and a "(±X.XX pp)" figure in its trend line.
+- A quantity/count KPI card (e.g. Output Quantity (MT), Total Coils) shows both the relative % change and a plain unit delta — `(+N.NNN MT)` or `(+N coils)` — in its trend line.
+- The pp/unit figure's sign and color match the existing % figure's — both green together for a good move, both red together for a bad one, per that KPI's own direction.
+- The QCR "Why Changed" section (FPY/Reject pp figures + statement) still renders as before.
+
 ## V64.8 — KPI card depth + glass control layer + chart entrance + insight strip (2026-09-24)
+
 
 Full pass on all three suggestion buckets from the "next level UI" ask — everything under Glass (A), 3D (B), and the new-direction bucket (C), not just a subset. No layout, data, or API changes.
 

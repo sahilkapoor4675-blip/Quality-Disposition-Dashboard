@@ -951,6 +951,7 @@ def compute_kpis(filters, _skip_prev=False):
                 k["change_value"] = None
                 k["change_type"] = "none"
                 k["change_value_pp"] = None
+                k["change_value_abs"] = None
                 k["arrow"] = None
                 k["trend_color"] = "equal"
                 continue
@@ -964,6 +965,13 @@ def compute_kpis(filters, _skip_prev=False):
             # computable, e.g. a KPI going from exactly 0% is a "new" value for
             # the relative branch but its pp delta is still perfectly defined).
             k["change_value_pp"] = (cur_v - prev_v) if k.get("fmt") == "pct" else None
+            # Same "shop-floor" delta as change_value_pp above, but for the
+            # non-percentage cards (int / num2). change_value_pp is a
+            # percentage-point delta; this is a plain unit delta in the
+            # KPI's own unit (coils, or MT), shown alongside the relative
+            # % change so every KPI card -- not just the six "%" ones --
+            # gets an absolute, easy-to-read change figure.
+            k["change_value_abs"] = (cur_v - prev_v) if k.get("fmt") != "pct" else None
             if meta["change"] == "pts":
                 diff = cur_v - prev_v
                 k["change_value"] = diff
