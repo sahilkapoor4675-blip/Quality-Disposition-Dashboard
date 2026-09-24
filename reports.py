@@ -59,7 +59,7 @@ def _safe_filename(filters, ext):
         if not value or value == "All":
             continue
         text = str(value)
-        text = re.sub(r"[\\x00-\\x1f\\x7f]", "-", text)
+        text = re.sub(r"[\x00-\x1f\x7f]", "-", text)
         text = text.replace("\\", "-").replace("/", "-").replace('"', "-")
         text = re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("._- ")
         if text:
