@@ -12,6 +12,7 @@ const FILTER_DEFS = [
 let currentFilters = {};
 FILTER_DEFS.forEach(f => currentFilters[f.key] = "All");
 let previousKpiValues = new Map();
+let previousKpiTrend = new Map();
 let kpiAnimationToken = 0;
 let kpiFirstPaintDone = false;
 // Subtle 3D tilt on KPI cards (mouse-follow rotateX/rotateY), only for
@@ -573,7 +574,7 @@ function sparklineSvg(oldValue,currentValue,status){
   return `<svg class="sparkline" viewBox="0 0 76 28" preserveAspectRatio="none"><polyline points="${points}" stroke="${stroke}"/><circle cx="76" cy="${(24-(b-min)/(max-min)*20).toFixed(1)}" r="2.2" fill="${stroke}"/></svg>`;
 }
 function renderKpis(kpis){
-  const grid=document.getElementById('kpiGrid'); const nextValues=new Map(); const token=++kpiAnimationToken; grid.innerHTML='';
+  const grid=document.getElementById('kpiGrid'); const nextValues=new Map(); const nextTrend=new Map(); const token=++kpiAnimationToken; grid.innerHTML='';
   const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const isFirstPaint=!kpiFirstPaintDone;
   kpis.forEach((k,idx)=>{
@@ -583,7 +584,34 @@ function renderKpis(kpis){
     // gentle left-to-right ripple instead of every card flashing in lockstep.
     const staggerMs=reduceMotion?0:Math.min(idx,7)*65;
     if(staggerMs) card.style.setProperty('--kpi-stagger',`${staggerMs}ms`);
-    let trendHtml=''; if(k.arrow!==null && k.arrow!==undefined){const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬'; let changeText=''; if(k.change_type==='pts') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)} pts`; else if(k.change_type==='new') changeText='New'; else if(k.change_type==='pct') changeText=`${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}%`; else changeText='No change'; if(k.change_value_pp!==null && k.change_value_pp!==undefined){const ppVal=k.change_value_pp*100; changeText+=` (${ppVal>=0?'+':''}${ppVal.toFixed(2)} pp)`;} else if(k.change_value_abs!==null && k.change_value_abs!==undefined){const absUnit=k.fmt==='int'?'coils':(k.fmt==='num2'?'MT':''); changeText+=` (${k.change_value_abs>=0?'+':''}${fmtValue(k.change_value_abs,k.fmt)}${absUnit?' '+absUnit:''})`;} trendHtml=`<span class="prev">Prev: ${fmtValue(k.prev,k.fmt)}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeText}</span>`;}
+    let trendHtml=''; let trendMeta=null;
+    if(k.arrow!==null && k.arrow!==undefined){
+      const arrowChar=k.arrow==='up'?'▲':k.arrow==='down'?'▼':'▬';
+      const changeType=k.change_type;
+      let changeInner='';
+      if(changeType==='pts'||changeType==='pct'){
+        const unit=changeType==='pts'?' pts':'%';
+        changeInner=`<span class="kpi-change-val">${k.change_value>=0?'+':''}${(k.change_value*100).toFixed(3)}${unit}</span>`;
+      } else if(changeType==='new'){ changeInner='New'; }
+      else { changeInner='No change'; }
+      let deltaInner=''; let deltaKind=null, deltaRaw=null; const absUnit=k.fmt==='int'?'coils':(k.fmt==='num2'?'MT':'');
+      if(k.change_value_pp!==null && k.change_value_pp!==undefined){
+        deltaKind='pp'; deltaRaw=Number(k.change_value_pp); const ppVal=deltaRaw*100;
+        deltaInner=` (<span class="kpi-delta-val">${ppVal>=0?'+':''}${ppVal.toFixed(2)} pp</span>)`;
+      } else if(k.change_value_abs!==null && k.change_value_abs!==undefined){
+        deltaKind='abs'; deltaRaw=Number(k.change_value_abs);
+        deltaInner=` (<span class="kpi-delta-val">${deltaRaw>=0?'+':''}${fmtValue(deltaRaw,k.fmt)}${absUnit?' '+absUnit:''}</span>)`;
+      }
+      const prevRaw=(k.prev!==null && k.prev!==undefined)?Number(k.prev):null;
+      const prevInner = prevRaw!==null ? `<span class="kpi-prev-val">${fmtValue(prevRaw,k.fmt)}</span>` : 'N/A';
+      trendHtml=`<span class="prev">Prev: ${prevInner}</span><span class="trend ${k.trend_color}">${arrowChar} ${changeInner}${deltaInner}</span>`;
+      trendMeta={
+        fmt:k.fmt, prevRaw,
+        changeType:(changeType==='pts'||changeType==='pct')?changeType:null,
+        changeRaw:(changeType==='pts'||changeType==='pct')?Number(k.change_value):null,
+        deltaKind, deltaRaw, absUnit
+      };
+    }
     const statusText=status==='good'?'ON TARGET':status==='amber'?'WATCH':status==='bad'?'ACTION':'REFERENCE';
     const valueColor=(k.label==='Total Coils'||k.label==='Output Quantity (MT)')?'#2388C9':(k.color||'#16324F');
     const targetCfg=KPI_TARGETS[k.label]||null;
@@ -595,8 +623,40 @@ function renderKpis(kpis){
     if(_kpiTiltEnabled) attachKpiTilt(card);
     if(changed&&!reduceMotion){ if(staggerMs) setTimeout(()=>{ if(token===kpiAnimationToken) animateKpiValue(valueEl,oldValue,cur,k.fmt,token); },staggerMs); else animateKpiValue(valueEl,oldValue,cur,k.fmt,token); }
     else if(isFirstPaint&&!reduceMotion){ if(staggerMs) setTimeout(()=>{ if(token===kpiAnimationToken) animateKpiValue(valueEl,0,cur,k.fmt,token); },staggerMs); else animateKpiValue(valueEl,0,cur,k.fmt,token); }
-    nextValues.set(k.label,cur);
-  }); previousKpiValues=nextValues; kpiFirstPaintDone=true;
+    // Prev value / % trend / delta (pp or MT/coils) count up in step with the
+    // headline value, instead of just snapping to their new text.
+    if(trendMeta && !reduceMotion && (changed||isFirstPaint)){
+      const oldTrend=previousKpiTrend.get(k.label);
+      const runTrendAnim=()=>{
+        if(token!==kpiAnimationToken) return;
+        const prevEl=card.querySelector('.kpi-prev-val');
+        if(prevEl && trendMeta.prevRaw!==null){
+          const fromPrev=(oldTrend&&oldTrend.prevRaw!==null&&oldTrend.prevRaw!==undefined)?oldTrend.prevRaw:(isFirstPaint?0:trendMeta.prevRaw);
+          if(fromPrev!==trendMeta.prevRaw) animateNumericSpan(prevEl,fromPrev,trendMeta.prevRaw,v=>fmtValue(v,trendMeta.fmt),token);
+        }
+        const changeEl=card.querySelector('.kpi-change-val');
+        if(changeEl && trendMeta.changeType){
+          const sameType=oldTrend&&oldTrend.changeType===trendMeta.changeType;
+          const fromChange=sameType?oldTrend.changeRaw:(isFirstPaint?0:trendMeta.changeRaw);
+          if(fromChange!==trendMeta.changeRaw){
+            const unit=trendMeta.changeType==='pts'?' pts':'%';
+            animateNumericSpan(changeEl,fromChange,trendMeta.changeRaw,v=>`${v>=0?'+':''}${(v*100).toFixed(3)}${unit}`,token);
+          }
+        }
+        const deltaEl=card.querySelector('.kpi-delta-val');
+        if(deltaEl && trendMeta.deltaKind){
+          const sameKind=oldTrend&&oldTrend.deltaKind===trendMeta.deltaKind;
+          const fromDelta=sameKind?oldTrend.deltaRaw:(isFirstPaint?0:trendMeta.deltaRaw);
+          if(fromDelta!==trendMeta.deltaRaw){
+            if(trendMeta.deltaKind==='pp') animateNumericSpan(deltaEl,fromDelta,trendMeta.deltaRaw,v=>`${(v*100)>=0?'+':''}${(v*100).toFixed(2)} pp`,token);
+            else animateNumericSpan(deltaEl,fromDelta,trendMeta.deltaRaw,v=>`${v>=0?'+':''}${fmtValue(v,trendMeta.fmt)}${trendMeta.absUnit?' '+trendMeta.absUnit:''}`,token);
+          }
+        }
+      };
+      if(staggerMs) setTimeout(runTrendAnim,staggerMs); else runTrendAnim();
+    }
+    nextValues.set(k.label,cur); nextTrend.set(k.label,trendMeta);
+  }); previousKpiValues=nextValues; previousKpiTrend=nextTrend; kpiFirstPaintDone=true;
 }
 async function loadKpiTargets(){try{const d=await fetch('/api/kpi_targets',{cache:'no-store'}).then(r=>r.json());KPI_TARGETS=d.targets||{};}catch(e){KPI_TARGETS={};}}
 
@@ -611,6 +671,23 @@ function animateKpiValue(el, from, to, fmt, token){
     el.textContent = fmtValue(v, fmt);
     if(p < 1) requestAnimationFrame(step);
     else el.textContent = fmtValue(to, fmt);
+  };
+  requestAnimationFrame(step);
+}
+// Same count-up used for the headline KPI value, generalized with a custom
+// formatter so the Prev/% trend/delta (pp or MT/coils) numbers underneath
+// can count up too instead of just snapping to their new text.
+function animateNumericSpan(el, from, to, formatFn, token){
+  const start = performance.now();
+  const duration = 620;
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  const step = now => {
+    if(token !== kpiAnimationToken) return;
+    const p = Math.min(1, (now - start) / duration);
+    const v = from + (to - from) * ease(p);
+    el.textContent = formatFn(v);
+    if(p < 1) requestAnimationFrame(step);
+    else el.textContent = formatFn(to);
   };
   requestAnimationFrame(step);
 }

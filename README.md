@@ -7,10 +7,11 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## What changed in V64.9 (insight strip moved to Quality Control Room then removed, all KPI cards show a delta)
+## What changed in V64.9 (insight strip moved to Quality Control Room then removed, all KPI cards show a delta, delta animates too)
 - **Insight strip relocated, then removed:** the V64.8 "💡 …" one-liner first moved from the Dashboard tab to the Quality Control Room tab (under the header, above Quality Health). It's since been removed there too — its driver defect and its "% of positive defect-quantity increase" figure were computed from two different slices of the data (biggest *share* swing vs. share of only the *quantity-increasing* defects), so a driver whose own quantity had actually fallen — e.g. while Reject % was improving — could be named "primary driver" and still show "0%", reading as self-contradictory. The rest of QCR's "Why Changed" panel (FPY/Reject pp + Top Contributors) is unaffected and still explains what moved.
 - **All 12 KPI cards now show a delta, not just the six percentage ones:** percentage-valued KPI cards (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty) show the pp change alongside the existing relative % change — e.g. "+25.7% (+0.09 pp)" instead of just "+25.7%". The other six — Total Coils, Output Quantity (MT), Defect Coils, Hold For Decision Qty (MT), Reject Qty (MT), Salvage + Divert Qty (MT) — now show a matching plain unit delta instead of a pp figure, since a "percentage point" isn't meaningful for a raw quantity: coil-count cards show `(+5 coils)`, MT-based cards show `(+12.500 MT)`.
 - Sign (+/−) and color (green = good, red = bad, per that KPI's own better-direction) on the pp/unit figure follow the same already-existing direction-aware logic as the rest of the card — nothing new needed there.
+- **Prev / % trend / delta numbers now count up too, not just the headline value:** the `Prev: …` figure, the relative % (or pp) change, and the pp/MT/coils delta underneath each KPI card now animate with the same count-up used by the headline value, instead of snapping straight to their new text on every filter/refresh change and on first paint.
 
 ### V64.9 checkpoints
 - Dashboard tab: no insight-strip banner appears above the KPI grid.
@@ -19,6 +20,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - A quantity/count KPI card (e.g. Output Quantity (MT), Total Coils) shows both the relative % change and a plain unit delta — `(+N.NNN MT)` or `(+N coils)` — in its trend line.
 - The pp/unit figure's sign and color match the existing % figure's — both green together for a good move, both red together for a bad one, per that KPI's own direction.
 - The QCR "Why Changed" section (FPY/Reject pp figures + statement) still renders as before.
+- On a filter/refresh change (or first page load), the `Prev: …` value, the % / pts change, and the pp/unit delta all count up alongside the headline KPI value; with `prefers-reduced-motion: reduce` set, they update instantly with no animation.
 
 ## What changed in V64.8 (KPI card depth, glass control layer, chart entrance, insight strip)
 Full pass on all three suggestion buckets from the "next level UI" ask — Glass (A), 3D (B), and a

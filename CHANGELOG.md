@@ -11,6 +11,11 @@
 ### Removed
 - **"💡 Primary visible driver…" insight strip removed** from the Quality Control Room tab (the same strip relocated there earlier in this version). Its driver-selection and its "% of positive defect-quantity increase" figure were computed independently of each other: the driver was whichever defect's *share* of total output moved the most (up or down), while the percentage was that driver's slice of only the defects whose *quantity* increased. When the chosen driver's own quantity had actually fallen — e.g. during a period where Reject % improved — it contributed 0 to that "positive increase" total, so the strip read something like "Reject changed … (−0.47 pp). Primary visible driver is X … It accounts for about 0% of the positive defect-quantity increase," implying a driver of an increase that was, in that reading, not increasing at all. Removed the strip (`renderKpiInsightStrip()` in `app.js`, the `#kpiInsightStrip` element in `index.html`, and its `.kpi-insight-strip`/`.kis-*` styles in `app.css`). The fuller "Why Changed" panel elsewhere on the QCR tab (FPY/Reject pp figures + the same underlying statement, with the Top Contributors table for context) is unaffected.
 
+### Changed (follow-up, same version — no version bump, per feedback: only bump on a major change)
+- **Prev / % trend / delta (pp or MT/coils) numbers now count up too, not just the headline KPI value.** The headline value already animated with a count-up on every filter/refresh change and on first paint; the smaller numbers underneath it (`Prev: …`, the relative % or pp change, and the `(+X pp)` / `(+X MT)` / `(+X coils)` delta) previously just snapped straight to their new text. They're now wrapped in their own spans and driven by the same easing/duration as the headline value (and the same stagger, so a full-grid refresh still reads as one ripple), reusing the previous render's numbers as the animation's starting point. If the trend's *kind* changes between renders — e.g. a KPI flips from a plain "% change" to "New" because a comparison period stopped being available — the animation is skipped and the new text is just set directly, since there's no sensible number to count from.
+
+
+
 ### V64.9 checkpoints
 - Dashboard tab: no insight-strip banner appears above the KPI grid.
 - Quality Control Room tab: no "💡 …" banner appears anywhere (it was relocated here earlier in this version, then removed in the follow-up above).
@@ -18,6 +23,7 @@
 - A quantity/count KPI card (e.g. Output Quantity (MT), Total Coils) shows both the relative % change and a plain unit delta — `(+N.NNN MT)` or `(+N coils)` — in its trend line.
 - The pp/unit figure's sign and color match the existing % figure's — both green together for a good move, both red together for a bad one, per that KPI's own direction.
 - The QCR "Why Changed" section (FPY/Reject pp figures + statement) still renders as before.
+- On a filter/refresh change (or first page load), the `Prev: …` value, the % / pts change, and the pp/unit delta all count up alongside the headline KPI value instead of snapping straight to their new numbers; with `prefers-reduced-motion: reduce` set, all of these (headline value included) update instantly with no animation.
 
 ## V64.8 — KPI card depth + glass control layer + chart entrance + insight strip (2026-09-24)
 
