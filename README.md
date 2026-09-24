@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.9
+# Quality Disposition Control Dashboard — V65.0
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -7,20 +7,18 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## What changed in V64.9 (insight strip moved to Quality Control Room then removed, all KPI cards show a delta, delta animates too)
-- **Insight strip relocated, then removed:** the V64.8 "💡 …" one-liner first moved from the Dashboard tab to the Quality Control Room tab (under the header, above Quality Health). It's since been removed there too — its driver defect and its "% of positive defect-quantity increase" figure were computed from two different slices of the data (biggest *share* swing vs. share of only the *quantity-increasing* defects), so a driver whose own quantity had actually fallen — e.g. while Reject % was improving — could be named "primary driver" and still show "0%", reading as self-contradictory. The rest of QCR's "Why Changed" panel (FPY/Reject pp + Top Contributors) is unaffected and still explains what moved.
-- **All 12 KPI cards now show a delta, not just the six percentage ones:** percentage-valued KPI cards (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty) show the pp change alongside the existing relative % change — e.g. "+25.7% (+0.09 pp)" instead of just "+25.7%". The other six — Total Coils, Output Quantity (MT), Defect Coils, Hold For Decision Qty (MT), Reject Qty (MT), Salvage + Divert Qty (MT) — now show a matching plain unit delta instead of a pp figure, since a "percentage point" isn't meaningful for a raw quantity: coil-count cards show `(+5 coils)`, MT-based cards show `(+12.500 MT)`.
-- Sign (+/−) and color (green = good, red = bad, per that KPI's own better-direction) on the pp/unit figure follow the same already-existing direction-aware logic as the rest of the card — nothing new needed there.
-- **Prev / % trend / delta numbers now count up too, not just the headline value:** the `Prev: …` figure, the relative % (or pp) change, and the pp/MT/coils delta underneath each KPI card now animate with the same count-up used by the headline value, instead of snapping straight to their new text on every filter/refresh change and on first paint.
+## What changed in V65.0 (presentation mode fits screen, field-name hover tag, animated header, icons)
+- **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
+- **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
+- **Rolling-mill header background:** slow copper/steel ribbons, glow and glint. Disabled for reduced-motion and print.
+- **Icons:** one SVG sprite (top of `index.html`) + `qdIc('name')` in `app.js`; added to filters, selection, presets, export, search, drill-down, compare, Control Room headings, presentation mode.
+- **Chart tooltip** now has styling (it had none) and names the measure on single-series charts.
 
-### V64.9 checkpoints
-- Dashboard tab: no insight-strip banner appears above the KPI grid.
-- Quality Control Room tab: no "💡 …" banner appears anywhere, in any filter state.
-- A percentage KPI card (e.g. Reject % Qty) shows both the relative % change and a "(±X.XX pp)" figure in its trend line.
-- A quantity/count KPI card (e.g. Output Quantity (MT), Total Coils) shows both the relative % change and a plain unit delta — `(+N.NNN MT)` or `(+N coils)` — in its trend line.
-- The pp/unit figure's sign and color match the existing % figure's — both green together for a good move, both red together for a bad one, per that KPI's own direction.
-- The QCR "Why Changed" section (FPY/Reject pp figures + statement) still renders as before.
-- On a filter/refresh change (or first page load), the `Prev: …` value, the % / pts change, and the pp/unit delta all count up alongside the headline KPI value; with `prefers-reduced-motion: reduce` set, they update instantly with no animation.
+### V65.0 checkpoints
+- Browser at 100%: open the expand button on every chart. Chart, legend and table are fully visible with no overlap.
+- Hover a KPI value, a table header and a table cell: the tag shows KPI name / column name / column + "Row: …".
+- Header shows slow moving ribbons and an occasional glint; text stays readable in light and dark theme.
+- Filters, Selection, Save/Manage Presets, Export, Commands, Search show icons.
 
 ## What changed in V64.8 (KPI card depth, glass control layer, chart entrance, insight strip)
 Full pass on all three suggestion buckets from the "next level UI" ask — Glass (A), 3D (B), and a

@@ -9,6 +9,9 @@ const FILTER_DEFS = [
   {key:"defect_intensity", label:"🏷️ Defect Intensity"},
 ];
 
+// V65.0 icon helper: <svg><use> reference into the sprite at the top of index.html.
+function qdIc(name,cls){ return `<svg class="ic${cls?' '+cls:''}" aria-hidden="true"><use href="#ic-${name}"/></svg>`; }
+
 let currentFilters = {};
 FILTER_DEFS.forEach(f => currentFilters[f.key] = "All");
 let previousKpiValues = new Map();
@@ -208,6 +211,11 @@ function initCommandPalette(){
       const on=toggleSound();
       if(on!==null) showToast('success',on?'Sound effects on':'Sound effects muted', on?'Click and confirmation sounds are back.':'The dashboard is silent now. Unmute any time from Ctrl+K.');
     }});
+    const hintsOn=fieldHintsOn();
+    cmds.push({icon:'🏷️',label:hintsOn?'Turn Off Field Name Hints (hover tag)':'Turn On Field Name Hints (hover tag)',kw:'field name hover tooltip tag hint cursor',run:()=>{
+      const on=toggleFieldHints();
+      showToast('success',on?'Field name hints on':'Field name hints off', on?'A small tag now names the field under your cursor.':'The hover tag is hidden. Turn it back on from Ctrl+K.');
+    }});
     cmds.push({icon:'🔐',label:'Open Admin Panel',kw:'admin settings users login manage',run:()=>window.location.href='/admin'});
     const curTab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
     cmds.push({icon:'📌',label:`Set "${TAB_LABELS[curTab]||curTab}" as my Default Landing Tab`,run:()=>setDefaultLandingTab(curTab)});
@@ -362,14 +370,14 @@ async function loadFilters(){
   const options = await res.json();
   window._filterOptionsCache = options;
   const container = document.getElementById("filters");
-  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">⊞ Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">Reset All</button></div></div>`;
+  container.innerHTML = `<div class="filter-toolbar"><div class="filter-toolbar-title">${qdIc('filter')}Dashboard Filters</div><div class="filter-actions"><span id="activeFilterBadge" class="active-filter-badge">0 Active</span><button id="compareModeBtn" class="reset-all" type="button">${qdIc('compare')}Compare Periods</button><button id="resetAllBtn" class="reset-all" type="button">${qdIc('reset')}Reset All</button></div></div>`;
   FILTER_DEFS.forEach(f => {
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
     const label = document.createElement("label"); label.textContent = f.label;
     const control = document.createElement("div"); control.className = "filter-control";
     const trigger = document.createElement("button"); trigger.type="button"; trigger.className="filter-trigger";
     const valueSpan = document.createElement("span"); valueSpan.textContent="All";
-    trigger.appendChild(valueSpan); trigger.insertAdjacentHTML("beforeend","<span class='chevron'>▼</span>");
+    trigger.appendChild(valueSpan); trigger.insertAdjacentHTML("beforeend",`<span class='chevron'>${qdIc('chevron-down')}</span>`);
     const menu = document.createElement("div"); menu.className="filter-menu";
     const search = document.createElement("input"); search.className="filter-search"; search.placeholder="Search options…"; search.type="text";
     const list = document.createElement("div"); list.className="filter-options";
@@ -893,7 +901,7 @@ function saveCurrentView(){
   // Replaces the old window.prompt() flow with an inline, named-preset
   // popover: type a name, hit Save — no browser dialog.
   const pop=document.getElementById('viewPopover'); if(!pop) return;
-  pop.innerHTML=`<div class="view-pop-title">Save current filters as…</div><input type="text" id="viewPopSaveName" maxlength="60" placeholder="e.g. This Month + Work Center A + PRIME"><div class="view-pop-actions"><button class="btn" id="viewPopCancelBtn" type="button">Cancel</button><button class="btn primary" id="viewPopSaveBtn" type="button">Save Preset</button></div>`;
+  pop.innerHTML=`<div class="view-pop-title">${qdIc('bookmark-plus')}Save current filters as…</div><input type="text" id="viewPopSaveName" maxlength="60" placeholder="e.g. This Month + Work Center A + PRIME"><div class="view-pop-actions"><button class="btn" id="viewPopCancelBtn" type="button">Cancel</button><button class="btn primary" id="viewPopSaveBtn" type="button">${qdIc('bookmark-plus')}Save Preset</button></div>`;
   pop.classList.remove('hidden');
   const input=document.getElementById('viewPopSaveName'); input.focus();
   function doSave(){
@@ -913,7 +921,7 @@ function renderManagePresetsList(){
   const listHtml = names.length
     ? `<div class="view-pop-list">${names.map(n=>`<div class="view-pop-row" data-name="${escQcr(n)}"><span class="view-pop-name">${escQcr(n)}</span><button class="view-pop-load" type="button" title="Load this preset">Load</button><button class="view-pop-del" type="button" title="Delete this preset">🗑</button></div>`).join('')}</div>`
     : `<div class="view-pop-empty">No saved presets yet — use “Save Preset” to name your current filter combination.</div>`;
-  pop.innerHTML=`<div class="view-pop-title">Saved filter presets</div>${listHtml}<div class="view-pop-actions"><button class="btn" id="viewPopCloseBtn" type="button">Close</button></div>`;
+  pop.innerHTML=`<div class="view-pop-title">${qdIc('list-edit')}Saved filter presets</div>${listHtml}<div class="view-pop-actions"><button class="btn" id="viewPopCloseBtn" type="button">Close</button></div>`;
   pop.classList.remove('hidden');
   pop.querySelectorAll('.view-pop-load').forEach(b=>b.addEventListener('click',e=>{
     const name=e.target.closest('.view-pop-row').dataset.name;
@@ -931,7 +939,7 @@ function renderManagePresetsList(){
 function manageSavedViews(){ renderManagePresetsList(); }
 document.addEventListener('click',e=>{
   const pop=document.getElementById('viewPopover'); if(!pop || pop.classList.contains('hidden')) return;
-  if(pop.contains(e.target) || e.target.id==='saveViewBtn' || e.target.id==='clearViewsBtn') return;
+  if(pop.contains(e.target) || e.target.closest('#saveViewBtn,#clearViewsBtn')) return;
   closeViewPopover();
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeViewPopover(); });
@@ -1019,7 +1027,7 @@ function goToDrillLevel(i){
 }
 function renderDrillPage(page=1){
   const {metric,title,extra}=currentDrill(), modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
-  currentDrill().page=page; document.getElementById('drillTitle').textContent=title||'Underlying Records'; document.getElementById('drillSubtitle').textContent=activeFilterSummary();
+  currentDrill().page=page; { const dt=document.getElementById('drillTitle'); const dtt=dt&&dt.querySelector('.drill-title-text'); (dtt||dt).textContent=title||'Underlying Records'; } document.getElementById('drillSubtitle').textContent=activeFilterSummary();
   content.innerHTML='<div class="drill-empty">Loading underlying records…</div>'; document.getElementById('drillCount').textContent='Loading…';
   const qs=drilldownFiltersQuery(Object.assign({metric,page,page_size:250},extra)); document.getElementById('drillExportBtn').href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric},extra));
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
@@ -1291,7 +1299,9 @@ function chartAvailWidth(el){
 function chartUnits(container, pxPerUnit=CHART_PX_PER_UNIT, minUnits=CHART_MIN_UNITS, fallback=DESIGN_W){
   const cw = chartAvailWidth(container);
   if(!cw) return fallback;
-  return Math.max(minUnits, Math.round(cw / pxPerUnit));
+  // container._qdFit is set only by presentation mode: it reshapes the canvas so the chart's
+  // aspect ratio matches the space it is shown in (1 = normal dashboard behaviour).
+  return Math.max(minUnits, Math.round(cw / (pxPerUnit * (container._qdFit || 1))));
 }
 // Charts remember how to redraw themselves and are redrawn (debounced) when
 // their container's width changes: browser zoom, window resize, a hidden tab
@@ -1353,7 +1363,10 @@ function initChartTooltips(){
     const t = e.target.closest('[data-tip]');
     if(!t || t.contains(e.relatedTarget)) return;
     const el = chartTooltipEl();
-    el.textContent = t.getAttribute('data-tip');
+    const tip = t.getAttribute('data-tip') || '';
+    const fEl = t.closest('[data-chart-field]');
+    const showField = fEl && !/ — /.test(tip) && !/^Cumulative/i.test(tip);
+    el.innerHTML = '<span class="ct-main">' + escQcr(tip) + '</span>' + (showField ? '<span class="ct-field">' + qdIc('tag') + escQcr(fEl.getAttribute('data-chart-field')) + '</span>' : '');
     el.classList.add('show');
     positionChartTooltip(e.clientX, e.clientY);
   });
@@ -1394,10 +1407,10 @@ function ensureAnalyticsPresentation(){
     <section class="analytics-presentation-shell" role="dialog" aria-modal="true" aria-labelledby="analyticsPresentationTitle">
       <div class="analytics-presentation-toolbar">
         <div class="analytics-presentation-meta">
-          <span class="analytics-presentation-kicker">PRESENTATION MODE</span>
+          <span class="analytics-presentation-kicker">${qdIc('maximize')}PRESENTATION MODE</span>
           <h2 id="analyticsPresentationTitle"></h2>
         </div>
-        <button type="button" class="analytics-presentation-close" aria-label="Close presentation mode" title="Close presentation mode (Esc)">×</button>
+        <button type="button" class="analytics-presentation-close" aria-label="Close presentation mode" title="Close presentation mode (Esc)">${qdIc('x')}</button>
       </div>
       <div class="analytics-presentation-stage" tabindex="-1"></div>
     </section>`;
@@ -1450,11 +1463,35 @@ function openAnalyticsPresentation(panel){
   requestAnimationFrame(()=>{
     overlay.classList.add('is-open');
     closeBtn.focus({preventScroll:true});
-    // Moving the real chart container changes its width, so give the
-    // ResizeObserver one frame to redraw at presentation dimensions.
-    panel.querySelectorAll('.chart-scroll').forEach(c=>{ c._qdRedraw?.(); });
+    // Moving the real chart container changes its size: redraw every chart at the
+    // presentation size and reshape it to fit the screen (no zooming out needed).
+    fitPresentationCharts(panel);
   });
 }
+
+// Presentation fit: the chart's SVG is letterboxed (never cropped) inside the space left after the
+// legend and table. To also FILL that space, redraw once with a canvas whose aspect ratio matches it.
+function fitPresentationCharts(panel){
+  if(!panel) return;
+  panel.querySelectorAll('.chart-scroll').forEach(c=>{
+    if(!c._qdRedraw) return;
+    try{
+      c._qdFit=1; c._qdRedraw();
+      const svg=c.querySelector(':scope > .chart-svg');
+      const vb=svg && svg.viewBox && svg.viewBox.baseVal;
+      if(!vb || !vb.width || !vb.height || !svg.clientWidth || !svg.clientHeight) return;
+      const fit=Math.max(0.55,Math.min(2.2,(vb.width/vb.height)/(svg.clientWidth/svg.clientHeight)));
+      if(Math.abs(fit-1)<0.06) return;
+      c._qdFit=fit; c._qdRedraw();
+    }catch(err){ console.error('Presentation fit failed',err); }
+  });
+}
+let _presFitTimer=null;
+window.addEventListener('resize',()=>{
+  if(!_analyticsPresentationState) return;
+  clearTimeout(_presFitTimer);
+  _presFitTimer=setTimeout(()=>{ if(_analyticsPresentationState) fitPresentationCharts(_analyticsPresentationState.panel); },220);
+});
 
 function closeAnalyticsPresentation(){
   const state=_analyticsPresentationState;
@@ -1468,6 +1505,7 @@ function closeAnalyticsPresentation(){
     try{state.parent.appendChild(panel);}catch(_e){}
   }
   panel.classList.remove('analytics-presentation-panel');
+  panel.querySelectorAll('.chart-scroll').forEach(c=>{ c._qdFit=1; });
   _analyticsPresentationState=null;
   document.documentElement.classList.remove('analytics-presentation-open');
   document.body.classList.remove('analytics-presentation-open');
@@ -1501,10 +1539,100 @@ function wireAnalyticsPresentation(){
     btn.className='analytics-expand-btn';
     btn.setAttribute('aria-label',`Open ${analyticsPanelTitle(panel)} in presentation mode`);
     btn.title='Open in presentation mode';
-    btn.textContent='⛶';
+    btn.innerHTML=qdIc('maximize');
     btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openAnalyticsPresentation(panel);});
     heading.appendChild(btn);
   });
+}
+
+// ---------------------------------------------------------------------
+// FIELD HINTS (V65.0)
+// A small tag follows the mouse and names the field under it: KPI parts, table columns
+// (+ row), filters, legends and icon-only buttons. Chart shapes keep their own tooltip
+// (above). Toggle from Ctrl+K; the choice is remembered.
+const FIELD_HINT_KEY='qdash_field_hints';
+function fieldHintsOn(){ try{ return localStorage.getItem(FIELD_HINT_KEY)!=='off'; }catch(e){ return true; } }
+function toggleFieldHints(){ const on=!fieldHintsOn(); try{ localStorage.setItem(FIELD_HINT_KEY,on?'on':'off'); }catch(e){} if(!on) hideFieldTag(); return on; }
+let _fieldTagEl=null, _fieldTagTarget=null, _fieldTagTitleEl=null, _fieldTagRaf=0, _fieldTagXY=null;
+function fieldTagEl(){
+  if(!_fieldTagEl){
+    _fieldTagEl=document.createElement('div');
+    _fieldTagEl.className='qd-field-tag'; _fieldTagEl.setAttribute('role','tooltip');
+    _fieldTagEl.innerHTML=qdIc('tag')+'<div class="qft-copy"><b class="qft-name"></b><small class="qft-meta"></small></div>';
+    document.body.appendChild(_fieldTagEl);
+  }
+  return _fieldTagEl;
+}
+function _fhClean(s){ return String(s||'').replace(/[\u2191\u2193\u2195\u25B2\u25BC\u21C5]/g,'').replace(/\s+/g,' ').trim(); }
+function _fhCell(table,idx){
+  const rows=table.tHead&&table.tHead.rows.length?table.tHead.rows:table.rows;
+  const r=rows[rows.length?(table.tHead&&table.tHead.rows.length?rows.length-1:0):0]; return r&&r.cells[idx]?_fhClean(r.cells[idx].textContent):'';
+}
+function resolveFieldInfo(t){
+  if(!(t instanceof Element)) return null;
+  if(t.closest('[data-tip],.qd-field-tag,.chart-tooltip,.analytics-presentation-backdrop')) return null;
+  const ex=t.closest('[data-field]');
+  if(ex) return {name:ex.getAttribute('data-field'),meta:ex.getAttribute('data-field-meta')||'Field'};
+  const cell=t.closest('td,th');
+  if(cell && cell.closest('table')){
+    const table=cell.closest('table'); const idx=cell.cellIndex; const head=_fhCell(table,idx);
+    if(cell.tagName==='TH') return head?{name:head,meta:'Table column'}:null;
+    if(!head) return null;
+    let rowLabel=''; for(const c of cell.parentElement.cells){ const h=_fhCell(table,c.cellIndex); const tx=_fhClean(c.textContent); if(c!==cell && tx && !/^(rank|#|sr\.?|s\.?no\.?)$/i.test(h) && !/^[\d.,%\s-]+$/.test(tx)){ rowLabel=tx; break; } }
+    return {name:head,meta:rowLabel?('Row: '+(rowLabel.length>34?rowLabel.slice(0,33)+'…':rowLabel)):'Table value'};
+  }
+  const kpi=t.closest('.kpi-card');
+  if(kpi){
+    const name=_fhClean(kpi.querySelector('.label')&&kpi.querySelector('.label').textContent.replace(kpi.querySelector('.kpi-icon')?.textContent||'',''))||'KPI';
+    if(t.closest('.kpi-status')) return {name:'Status vs target',meta:name};
+    if(t.closest('.value')) return {name:name,meta:'Current value'};
+    if(t.closest('.prev')) return {name:'Previous period value',meta:name};
+    if(t.closest('.trend')) return {name:'Change vs previous period',meta:name};
+    if(t.closest('.kpi-targets,.kpi-target,.kpi-target-item')) return {name:'Target thresholds',meta:name};
+    return {name:name,meta:'KPI'};
+  }
+  const ff=t.closest('.filter-field');
+  if(ff){ const lab=_fhClean(ff.querySelector('label')&&ff.querySelector('label').textContent).replace(/^\P{L}+/u,''); const opt=t.closest('.filter-option,.filter-options > *'); return {name:lab||'Filter',meta:opt?('Option: '+_fhClean(opt.textContent)):'Filter'}; }
+  const li=t.closest('.legend-item'); if(li) return {name:_fhClean(li.textContent),meta:'Legend'};
+  const ex2=t.closest('.qcr-exec-item'); if(ex2){ const sm=ex2.querySelector('small'); if(sm) return {name:_fhClean(sm.textContent),meta:'Summary'}; }
+  const ti=t.closest('[title],[aria-label]');
+  if(ti && (ti.tagName==='BUTTON'||ti.hasAttribute('title')) && !ti.closest('.cmdk-dialog')){
+    const nm=_fhClean(ti.getAttribute('title')||ti.getAttribute('data-qd-title')||ti.getAttribute('aria-label')); if(nm) return {name:nm,meta:ti.tagName==='BUTTON'?'Button':'Info',_titleEl:ti.hasAttribute('title')?ti:null};
+  }
+  return null;
+}
+function hideFieldTag(){
+  if(_fieldTagEl) _fieldTagEl.classList.remove('show');
+  if(_fieldTagTitleEl){ const v=_fieldTagTitleEl.getAttribute('data-qd-title'); if(v!==null){ _fieldTagTitleEl.setAttribute('title',v); _fieldTagTitleEl.removeAttribute('data-qd-title'); } _fieldTagTitleEl=null; }
+  _fieldTagTarget=null;
+}
+function placeFieldTag(x,y){
+  const el=fieldTagEl(); const r=el.getBoundingClientRect(); let L=x+14,T=y+20;
+  if(L+r.width>innerWidth-8) L=x-r.width-12; if(T+r.height>innerHeight-8) T=y-r.height-14;
+  el.style.transform='translate3d('+Math.max(6,L)+'px,'+Math.max(6,T)+'px,0)';
+}
+function initFieldHints(){
+  if(initFieldHints._wired) return; initFieldHints._wired=true;
+  if(!window.matchMedia('(pointer: fine)').matches) return;
+  document.addEventListener('pointermove',e=>{
+    if(e.pointerType!=='mouse' || !fieldHintsOn()) return;
+    _fieldTagXY=[e.clientX,e.clientY];
+    if(_fieldTagRaf) return;
+    _fieldTagRaf=requestAnimationFrame(()=>{
+      _fieldTagRaf=0; const [x,y]=_fieldTagXY; const tg=e.target;
+      if(tg!==_fieldTagTarget){
+        hideFieldTag(); _fieldTagTarget=tg; const info=resolveFieldInfo(tg);
+        if(!info){ return; }
+        if(info._titleEl){ _fieldTagTitleEl=info._titleEl; info._titleEl.setAttribute('data-qd-title',info._titleEl.getAttribute('title')); info._titleEl.removeAttribute('title'); }
+        const el=fieldTagEl(); el.querySelector('.qft-name').textContent=info.name; el.querySelector('.qft-meta').textContent=info.meta||''; el.classList.add('show');
+      }
+      if(_fieldTagEl && _fieldTagEl.classList.contains('show')) placeFieldTag(x,y);
+    });
+  },{passive:true});
+  document.addEventListener('pointerleave',hideFieldTag,true);
+  document.documentElement.addEventListener('mouseleave',hideFieldTag);
+  window.addEventListener('scroll',hideFieldTag,{passive:true,capture:true});
+  document.addEventListener('pointerdown',hideFieldTag,true);
 }
 
 function truncateLabel(s, n){
@@ -2990,6 +3118,7 @@ async function init(){
   wireExportDialog();
   initCommandPalette();
   initChartTooltips();
+  initFieldHints();
   // No tab in the URL (a fresh visit, not a shared link)? Fall back to
   // whichever tab this person picked as their default landing tab (Command
   // Palette → "Set … as my Default Landing Tab"), before finally falling

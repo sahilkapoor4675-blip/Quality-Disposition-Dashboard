@@ -1,3 +1,14 @@
+## V65.0 — Presentation mode fits the screen, field-name hover tag, animated header, icons (2026-09-24)
+
+### Fixed
+- **Presentation mode no longer overlaps chart and table at 100% zoom.** The panel is now exactly the size of the stage; legend, chart and table share it. The chart is redrawn with an aspect ratio that matches the free space (and re-fitted on window resize), the table gets at most 38% of the height and scrolls inside itself, the duplicated inner title/expand button is hidden, and the 6M Fishbone is fitted the same way.
+- **Chart hover tooltip had no CSS at all**; it is now styled (dark pill, shown only on hover). Single-series charts also name the measure (e.g. "Qty (MT)").
+
+### Added
+- **Field-name hover tag:** a small tag follows the cursor and names the field: KPI parts (value, previous, change, status, targets), table columns and cells (column + row), filters and their options, legends, icon-only buttons. Turn it off/on from Ctrl+K.
+- **Rolling-mill header background:** slow drifting copper/steel ribbons, a soft glow and a glint sweep (GPU transforms only; off for reduced-motion and print; dark-mode tuned).
+- **Icon set:** shared SVG sprite in index.html plus `qdIc()` helper in app.js. Icons added to Dashboard Filters, Compare Periods, Reset All, Selection, Saved Views, Save/Manage Presets, Export button and dialog, Commands, Search, Last Updated, drill-down, Compare view, Control Room summary strip and zone headings, presentation mode.
+
 ## V64.9 — Insight strip moved to Quality Control Room, KPI cards show percentage-point delta (2026-09-25)
 
 ### Changed

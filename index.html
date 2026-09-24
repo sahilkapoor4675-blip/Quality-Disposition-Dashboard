@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=69.6">
+<link rel="stylesheet" href="/app.css?v=70.0">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -121,6 +121,40 @@
 </style>
 </head>
 <body>
+
+<!-- V65.0 icon sprite: one shared set of line icons, used as <svg class="ic"><use href="#ic-NAME"/></svg>
+     (static markup here, and via qdIc('NAME') from app.js for dynamically built UI). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="ic-filter" viewBox="0 0 24 24"><path d="M3.5 5h17l-6.5 8v6l-4 2v-8z"/></symbol>
+    <symbol id="ic-sliders" viewBox="0 0 24 24"><path d="M4 6h8M17 6h3M4 12h3M12 12h8M4 18h10M19 18h1"/><circle cx="14.5" cy="6" r="2.3"/><circle cx="9.5" cy="12" r="2.3"/><circle cx="16.5" cy="18" r="2.3"/></symbol>
+    <symbol id="ic-selection" viewBox="0 0 24 24"><path d="M3.5 6.5l1.6 1.6 3-3.4M3.5 12.5l1.6 1.6 3-3.4M3.5 18.5l1.6 1.6 3-3.4M12 7h8.5M12 13h8.5M12 19h8.5"/></symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10.5l4.5 4.5 4.5-4.5M4.5 20h15"/></symbol>
+    <symbol id="ic-file-sheet" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h7M12.5 11v8"/></symbol>
+    <symbol id="ic-file-text" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></symbol>
+    <symbol id="ic-presentation" viewBox="0 0 24 24"><path d="M3 4h18M5 4v11h14V4M12 15v3.5M8.5 21l3.5-2.5 3.5 2.5"/><path d="M8.5 11.5l2.5-2.5 2 2 3-3.5"/></symbol>
+    <symbol id="ic-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v6.5c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8V5.5M4.5 12v6.5c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8V12"/></symbol>
+    <symbol id="ic-bookmark-plus" viewBox="0 0 24 24"><path d="M6 3.5h12v17.5l-6-4.5-6 4.5z"/><path d="M12 7.5v5M9.5 10h5"/></symbol>
+    <symbol id="ic-list-edit" viewBox="0 0 24 24"><path d="M3.5 6h11M3.5 12h7M3.5 18h6"/><path d="M12.5 19l.8-3.4 6.8-6.8 2.6 2.6-6.8 6.8z"/></symbol>
+    <symbol id="ic-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9L4 8.5"/><path d="M4 3.5v5h5"/></symbol>
+    <symbol id="ic-compare" viewBox="0 0 24 24"><rect x="3" y="4.5" width="7.5" height="15" rx="1.8"/><rect x="13.5" y="4.5" width="7.5" height="15" rx="1.8"/></symbol>
+    <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.3"/><path d="M15.6 15.6l4.9 4.9"/></symbol>
+    <symbol id="ic-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="ic-maximize" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="ic-chevron-down" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="ic-command" viewBox="0 0 24 24"><path d="M9 9h6v6H9z"/><path d="M9 9V6.5A2.5 2.5 0 1 0 6.5 9H9zM15 9V6.5A2.5 2.5 0 1 1 17.5 9H15zM9 15v2.5A2.5 2.5 0 1 1 6.5 15H9zM15 15v2.5a2.5 2.5 0 1 0 2.5-2.5H15z"/></symbol>
+    <symbol id="ic-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6.5 4 13 2.5-6.5H21"/></symbol>
+    <symbol id="ic-alert" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.4v.1"/></symbol>
+    <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".9"/></symbol>
+    <symbol id="ic-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15.5 7H21v5.5"/></symbol>
+    <symbol id="ic-flame" viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.2 2-4 0 1.5.8 2.4 1.7 2.6C10.2 9 10.5 5.5 12 3z"/></symbol>
+    <symbol id="ic-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M3.5 15h17M9.5 4.5v15"/></symbol>
+    <symbol id="ic-tag" viewBox="0 0 24 24"><path d="M3.5 12.2V4.5h7.7l9 9a1.6 1.6 0 0 1 0 2.3l-5.4 5.4a1.6 1.6 0 0 1-2.3 0z"/><circle cx="7.8" cy="8.8" r="1.2"/></symbol>
+    <symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-13.6 5.7M4 12a8 8 0 0 1 13.6-5.7"/><path d="M18 3v3.5h-3.5M6 21v-3.5h3.5"/></symbol>
+    <symbol id="ic-edit" viewBox="0 0 24 24"><path d="M4 20l1-4.2L16.5 4.3a1.8 1.8 0 0 1 2.5 0l1.7 1.7a1.8 1.8 0 0 1 0 2.5L9.2 20z"/></symbol>
+  </defs>
+</svg>
 
 <div id="introScreen" aria-label="Quality Intelligence introduction">
   <div class="intro-grid" aria-hidden="true"></div>
@@ -323,6 +357,13 @@
 </script>
 
 <header class="app-header">
+  <!-- V65.0 rolling-mill background: slow drifting copper/steel ribbons + a glint that sweeps across, like sheet metal running through the mill. Decorative only. -->
+  <div class="header-fx" aria-hidden="true">
+    <span class="hfx-glow"></span>
+    <svg class="hfx-wave hfx-wave-b" viewBox="0 0 1200 120" preserveAspectRatio="none"><path d="M0 72 Q75 46 150 72 T300 72 T450 72 T600 72 T750 72 T900 72 T1050 72 T1200 72 V120 H0Z"/></svg>
+    <svg class="hfx-wave hfx-wave-a" viewBox="0 0 1200 120" preserveAspectRatio="none"><path d="M0 60 Q150 14 300 60 T600 60 T900 60 T1200 60 V120 H0Z"/></svg>
+    <span class="hfx-sheen"></span>
+  </div>
   <div class="header-top-row">
     <div class="executive-header-inner">
       <img class="header-logo" src="jsl-header-logo.png" alt="Jindal Stainless">
@@ -335,7 +376,7 @@
     </div>
     <div class="executive-meta">
       <div class="updated-block">
-        <div class="updated-label">Last Updated</div>
+        <div class="updated-label"><svg class="ic" aria-hidden="true"><use href="#ic-refresh"/></svg>Last Updated</div>
         <div class="updated-time" id="refreshed">—</div>
       </div>
       <div class="header-right-stack">
@@ -359,10 +400,10 @@
           <div class="live-status"><span class="live-dot"></span><span id="liveLabel">LIVE DATA</span></div>
           <!-- Export opens as a modal dialog, matching the Command Palette interaction pattern. -->
           <button class="cmdk-open-btn export-menu-btn" id="exportMenuBtn" type="button" aria-haspopup="dialog" aria-controls="exportDialogModal" aria-expanded="false" title="Export the current view as a report">
-            <span class="cmdk-ico" aria-hidden="true">⬇</span><span class="cmdk-text">Export</span>
+            <span class="cmdk-ico" aria-hidden="true"><svg class="ic"><use href="#ic-download"/></svg></span><span class="cmdk-text">Export</span>
           </button>
           <!-- Everything else (Admin panel, dark mode, sound, compact rows, tab navigation...) lives in the Command Palette. -->
-          <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — Admin, dark mode, sound, compact rows, tab navigation and more" aria-label="Open command palette"><span class="cmdk-ico" aria-hidden="true">⌘</span><span class="cmdk-text">Commands</span><kbd class="cmdk-kbd" id="cmdkKbd">Ctrl K</kbd></button>
+          <button class="theme-toggle-btn cmdk-open-btn" id="cmdkOpenBtn" type="button" title="Command palette (Ctrl+K) — Admin, dark mode, sound, compact rows, tab navigation and more" aria-label="Open command palette"><span class="cmdk-ico" aria-hidden="true"><svg class="ic"><use href="#ic-command"/></svg></span><span class="cmdk-text">Commands</span><kbd class="cmdk-kbd" id="cmdkKbd">Ctrl K</kbd></button>
         </div>
       </div>
     </div>
@@ -371,11 +412,12 @@
 
 <div class="container">
   <div class="global-search-wrap" id="globalSearchWrap">
-    <input type="text" id="globalSearchInput" class="global-search-input" placeholder="🔎 Search any defect, grade, or work center…" autocomplete="off">
+    <svg class="ic global-search-icon" aria-hidden="true"><use href="#ic-search"/></svg>
+    <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Search any defect, grade, or work center…" autocomplete="off">
     <kbd class="kbd-hint" title="Press ? for all keyboard shortcuts">/</kbd>
     <div class="global-search-results" id="globalSearchResults"></div>
   </div>
-  <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" id="drillDialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head" id="drillHead"><div><h3 id="drillTitle">Underlying Records</h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#">Export Selected Records</a><button id="drillCloseBtn" type="button">Close</button></div></div><nav class="drill-breadcrumb" id="drillBreadcrumb" aria-label="Drill-down path"></nav><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div><div class="drill-resize-handle" id="drillResizeHandle" title="Drag to resize" aria-hidden="true"></div></div></div>
+  <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" id="drillDialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head" id="drillHead"><div><h3 id="drillTitle"><svg class="ic" aria-hidden="true"><use href="#ic-table"/></svg><span class="drill-title-text">Underlying Records</span></h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#"><svg class="ic" aria-hidden="true"><use href="#ic-download"/></svg>Export Selected Records</a><button id="drillCloseBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-x"/></svg>Close</button></div></div><nav class="drill-breadcrumb" id="drillBreadcrumb" aria-label="Drill-down path"></nav><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div><div class="drill-resize-handle" id="drillResizeHandle" title="Drag to resize" aria-hidden="true"></div></div></div>
 
   <!-- Side-by-side compare: two independent copies of this very page, each
        loaded with a different value for one chosen filter (Month by
@@ -387,7 +429,7 @@
        that where there isn't room for two full dashboards either way. -->
   <div class="compare-modal" id="compareModal" aria-hidden="true">
     <div class="compare-setup" id="compareSetup">
-      <h3>⊞ Compare Two Periods Side-by-Side</h3>
+      <h3><svg class="ic" aria-hidden="true"><use href="#ic-compare"/></svg>Compare Two Periods Side-by-Side</h3>
       <p class="compare-setup-desc">Pick a filter dimension and two values — everything else (tab, other filters) stays the same on both sides.</p>
       <div class="compare-setup-row">
         <label>Compare by
@@ -409,8 +451,8 @@
       <div class="compare-view-head">
         <span id="compareViewTitle"></span>
         <div>
-          <button type="button" class="btn" id="compareEditBtn">✎ Change</button>
-          <button type="button" class="btn" id="compareCloseBtn">✕ Close Compare</button>
+          <button type="button" class="btn" id="compareEditBtn"><svg class="ic" aria-hidden="true"><use href="#ic-edit"/></svg>Change</button>
+          <button type="button" class="btn" id="compareCloseBtn"><svg class="ic" aria-hidden="true"><use href="#ic-x"/></svg>Close Compare</button>
         </div>
       </div>
       <div class="compare-panes">
@@ -425,30 +467,30 @@
     <div class="export-dialog" role="dialog" aria-modal="true" aria-labelledby="exportDialogTitle" aria-describedby="exportDialogDesc">
       <div class="export-dialog-head">
         <div>
-          <div class="export-dialog-eyebrow">REPORT EXPORT</div>
+          <div class="export-dialog-eyebrow"><svg class="ic" aria-hidden="true"><use href="#ic-download"/></svg>REPORT EXPORT</div>
           <h3 id="exportDialogTitle">Export current view</h3>
           <p id="exportDialogDesc">Choose a format. The current dashboard filters are applied automatically.</p>
         </div>
-        <button type="button" class="export-dialog-close" id="exportDialogCloseBtn" aria-label="Close export dialog" title="Close">×</button>
+        <button type="button" class="export-dialog-close" id="exportDialogCloseBtn" aria-label="Close export dialog" title="Close"><svg class="ic" aria-hidden="true"><use href="#ic-x"/></svg></button>
       </div>
       <div class="export-dialog-options" id="exportDialogOptions" role="group" aria-label="Export format">
         <button type="button" class="export-dialog-option" data-fmt="excel">
-          <span class="export-dialog-option-icon" aria-hidden="true">📊</span>
+          <span class="export-dialog-option-icon eo-xl" aria-hidden="true"><svg class="ic"><use href="#ic-file-sheet"/></svg></span>
           <span class="export-dialog-option-copy"><strong>Excel report</strong><small>Spreadsheet with the current dashboard data.</small></span>
           <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
         </button>
         <button type="button" class="export-dialog-option" data-fmt="pdf">
-          <span class="export-dialog-option-icon" aria-hidden="true">📄</span>
+          <span class="export-dialog-option-icon eo-pdf" aria-hidden="true"><svg class="ic"><use href="#ic-file-text"/></svg></span>
           <span class="export-dialog-option-copy"><strong>PDF report</strong><small>Print-ready report of the current view.</small></span>
           <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
         </button>
         <button type="button" class="export-dialog-option" data-fmt="pptx">
-          <span class="export-dialog-option-icon" aria-hidden="true">📑</span>
+          <span class="export-dialog-option-icon eo-ppt" aria-hidden="true"><svg class="ic"><use href="#ic-presentation"/></svg></span>
           <span class="export-dialog-option-copy"><strong>PowerPoint report</strong><small>Presentation-ready slides from the dashboard.</small></span>
           <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
         </button>
         <button type="button" class="export-dialog-option" data-fmt="csv">
-          <span class="export-dialog-option-icon" aria-hidden="true">🗂️</span>
+          <span class="export-dialog-option-icon eo-csv" aria-hidden="true"><svg class="ic"><use href="#ic-database"/></svg></span>
           <span class="export-dialog-option-copy"><strong>Raw data (CSV)</strong><small>Flat data export for analysis or downstream tools.</small></span>
           <span class="export-dialog-option-arrow" aria-hidden="true">↗</span>
         </button>
@@ -467,7 +509,7 @@
     </div>
   </div>
 
-  <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label">Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions" style="position:relative"><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select><button id="saveViewBtn" type="button">Save Preset</button><button id="clearViewsBtn" type="button">Manage Presets</button><div class="view-popover hidden" id="viewPopover" role="dialog" aria-label="Filter presets"></div></div></div>
+  <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label"><svg class="ic" aria-hidden="true"><use href="#ic-selection"/></svg>Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions" style="position:relative"><span class="saved-view-wrap"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select></span><button id="saveViewBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg>Save Preset</button><button id="clearViewsBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-list-edit"/></svg>Manage Presets</button><div class="view-popover hidden" id="viewPopover" role="dialog" aria-label="Filter presets"></div></div></div>
 
   <div class="sticky-controls" id="stickyControls">
     <div class="filters" id="filters"></div>
@@ -487,14 +529,14 @@
 
     <div class="qcr-executive-strip" id="qcrExecutiveStrip">
       <div class="qcr-exec-item qcr-exec-health">
-        <small>QUALITY HEALTH</small><b id="qcrExecHealth">—/100</b><span id="qcrExecHealthState">—</span>
+        <small><svg class="ic" aria-hidden="true"><use href="#ic-pulse"/></svg>QUALITY HEALTH</small><b id="qcrExecHealth">—/100</b><span id="qcrExecHealthState">—</span>
         <button class="qcr-exec-why qcr-hidden" id="qcrHealthWhyBtn" type="button">Why? ▾</button>
         <div class="qcr-health-reasons qcr-hidden" id="qcrHealthReasons"></div>
       </div>
-      <div class="qcr-exec-item"><small>CRITICAL ISSUES</small><b id="qcrExecCritical">0</b><span>Detected</span></div>
-      <div class="qcr-exec-item"><small>TARGET BREACHES</small><b id="qcrExecBreaches">0</b><span>Above configured target</span></div>
-      <div class="qcr-exec-item qcr-exec-problem"><small>BIGGEST PROBLEM</small><b id="qcrExecProblem">—</b><span id="qcrExecDriver">No material issue</span></div>
-      <div class="qcr-exec-item"><small>TREND</small><b id="qcrExecTrend">—</b><span id="qcrExecTrendText">Current vs previous</span></div>
+      <div class="qcr-exec-item"><small><svg class="ic" aria-hidden="true"><use href="#ic-alert"/></svg>CRITICAL ISSUES</small><b id="qcrExecCritical">0</b><span>Detected</span></div>
+      <div class="qcr-exec-item"><small><svg class="ic" aria-hidden="true"><use href="#ic-target"/></svg>TARGET BREACHES</small><b id="qcrExecBreaches">0</b><span>Above configured target</span></div>
+      <div class="qcr-exec-item qcr-exec-problem"><small><svg class="ic" aria-hidden="true"><use href="#ic-flame"/></svg>BIGGEST PROBLEM</small><b id="qcrExecProblem">—</b><span id="qcrExecDriver">No material issue</span></div>
+      <div class="qcr-exec-item"><small><svg class="ic" aria-hidden="true"><use href="#ic-trend"/></svg>TREND</small><b id="qcrExecTrend">—</b><span id="qcrExecTrendText">Current vs previous</span></div>
     </div>
 
     <div class="qcr-problem-card qcr-card qcr-wide qcr-priority-01">
@@ -510,7 +552,7 @@
     </div>
 
     <section class="qcr-zone qcr-zone-action">
-      <div class="qcr-zone-heading"><h3>Action Required</h3><p>Which KPIs and areas need investigation right now.</p></div>
+      <div class="qcr-zone-heading"><h3><svg class="ic" aria-hidden="true"><use href="#ic-alert"/></svg>Action Required</h3><p>Which KPIs and areas need investigation right now.</p></div>
       <div class="qcr-grid qcr-grid-action">
         <div class="qcr-card qcr-wide"><h3>🔴 Critical KPIs</h3><div class="qcr-body"><div class="qcr-kpi-grid" id="qcrCriticalKpis"></div></div></div>
 
@@ -539,7 +581,7 @@
     </section>
 
     <section class="qcr-zone qcr-zone-performance">
-      <div class="qcr-zone-heading"><h3>Trend &amp; History</h3><p>What changed, why it changed, and how it's tracking against target.</p></div>
+      <div class="qcr-zone-heading"><h3><svg class="ic" aria-hidden="true"><use href="#ic-trend"/></svg>Trend &amp; History</h3><p>What changed, why it changed, and how it's tracking against target.</p></div>
       <div class="qcr-card qcr-wide qcr-trend-card">
         <h3>📈 Quality Trend &amp; Target History</h3>
         <div class="qcr-body">
@@ -560,7 +602,7 @@
 
     <div class="panel">
       <h3>⚖️ Quality Decision Mix — Qty (MT)</h3>
-      <div class="chart-scroll" id="decisionPie" style="max-width:1450px;margin:0 auto;"></div>
+      <div class="chart-scroll" id="decisionPie" data-chart-field="Qty (MT)" style="max-width:1450px;margin:0 auto;"></div>
     </div>
 
     <div class="panel">
@@ -580,7 +622,7 @@
 
     <div class="panel">
       <h3>🎯 Top 5 Defects — Pareto Analysis (Qty MT &amp; Cumulative %)</h3>
-      <div class="chart-scroll" id="pareto5Chart"></div>
+      <div class="chart-scroll" id="pareto5Chart" data-chart-field="Qty (MT)"></div>
       <div class="panel-body">
         <div class="table-scroll"><table id="defectTable">
           <thead><tr><th>Defect</th><th>Qty (MT)</th><th>%</th><th>Cum. %</th></tr></thead>
@@ -629,7 +671,7 @@
   <div class="tab-panel hidden" id="tab-wcgrade">
     <div class="panel">
       <h3>🏭 Reject % Qty by Work Center</h3>
-      <div class="chart-scroll" id="wcChart"></div>
+      <div class="chart-scroll" id="wcChart" data-chart-field="Reject % Qty"></div>
       <div class="panel-body">
         <div class="table-scroll"><table id="wcTable">
           <thead><tr><th>Rank</th><th>Work Center</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
@@ -639,7 +681,7 @@
     </div>
     <div class="panel">
       <h3>🔬 Reject % Qty by Alloy Grade</h3>
-      <div class="chart-scroll" id="gradeChart"></div>
+      <div class="chart-scroll" id="gradeChart" data-chart-field="Reject % Qty"></div>
       <div class="panel-body">
         <div class="table-scroll"><table id="gradeTable">
           <thead><tr><th>Rank</th><th>Grade</th><th>Coils</th><th>Output Qty (MT)</th><th>Defect Coils</th><th>Defect %</th><th>Reject Qty (MT)</th><th>Reject % Qty</th><th>First Pass Yield % (Prime%)</th></tr></thead>
@@ -653,7 +695,7 @@
   <div class="tab-panel hidden" id="tab-defects">
     <div class="panel">
       <h3>🎯 Top 10 Defect Pareto (Qty MT &amp; Cumulative %)</h3>
-      <div class="chart-scroll" id="paretoChart"></div>
+      <div class="chart-scroll" id="paretoChart" data-chart-field="Qty (MT)"></div>
     </div>
     <div class="panel">
       <h3>📋 Complete Defect Occurrence Register</h3>
@@ -713,6 +755,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=64.6.13" defer></script>
+<script src="/app.js?v=65.0" defer></script>
 </body>
 </html>

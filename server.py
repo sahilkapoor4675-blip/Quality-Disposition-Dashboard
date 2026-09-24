@@ -117,7 +117,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V64.9"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V65.0"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
