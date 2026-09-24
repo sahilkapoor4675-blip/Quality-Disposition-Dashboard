@@ -10,7 +10,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 ## What changed in V65.0 (presentation mode fits screen, field-name hover tag, animated header, icons)
 - **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
-- **Animated header background:** flowing blue and copper ribbon waves behind the text, copper coils on the right, separate light/dark look. "Last Updated" is a solid chip. Disabled for reduced-motion and print.
+- **"Copper Mill" theme (default):** header with a factory-bay/copper-coil scene and flowing blue/copper ribbon waves, 3D logo with a moving glint, solid "Last Updated" chip, and a copper watermark background on the intro screen. Ctrl+K → "Theme" switches to the plain Classic look. Disabled for reduced-motion and print.
 - **Icons:** one SVG sprite (top of `index.html`) + `qdIc('name')` in `app.js`; added to filters, selection, presets, export, search, drill-down, compare, Control Room headings, presentation mode.
 - **Admin icons:** the Admin console has the same icon set; every button label (including dynamically built ones) gets a matching icon, plus login fields, section kickers and the theme toggle.
 - **Chart tooltip** now has styling (it had none) and names the measure on single-series charts.

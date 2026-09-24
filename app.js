@@ -212,6 +212,13 @@ function initCommandPalette(){
       if(on!==null) showToast('success',on?'Sound effects on':'Sound effects muted', on?'Click and confirmation sounds are back.':'The dashboard is silent now. Unmute any time from Ctrl+K.');
     }});
     const hintsOn=fieldHintsOn();
+    const copperSkin=document.documentElement.getAttribute('data-skin')!=='classic';
+    cmds.push({icon:'🟠',label:copperSkin?'Theme: Switch to Classic (plain white header)':'Theme: Switch to Copper Mill (animated header + intro)',kw:'theme skin copper mill classic header animation look',run:()=>{
+      const next=copperSkin?'classic':'copper';
+      document.documentElement.setAttribute('data-skin',next);
+      try{ localStorage.setItem('qdash_skin',next); }catch(e){}
+      showToast('success',next==='copper'?'Copper Mill theme on':'Classic theme on',next==='copper'?'Animated header, 3D logo and intro artwork are back.':'Plain white header. Switch back any time from Ctrl+K.');
+    }});
     cmds.push({icon:'🏷️',label:hintsOn?'Turn Off Field Name Hints (hover tag)':'Turn On Field Name Hints (hover tag)',kw:'field name hover tooltip tag hint cursor',run:()=>{
       const on=toggleFieldHints();
       showToast('success',on?'Field name hints on':'Field name hints off', on?'A small tag now names the field under your cursor.':'The hover tag is hidden. Turn it back on from Ctrl+K.');
