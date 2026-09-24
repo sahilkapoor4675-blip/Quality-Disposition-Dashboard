@@ -1,4 +1,4 @@
-# Quality Disposition Control Dashboard — V64.7
+# Quality Disposition Control Dashboard — V64.8
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -6,6 +6,37 @@ frontend CDN or build step.
 
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
+
+## What changed in V64.8 (glass control layer, 3D depth, chart entrance, OLED dark mode, insight strip)
+Full pass on all three suggestion buckets from the "next level UI" ask — Glass (A), 3D (B), and a
+new distinctive direction (C) — implemented in full rather than a subset. No layout, data, or API changes.
+
+**A — Glass**
+- **Consistent glass elevation tokens:** shared `--glass-bg-1/2`, `--glass-blur-1/2`, `--glass-border` tokens (light + dark) replace one-off translucency values, applied to the sticky filter bar, filter dropdown menus, the Save/Manage Presets popover, and a modal's own title strip (drill-down header, export dialog header) — not to table/chart bodies or dense modal content, where translucency would hurt legibility. Also fixes an inconsistency: dark-mode filters were solid while light-mode filters were already glass; both are glass now.
+- **Status-tinted glow on hover:** KPI cards' status-colored ambient shadow (green/amber/red/blue) used to flatten to plain navy on hover. Hover now deepens the same status color instead, in both themes.
+- **Glass sheen sweep:** a one-time soft diagonal light streak crosses a KPI card on hover.
+
+**B — 3D**
+- **3D mouse-tilt:** KPI cards tilt a few degrees toward the cursor (capped at 5°), skipped on touch devices and when `prefers-reduced-motion` is set.
+- **Count-up on first paint:** KPI values now count up from 0 on first page load too, not just on later refreshes/filter changes.
+- **Chart bars grow in on load:** bars animate up from the baseline once per chart load/refresh, on top of the existing whole-panel fade-in.
+
+**C — New direction**
+- **OLED-style dark mode:** dark theme's background deepened from `#0B1220` toward near-black `#070B14`, giving cards more contrast against the canvas.
+- **Telemetry-grid header (dark mode):** a faint static grid texture behind the header gradient, plus a soft glow on the active tab — a control-room cue instead of a flat header.
+- **"Why did this change" insight strip:** a one-line banner above the KPI grid, populated from the same driver analysis the QCR tab's "Why did it change?" accordion already computes. Shown only when a real, significant driver was found (>5pp defect-mix shift); otherwise it renders nothing.
+
+### V64.8 checkpoints
+- Hovering a KPI card shows a glow tinted to its own status color (not generic navy) in both light and dark mode.
+- KPI cards tilt toward the mouse on hover on desktop with a mouse; no tilt on touch/coarse-pointer devices or with reduced motion enabled.
+- On a fresh page load, KPI values animate up from 0; on a later filter change, only the changed values animate, from their previous value (unchanged behavior).
+- Chart bars grow up from the baseline on load/refresh; disabled under reduced motion.
+- Filters, filter dropdown menus, and the Save/Manage Presets popover all show the same frosted-glass treatment in both light and dark mode.
+- A drill-down or export dialog's title strip is a soft frosted band; the dialog body underneath stays fully opaque/readable.
+- Dark mode background reads noticeably closer to black; card/border/text contrast is otherwise unchanged.
+- Header in dark mode shows a faint grid texture; no such texture in light mode; active tab in dark mode has a soft glow.
+- Loading the Dashboard/QCR tab with a large, real driver behind a KPI move shows a "💡 …" strip above the KPI cards; with no significant driver, the strip is absent (not empty/blank — not present in the DOM's visible flow at all).
+- Sparklines remain removed per earlier feedback.
 
 ## What changed in V64.7 (Import column mapping, named filter presets)
 - **Import column mapping:** before validating an uploaded file, the Monthly Data Import Wizard now reads its header row and auto-matches it against the expected fields. If a required column (Heat No, Batch No, Insp Lot Date, Quality Decision) can't be auto-matched — e.g. a plant's export uses renamed headers — a "Map your columns" step opens so the user points each field at the right column before Validate & Preview runs. A "🧭 Map your columns" control is always available for a manual review even when auto-matching succeeded. Well-formed files that already match are unaffected.

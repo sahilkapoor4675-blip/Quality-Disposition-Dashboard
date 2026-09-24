@@ -1,3 +1,32 @@
+## V64.8 — KPI card depth + glass control layer + chart entrance + insight strip (2026-09-24)
+
+Full pass on all three suggestion buckets from the "next level UI" ask — everything under Glass (A), 3D (B), and the new-direction bucket (C), not just a subset. No layout, data, or API changes.
+
+### A — Glass
+- **Consistent glass elevation-token system:** new shared tokens (`--glass-bg-1/2`, `--glass-blur-1/2`, `--glass-border`, light + dark variants) replace one-off hardcoded translucency values. Applied to the sticky filter bar, filter dropdown menus, the Save/Manage Presets popover, and a modal's own title strip (drill-down header, export dialog header) — deliberately *not* applied to table/chart bodies or dense modal content, where translucency would hurt legibility rather than help it. Fixes a real inconsistency along the way: dark-mode filters were solid/opaque while light-mode filters were already glass; both are glass now.
+- **Status-tinted glow on hover:** KPI cards already had a status-colored ambient shadow at rest (green/amber/red/blue), but hovering reset every card to the same flat navy shadow, losing that signal at the exact moment you're looking closer. Hover now keeps the card's own status color and deepens the glow instead of flattening it — light and dark themes both.
+- **Glass sheen sweep:** a soft one-time diagonal light streak crosses a KPI card on hover, reusing the existing `::after` flash layer.
+
+### B — 3D
+- **3D mouse-tilt on KPI cards:** cards tilt a few degrees toward the cursor (`rotateX`/`rotateY`, capped at 5°) via `--tiltX`/`--tiltY` custom properties updated on `mousemove`. Skipped automatically on touch devices (`pointer: fine` check) and when `prefers-reduced-motion` is set.
+- **Count-up on first paint:** KPI values already animated a count-up when a filter/refresh changed them; they now also count up from 0 on the very first render of a page load, not just on subsequent changes.
+- **Chart bars grow in on load:** bars now animate up from the baseline once per chart load/refresh (`scaleY` from the bottom), layered on top of the existing whole-panel fade-in. The refresh completion window that clears the animation class was extended from 350ms to 700ms so a 480ms bar-grow isn't cut off mid-animation.
+
+### C — New direction
+- **OLED-style dark mode:** deepened the dark theme's background/navy tokens from `#0B1220` toward a truer near-black `#070B14`, giving cards more contrast against the canvas — closer to how an actual 24/7 control-room monitor looks. Card, border, and text tokens are unchanged, so contrast ratios elsewhere are unaffected.
+- **Telemetry-grid header, dark mode only:** a very low-opacity grid line texture behind the header's navy gradient, and a soft glow on the active tab — a plant-control-room cue instead of a generic flat header. Static (no motion), so no performance or accessibility cost.
+- **"Why did this change" insight strip:** a new one-line banner above the KPI grid, populated from the same driver-analysis the QCR tab's existing (collapsed) "Why did it change?" accordion already computes server-side (`why_changed.statement`). Shown **only** when a real, significant driver was found (>5pp defect-mix shift — the same bar the backend already uses to decide whether a shift is worth flagging as a problem); otherwise the strip renders nothing and takes zero space, unlike a persistent always-on status row.
+
+### Notes
+- All of the above are additive CSS/JS changes to existing elements; nothing was restructured, renamed, or removed.
+- `prefers-reduced-motion: reduce` disables the tilt, first-paint count-up, hover sheen sweep, and chart bar-grow; the status-glow hover, glass tokens, and OLED palette still apply since they're not motion.
+- Sparklines remain removed per earlier feedback — not reintroduced here.
+
+### Notes
+- All of the above are additive CSS/JS changes to existing elements (`.kpi-card`, `header`, `.tab-btn.active`); nothing was restructured, renamed, or removed.
+- `prefers-reduced-motion: reduce` disables the tilt, the first-paint count-up, and the hover sheen sweep; the status-glow hover and OLED palette still apply since they're not motion.
+- Sparklines remain removed per earlier feedback — not reintroduced here.
+
 ## V64.7 — Follow-up: Data Status Strip removed, Manage Presets popover z-index fix (2026-09-23)
 
 ### Removed

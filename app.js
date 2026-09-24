@@ -13,6 +13,21 @@ let currentFilters = {};
 FILTER_DEFS.forEach(f => currentFilters[f.key] = "All");
 let previousKpiValues = new Map();
 let kpiAnimationToken = 0;
+let kpiFirstPaintDone = false;
+// Subtle 3D tilt on KPI cards (mouse-follow rotateX/rotateY), only for
+// fine-pointer devices and when the user hasn't asked for reduced motion.
+// Reads --tiltX/--tiltY, consumed by the .kpi-card:hover transform in app.css.
+const _kpiTiltEnabled = window.matchMedia('(pointer:fine)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function attachKpiTilt(card){
+  const maxDeg=5;
+  card.addEventListener('mousemove',e=>{
+    const r=card.getBoundingClientRect();
+    const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+    card.style.setProperty('--tiltY',((px-0.5)*2*maxDeg).toFixed(2)+'deg');
+    card.style.setProperty('--tiltX',((0.5-py)*2*maxDeg).toFixed(2)+'deg');
+  });
+  card.addEventListener('mouseleave',()=>{ card.style.setProperty('--tiltX','0deg'); card.style.setProperty('--tiltY','0deg'); });
+}
 
 // ---- Global search: quickly find any defect / grade / work center -----
 (function initGlobalSearch(){
@@ -500,7 +515,7 @@ async function triggerFilterRefresh(){
   const t0=performance.now();
   try{await TAB_LOADERS[activeTab](signal); if(activeTab==='dashboard') prefetchQcrCore({...currentFilters}); finishTabLoad(activeTab);}catch(e){finishTabLoad(activeTab,e);}finally{
     const elapsed=performance.now()-t0; const wait=Math.max(0,250-elapsed);
-    setTimeout(()=>{document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('shimmering')); document.querySelectorAll('.chart-scroll').forEach(c=>{c.classList.remove('chart-refreshing');c.classList.add('chart-ready');setTimeout(()=>c.classList.remove('chart-ready'),350)}); if(page)page.classList.remove('dashboard-refreshing');},wait);
+    setTimeout(()=>{document.querySelectorAll('.kpi-card').forEach(c=>c.classList.remove('shimmering')); document.querySelectorAll('.chart-scroll').forEach(c=>{c.classList.remove('chart-refreshing');c.classList.add('chart-ready');setTimeout(()=>c.classList.remove('chart-ready'),700)}); if(page)page.classList.remove('dashboard-refreshing');},wait);
   }
 }
 
@@ -560,6 +575,7 @@ function sparklineSvg(oldValue,currentValue,status){
 function renderKpis(kpis){
   const grid=document.getElementById('kpiGrid'); const nextValues=new Map(); const token=++kpiAnimationToken; grid.innerHTML='';
   const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const isFirstPaint=!kpiFirstPaintDone;
   kpis.forEach((k,idx)=>{
     const card=document.createElement('div'); const oldValue=previousKpiValues.get(k.label); const cur=Number(k.value)||0; const changed=Number.isFinite(oldValue)&&Math.abs(oldValue-cur)>1e-12; const direction=changed?(cur>oldValue?'up':'down'):''; const status=kpiStatus(k.label,k);
     card.className=`kpi-card status-${status} kpi-pulse`; if(direction)card.classList.add(direction==='up'?'kpi-up':'kpi-down');
@@ -576,9 +592,11 @@ function renderKpis(kpis){
     const prevText=(k.prev!==null && k.prev!==undefined) ? fmtValue(k.prev,k.fmt) : 'N/A';
     card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${escQcr(k.label)}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
     card.setAttribute('role','button'); card.setAttribute('tabindex','0'); card.setAttribute('aria-label',`Drill down into ${k.label}`); card.addEventListener('click',()=>openDrilldown(k.label,`${k.label} — Underlying Records`)); card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDrilldown(k.label,`${k.label} — Underlying Records`);}}); grid.appendChild(card); const valueEl=card.querySelector('.value');
+    if(_kpiTiltEnabled) attachKpiTilt(card);
     if(changed&&!reduceMotion){ if(staggerMs) setTimeout(()=>{ if(token===kpiAnimationToken) animateKpiValue(valueEl,oldValue,cur,k.fmt,token); },staggerMs); else animateKpiValue(valueEl,oldValue,cur,k.fmt,token); }
+    else if(isFirstPaint&&!reduceMotion){ if(staggerMs) setTimeout(()=>{ if(token===kpiAnimationToken) animateKpiValue(valueEl,0,cur,k.fmt,token); },staggerMs); else animateKpiValue(valueEl,0,cur,k.fmt,token); }
     nextValues.set(k.label,cur);
-  }); previousKpiValues=nextValues;
+  }); previousKpiValues=nextValues; kpiFirstPaintDone=true;
 }
 async function loadKpiTargets(){try{const d=await fetch('/api/kpi_targets',{cache:'no-store'}).then(r=>r.json());KPI_TARGETS=d.targets||{};}catch(e){KPI_TARGETS={};}}
 
@@ -2501,6 +2519,20 @@ function qcrRenderWhyDecomposition(intel){
   if(!z||!z.current||!z.previous){el.innerHTML='<div class="qcr-empty">Previous period comparison is not available for this selection.</div>';return;}
   el.innerHTML=`<div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b></div></div><div class="qcr-story-text">${escQcr(z.statement||'')}</div>`;
 }
+function renderKpiInsightStrip(intel){
+  // A glanceable one-liner — "why did the numbers move" — shown only when a
+  // real, meaningful driver was found (mirrors the >5pp bar the backend uses
+  // to decide whether a defect-mix shift is worth flagging at all), so it
+  // never sits there as filler text when nothing notable happened.
+  const el=document.getElementById('kpiInsightStrip'); if(!el) return;
+  const z=intel?.why_changed;
+  const drv=z?.defect_contributor;
+  if(!z || !drv || Math.abs(Number(drv.change_pp)||0)<=5 || !z.statement){
+    el.classList.add('hidden'); el.innerHTML=''; return;
+  }
+  el.innerHTML=`<span class="kis-icon">💡</span><span class="kis-text">${escQcr(z.statement)}</span>`;
+  el.classList.remove('hidden');
+}
 function qcrInvestigation(extra={}, title='QCR Investigation'){
   const p={};
   Object.entries(extra||{}).forEach(([k,v])=>{
@@ -2642,6 +2674,7 @@ async function loadControlRoom(signal){
     qcrRenderQualityStory(intel,intelErr);
     qcrRenderQualityImprovements(intel);
     qcrRenderWhyDecomposition(intel);
+    renderKpiInsightStrip(intel);
     qcrRenderHealthReasons(intel);
     qcrRenderTopContributors(topDefects,defectTotalQty,worstWc,worstGr,intel);
     const loadToken=++window.qcrLoadToken;
