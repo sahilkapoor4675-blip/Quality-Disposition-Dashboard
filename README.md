@@ -12,6 +12,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
 - **Rolling-mill header background:** slow copper/steel ribbons, glow and glint. Disabled for reduced-motion and print.
 - **Icons:** one SVG sprite (top of `index.html`) + `qdIc('name')` in `app.js`; added to filters, selection, presets, export, search, drill-down, compare, Control Room headings, presentation mode.
+- **Admin icons:** the Admin console has the same icon set; every button label (including dynamically built ones) gets a matching icon, plus login fields, section kickers and the theme toggle.
 - **Chart tooltip** now has styling (it had none) and names the measure on single-series charts.
 
 ### V65.0 checkpoints
@@ -20,111 +21,13 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - Header shows slow moving ribbons and an occasional glint; text stays readable in light and dark theme.
 - Filters, Selection, Save/Manage Presets, Export, Commands, Search show icons.
 
-## What changed in V64.8 (KPI card depth, glass control layer, chart entrance, insight strip)
-Full pass on all three suggestion buckets from the "next level UI" ask — Glass (A), 3D (B), and a
-new distinctive direction (C) — implemented in full rather than a subset. No layout, data, or API changes.
-
-**A — Glass**
-- **Consistent glass elevation tokens:** shared `--glass-bg-1/2`, `--glass-blur-1/2`, `--glass-border` tokens (light + dark) replace one-off translucency values, applied to the sticky filter bar, filter dropdown menus, the Save/Manage Presets popover, and a modal's own title strip (drill-down header, export dialog header) — not to table/chart bodies or dense modal content, where translucency would hurt legibility. Also fixes an inconsistency: dark-mode filters were solid while light-mode filters were already glass; both are glass now.
-- **Status-tinted glow on hover:** KPI cards' status-colored ambient shadow (green/amber/red/blue) used to flatten to plain navy on hover. Hover now deepens the same status color instead, in both themes.
-- **Glass sheen sweep:** a one-time soft diagonal light streak crosses a KPI card on hover.
-
-**B — 3D**
-- **3D mouse-tilt:** KPI cards tilt a few degrees toward the cursor (capped at 5°), skipped on touch devices and when `prefers-reduced-motion` is set.
-- **Count-up on first paint:** KPI values now count up from 0 on first page load too, not just on later refreshes/filter changes.
-- **Chart bars grow in on load:** bars animate up from the baseline once per chart load/refresh, on top of the existing whole-panel fade-in.
-
-**C — New direction**
-- **OLED-style dark mode:** dark theme's background deepened from `#0B1220` toward near-black `#070B14`, giving cards more contrast against the canvas.
-- **Telemetry-grid header (dark mode):** a faint static grid texture behind the header gradient, plus a soft glow on the active tab — a control-room cue instead of a flat header.
-- **"Why did this change" insight strip:** a one-line banner above the KPI grid, populated from the same driver analysis the QCR tab's "Why did it change?" accordion already computes. Shown only when a real, significant driver was found (>5pp defect-mix shift); otherwise it renders nothing.
-
-### V64.8 checkpoints
-- Hovering a KPI card shows a glow tinted to its own status color (not generic navy) in both light and dark mode.
-- KPI cards tilt toward the mouse on hover on desktop with a mouse; no tilt on touch/coarse-pointer devices or with reduced motion enabled.
-- On a fresh page load, KPI values animate up from 0; on a later filter change, only the changed values animate, from their previous value (unchanged behavior).
-- Chart bars grow up from the baseline on load/refresh; disabled under reduced motion.
-- Filters, filter dropdown menus, and the Save/Manage Presets popover all show the same frosted-glass treatment in both light and dark mode.
-- A drill-down or export dialog's title strip is a soft frosted band; the dialog body underneath stays fully opaque/readable.
-- Dark mode background reads noticeably closer to black; card/border/text contrast is otherwise unchanged.
-- Header in dark mode shows a faint grid texture; no such texture in light mode; active tab in dark mode has a soft glow.
-- Loading the Dashboard/QCR tab with a large, real driver behind a KPI move shows a "💡 …" strip above the KPI cards; with no significant driver, the strip is absent (not empty/blank — not present in the DOM's visible flow at all).
-- Sparklines remain removed per earlier feedback.
-
-## What changed in V64.7 (Import column mapping, named filter presets)
-- **Import column mapping:** before validating an uploaded file, the Monthly Data Import Wizard now reads its header row and auto-matches it against the expected fields. If a required column (Heat No, Batch No, Insp Lot Date, Quality Decision) can't be auto-matched — e.g. a plant's export uses renamed headers — a "Map your columns" step opens so the user points each field at the right column before Validate & Preview runs. A "🧭 Map your columns" control is always available for a manual review even when auto-matching succeeded. Well-formed files that already match are unaffected.
-- **Named, dropdown-managed filter presets:** the existing "Saved Views" feature already stored the full filter combination (date range, work center, PRIME/decision, etc.), not just layout — but saving/deleting went through browser `prompt()`/`alert()` dialogs. It's now an inline popover: type a name under "Save Preset", or open "Manage Presets" for a list of saved presets with one-click Load/Delete. Same `qdash_saved_views` storage, no migration needed for existing saved views.
-- **No version-drift risk:** `VERSION.txt` and the `server.py` runtime fallback constant were bumped together, per the drift check V64.6 already added.
-
-### V64.7 follow-up (same version, no version bump)
-- **Data Status Strip removed:** the compact `Data through • Last refreshed • Active filters • Comparing to` row under the filter summary bar has been taken back out per feedback. The underlying signals (data-through timestamp, last-refreshed time, active-filter count, compare-mode label) still update elsewhere in the UI; only this standalone row was removed.
-- **Manage Presets popover fix:** the "Manage Presets" / "Save Preset" popover was rendering behind the sticky filters/tabs bar (which sits at a much higher stacking order) instead of on top of it. The popover's `z-index` is now raised above the sticky controls so it always displays correctly.
-
-### V64.7 checkpoints
-- Uploading a file whose headers already match the built-in aliases (`HEAT NO`, `BATCH NO`, …) previews exactly as before — no mapping step forced.
-- Uploading a file with unrecognized headers for a required field opens "Map your columns" and blocks Validate & Preview until the required fields are mapped; the chosen mapping is sent with the preview request and used for the actual import.
-- Saved filter presets: Save Preset / Manage Presets open an inline popover (no native browser dialogs) that now displays above the sticky filters/tabs bar; Load and Delete both work per-preset from the Manage Presets list; the Saved Views dropdown continues to work unchanged for presets saved before this update.
-- Data Status Strip no longer appears anywhere in the UI or in print output.
-
-## What changed in V64.6 (sorting + targeted chart/QCR/card-heading refinement)
-- **Three-state table sorting:** click a dashboard table header once for ascending order, twice for descending order, and a third time to restore the natural/server order. Sort state is preserved through filter refreshes until the third click resets it.
-- **Accessible sort state:** sortable headers expose `aria-sort` as `ascending`, `descending`, or `none`.
-- **Targeted chart precision:** only the Dashboard **Decision Mix donut chart** shows Qty (MT) and % values to exactly 3 decimal places. Pareto, Work Center, Grade, Intensity and Period Trend charts retain their prior display precision.
-- **QCR 6M Fishbone → RCA header:** the RCA table header uses the same blue-gradient palette as dashboard table headers in both light and dark themes.
-- **Dashboard card-heading polish:** only card headings in Dashboard, Work Center & Grade, Defect List and Period Trend use a subtle navy/blue gradient, very soft depth shadow and thin blue accent line. Existing heading text is unchanged. QCR/Admin headings are intentionally not restyled by this rule.
-- **No version bump:** this follow-up remains **V64.6**; runtime version metadata is unchanged. `app.js` is explicitly included so the Decision Mix donut formatter is actually deployed, and the JS/CSS asset cache-busters advance without changing the runtime version.
-- **UI polish:** numeric table cells use tabular numerals for cleaner visual alignment; existing sticky filters, chart hover/focus cues and sort-state indicators remain enabled.
-
-### V64.6 re-audit checkpoints
-- Same table header, three clicks = ascending → descending → natural order.
-- Sorted header has `aria-sort="ascending"` or `"descending"`; reset returns the sortable headers to `aria-sort="none"`.
-- Decision Mix donut Qty/% values show 3 fractional digits; all other chart precision remains at the existing V64.5 contract.
-- `app.js` is part of the V64.6 follow-up patch; this is required for the donut formatter and three-state sort behavior to actually reach the browser.
-- Dashboard/drill/RCA numeric cells use tabular numerals; this changes alignment only, not numeric values.
-- QCR 6M Fishbone → RCA header uses the same blue gradient as dashboard tables in light and dark mode.
-- Dashboard, Work Center & Grade, Defect List and Period Trend card headings keep their original text and receive the scoped gradient/accent/shadow treatment in both themes.
-- QCR, Admin and drill-down headings are not affected by the new dashboard-card heading rule.
-
-## What changed in V64.5 (Admin correctness, performance, freshness + security hardening)
-- **Data freshness fixed:** Admin service health and Overview now measure freshness from the latest `disposition.insp_lot_date` (“Data Through”), never from dashboard activity/heartbeat timestamps. Activity remains monitoring-only metadata.
-- **Freshness mismatch fixed:** the Admin header chip and Overview KPI use the same source-date definition and show the data age in days. Missing source dates are reported as a warning instead of a healthy state.
-- **Admin request storm reduced:** the old chain of delayed `showAdmin()` wrappers and duplicated 60-second timers was replaced by one centralized lazy loader. Overview/Data Quality/Latest Records are loaded first; deeper sections load when first viewed.
-- **Polling consolidated:** background Admin polling now refreshes only the already-used live monitoring sections once per minute while the page is visible. Deep governance/backup/report sections are not re-fetched unless opened.
-- **Backup list performance fixed:** `/api/admin/backup/list` no longer decompresses and parses every retained backup on every refresh. Validated metadata is cached with a file signature and invalidated whenever backups change.
-- **Viewer heartbeat load reduced:** public dashboard heartbeat cadence changed from 20 seconds to 30 seconds and only runs while the tab is visible. The live-user window is 90 seconds and the live-user count is briefly cached to absorb concurrent requests.
-- **Data Quality query optimized:** the old set of independent full-table scans and repeated duplicate subqueries is now one conditional aggregate plus a small duplicate-group query. Duplicate correction counts still represent distinct records.
-- **Quality Records invalid-date check optimized:** invalid dates are filtered in SQL instead of loading the entire disposition table into Python. Duplicate-batch grouping is handled through a CTE.
-- **Records total optimized:** the unfiltered live record count used by Admin Records is cached briefly and cleared after data mutations.
-- **Import preview race fixed:** previews store the disposition mutation revision. Confirm refuses to proceed when the underlying disposition dataset changed after Preview, forcing a fresh preview rather than applying stale review numbers.
-- **Mutation revision tracking added:** an idempotent `app_state` table tracks `disposition_revision` and `disposition_changed_at`; inserts/updates, deletes, bulk deletes and restores advance the revision atomically.
-- **Session revocation fixed:** disabling a user immediately removes all of that user’s in-memory sessions. Viewer authentication also rejects sessions marked inactive.
-- **Sensitive Admin authorization tightened:** Users, security session status, backup list/verify/download and audit analytics/export are now Super Admin-only at the backend. UI visibility remains a convenience, not the security boundary.
-- **Security-status duplicate request removed:** the Admin Security panel now renders its session list from the same API response instead of requesting `/api/admin/security_status` twice.
-- **Admin refresh behavior clarified:** the main refresh button now refreshes only sections already opened/loaded, avoiding a full-console request burst. New sections load automatically when viewed.
-- **Unified regression tooling:** `regression.py` embeds and runs the six regression suites (including the V64.5/V64.6 and Quarter+FY targeted checks) in isolated child processes without modifying the repository seed database.
-- **Version bumped:** `VERSION.txt` and runtime `APP_VERSION` now report `V64.6`.
-
-### Re-audit checkpoints
-For the next audit/review, check these exact invariants:
-1. `/api/admin/service_health` → `latest_data_date`, `freshness_age_days`, `data_revision`; `latest_activity` must not determine freshness.
-2. `/api/admin/home` → `last_data_update` must be the latest disposition inspection date; `last_import_at` is informational only.
-3. `app_state` → `disposition_revision` changes only when disposition data is inserted/updated/deleted/restored.
-4. `/api/admin/backup/list` → unchanged backup files must not be decompressed/JSON-parsed on every call.
-5. Admin login/scroll → deep sections are lazy-loaded; there are no chained `showAdmin()` wrappers creating duplicate timer bursts.
-6. Disabled users → existing `qdash_admin`/`qdash_user` sessions no longer authorize access.
-7. Backup/user/security GET APIs → non-Super-Admin roles receive HTTP 403.
-
-### Verification performed for V64.6
+### Verification performed for V65.0
 - `python3 -m py_compile server.py`
-- `node --check` on all inline scripts in `admin.html` and `index.html`
-- `python3 regression.py`
-- `python3 smoke_test.py`
-- `python3 http_smoke.py`
-- `python3 admin_ux_audit.py`
-- `python3 export_acceptance.py`
-- `python3 export_stress.py` (PASS; ~30.8s wall, ~545 MB peak RSS on the repository stress fixture)
+- `node --check` on `app.js` and all inline scripts in `admin.html` / `index.html`
+- `python3 regression.py`, `python3 smoke_test.py`, `python3 code_health.py`
+- Browser check (Chromium) of every presentation-mode panel at 1366×768 and 1920×1080; hover tag on KPI / table header / table cell / chart bar.
 
-The bundled `quality.db` remains unchanged. Its current seed invariants remain 4,936 disposition rows, 0 duplicate batch groups, and no missing/invalid core disposition fields.
+The bundled `quality.db` is unchanged (4,936 disposition rows).
 
 ## Admin console navigation
 - Sidebar navigation is grouped into a canonical 21-section sequence; sidebar and content use the same order.

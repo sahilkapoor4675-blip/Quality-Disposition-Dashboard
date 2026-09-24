@@ -9,7 +9,7 @@
 <link href="/site.webmanifest?v=qa1" rel="manifest"/>
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1" name="viewport"/>
-<meta name="app-version" content="V64.6">
+<meta name="app-version" content="V65.0">
 <title>Quality Intelligence — Admin</title>
 <style>
 :root{--navy:#16324F;--blue:#2388C9;--bg:#F5F8FB;--card:#fff;--border:#DCE6EF;--text:#24364B;--muted:#5c6b7d;--red:#D94A4A;--green:#1B9A63}
@@ -375,14 +375,76 @@ body{min-width:0;}
   .admin-kpi-grid{grid-template-columns:1fr 1fr;}
 }
 </style>
+<style id="v65-admin-icons">
+/* V65.0 Admin icons (line icons from the sprite at the top of <body>) */
+.ic{width:1.15em;height:1.15em;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.2em;margin-right:.42em;pointer-events:none;}
+.theme-toggle-btn .ic{margin:0;width:1.2em;height:1.2em;}
+.btn .ic,.delete .ic{margin-right:.4em;}
+.btn,.delete{display:inline-flex;align-items:center;justify-content:center;}
+.top .actions .secure{display:inline-flex;align-items:center;}
+.v29-kicker,.sidebar-progress-kicker{display:inline-flex;align-items:center;}
+.v29-kicker .ic,.sidebar-progress-kicker .ic{width:1.05em;height:1.05em;}
+.field label{display:flex;align-items:center;}
+.field label .ic{color:var(--accent-blue,#3B82F6);}
+.pref-row label{display:inline-flex;align-items:center;}
+</style>
 </head>
 <body>
-<div class="top"><div class="top-brand"><img alt="Jindal Stainless" class="top-logo" src="/jsl-header-logo.png"/><div class="brand"><h1><span class="admin-title-main"><span class="admin-quality">QUALITY</span><span style="display:inline-block;width:8px"></span><span class="admin-intelligence">INTELLIGENCE</span></span><span class="admin-title-sub"><span class="admin-admin">ADMIN</span></span></h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div></div><div class="actions"><span class="secure">● SECURE ADMIN</span><span class="security-badge">CSRF • RATE LIMIT • SESSION PROTECTED</span><span class="live-db-badge" id="liveDbBadge" title="Active database connection">🟢 LIVE DB · checking</span><button aria-label="Switch to dark mode" class="theme-toggle-btn" id="adminThemeToggleBtn" title="Switch to dark mode" type="button">☾</button><button aria-label="Mute sound effects" class="theme-toggle-btn sfx-toggle-btn" title="Mute sound effects" type="button">🔊</button><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
+<!-- V65.0 icon sprite for the Admin console; the enhancer script at the bottom adds icons to buttons (also dynamically built ones). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="ic-filter" viewBox="0 0 24 24"><path d="M3.5 5h17l-6.5 8v6l-4 2v-8z"/></symbol>
+    <symbol id="ic-sliders" viewBox="0 0 24 24"><path d="M4 6h8M17 6h3M4 12h3M12 12h8M4 18h10M19 18h1"/><circle cx="14.5" cy="6" r="2.3"/><circle cx="9.5" cy="12" r="2.3"/><circle cx="16.5" cy="18" r="2.3"/></symbol>
+    <symbol id="ic-selection" viewBox="0 0 24 24"><path d="M3.5 6.5l1.6 1.6 3-3.4M3.5 12.5l1.6 1.6 3-3.4M3.5 18.5l1.6 1.6 3-3.4M12 7h8.5M12 13h8.5M12 19h8.5"/></symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10.5l4.5 4.5 4.5-4.5M4.5 20h15"/></symbol>
+    <symbol id="ic-file-sheet" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h7M12.5 11v8"/></symbol>
+    <symbol id="ic-file-text" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></symbol>
+    <symbol id="ic-presentation" viewBox="0 0 24 24"><path d="M3 4h18M5 4v11h14V4M12 15v3.5M8.5 21l3.5-2.5 3.5 2.5"/><path d="M8.5 11.5l2.5-2.5 2 2 3-3.5"/></symbol>
+    <symbol id="ic-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v6.5c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8V5.5M4.5 12v6.5c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8V12"/></symbol>
+    <symbol id="ic-bookmark-plus" viewBox="0 0 24 24"><path d="M6 3.5h12v17.5l-6-4.5-6 4.5z"/><path d="M12 7.5v5M9.5 10h5"/></symbol>
+    <symbol id="ic-list-edit" viewBox="0 0 24 24"><path d="M3.5 6h11M3.5 12h7M3.5 18h6"/><path d="M12.5 19l.8-3.4 6.8-6.8 2.6 2.6-6.8 6.8z"/></symbol>
+    <symbol id="ic-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9L4 8.5"/><path d="M4 3.5v5h5"/></symbol>
+    <symbol id="ic-compare" viewBox="0 0 24 24"><rect x="3" y="4.5" width="7.5" height="15" rx="1.8"/><rect x="13.5" y="4.5" width="7.5" height="15" rx="1.8"/></symbol>
+    <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.3"/><path d="M15.6 15.6l4.9 4.9"/></symbol>
+    <symbol id="ic-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="ic-maximize" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="ic-chevron-down" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+    <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="ic-command" viewBox="0 0 24 24"><path d="M9 9h6v6H9z"/><path d="M9 9V6.5A2.5 2.5 0 1 0 6.5 9H9zM15 9V6.5A2.5 2.5 0 1 1 17.5 9H15zM9 15v2.5A2.5 2.5 0 1 1 6.5 15H9zM15 15v2.5a2.5 2.5 0 1 0 2.5-2.5H15z"/></symbol>
+    <symbol id="ic-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6.5 4 13 2.5-6.5H21"/></symbol>
+    <symbol id="ic-alert" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.4v.1"/></symbol>
+    <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".9"/></symbol>
+    <symbol id="ic-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M15.5 7H21v5.5"/></symbol>
+    <symbol id="ic-flame" viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.2 2-4 0 1.5.8 2.4 1.7 2.6C10.2 9 10.5 5.5 12 3z"/></symbol>
+    <symbol id="ic-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M3.5 15h17M9.5 4.5v15"/></symbol>
+    <symbol id="ic-tag" viewBox="0 0 24 24"><path d="M3.5 12.2V4.5h7.7l9 9a1.6 1.6 0 0 1 0 2.3l-5.4 5.4a1.6 1.6 0 0 1-2.3 0z"/><circle cx="7.8" cy="8.8" r="1.2"/></symbol>
+    <symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-13.6 5.7M4 12a8 8 0 0 1 13.6-5.7"/><path d="M18 3v3.5h-3.5M6 21v-3.5h3.5"/></symbol>
+    <symbol id="ic-edit" viewBox="0 0 24 24"><path d="M4 20l1-4.2L16.5 4.3a1.8 1.8 0 0 1 2.5 0l1.7 1.7a1.8 1.8 0 0 1 0 2.5L9.2 20z"/></symbol>
+    <symbol id="ic-home" viewBox="0 0 24 24"><path d="M3.5 11L12 4l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"/></symbol>
+    <symbol id="ic-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="3.8"/><path d="M10.8 12.2L20 3M16.5 6.5l3 3M14 9l2 2"/></symbol>
+    <symbol id="ic-login" viewBox="0 0 24 24"><path d="M14 4h5.5v16H14M4 12h10M10.5 8l4 4-4 4"/></symbol>
+    <symbol id="ic-logout" viewBox="0 0 24 24"><path d="M10 4H4.5v16H10M9 12h11M16.5 8l4 4-4 4"/></symbol>
+    <symbol id="ic-trash" viewBox="0 0 24 24"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v6M14 11v6"/></symbol>
+    <symbol id="ic-save" viewBox="0 0 24 24"><path d="M5 3.5h11l3.5 3.5V20.5H5z"/><path d="M8 3.5v5h7v-5M8 20.5v-6.5h8v6.5"/></symbol>
+    <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="ic-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24"><path d="M4.5 12.5l4.5 4.5 10.5-10.5"/></symbol>
+    <symbol id="ic-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></symbol>
+    <symbol id="ic-upload" viewBox="0 0 24 24"><path d="M12 15.5v-12M7.5 8l4.5-4.5L16.5 8M4.5 20h15"/></symbol>
+    <symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></symbol>
+    <symbol id="ic-chevron-right" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+    <symbol id="ic-chevron-left" viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></symbol>
+    <symbol id="ic-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-4 4-6 7.5-6s6.7 2 7.5 6"/></symbol>
+    <symbol id="ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8"/></symbol>
+    <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></symbol>
+  </defs>
+</svg>
+<div class="top"><div class="top-brand"><img alt="Jindal Stainless" class="top-logo" src="/jsl-header-logo.png"/><div class="brand"><h1><span class="admin-title-main"><span class="admin-quality">QUALITY</span><span style="display:inline-block;width:8px"></span><span class="admin-intelligence">INTELLIGENCE</span></span><span class="admin-title-sub"><span class="admin-admin">ADMIN</span></span></h1><p>Protected Data Management • Cupronickel (Non-Ferrous) Division</p></div></div><div class="actions"><span class="secure"><svg class="ic" aria-hidden="true"><use href="#ic-shield"/></svg>SECURE ADMIN</span><span class="security-badge">CSRF • RATE LIMIT • SESSION PROTECTED</span><span class="live-db-badge" id="liveDbBadge" title="Active database connection">🟢 LIVE DB · checking</span><button aria-label="Switch to dark mode" class="theme-toggle-btn" id="adminThemeToggleBtn" title="Switch to dark mode" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-moon"/></svg></button><button aria-label="Mute sound effects" class="theme-toggle-btn sfx-toggle-btn" title="Mute sound effects" type="button">🔊</button><a class="btn" href="/">← Dashboard</a><button class="btn danger hidden" id="logoutBtn">Logout</button></div></div>
 <div class="wrap">
 <section class="login" id="loginBox">
 <h2>🔐 Admin Login</h2><p class="hint">Only the authorized administrator can add, import or delete data. Viewer access to the dashboard remains read-only.</p>
-<div class="field"><label>Username</label><input autocomplete="username" id="username" value="admin"/></div>
-<div class="field"><label>Password</label><input autocomplete="current-password" id="password" placeholder="Enter admin password" type="password"/></div>
+<div class="field"><label><svg class="ic" aria-hidden="true"><use href="#ic-user"/></svg>Username</label><input autocomplete="username" id="username" value="admin"/></div>
+<div class="field"><label><svg class="ic" aria-hidden="true"><use href="#ic-key"/></svg>Password</label><input autocomplete="current-password" id="password" placeholder="Enter admin password" type="password"/></div>
 <div class="connection-box" id="loginConnection"><div><span class="connection-dot checking"></span><strong>Database Connection</strong><small id="loginConnectionText">Checking connection…</small></div><button class="btn" id="connectionBtn" type="button">↻ Check</button></div>
 <button class="btn primary" id="loginBtn" style="width:100%">Login</button><div class="msg" id="loginMsg"></div>
 </section>
@@ -416,23 +478,23 @@ body{min-width:0;}
 
 
 
-<div class="sidebar-progress" id="sidebarProgress"><span class="sidebar-progress-kicker">CURRENT SECTION</span><strong id="currentSectionName">Overview</strong><small><span id="currentSectionIndex"></span> / <span id="currentSectionTotal"></span></small></div><nav aria-label="Admin sections" class="sidebar-nav" id="adminSidebarNav"><div class="sidebar-group" data-nav-group="monitoring"><div class="sidebar-group-label">Monitoring</div><button aria-controls="homePanel" aria-current="page" class="sidebar-link active" data-target="homePanel" type="button"><span aria-hidden="true" class="sidebar-icon">🏠</span><span class="sidebar-link-text">Overview</span></button><button aria-controls="dataQualityPanel" aria-current="false" class="sidebar-link" data-target="dataQualityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧪</span><span class="sidebar-link-text">Data Quality</span></button></div><div class="sidebar-group" data-nav-group="data-operations"><div class="sidebar-group-label">Data Operations</div><button aria-controls="kpiPanel" aria-current="false" class="sidebar-link" data-target="kpiPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🎯</span><span class="sidebar-link-text">KPI Targets</span></button><button aria-controls="addRecordPanel" aria-current="false" class="sidebar-link" data-target="addRecordPanel" type="button"><span aria-hidden="true" class="sidebar-icon">➕</span><span class="sidebar-link-text">Add Record</span></button><button aria-controls="importPanel" aria-current="false" class="sidebar-link" data-target="importPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📥</span><span class="sidebar-link-text">Import Wizard</span></button><button aria-controls="importHistoryPanel" aria-current="false" class="sidebar-link" data-target="importHistoryPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧾</span><span class="sidebar-link-text">Import History</span></button><button aria-controls="recordsPanel" aria-current="false" class="sidebar-link" data-target="recordsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🗃️</span><span class="sidebar-link-text">Latest Records</span></button><button aria-controls="fishbonePanel" aria-current="false" class="sidebar-link" data-target="fishbonePanel" type="button"><span aria-hidden="true" class="sidebar-icon">🐟</span><span class="sidebar-link-text">Fishbone Master</span></button><button aria-controls="fishboneMapPanel" aria-current="false" class="sidebar-link" data-target="fishboneMapPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔗</span><span class="sidebar-link-text">Defect Mapping</span></button></div><div class="sidebar-group" data-nav-group="system"><div class="sidebar-group-label">System</div><button aria-controls="commandCenterPanel" aria-current="false" class="sidebar-link" data-target="commandCenterPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧭</span><span class="sidebar-link-text">Command Center</span></button><button aria-controls="databasePanel" aria-current="false" class="sidebar-link" data-target="databasePanel" type="button"><span aria-hidden="true" class="sidebar-icon">📊</span><span class="sidebar-link-text">Database</span></button><button aria-controls="performancePanel" aria-current="false" class="sidebar-link" data-target="performancePanel" type="button"><span aria-hidden="true" class="sidebar-icon">⚡</span><span class="sidebar-link-text">DB Performance</span></button><button aria-controls="backupsPanel" aria-current="false" class="sidebar-link" data-target="backupsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🗄️</span><span class="sidebar-link-text">Backups</span></button><button aria-controls="recoveryPanel" aria-current="false" class="sidebar-link" data-target="recoveryPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🛟</span><span class="sidebar-link-text">Recovery Center</span></button></div><div class="sidebar-group" data-nav-group="governance"><div class="sidebar-group-label">Governance</div><button aria-controls="securityPanel" aria-current="false" class="sidebar-link" data-target="securityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🛡️</span><span class="sidebar-link-text">Security</span></button><button aria-controls="validationPanel" aria-current="false" class="sidebar-link" data-target="validationPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧩</span><span class="sidebar-link-text">Validation Rules</span></button><button aria-controls="usersPanel" aria-current="false" class="sidebar-link" data-target="usersPanel" type="button"><span aria-hidden="true" class="sidebar-icon">👥</span><span class="sidebar-link-text">Users &amp; Roles</span></button><button aria-controls="auditExplorerPanel" aria-current="false" class="sidebar-link" data-target="auditExplorerPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔎</span><span class="sidebar-link-text">Audit Explorer</span></button><button aria-controls="auditTrailPanel" aria-current="false" class="sidebar-link" data-target="auditTrailPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔐</span><span class="sidebar-link-text">Audit Trail</span></button><button aria-controls="auditAnalyticsPanel" aria-current="false" class="sidebar-link" data-target="auditAnalyticsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📊</span><span class="sidebar-link-text">Audit Analytics</span></button><button aria-controls="activityPanel" aria-current="false" class="sidebar-link" data-target="activityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📈</span><span class="sidebar-link-text">Activity</span></button></div></nav><div class="sidebar-foot"><button class="sidebar-top-btn" id="sidebarTopBtn" type="button">↑ Back to Overview</button> <span class="shortcut-key">R</span> Refresh</div></aside>
+<div class="sidebar-progress" id="sidebarProgress"><span class="sidebar-progress-kicker"><svg class="ic" aria-hidden="true"><use href="#ic-target"/></svg>CURRENT SECTION</span><strong id="currentSectionName">Overview</strong><small><span id="currentSectionIndex"></span> / <span id="currentSectionTotal"></span></small></div><nav aria-label="Admin sections" class="sidebar-nav" id="adminSidebarNav"><div class="sidebar-group" data-nav-group="monitoring"><div class="sidebar-group-label">Monitoring</div><button aria-controls="homePanel" aria-current="page" class="sidebar-link active" data-target="homePanel" type="button"><span aria-hidden="true" class="sidebar-icon">🏠</span><span class="sidebar-link-text">Overview</span></button><button aria-controls="dataQualityPanel" aria-current="false" class="sidebar-link" data-target="dataQualityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧪</span><span class="sidebar-link-text">Data Quality</span></button></div><div class="sidebar-group" data-nav-group="data-operations"><div class="sidebar-group-label">Data Operations</div><button aria-controls="kpiPanel" aria-current="false" class="sidebar-link" data-target="kpiPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🎯</span><span class="sidebar-link-text">KPI Targets</span></button><button aria-controls="addRecordPanel" aria-current="false" class="sidebar-link" data-target="addRecordPanel" type="button"><span aria-hidden="true" class="sidebar-icon">➕</span><span class="sidebar-link-text">Add Record</span></button><button aria-controls="importPanel" aria-current="false" class="sidebar-link" data-target="importPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📥</span><span class="sidebar-link-text">Import Wizard</span></button><button aria-controls="importHistoryPanel" aria-current="false" class="sidebar-link" data-target="importHistoryPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧾</span><span class="sidebar-link-text">Import History</span></button><button aria-controls="recordsPanel" aria-current="false" class="sidebar-link" data-target="recordsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🗃️</span><span class="sidebar-link-text">Latest Records</span></button><button aria-controls="fishbonePanel" aria-current="false" class="sidebar-link" data-target="fishbonePanel" type="button"><span aria-hidden="true" class="sidebar-icon">🐟</span><span class="sidebar-link-text">Fishbone Master</span></button><button aria-controls="fishboneMapPanel" aria-current="false" class="sidebar-link" data-target="fishboneMapPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔗</span><span class="sidebar-link-text">Defect Mapping</span></button></div><div class="sidebar-group" data-nav-group="system"><div class="sidebar-group-label">System</div><button aria-controls="commandCenterPanel" aria-current="false" class="sidebar-link" data-target="commandCenterPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧭</span><span class="sidebar-link-text">Command Center</span></button><button aria-controls="databasePanel" aria-current="false" class="sidebar-link" data-target="databasePanel" type="button"><span aria-hidden="true" class="sidebar-icon">📊</span><span class="sidebar-link-text">Database</span></button><button aria-controls="performancePanel" aria-current="false" class="sidebar-link" data-target="performancePanel" type="button"><span aria-hidden="true" class="sidebar-icon">⚡</span><span class="sidebar-link-text">DB Performance</span></button><button aria-controls="backupsPanel" aria-current="false" class="sidebar-link" data-target="backupsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🗄️</span><span class="sidebar-link-text">Backups</span></button><button aria-controls="recoveryPanel" aria-current="false" class="sidebar-link" data-target="recoveryPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🛟</span><span class="sidebar-link-text">Recovery Center</span></button></div><div class="sidebar-group" data-nav-group="governance"><div class="sidebar-group-label">Governance</div><button aria-controls="securityPanel" aria-current="false" class="sidebar-link" data-target="securityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🛡️</span><span class="sidebar-link-text">Security</span></button><button aria-controls="validationPanel" aria-current="false" class="sidebar-link" data-target="validationPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🧩</span><span class="sidebar-link-text">Validation Rules</span></button><button aria-controls="usersPanel" aria-current="false" class="sidebar-link" data-target="usersPanel" type="button"><span aria-hidden="true" class="sidebar-icon">👥</span><span class="sidebar-link-text">Users &amp; Roles</span></button><button aria-controls="auditExplorerPanel" aria-current="false" class="sidebar-link" data-target="auditExplorerPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔎</span><span class="sidebar-link-text">Audit Explorer</span></button><button aria-controls="auditTrailPanel" aria-current="false" class="sidebar-link" data-target="auditTrailPanel" type="button"><span aria-hidden="true" class="sidebar-icon">🔐</span><span class="sidebar-link-text">Audit Trail</span></button><button aria-controls="auditAnalyticsPanel" aria-current="false" class="sidebar-link" data-target="auditAnalyticsPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📊</span><span class="sidebar-link-text">Audit Analytics</span></button><button aria-controls="activityPanel" aria-current="false" class="sidebar-link" data-target="activityPanel" type="button"><span aria-hidden="true" class="sidebar-icon">📈</span><span class="sidebar-link-text">Activity</span></button></div></nav><div class="sidebar-foot"><button class="sidebar-top-btn" id="sidebarTopBtn" type="button">↑ Back to Overview</button> <span class="shortcut-key">R</span> Refresh</div></aside>
 <main class="admin-content">
 <div class="admin-commandbar" id="commandBar"><div aria-live="polite" class="admin-section-position" id="adminSectionPosition"><span id="adminSectionPositionIndex"></span> · <strong id="adminSectionPositionName"></strong></div>
 <button class="btn command-refresh" id="commandRefreshBtn" type="button">↻ Refresh</button>
 </div>
 <div class="admin-v29-tools" id="adminV29Tools">
 <div class="admin-health-score-card">
-<div><span class="v29-kicker">SYSTEM HEALTH</span><b id="adminHealthScore">—</b><span id="adminHealthState">Calculating…</span></div>
+<div><span class="v29-kicker"><svg class="ic" aria-hidden="true"><use href="#ic-pulse"/></svg>SYSTEM HEALTH</span><b id="adminHealthScore">—</b><span id="adminHealthState">Calculating…</span></div>
 <div class="health-ring" id="adminHealthRing"><span id="adminHealthRingValue">—</span></div>
 </div>
 <div class="admin-notify-card">
-<div class="v29-card-head"><div><span class="v29-kicker">ATTENTION CENTER</span><b>What needs attention</b></div><span class="notify-count" id="adminNotifyCount">0</span></div>
+<div class="v29-card-head"><div><span class="v29-kicker"><svg class="ic" aria-hidden="true"><use href="#ic-alert"/></svg>ATTENTION CENTER</span><b>What needs attention</b></div><span class="notify-count" id="adminNotifyCount">0</span></div>
 <div class="notify-list" id="adminNotifyList"><div class="v29-empty">No alerts yet.</div></div>
 </div>
 <div class="admin-personal-card">
-<div class="v29-card-head"><div><span class="v29-kicker">WORKSPACE</span><b>Admin preferences</b></div></div>
-<div class="pref-row"><label><input id="compactAdminToggle" type="checkbox"/> Compact density</label><button class="btn" id="resetAdminPrefs">↺ Reset</button></div>
+<div class="v29-card-head"><div><span class="v29-kicker"><svg class="ic" aria-hidden="true"><use href="#ic-sliders"/></svg>WORKSPACE</span><b>Admin preferences</b></div></div>
+<div class="pref-row"><label><input id="compactAdminToggle" type="checkbox"/> <svg class="ic" aria-hidden="true"><use href="#ic-sliders"/></svg>Compact density</label><button class="btn" id="resetAdminPrefs">↺ Reset</button></div>
 </div>
 </div>
 <div class="admin-health-strip">
@@ -757,7 +819,7 @@ $('backupBtn').onclick=()=>{window.location.href='/api/admin/export_csv'};boot()
   const apply=(theme)=>{
     document.documentElement.setAttribute('data-theme',theme);
     const dark=theme==='dark';
-    btn.textContent=dark?'☀':'☾';
+    btn.innerHTML='<svg class="ic" aria-hidden="true"><use href="#ic-'+(dark?'sun':'moon')+'"/></svg>';
     btn.title=dark?'Switch to light mode':'Switch to dark mode';
     btn.setAttribute('aria-label',btn.title);
   };
@@ -1202,4 +1264,34 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
   window.goAdminSection=go;
   setTimeout(()=>{window.__adminSyncSidebarVisibility?.();setCurrent('homePanel',true);scheduleSpy();},0);
 })();
-</script></body></html>
+</script><script id="v65-admin-icon-enhancer">
+/* V65.0: puts a matching line icon in front of every Admin button label (static and dynamically built).
+   Purely visual: the button text, ids and handlers are untouched. Re-applies itself if a handler rewrites a label. */
+(function(){
+  const RULES=[[/log\s?out|sign\s?out/i,'logout'],[/log\s?in|sign\s?in/i,'login'],[/dashboard/i,'home'],[/password/i,'key'],
+    [/restore|import|upload|choose|browse/i,'upload'],[/export|download/i,'download'],[/backup/i,'database'],
+    [/refresh|reload|retry|check|test connection/i,'refresh'],[/reset|clear|undo/i,'reset'],[/delete|remove|purge|revoke|discard/i,'trash'],
+    [/edit|rename|change/i,'edit'],[/search|find/i,'search'],[/filter|apply/i,'filter'],[/save|update|confirm|submit|set new|approve/i,'save'],
+    [/add|new|create|invite/i,'plus'],[/view|show|open|preview|detail|inspect/i,'eye'],[/cancel|close|dismiss/i,'x'],
+    [/copy/i,'copy'],[/next/i,'chevron-right'],[/prev|back/i,'chevron-left'],[/verify|validate|resolve|map|link/i,'check']];
+  const GLYPH=/^[\s\u2190-\u21FF\u2300-\u23FF\u25A0-\u27BF\u2B00-\u2BFF\uFE0F\u{1F300}-\u{1FAFF}]+/u;
+  const SEL='.btn,button.delete,td button,.submit-row button';
+  function pick(txt){ for(const [re,name] of RULES){ if(re.test(txt)) return name; } return null; }
+  function enhance(root){
+    (root||document).querySelectorAll(SEL).forEach(el=>{
+      if(el.querySelector(':scope > svg.ic') || el.classList.contains('theme-toggle-btn') || el.classList.contains('no-ic')) return;
+      const raw=(el.textContent||'').trim(); if(!raw) return;
+      const clean=raw.replace(GLYPH,'').trim(); if(!clean) return;
+      const name=pick(clean); if(!name) return;
+      // drop a leading emoji/arrow glyph that the SVG replaces
+      const first=[...el.childNodes].find(n=>n.nodeType===3 && n.nodeValue.trim());
+      if(first) first.nodeValue=first.nodeValue.replace(GLYPH,'');
+      el.insertAdjacentHTML('afterbegin','<svg class="ic" aria-hidden="true"><use href="#ic-'+name+'"/></svg>');
+    });
+  }
+  let raf=0; const again=()=>{ if(raf) return; raf=requestAnimationFrame(()=>{ raf=0; enhance(); }); };
+  function start(){ enhance(); new MutationObserver(again).observe(document.body,{childList:true,subtree:true,characterData:true}); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
+})();
+</script>
+</body></html>
