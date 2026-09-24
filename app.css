@@ -1917,24 +1917,44 @@ html[data-theme="dark"] .export-dialog-close:hover{background:#1B2A40;}
 .analytics-presentation-kicker{display:flex;align-items:center;}
 .analytics-presentation-kicker .ic{width:1.05em;height:1.05em;margin-right:.45em;}
 
-/* ---- rolling-mill header background ---- */
-header.app-header .header-top-row{position:relative;z-index:1;}
+/* ---- header background: flowing ribbon waves + copper coils (V65.0, redesigned from a reference video) ---- */
+header.app-header .header-top-row{position:relative;z-index:2;}
 .header-fx{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;z-index:0;}
 .header-fx>*{position:absolute;display:block;pointer-events:none;}
-.hfx-glow{inset:-40% -10%;background:radial-gradient(ellipse 28% 60% at 12% 60%,rgba(220,125,52,.16),transparent 70%),radial-gradient(ellipse 30% 60% at 88% 40%,rgba(45,185,235,.17),transparent 70%);animation:hfxGlow 16s ease-in-out infinite alternate;will-change:transform;}
-.hfx-wave{left:0;bottom:0;width:200%;height:62%;will-change:transform;}
-.hfx-wave-a{fill:rgba(220,125,52,.10);animation:hfxRoll 26s linear infinite;}
-.hfx-wave-b{height:70%;fill:rgba(35,136,201,.10);animation:hfxRoll 38s linear infinite reverse;}
-.hfx-sheen{top:-20%;bottom:-20%;left:0;width:22%;background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.55) 48%,rgba(255,214,170,.35) 52%,transparent 100%);transform:translateX(-140%) skewX(-14deg);animation:hfxSheen 9s ease-in-out infinite;will-change:transform;}
+.hfx-wash{inset:0;background:radial-gradient(60% 140% at 100% 100%,rgba(240,146,66,.20),transparent 62%),radial-gradient(55% 140% at 0% 100%,rgba(56,150,236,.15),transparent 66%),linear-gradient(100deg,rgba(255,255,255,.96) 0%,rgba(244,249,255,.9) 48%,rgba(246,250,255,.85) 66%,rgba(253,243,232,.9) 100%);}
+.hfx-coils{right:0;top:0;height:100%;width:50%;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 42%);mask-image:linear-gradient(90deg,transparent 0,#000 42%);opacity:.95;}
+.hfx-layer{left:0;right:0;bottom:0;height:92%;transform-origin:50% 100%;animation:hfxBreath 9s ease-in-out infinite alternate;will-change:transform;}
+.hfx-layer svg{position:absolute;left:0;top:0;height:100%;width:200%;animation:hfxRoll 34s linear infinite;will-change:transform;}
+.hfx-copper{animation-duration:11s;animation-direction:alternate-reverse;}
+.hfx-copper svg{animation-duration:26s;animation-direction:reverse;}
+.hfx-blue{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 42%,transparent 84%);mask-image:linear-gradient(90deg,#000 0,#000 42%,transparent 84%);}
+.hfx-copper{-webkit-mask-image:linear-gradient(90deg,transparent 24%,#000 66%);mask-image:linear-gradient(90deg,transparent 24%,#000 66%);}
+.hfx-veil{inset:0;background:linear-gradient(90deg,rgba(255,255,255,.82) 0%,rgba(255,255,255,.68) 36%,rgba(255,255,255,0) 64%);-webkit-mask-image:linear-gradient(180deg,#000 0,#000 45%,transparent 82%);mask-image:linear-gradient(180deg,#000 0,#000 45%,transparent 82%);}
 @keyframes hfxRoll{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
-@keyframes hfxGlow{from{transform:translate3d(-3%,0,0)}to{transform:translate3d(3%,0,0)}}
-@keyframes hfxSheen{0%,55%{transform:translateX(-140%) skewX(-14deg)}100%{transform:translateX(560%) skewX(-14deg)}}
-html[data-theme="dark"] .hfx-wave-a{fill:rgba(220,125,52,.13);}
-html[data-theme="dark"] .hfx-wave-b{fill:rgba(45,185,235,.11);}
-html[data-theme="dark"] .hfx-sheen{background:linear-gradient(105deg,transparent 0%,rgba(255,255,255,.10) 48%,rgba(255,190,130,.14) 52%,transparent 100%);}
-@media(max-width:600px){.hfx-wave-b,.hfx-sheen{display:none;}}
-@media(prefers-reduced-motion:reduce){.hfx-glow,.hfx-wave,.hfx-sheen{animation:none!important;}.hfx-sheen{display:none;}}
+@keyframes hfxBreath{from{transform:translate3d(0,0,0) scaleY(1)}to{transform:translate3d(0,-5px,0) scaleY(1.16)}}
+/* dark theme: deep navy, ribbons glow (screen blend), coils dimmed */
+html[data-theme="dark"] .hfx-wash{background:radial-gradient(60% 140% at 100% 100%,rgba(240,130,50,.22),transparent 62%),radial-gradient(55% 140% at 0% 100%,rgba(40,130,230,.24),transparent 66%),linear-gradient(100deg,rgba(6,11,22,.55) 0%,rgba(10,24,44,.35) 55%,rgba(26,18,12,.5) 100%);}
+html[data-theme="dark"] .hfx-layer{mix-blend-mode:screen;}
+html[data-theme="dark"] .hfx-blue svg{filter:brightness(1.05) saturate(1.15);}
+html[data-theme="dark"] .hfx-copper svg{filter:brightness(1.0) saturate(1.1);}
+html[data-theme="dark"] .hfx-coils{filter:brightness(.68) saturate(1.1);opacity:.9;}
+html[data-theme="dark"] .hfx-veil{background:linear-gradient(90deg,rgba(6,12,24,.62) 0%,rgba(6,12,24,.45) 36%,rgba(6,12,24,0) 64%);}
+@media(max-width:1100px){.hfx-coils{display:none;}}
+@media(max-width:600px){.hfx-copper{display:none;}}
+@media(prefers-reduced-motion:reduce){.hfx-layer,.hfx-layer svg{animation:none!important;}}
 @media print{.header-fx{display:none!important;}}
+
+/* "Last updated" is a real chip now: solid glass background so the waves can never sit on top of / behind its text */
+header.app-header .updated-block{display:inline-flex;align-items:center;align-self:flex-end;gap:0;height:38px;padding:0 14px 0 12px;text-align:left;background:rgba(255,255,255,.92);border:1px solid #D3E3F1;border-radius:12px;box-shadow:0 4px 14px rgba(24,58,88,.10);position:relative;z-index:3;}
+header.app-header .updated-label{display:inline-flex;align-items:center;margin:0;padding-right:10px;border-right:1px solid #D3E3F1;font-size:12px;letter-spacing:.9px;color:#1D78C8;opacity:1;white-space:nowrap;}
+header.app-header .updated-label .ic{color:#1D78C8;}
+header.app-header .updated-time{padding-left:10px;font-size:13px;font-weight:800;color:#16324F;white-space:nowrap;}
+html[data-theme="dark"] header.app-header .updated-block{background:rgba(17,30,50,.92);border-color:#2A4666;box-shadow:0 5px 16px rgba(0,0,0,.35);}
+html[data-theme="dark"] header.app-header .updated-label{color:#8FD0FF;border-right-color:#2A4666;}
+html[data-theme="dark"] header.app-header .updated-label .ic{color:#8FD0FF;}
+html[data-theme="dark"] header.app-header .updated-time{color:#F4F8FF;}
+@media(max-width:600px){header.app-header .updated-label{display:none;}header.app-header .updated-time{padding-left:0;}}
+
 
 /* ---- chart tooltip (was unstyled) ---- */
 .chart-tooltip{position:fixed;left:0;top:0;z-index:2147483000;max-width:320px;padding:7px 10px;border-radius:9px;background:rgba(15,42,74,.96);color:#fff;font:700 12.5px/1.35 Manrope,sans-serif;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;display:flex;flex-direction:column;gap:2px;}

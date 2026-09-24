@@ -10,7 +10,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 ## What changed in V65.0 (presentation mode fits screen, field-name hover tag, animated header, icons)
 - **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
-- **Rolling-mill header background:** slow copper/steel ribbons, glow and glint. Disabled for reduced-motion and print.
+- **Animated header background:** flowing blue and copper ribbon waves behind the text, copper coils on the right, separate light/dark look. "Last Updated" is a solid chip. Disabled for reduced-motion and print.
 - **Icons:** one SVG sprite (top of `index.html`) + `qdIc('name')` in `app.js`; added to filters, selection, presets, export, search, drill-down, compare, Control Room headings, presentation mode.
 - **Admin icons:** the Admin console has the same icon set; every button label (including dynamically built ones) gets a matching icon, plus login fields, section kickers and the theme toggle.
 - **Chart tooltip** now has styling (it had none) and names the measure on single-series charts.
@@ -18,7 +18,7 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 ### V65.0 checkpoints
 - Browser at 100%: open the expand button on every chart. Chart, legend and table are fully visible with no overlap.
 - Hover a KPI value, a table header and a table cell: the tag shows KPI name / column name / column + "Row: …".
-- Header shows slow moving ribbons and an occasional glint; text stays readable in light and dark theme.
+- Header shows flowing ribbon waves behind the text; text and the Last Updated chip stay readable in light and dark theme.
 - Filters, Selection, Save/Manage Presets, Export, Commands, Search show icons.
 
 ### Verification performed for V65.0

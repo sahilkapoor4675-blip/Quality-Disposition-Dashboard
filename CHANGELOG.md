@@ -6,7 +6,7 @@
 
 ### Added
 - **Field-name hover tag:** a small tag follows the cursor and names the field: KPI parts (value, previous, change, status, targets), table columns and cells (column + row), filters and their options, legends, icon-only buttons. Turn it off/on from Ctrl+K.
-- **Rolling-mill header background:** slow drifting copper/steel ribbons, a soft glow and a glint sweep (GPU transforms only; off for reduced-motion and print; dark-mode tuned).
+- **Animated header background (redesigned from a reference video):** translucent blue steel-ribbon waves and copper ribbon waves keep flowing behind the text, with copper coils on the right; text and buttons always sit above it. Separate light and dark treatments (dark uses glowing screen-blended ribbons). "Last Updated" is now a solid glass chip (icon | label | value) so the animation can never hide or dim it. Motion is GPU transforms only, off for reduced-motion and print, and the coils hide on narrow screens.
 - **Icon set:** shared SVG sprite in index.html plus `qdIc()` helper in app.js. Icons added to Dashboard Filters, Compare Periods, Reset All, Selection, Saved Views, Save/Manage Presets, Export button and dialog, Commands, Search, Last Updated, drill-down, Compare view, Control Room summary strip and zone headings, presentation mode.
 
 ## V64.9 — Insight strip moved to Quality Control Room, KPI cards show percentage-point delta (2026-09-25)
