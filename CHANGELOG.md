@@ -1,3 +1,18 @@
+## V65.0 — Follow-up: intro screen progress fill + logo scale-in, header accent strip (no version bump — same version) (2026-09-25)
+
+### Added
+- **Intro screen — logo scale-in:** the logo's entrance now pairs a subtle scale-up (.9 → 1) with the existing fade/translate, instead of a flat fade only.
+- **Intro screen — progress fill bar:** a thin blue→orange gradient bar appears right under the logo and fills smoothly across the whole reveal sequence, finishing exactly as "Enter Dashboard" unlocks, then fades out. Gives the loading pause a clear "getting the dashboard ready" read. Skipped entirely under `prefers-reduced-motion: reduce`, consistent with the rest of the intro's decorative motion.
+- **Header — clean gradient accent strip:** a thin (3px) brand-gradient line (blue → orange) across the header's top edge, with a subtle glass-style inner top highlight on the header itself. Separate light/dark gradient tones. This is the enterprise-dashboard-style replacement for the old illustrated header scene — a small brand cue instead of decorative artwork, matching the plain Classic header direction from the earlier V65.0 follow-up.
+
+### Notes
+- CSS/JS only; no data, API or layout changes. No application-version bump: this remains **V65.0**.
+
+### Checkpoints
+- Loading the dashboard: the logo scales up slightly while fading in; a thin gradient progress bar fills under it and disappears right as the "Enter Dashboard" button lights up.
+- With `prefers-reduced-motion: reduce` set, the progress bar never appears (no layout shift either) — the rest of the intro already updates instantly per the existing reduced-motion handling.
+- Header shows a thin blue→orange line across its top edge in both light and dark theme.
+
 ## V65.0 — Follow-up: "Copper Mill" theme removed, header/intro back to plain Classic (no version bump — same version) (2026-09-25)
 
 ### Removed

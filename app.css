@@ -1549,8 +1549,18 @@ header.app-header{
   padding:14px 26px;
   background:linear-gradient(135deg,#FFFFFF 0%,#F4F8FC 100%);
   border:1px solid #DCE7F0;border-radius:14px;
-  box-shadow:0 6px 22px rgba(31,61,90,.08);
+  box-shadow:0 6px 22px rgba(31,61,90,.08),inset 0 1px 0 rgba(255,255,255,.7);
 }
+/* Clean accent strip: a thin brand-gradient line across the top edge, standing in for
+   a full illustrated scene — an enterprise-dashboard cue rather than decorative artwork.
+   border-radius matches the header's own top corners instead of clipping the header
+   (clipping would also cut off any dropdown/popover that overflows the header box). */
+header.app-header::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;z-index:1;
+  border-radius:14px 14px 0 0;
+  background:linear-gradient(90deg,#1565c0 0%,#2e96f0 28%,#dc7d34 72%,#f4c589 100%);
+}
+html[data-theme="dark"] header.app-header::before{background:linear-gradient(90deg,#3b82c9 0%,#4fd0f5 28%,#e8843a 72%,#f6a85e 100%);opacity:.85;}
 html[data-theme="dark"] header.app-header{background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0px,rgba(255,255,255,.035) 1px,transparent 1px,transparent 28px),repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0px,rgba(255,255,255,.035) 1px,transparent 1px,transparent 28px),linear-gradient(135deg,#070B14 0%,#141F33 100%);border-color:rgba(255,255,255,.08);box-shadow:0 6px 22px rgba(0,0,0,.4);}
 .header-top-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px 28px;width:100%;}
 .executive-header-inner{display:flex;align-items:center;gap:0;min-width:0;flex:0 1 auto;}
@@ -1610,6 +1620,11 @@ html[data-theme="dark"] .cmdk-kbd{background:#0F1626;border-color:#2A3B54;color:
   .digital-clock-date{font-size:10px;}
   .header-right-stack{gap:7px;}
   .header-right-stack .header-actions{gap:6px;}
+}
+@media(max-width:760px){
+  /* Below tablet width the one-row cluster (clock + Live + Export + Commands) no longer
+     fits; go back to the clock stacked above the action pills, right-aligned. */
+  .header-right-stack{flex-direction:column;align-items:flex-end;width:auto;}
 }
 
 /* ================================================================
@@ -1829,8 +1844,12 @@ html[data-theme="dark"] .analytics-expand-btn:hover{background:#18263d;border-co
 
 
 
-/* V64.6 current-time card: compact date + live 12-hour clock stacked directly above Commands. */
-.header-right-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;margin-left:auto;min-width:0;}
+/* V64.6 current-time card, updated per feedback: clock and the action pills (Live/Export/Commands)
+   now sit in one row instead of the clock stacking above them — the whole right-hand cluster
+   (Last Updated | Clock | Live | Export | Commands) reads as a single line on tablet/desktop.
+   Reverts to a stacked (column) layout only on genuinely narrow phones — see the max-width:760px
+   override below — where a single row would overflow. */
+.header-right-stack{display:flex;flex-direction:row;align-items:center;gap:16px;margin-left:auto;min-width:0;}
 .digital-clock-block{display:flex;align-items:center;gap:10px;min-width:205px;padding:8px 11px 8px 9px;border:1px solid #DCE7F0;border-radius:12px;background:linear-gradient(180deg,#ffffff 0%,#f4f8fc 100%);box-shadow:0 4px 12px rgba(24,58,88,.08);}
 .digital-clock-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:9px;background:linear-gradient(145deg,#2388C9 0%,#16324F 100%);color:#fff;line-height:1;box-shadow:0 5px 12px rgba(22,50,79,.22);}
 .digital-clock-copy{min-width:0;text-align:right;line-height:1;}

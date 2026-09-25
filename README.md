@@ -7,7 +7,7 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## What changed in V65.0 (presentation mode fits screen, field-name hover tag, icons; header/intro are the plain Classic look)
+## What changed in V65.0 (presentation mode fits screen, field-name hover tag, icons; header/intro are the plain Classic look with a gradient accent + progress fill)
 - **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
 - **Intro screen bug fixed:** the "QUALITY INTELLIGENCE" headline could break mid-word ("INTEL" / "LIGENCE") on narrow screens; each word is now one unbreakable unit.
@@ -15,12 +15,16 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - **Admin icons:** the Admin console has the same icon set; every button label (including dynamically built ones) gets a matching icon, plus login fields, section kickers and the theme toggle.
 - **Chart tooltip** now has styling (it had none) and names the measure on single-series charts.
 - **"Copper Mill" theme shipped and then removed within this same release:** an animated factory-bay header and a redesigned intro (copper coils, "Cu 29" mark, scan-line + "QC SCAN PASSED" panel) were added and later reverted per feedback. The dashboard always shows the plain **Classic** header and intro now; there's nothing to switch, so no theme command remains in Ctrl+K.
+- **Intro screen — logo scale-in + progress fill:** the logo entrance pairs a subtle scale-up with its fade, and a thin blue→orange progress bar fills under it across the whole reveal sequence, fading out as "Enter Dashboard" unlocks. Skipped under reduced-motion.
+- **Header — gradient accent strip:** a thin brand-gradient line across the header's top edge (separate light/dark tones) plus a subtle glass-style top highlight, standing in for the old illustrated header scene without any decorative artwork.
 
 ### V65.0 checkpoints
 - Browser at 100%: open the expand button on every chart. Chart, legend and table are fully visible with no overlap.
 - Hover a KPI value, a table header and a table cell: the tag shows KPI name / column name / column + "Row: …".
 - Filters, Selection, Save/Manage Presets, Export, Commands, Search show icons.
 - Fresh browser, no prior `localStorage`: dashboard loads with the plain Classic header and intro — no coil artwork, no scan-line/badge sequence, no swinging 3D logo. Ctrl+K has no "Theme" entry.
+- Intro: logo scales up while fading in; a thin gradient progress bar fills and then fades out right as "Enter Dashboard" unlocks. With reduced-motion set, the bar never appears.
+- Header shows a thin blue→orange gradient line across its top edge in both light and dark theme.
 
 The bundled `quality.db` is unchanged (4,936 disposition rows).
 
