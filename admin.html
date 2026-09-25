@@ -1293,5 +1293,112 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
   function start(){ enhance(); new MutationObserver(again).observe(document.body,{childList:true,subtree:true,characterData:true}); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
 })();
+
+<style id="admin-field-hint-style">
+/* V65.1 — consistent cursor field-name hint across the entire Admin console */
+.qd-field-tag{position:fixed;left:0;top:0;z-index:2147483001;display:flex;align-items:center;gap:8px;max-width:320px;padding:6px 10px 6px 8px;border-radius:9px;background:rgba(15,42,74,.96);border:1px solid rgba(143,208,255,.32);color:#fff;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;will-change:transform;font-family:Manrope,sans-serif}
+.qd-field-tag.show{opacity:1;visibility:visible}
+.qd-field-tag .qft-icon{font-size:14px;line-height:1;color:#8fd0ff}
+.qft-copy{display:flex;flex-direction:column;min-width:0}
+.qft-name{font:800 12.5px/1.25 Manrope,sans-serif;white-space:normal}
+.qft-meta{font:600 10.5px/1.25 Manrope,sans-serif;color:#9fb8d0}
+html[data-theme="dark"] .qd-field-tag{background:rgba(232,240,252,.96);color:#0f2a4a;border-color:rgba(15,42,74,.20)}
+html[data-theme="dark"] .qd-field-tag .qft-icon{color:#1d5fa8}
+html[data-theme="dark"] .qft-meta{color:#476079}
+@media print{.qd-field-tag{display:none!important}}
+@media (prefers-reduced-motion:reduce){.qd-field-tag{transition:none}}
+</style>
+<script id="v65-1-admin-field-hints">
+/* V65.1: field-name hover tag is delegated once from document so it also covers
+   dynamically rendered Admin tables, result lists and form controls. The same
+   localStorage switch used by the dashboard is respected. */
+(function(){
+  const KEY='qdash_field_hints';
+  const on=()=>{try{return localStorage.getItem(KEY)!=='off'}catch(e){return true}};
+  let tag=null,target=null,titleEl=null,raf=0,xy=[0,0];
+  const clean=s=>String(s||'').replace(/[\u2191\u2193\u2195\u25B2\u25BC\u21C5]/g,'').replace(/\s+/g,' ').trim();
+  const esc=s=>clean(s).replace(/^\P{L}+/u,'');
+  function ensure(){
+    if(tag)return tag;
+    tag=document.createElement('div'); tag.className='qd-field-tag'; tag.setAttribute('role','tooltip');
+    tag.innerHTML='<span class="qft-icon">🏷</span><div class="qft-copy"><b class="qft-name"></b><small class="qft-meta"></small></div>';
+    document.body.appendChild(tag); return tag;
+  }
+  function header(table,idx){
+    const rows=table.tHead&&table.tHead.rows.length?table.tHead.rows:table.rows;
+    const r=rows[rows.length?(table.tHead&&table.tHead.rows.length?rows.length-1:0):0];
+    return r&&r.cells[idx]?clean(r.cells[idx].textContent):'';
+  }
+  function labelFor(el){
+    const id=el.getAttribute('id');
+    if(id){try{const l=document.querySelector(`label[for="${CSS.escape(id)}"]`);if(l)return esc(l.textContent)}catch(e){}}
+    const wrap=el.closest('.field,.form-field,.form-group,.audit-filter-grid > div,.form-grid > div');
+    if(wrap){const l=wrap.querySelector(':scope > label,label');if(l)return esc(l.textContent)}
+    return esc(el.getAttribute('aria-label')||el.getAttribute('placeholder')||'');
+  }
+  function kind(el){
+    const t=el.tagName;
+    if(t==='BUTTON')return 'Button'; if(t==='A')return 'Link'; if(t==='SELECT')return 'Select';
+    if(t==='TEXTAREA')return 'Text area'; if(t==='INPUT')return (el.type||'text').replace(/^./,c=>c.toUpperCase())+' input';
+    if(el.getAttribute('role')==='tab')return 'Tab'; if(el.getAttribute('role')==='button')return 'Action'; return 'Field';
+  }
+  function info(t){
+    if(!(t instanceof Element)||t.closest('.qd-field-tag'))return null;
+    const df=t.closest('[data-field]');
+    if(df)return {name:clean(df.getAttribute('data-field')),meta:clean(df.getAttribute('data-field-meta')||'Field')};
+    const cell=t.closest('td,th');
+    if(cell&&cell.closest('table')){
+      const table=cell.closest('table'), h=header(table,cell.cellIndex);
+      if(cell.tagName==='TH')return h?{name:h,meta:'Table column'}:null;
+      if(!h)return null;
+      let row='';
+      for(const c of cell.parentElement.cells){const hh=header(table,c.cellIndex),tx=clean(c.textContent);if(c!==cell&&tx&&!/^(rank|#|sr\.?|s\.?no\.?)$/i.test(hh)&&!/^[\d.,%\s-]+$/.test(tx)){row=tx;break}}
+      return {name:h,meta:row?'Row: '+(row.length>34?row.slice(0,33)+'…':row):'Table value'};
+    }
+    const nav=t.closest('.sidebar-link');
+    if(nav){const n=clean(nav.textContent);if(n)return {name:n,meta:'Admin section'};}
+    const tab=t.closest('[role="tab"],.qcr-tab-btn');
+    if(tab){const n=clean(tab.textContent||tab.getAttribute('aria-label')||tab.getAttribute('title'));if(n)return {name:n,meta:'Tab'};}
+    const stat=t.closest('.stat');
+    if(stat){const n=clean(stat.querySelector('strong,.stat-label,label')?.textContent||stat.textContent);if(n)return {name:n.slice(0,80),meta:'Metric'};}
+    const issue=t.closest('.issue,.quality-score,.health-card,.command-card,.connection-box,.filebox,.recovery-card');
+    if(issue){const n=clean(issue.querySelector('h2,h3,h4,.title,.name,strong')?.textContent||'');if(n)return {name:n,meta:'Panel'};}
+    const control=t.closest('input,select,textarea,button,a,[role="button"],[role="combobox"],[role="switch"]');
+    if(control){
+      let n=labelFor(control)||clean(control.textContent)||clean(control.getAttribute('title')||'');
+      if(n){n=n.length>80?n.slice(0,79)+'…':n;return {name:n,meta:kind(control),_titleEl:control.hasAttribute('title')?control:null};}
+    }
+    const titled=t.closest('[title],[aria-label]');
+    if(titled){const n=clean(titled.getAttribute('title')||titled.getAttribute('aria-label'));if(n)return {name:n,meta:titled.tagName==='BUTTON'?'Button':'Info',_titleEl:titled.hasAttribute('title')?titled:null};}
+    return null;
+  }
+  function hide(){
+    if(tag)tag.classList.remove('show');
+    if(titleEl){const v=titleEl.getAttribute('data-qd-title');if(v!==null){titleEl.setAttribute('title',v);titleEl.removeAttribute('data-qd-title')}}
+    titleEl=null;target=null;
+  }
+  function place(x,y){
+    if(!tag)return;const r=tag.getBoundingClientRect();let L=x+14,T=y+20;
+    if(L+r.width>innerWidth-8)L=x-r.width-12;if(T+r.height>innerHeight-8)T=y-r.height-14;
+    tag.style.transform=`translate3d(${Math.max(6,L)}px,${Math.max(6,T)}px,0)`;
+  }
+  if(window.matchMedia('(pointer: fine)').matches){
+    document.addEventListener('pointermove',e=>{
+      if(e.pointerType!=='mouse'||!on())return;
+      xy=[e.clientX,e.clientY];if(raf)return;
+      raf=requestAnimationFrame(()=>{raf=0;const [x,y]=xy,inf=info(e.target);
+        if(e.target!==target){hide();target=e.target;if(!inf)return;
+          if(inf._titleEl){titleEl=inf._titleEl;titleEl.setAttribute('data-qd-title',titleEl.getAttribute('title'));titleEl.removeAttribute('title')}
+          const el=ensure();el.querySelector('.qft-name').textContent=inf.name;el.querySelector('.qft-meta').textContent=inf.meta||'';el.classList.add('show');
+        }
+        if(tag?.classList.contains('show'))place(x,y);
+      });
+    },{passive:true});
+    document.addEventListener('pointerleave',hide,true);
+    document.documentElement.addEventListener('mouseleave',hide);
+    window.addEventListener('scroll',hide,{passive:true,capture:true});
+    document.addEventListener('pointerdown',hide,true);
+  }
+})();
 </script>
 </body></html>

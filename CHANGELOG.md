@@ -1,3 +1,17 @@
+## V65.0 — Follow-up: consistent cursor field-name hover tag across the webapp (2026-09-25)
+
+### Added / Fixed
+- **Field-name hover hint coverage is now consistent across the webapp.** The dashboard hover-tag resolver now covers generic form controls (inputs, selects, textareas), buttons, links, tabs, filter controls/options/search, metrics/stat cards, table headers/cells, KPI parts, legends and existing titled/labelled controls instead of only a small set of explicit field targets.
+- **Admin console now uses the same cursor-following field hint.** It covers dynamically rendered admin tables, form fields, sidebar sections, tabs, metrics, panel/action controls and title/ARIA-labelled controls through one delegated pointer listener, so late-rendered content gets the hint automatically.
+- **Existing hover-tag toggle is respected by Admin too.** The shared `qdash_field_hints` preference is used, so turning Field Name Hints off/on from the Dashboard command palette applies consistently across the webapp.
+- **Browser-native title popups are suppressed while the custom field tag is visible** and restored immediately when the cursor leaves, preventing competing hover hints.
+
+### Verification
+- Updated the Dashboard JS cache-buster to `65.1` so the browser loads the new field-hint logic without requiring a hard refresh.
+- No database, API, or data changes. Application version remains **V65.0**.
+
+---
+
 ## V65.0 — Follow-up: header clock stacked above Commands again, intro "Enter Dashboard" delay removed (no version bump — same version) (2026-09-25)
 
 ### Fixed

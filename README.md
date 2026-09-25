@@ -7,6 +7,12 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
+
+## V65.0 follow-up — consistent cursor field-name hover hints
+- The small field-name tag that follows the cursor is now applied consistently across the Dashboard and Admin console, including dynamic content.
+- Hover coverage includes form controls, buttons/links/tabs, filters and options, KPIs/metrics, tables, legends, sidebar sections, and titled/ARIA-labelled controls.
+- The existing Dashboard **Ctrl+K → Field Name Hints** switch is shared with Admin so the preference stays consistent across the webapp.
+
 ## What changed in V65.0 (presentation mode fits screen, field-name hover tag, icons; header/intro are the plain Classic look with a gradient accent + progress fill)
 - **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
