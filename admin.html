@@ -1265,7 +1265,7 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
   setTimeout(()=>{window.__adminSyncSidebarVisibility?.();setCurrent('homePanel',true);scheduleSpy();},0);
 })();
 </script><script id="v65-admin-icon-enhancer">
-/* V65.2: puts a matching line icon in front of every Admin button label (static and dynamically built).
+/* V65.0: puts a matching line icon in front of every Admin button label (static and dynamically built).
    Purely visual: the button text, ids and handlers are untouched. Re-applies itself if a handler rewrites a label. */
 (function(){
   const RULES=[[/log\s?out|sign\s?out/i,'logout'],[/log\s?in|sign\s?in/i,'login'],[/dashboard/i,'home'],[/password/i,'key'],
@@ -1295,185 +1295,42 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
 })();
 </script>
 
-<style id="admin-field-hint-style">
-/* V65.2 — consistent cursor field-name hint across the entire Admin console */
-.qd-field-tag{position:fixed;left:0;top:0;z-index:2147483001;display:flex;align-items:center;gap:8px;max-width:320px;padding:6px 10px 6px 8px;border-radius:9px;background:rgba(15,42,74,.96);border:1px solid rgba(143,208,255,.32);color:#fff;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;will-change:transform;font-family:Manrope,sans-serif}
-.qd-field-tag.show{opacity:1;visibility:visible}
-.qd-field-tag .qft-icon{display:inline-flex;align-items:center;justify-content:center;color:#8fd0ff}.qd-field-tag .qft-icon .ic{width:15px;height:15px;margin:0}
-.qft-copy{display:flex;flex-direction:column;min-width:0}
-.qft-name{font:800 12.5px/1.25 Manrope,sans-serif;white-space:normal}
-.qft-meta{font:600 10.5px/1.25 Manrope,sans-serif;color:#9fb8d0}
-html[data-theme="dark"] .qd-field-tag{background:rgba(232,240,252,.96);color:#0f2a4a;border-color:rgba(15,42,74,.20)}
-html[data-theme="dark"] .qd-field-tag .qft-icon{color:#1d5fa8}
-html[data-theme="dark"] .qft-meta{color:#476079}
-@media print{.qd-field-tag{display:none!important}}
-@media (prefers-reduced-motion:reduce){.qd-field-tag{transition:none}}
+<style id="admin-field-hints">
+.qd-field-tag{position:fixed;left:0;top:0;z-index:2147483001;display:flex;align-items:center;gap:8px;max-width:300px;padding:6px 10px 6px 8px;border-radius:9px;background:rgba(15,42,74,.95);border:1px solid rgba(143,208,255,.28);color:#fff;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;will-change:transform}
+.qd-field-tag.show{opacity:1;visibility:visible}.qd-field-tag .ic{width:15px;height:15px;margin:0;color:#8fd0ff;flex:none}.qd-field-tag .qft-copy{min-width:0}.qd-field-tag .qft-name{display:block;font-size:12px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qd-field-tag .qft-meta{display:block;margin-top:2px;font-size:10px;line-height:1.2;color:#B8D3EA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-theme="dark"] .qd-field-tag{background:rgba(232,240,252,.96);color:#0f2a4a;border-color:rgba(15,42,74,.2);box-shadow:0 10px 28px rgba(0,0,0,.34)}
+html[data-theme="dark"] .qd-field-tag .ic{color:#1d5fa8}.qd-field-tag-hide{display:none!important}
+@media(prefers-reduced-motion:reduce){.qd-field-tag{transition:none!important}}
 </style>
-<script id="v65-2-admin-field-hints">
-/* V65.2: field-name hover tag is delegated once from document so it also covers
-   dynamically rendered Admin tables, result lists and form controls. The same
-   localStorage switch used by the dashboard is respected. */
-(function(){
+<script id="admin-field-hints">
+/* V65.1: cursor-following field-name hints cover the full Admin UI.
+   The intro/splash screen is excluded globally so presentation-only content never gets a tag. */
+(function initAdminFieldHints(){
   const KEY='qdash_field_hints';
   const on=()=>{try{return localStorage.getItem(KEY)!=='off'}catch(e){return true}};
-  let tag=null,target=null,titleEl=null,raf=0,xy=[0,0];
-  const clean=s=>String(s||'').replace(/^[\s\u2190-\u21FF\u2300-\u23FF\u25A0-\u27BF\u2B00-\u2BFF\uFE0F\u{1F300}-\u{1FAFF}]+/u,'').replace(/[\u2191\u2193\u2195\u25B2\u25BC\u21C5]/g,'').replace(/\s+/g,' ').trim();
-  const esc=s=>clean(s).replace(/^\P{L}+/u,'');
-  function ensure(){
-    if(tag)return tag;
-    tag=document.createElement('div'); tag.className='qd-field-tag'; tag.setAttribute('role','tooltip');
-    tag.innerHTML='<span class="qft-icon"><svg class="ic" aria-hidden="true"><use href="#ic-tag"/></svg></span><div class="qft-copy"><b class="qft-name"></b><small class="qft-meta"></small></div>';
-    document.body.appendChild(tag); return tag;
-  }
-  function header(table,idx){
-    const rows=table.tHead&&table.tHead.rows.length?table.tHead.rows:table.rows;
-    const r=rows[rows.length?(table.tHead&&table.tHead.rows.length?rows.length-1:0):0];
-    return r&&r.cells[idx]?clean(r.cells[idx].textContent):'';
-  }
-  function labelFor(el){
-    const id=el.getAttribute('id');
-    if(id){try{const l=document.querySelector(`label[for="${CSS.escape(id)}"]`);if(l)return esc(l.textContent)}catch(e){}}
-    const wrap=el.closest('.field,.form-field,.form-group,.audit-filter-grid > div,.form-grid > div');
-    if(wrap){const l=wrap.querySelector(':scope > label,label');if(l)return esc(l.textContent)}
-    return esc(el.getAttribute('aria-label')||el.getAttribute('placeholder')||'');
-  }
-  function kind(el){
-    const t=el.tagName;
-    if(t==='BUTTON')return 'Button'; if(t==='A')return 'Link'; if(t==='SELECT')return 'Select';
-    if(t==='TEXTAREA')return 'Text area'; if(t==='INPUT')return (el.type||'text').replace(/^./,c=>c.toUpperCase())+' input';
-    if(el.getAttribute('role')==='tab')return 'Tab'; if(el.getAttribute('role')==='button')return 'Action'; return 'Field';
-  }
-  function info(t){
-    if(!(t instanceof Element)||t.closest('.qd-field-tag'))return null;
-    const df=t.closest('[data-field]');
-    if(df)return {name:clean(df.getAttribute('data-field')),meta:clean(df.getAttribute('data-field-meta')||'Field')};
-    const cell=t.closest('td,th');
-    if(cell&&cell.closest('table')){
-      const table=cell.closest('table'), h=header(table,cell.cellIndex);
-      if(cell.tagName==='TH')return h?{name:h,meta:'Table column'}:null;
-      if(!h)return null;
-      let row='';
-      for(const c of cell.parentElement.cells){const hh=header(table,c.cellIndex),tx=clean(c.textContent);if(c!==cell&&tx&&!/^(rank|#|sr\.?|s\.?no\.?)$/i.test(hh)&&!/^[\d.,%\s-]+$/.test(tx)){row=tx;break}}
-      return {name:h,meta:row?'Row: '+(row.length>34?row.slice(0,33)+'…':row):'Table value'};
-    }
-    const nav=t.closest('.sidebar-link');
-    if(nav){const n=clean(nav.textContent);if(n)return {name:n,meta:'Admin section'};}
-    const tab=t.closest('[role="tab"],.qcr-tab-btn');
-    if(tab){const n=clean(tab.textContent||tab.getAttribute('aria-label')||tab.getAttribute('title'));if(n)return {name:n,meta:'Tab'};}
-    const label=t.closest('label');
-    if(label){const n=clean(label.textContent||label.getAttribute('aria-label'));if(n)return {name:n,meta:'Field label'};}
-    const heading=t.closest('.panel > h2,.panel h3');
-    if(heading){const n=clean(heading.textContent);if(n)return {name:n,meta:'Admin panel'};}
-    const stat=t.closest('.stat');
-    if(stat){const n=clean(stat.querySelector('strong,.stat-label,label')?.textContent||stat.textContent);if(n)return {name:n.slice(0,80),meta:'Metric'};}
-    const issue=t.closest('.issue,.quality-score,.health-card,.command-card,.connection-box,.filebox,.recovery-card');
-    if(issue){const n=clean(issue.querySelector('h2,h3,h4,.title,.name,strong')?.textContent||issue.textContent);if(n)return {name:n.slice(0,80),meta:'Panel'};}
-    const control=t.closest('input,select,textarea,button,a,[role="button"],[role="combobox"],[role="switch"]');
-    if(control){
-      let n=labelFor(control)||clean(control.textContent)||clean(control.getAttribute('title')||'');
-      if(n){n=n.length>80?n.slice(0,79)+'…':n;return {name:n,meta:kind(control),_titleEl:control.hasAttribute('title')?control:null};}
-    }
-    const titled=t.closest('[title],[aria-label]');
-    if(titled){const n=clean(titled.getAttribute('title')||titled.getAttribute('aria-label'));if(n)return {name:n,meta:titled.tagName==='BUTTON'?'Button':'Info',_titleEl:titled.hasAttribute('title')?titled:null};}
+  let tag=null,target=null,raf=0,xy=[0,0],titleEl=null;
+  const clean=(s)=>String(s||'').replace(/^[\s\u2191\u2193\u2195\u25B2\u25BC\u21C5]+/,'').replace(/\s+/g,' ').trim();
+  const make=()=>{if(tag)return tag;tag=document.createElement('div');tag.className='qd-field-tag';tag.setAttribute('role','tooltip');tag.innerHTML='<svg class="ic" aria-hidden="true"><use href="#ic-tag"></use></svg><div class="qft-copy"><b class="qft-name"></b><small class="qft-meta"></small></div>';document.body.appendChild(tag);return tag};
+  const hide=()=>{if(tag)tag.classList.remove('show');if(titleEl){const v=titleEl.getAttribute('data-qd-title');if(v!==null){titleEl.setAttribute('title',v);titleEl.removeAttribute('data-qd-title')}titleEl=null}target=null};
+  const place=(x,y)=>{const el=make(),r=el.getBoundingClientRect();let L=x+14,T=y+20;if(L+r.width>innerWidth-8)L=x-r.width-12;if(T+r.height>innerHeight-8)T=y-r.height-14;el.style.transform='translate3d('+Math.max(6,L)+'px,'+Math.max(6,T)+'px,0)'};
+  const tableHead=(table,idx)=>{const rows=table.tHead&&table.tHead.rows.length?table.tHead.rows:table.rows;if(!rows.length)return '';const r=table.tHead&&table.tHead.rows.length?rows[rows.length-1]:rows[0];return r&&r.cells[idx]?clean(r.cells[idx].textContent):''};
+  const resolve=(t)=>{
+    if(!(t instanceof Element))return null;
+    if(t.closest('#introScreen,[data-tip],.qd-field-tag,.chart-tooltip,.cmdk-dialog'))return null;
+    const ex=t.closest('[data-field]');if(ex)return{name:clean(ex.getAttribute('data-field')),meta:ex.getAttribute('data-field-meta')||'Field'};
+    const ctl=t.closest('input,select,textarea');if(ctl){const id=ctl.id,lab=(id&&document.querySelector('label[for="'+CSS.escape(id)+'"]'))||ctl.closest('.field,.filter-field')?.querySelector('label');const nm=clean(lab?.textContent||ctl.getAttribute('aria-label')||ctl.getAttribute('name')||ctl.getAttribute('placeholder'));if(nm)return{name:nm,meta:ctl.tagName==='SELECT'?'Dropdown':ctl.tagName==='TEXTAREA'?'Text field':'Input'}}
+    const cell=t.closest('td,th');if(cell&&cell.closest('table')){const table=cell.closest('table'),head=tableHead(table,cell.cellIndex);if(head)return{name:head,meta:cell.tagName==='TH'?'Table column':'Table value'}}
+    const ff=t.closest('.field,.filter-field');if(ff){const nm=clean(ff.querySelector('label')?.textContent);if(nm)return{name:nm,meta:t.closest('.filter-option')?'Option':'Field'}}
+    const kpi=t.closest('.admin-kpi');if(kpi){const nm=clean(kpi.querySelector('.label')?.textContent||kpi.textContent);if(nm)return{name:nm,meta:'KPI'}}
+    const nav=t.closest('.sidebar-link');if(nav){const nm=clean(nav.querySelector('.sidebar-link-text')?.textContent||nav.textContent);if(nm)return{name:nm,meta:'Navigation'}}
+    const card=t.closest('.command-card,.recovery-card,.activity-event,.connection-box,.issue,.stat,.quality-score,.result,.filebox,.admin-prod-card,.prod-metrics > div,.integrity-grid > div,.wizard .step');if(card){const nm=clean(card.getAttribute('data-field')||card.querySelector('.command-card b,.recovery-card b,.activity-main b,.prod-head b,.prod-metrics span,.integrity-grid span')?.textContent||card.textContent);if(nm)return{name:nm.length>70?nm.slice(0,69)+'…':nm,meta:'Field'}}
+    const ti=t.closest('[title],[aria-label]');if(ti&&(ti.tagName==='BUTTON'||ti.hasAttribute('title')||ti.getAttribute('role')==='button')){const nm=clean(ti.getAttribute('title')||ti.getAttribute('data-qd-title')||ti.getAttribute('aria-label'));if(nm){if(ti.hasAttribute('title')){titleEl=ti;ti.setAttribute('data-qd-title',ti.getAttribute('title'));ti.removeAttribute('title')}return{name:nm,meta:ti.tagName==='BUTTON'?'Button':'Info'}}}
+    const action=t.closest('button,a,[role="button"]');if(action){const nm=clean(action.textContent||action.getAttribute('aria-label'));if(nm&&nm.length<=80)return{name:nm,meta:action.tagName==='A'?'Link':'Button'}}
+    const heading=t.closest('h1,h2,h3,h4,h5,h6');if(heading){const nm=clean(heading.textContent);if(nm)return{name:nm,meta:'Section'}}
     return null;
-  }
-  function hide(){
-    if(tag)tag.classList.remove('show');
-    if(titleEl){const v=titleEl.getAttribute('data-qd-title');if(v!==null){titleEl.setAttribute('title',v);titleEl.removeAttribute('data-qd-title')}}
-    titleEl=null;target=null;
-  }
-  function place(x,y){
-    if(!tag)return;const r=tag.getBoundingClientRect();let L=x+14,T=y+20;
-    if(L+r.width>innerWidth-8)L=x-r.width-12;if(T+r.height>innerHeight-8)T=y-r.height-14;
-    tag.style.transform=`translate3d(${Math.max(6,L)}px,${Math.max(6,T)}px,0)`;
-  }
-  if(window.matchMedia('(pointer: fine)').matches){
-    document.addEventListener('pointermove',e=>{
-      if(e.pointerType!=='mouse'||!on())return;
-      xy=[e.clientX,e.clientY];if(raf)return;
-      raf=requestAnimationFrame(()=>{raf=0;const [x,y]=xy,inf=info(e.target);
-        if(e.target!==target){hide();target=e.target;if(!inf)return;
-          if(inf._titleEl){titleEl=inf._titleEl;titleEl.setAttribute('data-qd-title',titleEl.getAttribute('title'));titleEl.removeAttribute('title')}
-          const el=ensure();el.querySelector('.qft-name').textContent=inf.name;el.querySelector('.qft-meta').textContent=inf.meta||'';el.classList.add('show');
-        }
-        if(tag?.classList.contains('show'))place(x,y);
-      });
-    },{passive:true});
-    document.addEventListener('pointerleave',hide,true);
-    document.documentElement.addEventListener('mouseleave',hide);
-    window.addEventListener('scroll',hide,{passive:true,capture:true});
-    document.addEventListener('pointerdown',hide,true);
-  }
-})();
-</script>
-<script id="v65-2-admin-semantic-icons">
-/* V65.2: complete Admin icon coverage for headings, sidebar items, field labels,
-   issue cards and command cards. Handles dynamically rendered content too. */
-(function(){
-  const RULES=[
-    [/admin\s*login|password/i,'key'],
-    [/new\s*password|current\s*password|password/i,'key'],
-    [/overview|control\s*center|dashboard/i,'home'],
-    [/data\s*quality|performance|activity/i,'pulse'],
-    [/kpi|target|warning|critical|logic/i,'target'],
-    [/add\s*one|add|create|new/i,'plus'],
-    [/import|upload|restore|file/i,'upload'],
-    [/history|audit trail|recent activity/i,'file-text'],
-    [/latest records|table|record/i,'table'],
-    [/fishbone/i,'flame'],
-    [/defect mapping|mapping|intensity|field name/i,'tag'],
-    [/command center|command|action/i,'command'],
-    [/database/i,'database'],
-    [/backup|recovery/i,'refresh'],
-    [/security|secure|role/i,'shield'],
-    [/validation|verify|validate|confirm/i,'check'],
-    [/user|employee|display name/i,'user'],
-    [/audit explorer|search|find/i,'search'],
-    [/analytics|trend|change/i,'trend'],
-    [/date|month|week|quarter|financial year|from$|to$/i,'clock'],
-    [/heat|batch|work center|grade/i,'table'],
-    [/output weight|weight|quantity/i,'trend'],
-    [/defect/i,'alert'],
-    [/compact density|filter/i,'sliders'],
-    [/cancel|close|dismiss|clear/i,'x'],
-    [/back|prev|previous/i,'chevron-left'],
-    [/next/i,'chevron-right'],
-  ];
-  const GLYPH=/^[\s\u2190-\u21FF\u2300-\u23FF\u25A0-\u27BF\u2B00-\u2BFF\uFE0F\u{1F300}-\u{1FAFF}]+/u;
-  const SELECTORS=[
-    '.sidebar-link',
-    '.panel > h2, .panel h3',
-    '.field > label, .pref-row > label, .audit-filter-grid label',
-    '.issue-btn, .command-card',
-    '.btn, button.delete, td button, .submit-row button'
-  ].join(',');
-  function pick(text){
-    const t=String(text||'').replace(GLYPH,'').trim();
-    for(const [re,name] of RULES) if(re.test(t)) return name;
-    return null;
-  }
-  function addIcon(el){
-    if(!el || el.closest('.qd-field-tag') || el.dataset.iconDone==='1') return;
-    if(el.querySelector(':scope > svg.ic')){el.dataset.iconDone='1';return;}
-    const raw=(el.textContent||'').replace(/\s+/g,' ').trim();
-    if(!raw)return;
-    const name=pick(raw);
-    if(!name)return;
-    const first=[...el.childNodes].find(n=>n.nodeType===3 && n.nodeValue.trim());
-    if(first) first.nodeValue=first.nodeValue.replace(GLYPH,'');
-    el.insertAdjacentHTML('afterbegin',`<svg class="ic admin-ico" aria-hidden="true"><use href="#ic-${name}"/></svg>`);
-    el.dataset.iconDone='1';
-  }
-  function enhance(root=document){
-    root.querySelectorAll(SELECTORS).forEach(addIcon);
-  }
-  function start(){
-    enhance();
-    const mo=new MutationObserver(()=>{enhance();});
-    mo.observe(document.body,{subtree:true,childList:true,characterData:true});
-    window.__adminEnhanceIcons=enhance;
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
+  };
+  function start(){if(!window.matchMedia('(pointer: fine)').matches)return;document.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'||!on())return;xy=[e.clientX,e.clientY];if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const[x,y]=xy,t=e.target;if(t!==target){hide();target=t;const info=resolve(t);if(!info)return;const el=make();el.querySelector('.qft-name').textContent=info.name;el.querySelector('.qft-meta').textContent=info.meta||'';el.classList.add('show')}if(tag?.classList.contains('show'))place(x,y)})},{passive:true});document.addEventListener('pointerdown',hide,true);document.addEventListener('pointerleave',hide,true);document.documentElement.addEventListener('mouseleave',hide);window.addEventListener('scroll',hide,{passive:true,capture:true});}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
 </script>
 </body></html>

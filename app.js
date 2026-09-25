@@ -1597,9 +1597,36 @@ function resolveFieldInfo(t){
   if(ff){ const lab=_fhClean(ff.querySelector('label')&&ff.querySelector('label').textContent).replace(/^\P{L}+/u,''); const opt=t.closest('.filter-option,.filter-options > *'); return {name:lab||'Filter',meta:opt?('Option: '+_fhClean(opt.textContent)):'Filter'}; }
   const li=t.closest('.legend-item'); if(li) return {name:_fhClean(li.textContent),meta:'Legend'};
   const ex2=t.closest('.qcr-exec-item'); if(ex2){ const sm=ex2.querySelector('small'); if(sm) return {name:_fhClean(sm.textContent),meta:'Summary'}; }
+
+  // Generic field coverage: keep the hint working on controls/labels added later
+  // without requiring every new element to be manually decorated with data-field.
+  const formCtl=t.closest('input,select,textarea');
+  if(formCtl){
+    const id=formCtl.id;
+    const lab=(id&&document.querySelector('label[for=\"'+CSS.escape(id)+'\"]'))||formCtl.closest('.field,.filter-field')?.querySelector('label');
+    const nm=_fhClean(lab?.textContent||formCtl.getAttribute('aria-label')||formCtl.getAttribute('name')||formCtl.getAttribute('placeholder'));
+    if(nm) return {name:nm,meta:formCtl.tagName==='SELECT'?'Dropdown':formCtl.tagName==='TEXTAREA'?'Text field':'Input'};
+  }
+  const tab=t.closest('.tab-btn'); if(tab){ const nm=_fhClean(tab.textContent); if(nm) return {name:nm,meta:'Dashboard section'}; }
+
   const ti=t.closest('[title],[aria-label]');
-  if(ti && (ti.tagName==='BUTTON'||ti.hasAttribute('title')) && !ti.closest('.cmdk-dialog')){
+  if(ti && (ti.tagName==='BUTTON'||ti.hasAttribute('title')||ti.getAttribute('role')==='button') && !ti.closest('.cmdk-dialog')){
     const nm=_fhClean(ti.getAttribute('title')||ti.getAttribute('data-qd-title')||ti.getAttribute('aria-label')); if(nm) return {name:nm,meta:ti.tagName==='BUTTON'?'Button':'Info',_titleEl:ti.hasAttribute('title')?ti:null};
+  }
+
+  const action=t.closest('button,a,[role=\"button\"]');
+  if(action && !action.closest('.cmdk-dialog')){
+    const nm=_fhClean(action.getAttribute('data-field')||action.textContent);
+    if(nm && nm.length<=80) return {name:nm,meta:action.tagName==='A'?'Link':'Button'};
+  }
+
+  const sectionTitle=t.closest('h1,h2,h3,h4,h5,h6');
+  if(sectionTitle){ const nm=_fhClean(sectionTitle.textContent); if(nm) return {name:nm,meta:'Section'}; }
+
+  const ui=t.closest('.stat,.quality-score,.result,.connection-box,.filebox,.shortcut-panel,.activity-event,.recovery-card,.command-card,.admin-kpi,.admin-prod-card,.prod-metrics > div,.integrity-grid > div,.issue,.wizard .step');
+  if(ui){
+    const own=_fhClean(ui.getAttribute('data-field')||ui.querySelector('.label,.prod-head b,.prod-metrics span,.integrity-grid span,.activity-main b,.command-card b,.recovery-card b')?.textContent||ui.textContent);
+    if(own){ const clipped=own.length>70?own.slice(0,69)+'…':own; return {name:clipped,meta:'Field'}; }
   }
   return null;
 }

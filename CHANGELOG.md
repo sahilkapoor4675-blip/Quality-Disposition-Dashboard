@@ -1,4 +1,14 @@
 
+### Live Data indicator pulse fix
+- Restored the header **LIVE DATA** status dot pulse after the Design 4 header styling had disabled its animation.
+- The pulse now uses the existing `livePulse` keyframes with a controlled 1.8s cadence and will-change hint for smooth rendering.
+- Intro hover-tag exclusion and full Dashboard/Admin field-hint coverage remain unchanged.
+## V65.1 — Field Hint Coverage Fix
+- Restored cursor-following **Field Name Hover Tag** coverage across the full main Dashboard UI and Admin UI.
+- Kept the Intro/Splash screen explicitly excluded from field-name hints.
+- Added generic fallback coverage for dynamically added controls, form fields, navigation, cards, tables, and action buttons so newly rendered UI does not silently lose the hint.
+
+
 ## Unreleased — Intro Hover Tag Fix
 - Disabled the cursor-following Field Name Hover Tag on the `#introScreen` / splash screen so the introduction remains presentation-only.
 

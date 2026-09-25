@@ -127,3 +127,12 @@ The dashboard uses the approved **Design 4 — Industrial Copper** header: stati
 
 ### UI note — Intro screen
 The cursor-following Field Name Hover Tag is intentionally disabled on the introduction/splash screen and remains active across the dashboard/admin fields.
+
+### Cursor-following Field Name Hover Tag
+The field-name hover tag is enabled across the main dashboard and Admin UI, including dynamically rendered controls. The Intro/Splash screen is intentionally excluded.
+
+
+### Header live-status behavior
+- The **LIVE DATA** indicator includes a subtle pulsing status dot in the main dashboard header.
+- The pulse is CSS-based and remains unobtrusive while indicating the live state.
+- Existing Dashboard/Admin cursor-following field hints remain enabled; the Intro/Splash screen is excluded.

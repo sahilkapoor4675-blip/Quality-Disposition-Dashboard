@@ -2167,7 +2167,7 @@ header.app-header .updated-block{position:relative;z-index:3;}
 header.app-header .header-right-stack,
 header.app-header .header-actions,
 header.app-header .digital-clock-block{position:relative;z-index:3;}
-header.app-header .live-dot{animation:none !important;}
+header.app-header .live-dot{animation:livePulse 1.8s ease-in-out infinite !important; transform-origin:center; will-change:transform,opacity; }
 
 /* Dark theme — same Design 4 geometry, with graphite/steel tones and copper coils retained. */
 html[data-theme="dark"] header.app-header{
