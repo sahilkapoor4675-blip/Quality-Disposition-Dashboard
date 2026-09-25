@@ -7,27 +7,20 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## What changed in V65.0 (presentation mode fits screen, field-name hover tag, animated header, icons)
+## What changed in V65.0 (presentation mode fits screen, field-name hover tag, icons; header/intro are the plain Classic look)
 - **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
-- **"Copper Mill" theme (default):** header with a factory-bay/copper-coil scene and flowing blue/copper ribbon waves, 3D logo with a moving glint, and a solid "Last Updated" chip. Ctrl+K → "Theme" switches to the plain Classic look.
 - **Intro screen bug fixed:** the "QUALITY INTELLIGENCE" headline could break mid-word ("INTEL" / "LIGENCE") on narrow screens; each word is now one unbreakable unit.
-- **Intro screen redesigned (copper coils + quality inspection, no live figures):** background carries coil renderings, a "Cu 29" mark and quality watermark icons; partway through, a small panel animates a coil being scanned and stamped "QC SCAN PASSED". Extended procedural sound (ambient pad, scan sweep, stamp + chime) — silent until audio is unlocked, off for reduced-motion, and not shown in Classic. the plain Classic look. Disabled for reduced-motion and print.
 - **Icons:** one SVG sprite (top of `index.html`) + `qdIc('name')` in `app.js`; added to filters, selection, presets, export, search, drill-down, compare, Control Room headings, presentation mode.
 - **Admin icons:** the Admin console has the same icon set; every button label (including dynamically built ones) gets a matching icon, plus login fields, section kickers and the theme toggle.
 - **Chart tooltip** now has styling (it had none) and names the measure on single-series charts.
+- **"Copper Mill" theme shipped and then removed within this same release:** an animated factory-bay header and a redesigned intro (copper coils, "Cu 29" mark, scan-line + "QC SCAN PASSED" panel) were added and later reverted per feedback. The dashboard always shows the plain **Classic** header and intro now; there's nothing to switch, so no theme command remains in Ctrl+K.
 
 ### V65.0 checkpoints
 - Browser at 100%: open the expand button on every chart. Chart, legend and table are fully visible with no overlap.
 - Hover a KPI value, a table header and a table cell: the tag shows KPI name / column name / column + "Row: …".
-- Header shows flowing ribbon waves behind the text; text and the Last Updated chip stay readable in light and dark theme.
 - Filters, Selection, Save/Manage Presets, Export, Commands, Search show icons.
-
-### Verification performed for V65.0
-- `python3 -m py_compile server.py`
-- `node --check` on `app.js` and all inline scripts in `admin.html` / `index.html`
-- `python3 regression.py`, `python3 smoke_test.py`, `python3 code_health.py`
-- Browser check (Chromium) of every presentation-mode panel at 1366×768 and 1920×1080; hover tag on KPI / table header / table cell / chart bar.
+- Fresh browser, no prior `localStorage`: dashboard loads with the plain Classic header and intro — no coil artwork, no scan-line/badge sequence, no swinging 3D logo. Ctrl+K has no "Theme" entry.
 
 The bundled `quality.db` is unchanged (4,936 disposition rows).
 

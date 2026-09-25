@@ -1,3 +1,17 @@
+## V65.0 — Follow-up: "Copper Mill" theme removed, header/intro back to plain Classic (no version bump — same version) (2026-09-25)
+
+### Removed
+- **"Copper Mill" theme removed entirely, along with its Ctrl+K toggle.** The animated factory-bay header (copper coils, flowing blue/copper ribbon waves, 3D swinging logo with a moving glint) and the redesigned intro screen (coil renderings, "Cu 29" watermark, quality/gauge icons, the scan-line + "QC SCAN PASSED" badge sequence, and its extended procedural sound) introduced earlier in V65.0 are gone. The plain **Classic** header and intro — the look that shipped before this theme — is now the only option; there is nothing to switch, so the "Theme: Switch to Copper Mill / Classic" command was removed from the command palette (Ctrl+K).
+- `data-skin` is hardcoded to `classic` in `index.html`; the old `localStorage`-backed `qdash_skin` copper/classic toggle is gone from both `index.html` and `app.js`. The now-unused Copper Mill CSS (`.intro-copper` layer, `.header-fx`, scan-panel styles, etc.) is left in `index.html`/`app.css` but is inert and never shown.
+
+### Notes
+- No data, API, or layout changes. No application-version bump: this remains **V65.0**, since the Copper Mill theme being removed here shipped and was reverted within the same V65.0 release.
+
+### Checkpoints
+- Loading the dashboard (fresh browser, no prior `localStorage`) shows the plain Classic header and intro — no coil artwork, no scan-line/badge sequence, no swinging 3D logo.
+- Ctrl+K command palette has no "Theme" / "Copper Mill" / "Classic" entry.
+- A browser with an old `qdash_skin=copper` value saved from earlier in V65.0 still renders Classic (the attribute is no longer read from `localStorage` at all).
+
 ## V65.0 — Presentation mode fits the screen, field-name hover tag, animated header, icons (2026-09-24)
 
 ### Fixed
