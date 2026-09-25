@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A simple, offline-friendly to-do list saved in your browser.">
+  <title>To-do list</title>
+  <link rel="stylesheet" href="todo.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="todo-card" aria-labelledby="page-title">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Personal workspace</p>
+          <h1 id="page-title">My to-do list</h1>
+          <p class="subtitle">Capture the next thing. Keep moving.</p>
+        </div>
+        <button id="themeToggle" class="icon-button" type="button" aria-label="Switch to dark mode" title="Switch theme">☾</button>
+      </header>
+
+      <form id="todoForm" class="add-form">
+        <label class="sr-only" for="todoInput">New task</label>
+        <input id="todoInput" name="task" type="text" maxlength="160" placeholder="What needs to be done?" autocomplete="off" required>
+        <button class="primary-button" type="submit">Add task</button>
+      </form>
+
+      <div class="toolbar">
+        <div class="filters" role="group" aria-label="Filter tasks">
+          <button class="filter-button active" type="button" data-filter="all">All <span id="allCount">0</span></button>
+          <button class="filter-button" type="button" data-filter="active">Active <span id="activeCount">0</span></button>
+          <button class="filter-button" type="button" data-filter="completed">Completed <span id="completedCount">0</span></button>
+        </div>
+        <button id="clearCompleted" class="text-button" type="button">Clear completed</button>
+      </div>
+
+      <ul id="todoList" class="todo-list" aria-live="polite"></ul>
+      <div id="emptyState" class="empty-state" hidden>
+        <span class="empty-icon" aria-hidden="true">✓</span>
+        <strong id="emptyTitle">Nothing here yet</strong>
+        <span id="emptyMessage">Add a task above to get started.</span>
+      </div>
+
+      <footer class="app-footer">
+        <span id="taskSummary">0 tasks</span>
+        <span class="saved-indicator"><span class="status-dot" aria-hidden="true"></span>Saved locally</span>
+      </footer>
+    </section>
+  </main>
+  <script src="todo.js"></script>
+</body>
+</html>
