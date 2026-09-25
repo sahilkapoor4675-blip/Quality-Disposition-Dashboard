@@ -1,3 +1,13 @@
+## V65.0 — Follow-up: header clock stacked above Commands again, intro "Enter Dashboard" delay removed (no version bump — same version) (2026-09-25)
+
+### Fixed
+- **Header — clock stacked above Commands again, no gap under the logo.** A recent "one row" experiment had put the clock and the Live Data / Export / Commands pills side by side on one line, with the "Last Updated" chip floating awkwardly in the middle of that taller cluster and a gap opening up under the JSL logo/title block. Reverted `.header-right-stack` to the earlier column layout — clock on top, "Last Updated" + Live Data + Export + Commands as one row directly under it — and changed `.header-top-row` to bottom-align its two halves, so the logo/title block now sits flush with that row instead of floating centered with empty space beneath it. This is the same arrangement the header used a couple of releases back; the dedicated `max-width:760px` rule that used to force this layout only on phones was removed since it's now the default at every width.
+- **Intro screen — "Enter Dashboard" no longer stuck behind an invisible ~2.7s pause.** The intro's timeline still budgeted time for the old Copper Mill quality-scan/PASS-badge beat (sweep sound, stamp thud, chime) even though that skin was removed earlier in V65.0 and the scan panel has been `display:none` ever since (`data-skin` is hardcoded to `classic`). The button was waiting on — and the page was playing sound effects for — an animation nobody could see. Removed that dead stretch from the timeline; the button now appears right after the intro cards finish, cutting the load-to-ready time by roughly 2 seconds with no visual change to anything that was actually on screen.
+
+### Checkpoints
+- Header: the digital clock sits directly above the Live Data / Export / Commands row, and the JSL logo + title block bottom-aligns with that row with no visible gap underneath, at desktop, tablet and phone widths, in both themes.
+- Loading the dashboard: "Enter Dashboard" unlocks noticeably sooner than before (no long pause after the intro cards finish, no scan-sweep/stamp sound).
+
 ## V65.0 — Follow-up: intro screen progress fill + logo scale-in, header accent strip (no version bump — same version) (2026-09-25)
 
 ### Added

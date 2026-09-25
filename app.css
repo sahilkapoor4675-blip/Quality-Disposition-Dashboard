@@ -1562,7 +1562,7 @@ header.app-header::before{
 }
 html[data-theme="dark"] header.app-header::before{background:linear-gradient(90deg,#3b82c9 0%,#4fd0f5 28%,#e8843a 72%,#f6a85e 100%);opacity:.85;}
 html[data-theme="dark"] header.app-header{background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0px,rgba(255,255,255,.035) 1px,transparent 1px,transparent 28px),repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0px,rgba(255,255,255,.035) 1px,transparent 1px,transparent 28px),linear-gradient(135deg,#070B14 0%,#141F33 100%);border-color:rgba(255,255,255,.08);box-shadow:0 6px 22px rgba(0,0,0,.4);}
-.header-top-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px 28px;width:100%;}
+.header-top-row{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px 28px;width:100%;}
 .executive-header-inner{display:flex;align-items:center;gap:0;min-width:0;flex:0 1 auto;}
 .header-logo{height:64px;width:auto;max-width:240px;margin:0 22px 0 0;flex:none;object-fit:contain;}
 .executive-brand{min-width:0;padding-left:22px;border-left:1px solid #DCE7F0;}
@@ -1621,12 +1621,6 @@ html[data-theme="dark"] .cmdk-kbd{background:#0F1626;border-color:#2A3B54;color:
   .header-right-stack{gap:7px;}
   .header-right-stack .header-actions{gap:6px;}
 }
-@media(max-width:760px){
-  /* Below tablet width the one-row cluster (clock + Live + Export + Commands) no longer
-     fits; go back to the clock stacked above the action pills, right-aligned. */
-  .header-right-stack{flex-direction:column;align-items:flex-end;width:auto;}
-}
-
 /* ================================================================
    FILTERS PANEL — slightly shorter now that the toolbar row moved
    out to the header; trimmed further so it takes up less vertical
@@ -1844,12 +1838,11 @@ html[data-theme="dark"] .analytics-expand-btn:hover{background:#18263d;border-co
 
 
 
-/* V64.6 current-time card, updated per feedback: clock and the action pills (Live/Export/Commands)
-   now sit in one row instead of the clock stacking above them — the whole right-hand cluster
-   (Last Updated | Clock | Live | Export | Commands) reads as a single line on tablet/desktop.
-   Reverts to a stacked (column) layout only on genuinely narrow phones — see the max-width:760px
-   override below — where a single row would overflow. */
-.header-right-stack{display:flex;flex-direction:row;align-items:center;gap:16px;margin-left:auto;min-width:0;}
+/* Reverted per feedback: back to the clock sitting directly above the action pills
+   (Live/Export/Commands) at every width, matching the header from a few versions back
+   (the brief one-row experiment above this comment is gone) — the row is now handled
+   only by the max-width:760px rule below, which no longer needs to do anything extra. */
+.header-right-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;margin-left:auto;min-width:0;}
 .digital-clock-block{display:flex;align-items:center;gap:10px;min-width:205px;padding:8px 11px 8px 9px;border:1px solid #DCE7F0;border-radius:12px;background:linear-gradient(180deg,#ffffff 0%,#f4f8fc 100%);box-shadow:0 4px 12px rgba(24,58,88,.08);}
 .digital-clock-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:9px;background:linear-gradient(145deg,#2388C9 0%,#16324F 100%);color:#fff;line-height:1;box-shadow:0 5px 12px rgba(22,50,79,.22);}
 .digital-clock-copy{min-width:0;text-align:right;line-height:1;}

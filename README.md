@@ -17,6 +17,8 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - **"Copper Mill" theme shipped and then removed within this same release:** an animated factory-bay header and a redesigned intro (copper coils, "Cu 29" mark, scan-line + "QC SCAN PASSED" panel) were added and later reverted per feedback. The dashboard always shows the plain **Classic** header and intro now; there's nothing to switch, so no theme command remains in Ctrl+K.
 - **Intro screen — logo scale-in + progress fill:** the logo entrance pairs a subtle scale-up with its fade, and a thin blue→orange progress bar fills under it across the whole reveal sequence, fading out as "Enter Dashboard" unlocks. Skipped under reduced-motion.
 - **Header — gradient accent strip:** a thin brand-gradient line across the header's top edge (separate light/dark tones) plus a subtle glass-style top highlight, standing in for the old illustrated header scene without any decorative artwork.
+- **Header — clock stacked above Commands again, no gap under the logo:** reverted a brief "one row" layout so the clock sits above the Live Data / Export / Commands row as it did a couple of releases back, and bottom-aligned the logo/title block against that row so no gap opens up underneath it.
+- **Intro screen — "Enter Dashboard" delay removed:** the button no longer waits behind a leftover, invisible Copper Mill scan-badge animation; it now appears right after the intro cards finish, roughly 2 seconds sooner.
 
 ### V65.0 checkpoints
 - Browser at 100%: open the expand button on every chart. Chart, legend and table are fully visible with no overlap.
@@ -25,6 +27,8 @@ header). `CHANGELOG.md` is the version history; this README always describes the
 - Fresh browser, no prior `localStorage`: dashboard loads with the plain Classic header and intro — no coil artwork, no scan-line/badge sequence, no swinging 3D logo. Ctrl+K has no "Theme" entry.
 - Intro: logo scales up while fading in; a thin gradient progress bar fills and then fades out right as "Enter Dashboard" unlocks. With reduced-motion set, the bar never appears.
 - Header shows a thin blue→orange gradient line across its top edge in both light and dark theme.
+- Header: clock sits directly above the Live Data / Export / Commands row, with the logo/title block bottom-aligned to that row (no gap underneath), at desktop, tablet and phone widths.
+- Loading the dashboard: "Enter Dashboard" unlocks shortly after the intro cards finish, with no extra silent pause.
 
 The bundled `quality.db` is unchanged (4,936 disposition rows).
 

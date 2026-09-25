@@ -528,21 +528,14 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
   });
   var cardsEnd=titleEnd+300+cardEls.length*150;
 
-  // Quality-inspection scan: a purely decorative beat (no live figures) — a
-  // scan line sweeps the coil, a soft "scan" sweep sound plays under it, then
-  // a PASS badge stamps in with a thud + a bright confirm chime.
-  at(cardsEnd+120,function(){
-    var scan=document.getElementById('ivScan');
-    if(scan){ show(scan); screen.classList.add('intro-scan-run'); scanSweepSound(now(),1.85); }
-  });
-  at(cardsEnd+120+1650,function(){
-    screen.classList.add('intro-scan-stamped');
-    thud(now()); chime(now()+.1,[587,932],.5);
-  });
+  // The quality-inspection scan/PASS-badge beat (and the ~2.7s it held the
+  // "Enter Dashboard" button back for) belonged to the Copper Mill skin,
+  // which is gone — data-skin is hardcoded to "classic" and #ivScan/.intro-scan
+  // is always display:none now, so that pause was just dead air with no
+  // visible payoff. The button now appears right after the cards finish.
+  at(cardsEnd+300,function(){ show(btn); });
 
-  at(cardsEnd+120+1650+380,function(){ show(btn); });
-
-  var readyAt=cardsEnd+120+1650+380+520;
+  var readyAt=cardsEnd+300+500;
   at(readyAt,function(){
     screen.classList.add('intro-ready');
     btn.removeAttribute('disabled'); btn.removeAttribute('aria-disabled'); btn.setAttribute('tabindex','0');
