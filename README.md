@@ -8,6 +8,11 @@ The current version is the single line in `VERSION.txt` (also shown in the `X-Ap
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
 
+## V65.0 follow-up — Admin hover hints + complete icon coverage
+- **Admin Field Name Hover Tag fixed:** the Admin hover-tag CSS and delegated pointer handler now load as separate executable blocks, so the cursor-following tag works across labels, headings, sidebar items, controls, tables, metrics and dynamically rendered content.
+- **Shared preference:** Admin continues to honor the dashboard `qdash_field_hints` setting.
+- **Admin icons completed:** sidebar navigation, panel headings, field labels, issue/command cards and generated action controls receive matching SVG line icons from the existing sprite.
+
 ## V65.0 follow-up — consistent cursor field-name hover hints
 - The small field-name tag that follows the cursor is now applied consistently across the Dashboard and Admin console, including dynamic content.
 - Hover coverage includes form controls, buttons/links/tabs, filters and options, KPIs/metrics, tables, legends, sidebar sections, and titled/ARIA-labelled controls.

@@ -1,3 +1,17 @@
+## V65.0 — Admin console hover hints + complete icon coverage (2026-09-25)
+
+### Added / Fixed
+- **Admin cursor-following Field Name Hover Tag is now active and reliable.** Fixed the Admin inline script boundary so the hover-tag stylesheet and delegated pointer handler execute as separate scripts. The tag now covers Admin field labels, panel headings, sidebar sections, controls, tables, metrics, issue cards, command cards, and dynamically rendered content while continuing to respect the shared `qdash_field_hints` preference.
+- **Admin hover tag now uses the shared SVG tag icon** instead of an emoji, matching the dashboard icon system.
+- **Admin icon coverage completed.** Sidebar items, panel headings, field labels, issue cards, command cards, and dynamically generated action buttons now receive matching SVG line icons; existing icons remain untouched and leading emoji/arrow glyphs are removed only when the matching SVG replaces them.
+- **No data/API changes.** Only Admin presentation and client-side interaction behavior changed.
+
+### Checkpoint
+- Open `/admin` with a fine pointer: move across labels, buttons, sidebar sections, panel headings, stats, issue cards, command cards, and table cells; the field-name tag follows the cursor consistently.
+- Admin controls show consistent line icons rather than a mix of missing icons and emoji-only prefixes.
+
+---
+
 ## V65.0 — Follow-up: consistent cursor field-name hover tag across the webapp (2026-09-25)
 
 ### Added / Fixed

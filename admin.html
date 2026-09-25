@@ -1265,7 +1265,7 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
   setTimeout(()=>{window.__adminSyncSidebarVisibility?.();setCurrent('homePanel',true);scheduleSpy();},0);
 })();
 </script><script id="v65-admin-icon-enhancer">
-/* V65.0: puts a matching line icon in front of every Admin button label (static and dynamically built).
+/* V65.2: puts a matching line icon in front of every Admin button label (static and dynamically built).
    Purely visual: the button text, ids and handlers are untouched. Re-applies itself if a handler rewrites a label. */
 (function(){
   const RULES=[[/log\s?out|sign\s?out/i,'logout'],[/log\s?in|sign\s?in/i,'login'],[/dashboard/i,'home'],[/password/i,'key'],
@@ -1293,12 +1293,13 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
   function start(){ enhance(); new MutationObserver(again).observe(document.body,{childList:true,subtree:true,characterData:true}); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
 })();
+</script>
 
 <style id="admin-field-hint-style">
-/* V65.1 — consistent cursor field-name hint across the entire Admin console */
+/* V65.2 — consistent cursor field-name hint across the entire Admin console */
 .qd-field-tag{position:fixed;left:0;top:0;z-index:2147483001;display:flex;align-items:center;gap:8px;max-width:320px;padding:6px 10px 6px 8px;border-radius:9px;background:rgba(15,42,74,.96);border:1px solid rgba(143,208,255,.32);color:#fff;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;will-change:transform;font-family:Manrope,sans-serif}
 .qd-field-tag.show{opacity:1;visibility:visible}
-.qd-field-tag .qft-icon{font-size:14px;line-height:1;color:#8fd0ff}
+.qd-field-tag .qft-icon{display:inline-flex;align-items:center;justify-content:center;color:#8fd0ff}.qd-field-tag .qft-icon .ic{width:15px;height:15px;margin:0}
 .qft-copy{display:flex;flex-direction:column;min-width:0}
 .qft-name{font:800 12.5px/1.25 Manrope,sans-serif;white-space:normal}
 .qft-meta{font:600 10.5px/1.25 Manrope,sans-serif;color:#9fb8d0}
@@ -1308,20 +1309,20 @@ html[data-theme="dark"] .qft-meta{color:#476079}
 @media print{.qd-field-tag{display:none!important}}
 @media (prefers-reduced-motion:reduce){.qd-field-tag{transition:none}}
 </style>
-<script id="v65-1-admin-field-hints">
-/* V65.1: field-name hover tag is delegated once from document so it also covers
+<script id="v65-2-admin-field-hints">
+/* V65.2: field-name hover tag is delegated once from document so it also covers
    dynamically rendered Admin tables, result lists and form controls. The same
    localStorage switch used by the dashboard is respected. */
 (function(){
   const KEY='qdash_field_hints';
   const on=()=>{try{return localStorage.getItem(KEY)!=='off'}catch(e){return true}};
   let tag=null,target=null,titleEl=null,raf=0,xy=[0,0];
-  const clean=s=>String(s||'').replace(/[\u2191\u2193\u2195\u25B2\u25BC\u21C5]/g,'').replace(/\s+/g,' ').trim();
+  const clean=s=>String(s||'').replace(/^[\s\u2190-\u21FF\u2300-\u23FF\u25A0-\u27BF\u2B00-\u2BFF\uFE0F\u{1F300}-\u{1FAFF}]+/u,'').replace(/[\u2191\u2193\u2195\u25B2\u25BC\u21C5]/g,'').replace(/\s+/g,' ').trim();
   const esc=s=>clean(s).replace(/^\P{L}+/u,'');
   function ensure(){
     if(tag)return tag;
     tag=document.createElement('div'); tag.className='qd-field-tag'; tag.setAttribute('role','tooltip');
-    tag.innerHTML='<span class="qft-icon">🏷</span><div class="qft-copy"><b class="qft-name"></b><small class="qft-meta"></small></div>';
+    tag.innerHTML='<span class="qft-icon"><svg class="ic" aria-hidden="true"><use href="#ic-tag"/></svg></span><div class="qft-copy"><b class="qft-name"></b><small class="qft-meta"></small></div>';
     document.body.appendChild(tag); return tag;
   }
   function header(table,idx){
@@ -1359,10 +1360,14 @@ html[data-theme="dark"] .qft-meta{color:#476079}
     if(nav){const n=clean(nav.textContent);if(n)return {name:n,meta:'Admin section'};}
     const tab=t.closest('[role="tab"],.qcr-tab-btn');
     if(tab){const n=clean(tab.textContent||tab.getAttribute('aria-label')||tab.getAttribute('title'));if(n)return {name:n,meta:'Tab'};}
+    const label=t.closest('label');
+    if(label){const n=clean(label.textContent||label.getAttribute('aria-label'));if(n)return {name:n,meta:'Field label'};}
+    const heading=t.closest('.panel > h2,.panel h3');
+    if(heading){const n=clean(heading.textContent);if(n)return {name:n,meta:'Admin panel'};}
     const stat=t.closest('.stat');
     if(stat){const n=clean(stat.querySelector('strong,.stat-label,label')?.textContent||stat.textContent);if(n)return {name:n.slice(0,80),meta:'Metric'};}
     const issue=t.closest('.issue,.quality-score,.health-card,.command-card,.connection-box,.filebox,.recovery-card');
-    if(issue){const n=clean(issue.querySelector('h2,h3,h4,.title,.name,strong')?.textContent||'');if(n)return {name:n,meta:'Panel'};}
+    if(issue){const n=clean(issue.querySelector('h2,h3,h4,.title,.name,strong')?.textContent||issue.textContent);if(n)return {name:n.slice(0,80),meta:'Panel'};}
     const control=t.closest('input,select,textarea,button,a,[role="button"],[role="combobox"],[role="switch"]');
     if(control){
       let n=labelFor(control)||clean(control.textContent)||clean(control.getAttribute('title')||'');
@@ -1399,6 +1404,76 @@ html[data-theme="dark"] .qft-meta{color:#476079}
     window.addEventListener('scroll',hide,{passive:true,capture:true});
     document.addEventListener('pointerdown',hide,true);
   }
+})();
+</script>
+<script id="v65-2-admin-semantic-icons">
+/* V65.2: complete Admin icon coverage for headings, sidebar items, field labels,
+   issue cards and command cards. Handles dynamically rendered content too. */
+(function(){
+  const RULES=[
+    [/admin\s*login|password/i,'key'],
+    [/new\s*password|current\s*password|password/i,'key'],
+    [/overview|control\s*center|dashboard/i,'home'],
+    [/data\s*quality|performance|activity/i,'pulse'],
+    [/kpi|target|warning|critical|logic/i,'target'],
+    [/add\s*one|add|create|new/i,'plus'],
+    [/import|upload|restore|file/i,'upload'],
+    [/history|audit trail|recent activity/i,'file-text'],
+    [/latest records|table|record/i,'table'],
+    [/fishbone/i,'flame'],
+    [/defect mapping|mapping|intensity|field name/i,'tag'],
+    [/command center|command|action/i,'command'],
+    [/database/i,'database'],
+    [/backup|recovery/i,'refresh'],
+    [/security|secure|role/i,'shield'],
+    [/validation|verify|validate|confirm/i,'check'],
+    [/user|employee|display name/i,'user'],
+    [/audit explorer|search|find/i,'search'],
+    [/analytics|trend|change/i,'trend'],
+    [/date|month|week|quarter|financial year|from$|to$/i,'clock'],
+    [/heat|batch|work center|grade/i,'table'],
+    [/output weight|weight|quantity/i,'trend'],
+    [/defect/i,'alert'],
+    [/compact density|filter/i,'sliders'],
+    [/cancel|close|dismiss|clear/i,'x'],
+    [/back|prev|previous/i,'chevron-left'],
+    [/next/i,'chevron-right'],
+  ];
+  const GLYPH=/^[\s\u2190-\u21FF\u2300-\u23FF\u25A0-\u27BF\u2B00-\u2BFF\uFE0F\u{1F300}-\u{1FAFF}]+/u;
+  const SELECTORS=[
+    '.sidebar-link',
+    '.panel > h2, .panel h3',
+    '.field > label, .pref-row > label, .audit-filter-grid label',
+    '.issue-btn, .command-card',
+    '.btn, button.delete, td button, .submit-row button'
+  ].join(',');
+  function pick(text){
+    const t=String(text||'').replace(GLYPH,'').trim();
+    for(const [re,name] of RULES) if(re.test(t)) return name;
+    return null;
+  }
+  function addIcon(el){
+    if(!el || el.closest('.qd-field-tag') || el.dataset.iconDone==='1') return;
+    if(el.querySelector(':scope > svg.ic')){el.dataset.iconDone='1';return;}
+    const raw=(el.textContent||'').replace(/\s+/g,' ').trim();
+    if(!raw)return;
+    const name=pick(raw);
+    if(!name)return;
+    const first=[...el.childNodes].find(n=>n.nodeType===3 && n.nodeValue.trim());
+    if(first) first.nodeValue=first.nodeValue.replace(GLYPH,'');
+    el.insertAdjacentHTML('afterbegin',`<svg class="ic admin-ico" aria-hidden="true"><use href="#ic-${name}"/></svg>`);
+    el.dataset.iconDone='1';
+  }
+  function enhance(root=document){
+    root.querySelectorAll(SELECTORS).forEach(addIcon);
+  }
+  function start(){
+    enhance();
+    const mo=new MutationObserver(()=>{enhance();});
+    mo.observe(document.body,{subtree:true,childList:true,characterData:true});
+    window.__adminEnhanceIcons=enhance;
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start); else start();
 })();
 </script>
 </body></html>
