@@ -7,6 +7,10 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
+## What changed in V65.0 (full audit pass, one bug fixed)
+- **Fixed:** `admin.html` had two elements sharing `id="admin-field-hints"` (a `<style>` tag and a `<script>` tag), which is invalid HTML and was failing the project's own `admin_ux_audit.py` check. Renamed to `admin-field-hints-style` / `admin-field-hints-script`; nothing else referenced the old id, so this is a pure fix with no behavior change.
+- **Verified:** every release-gate script (smoke test, all regression suites, HTTP smoke across 47 endpoints, code-health, admin UX audit, Excel/PDF/PPTX export acceptance and stress tests) passes, plus a full Python compile check and a JavaScript syntax check of every inline script in `index.html` and `admin.html`. This was the only defect found.
+
 ## What changed since V65.0 (intro screen side imagery)
 - **Intro screen — clean side imagery, no baked-in text:** the splash screen now shows real plant photography faded in along the left and right edges (industrial plant on the left, copper-coil warehouse on the right) instead of the old illustrated coil background. The images sit behind the text and fade toward the centre, so they never overlap the headline, cards or "Enter Dashboard" button; they also narrow and dim on phone-width screens. All text stays live DOM/CSS, not baked into any image.
 

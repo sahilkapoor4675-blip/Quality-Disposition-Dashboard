@@ -1,4 +1,8 @@
 
+## V65.0 — Full audit pass: duplicate HTML id fixed (no version bump — same version)
+- **Admin console — duplicate `id="admin-field-hints"` fixed.** The field-name hover tag's `<style>` block and its `<script>` block in `admin.html` both used the same `id`, which is invalid HTML (ids must be unique per page) and made the project's own `admin_ux_audit.py` contract check fail. Neither id was referenced anywhere else in the codebase, so this was safe to rename without touching behavior: the style block is now `admin-field-hints-style` and the script block is `admin-field-hints-script`.
+- **Full regression pass:** ran every existing release-gate script (`smoke_test.py`, `regression.py`'s 6 suites, `http_smoke.py` — 47 endpoints, `code_health.py`, `admin_ux_audit.py`, `export_acceptance.py`, `export_stress.py`) plus a fresh Python syntax compile of every `.py` file and a Node syntax check of every inline `<script>` block in `index.html` and `admin.html`. All pass; the duplicate id above was the only defect found. No data, API, or visual changes.
+
 ### Intro screen — clean side imagery (v8), no baked-in text
 - Replaced the old copper/coil illustrated intro background with real plant photography: a faded industrial-plant image on the left edge and a copper-coil warehouse image on the right edge of the splash screen, each anchored to the screen edge and fading to transparent toward the centre.
 - The photos sit behind the intro text (`z-index:0`, under the existing `intro-stage` at `z-index:1`) and are masked by their own edge-to-centre fade, so they never visually collide with the "NON-FERROUS / QUALITY INTELLIGENCE" headline, the cards, or the "Enter Dashboard" button at any width.
