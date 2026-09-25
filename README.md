@@ -7,6 +7,9 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
+## What changed since V65.0 (intro screen side imagery)
+- **Intro screen — clean side imagery, no baked-in text:** the splash screen now shows real plant photography faded in along the left and right edges (industrial plant on the left, copper-coil warehouse on the right) instead of the old illustrated coil background. The images sit behind the text and fade toward the centre, so they never overlap the headline, cards or "Enter Dashboard" button; they also narrow and dim on phone-width screens. All text stays live DOM/CSS, not baked into any image.
+
 ## What changed in V65.0 (presentation mode fits screen, field-name hover tag, icons; header/intro are the plain Classic look with a gradient accent + progress fill)
 - **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.

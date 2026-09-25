@@ -1,4 +1,11 @@
 
+### Intro screen — clean side imagery (v8), no baked-in text
+- Replaced the old copper/coil illustrated intro background with real plant photography: a faded industrial-plant image on the left edge and a copper-coil warehouse image on the right edge of the splash screen, each anchored to the screen edge and fading to transparent toward the centre.
+- The photos sit behind the intro text (`z-index:0`, under the existing `intro-stage` at `z-index:1`) and are masked by their own edge-to-centre fade, so they never visually collide with the "NON-FERROUS / QUALITY INTELLIGENCE" headline, the cards, or the "Enter Dashboard" button at any width.
+- On screens ≤800px wide the side images narrow to 22vw and dim to 80% opacity so they stay out of the way of the centred text on phones/tablets.
+- No text is baked into the images themselves — all copy remains the existing live DOM/CSS headline elements, so it keeps behaving correctly with reduced-motion, replay, and the letter-by-letter reveal.
+- Everything else about the intro (timeline, sound design, letter animation, iframe/Compare-Periods guard) is unchanged.
+
 ### Live Data indicator pulse fix
 - Restored the header **LIVE DATA** status dot pulse after the Design 4 header styling had disabled its animation.
 - The pulse now uses the existing `livePulse` keyframes with a controlled 1.8s cadence and will-change hint for smooth rendering.
