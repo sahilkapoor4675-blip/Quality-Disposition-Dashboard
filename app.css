@@ -2221,3 +2221,127 @@ html[data-theme="dark"] header.app-header .digital-clock-icon{background:linear-
 @media print{
   header.app-header .header-fx{display:none!important;}
 }
+
+
+/* ================================================================
+   V65.1 UI FOUNDATION — shared tokens + interaction contract
+   Keep component polish consistent without changing the existing visual skin.
+   ================================================================ */
+:root{
+  --space-1:4px; --space-2:6px; --space-3:8px; --space-4:12px;
+  --space-5:16px; --space-6:20px; --space-7:24px; --space-8:32px;
+  --radius-xs:6px; --radius-sm:8px; --radius-md:10px; --radius-lg:12px; --radius-xl:16px; --radius-pill:999px;
+  --shadow-1:0 1px 2px rgba(15,42,74,.06);
+  --shadow-2:0 4px 12px rgba(15,42,74,.08);
+  --shadow-3:0 10px 24px rgba(15,42,74,.12);
+  --shadow-4:0 18px 42px rgba(15,42,74,.16);
+  --motion-fast:120ms; --motion-base:180ms; --motion-slow:260ms;
+  --ease-standard:cubic-bezier(.2,.65,.25,1);
+  --ease-emphasis:cubic-bezier(.22,.85,.32,1);
+  --focus-ring:0 0 0 3px rgba(35,136,201,.26);
+  --focus-ring-offset:2px;
+  --drag-surface:rgba(35,136,201,.07);
+  --drag-border:rgba(35,136,201,.48);
+  --chart-tooltip-bg:#16324F; --chart-tooltip-text:#F7FAFF;
+  --chart-tooltip-muted:#B9D9F2; --chart-tooltip-border:rgba(159,208,242,.28);
+  --chart-tooltip-shadow:0 10px 28px rgba(8,20,36,.26);
+}
+html[data-theme="dark"]{
+  --shadow-1:0 1px 2px rgba(0,0,0,.28);
+  --shadow-2:0 4px 12px rgba(0,0,0,.34);
+  --shadow-3:0 10px 26px rgba(0,0,0,.42);
+  --shadow-4:0 18px 44px rgba(0,0,0,.52);
+  --focus-ring:0 0 0 3px rgba(108,180,255,.34);
+  --drag-surface:rgba(77,163,255,.11);
+  --drag-border:rgba(108,180,255,.66);
+  --chart-tooltip-bg:#0B1220; --chart-tooltip-text:#F4F8FF;
+  --chart-tooltip-muted:#B8CBE1; --chart-tooltip-border:rgba(143,208,255,.28);
+  --chart-tooltip-shadow:0 12px 30px rgba(0,0,0,.5);
+}
+
+/* One interaction rhythm for native + custom controls. */
+button, a.btn, .btn, [role="button"]{
+  transition:transform var(--motion-fast) var(--ease-standard),
+             box-shadow var(--motion-base) var(--ease-standard),
+             border-color var(--motion-base) var(--ease-standard),
+             background-color var(--motion-base) var(--ease-standard),
+             color var(--motion-base) var(--ease-standard),
+             opacity var(--motion-base) ease;
+}
+button:not(:disabled):active, a.btn:active, .btn:not(:disabled):active, [role="button"]:active{
+  transform:translateY(1px) scale(.985);
+  transition-duration:60ms;
+}
+button:disabled, .btn[aria-disabled="true"]{cursor:not-allowed;}
+
+/* Consistent focus visibility across the dashboard. */
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{
+  outline:2px solid color-mix(in srgb, var(--accent) 84%, white 16%);
+  outline-offset:var(--focus-ring-offset);
+  box-shadow:var(--focus-ring);
+}
+:where(.tab-btn,.filter-trigger,.filter-option,.view-pop-row,.view-pop-load,.view-pop-del,
+       .export-dialog-option,.analytics-expand-btn,.analytics-presentation-close):focus-visible{
+  outline:2px solid color-mix(in srgb, var(--accent) 84%, white 16%);
+  outline-offset:var(--focus-ring-offset);
+  box-shadow:var(--focus-ring);
+}
+
+/* Token adoption for the most-used surfaces/controls. */
+.filters,.filter-summary-bar{border-radius:var(--radius-lg);}
+.filter-trigger{border-radius:var(--radius-sm);padding:var(--space-3) var(--space-4);}
+.filter-menu,.view-popover{border-radius:var(--radius-lg);box-shadow:var(--shadow-3);}
+.kpi-card,.panel,.insights-panel{border-radius:var(--radius-lg);box-shadow:var(--shadow-2);}
+.kpi-card:hover,.panel:hover{box-shadow:var(--shadow-3);}
+.tab-btn{border-radius:var(--radius-md)!important;}
+.filter-actions,.summary-actions,.view-popover .view-pop-actions{gap:var(--space-3);}
+
+/* Drag/drop affordances for filter order and preset management. */
+.filter-field[data-filter-key]{transition:transform var(--motion-base) var(--ease-emphasis),opacity var(--motion-base) ease,box-shadow var(--motion-base) var(--ease-standard),background-color var(--motion-base) ease;}
+.filter-field[data-filter-key][draggable="true"]{cursor:grab;}
+.filter-field[data-filter-key][draggable="true"]:active{cursor:grabbing;}
+.filters.filter-dragging{background:color-mix(in srgb, var(--card) 94%, var(--accent) 6%);}
+.filter-field.filter-dragging{opacity:.58;transform:scale(.992);}
+.filter-field.filter-drag-target{background:var(--drag-surface);border-radius:var(--radius-md);box-shadow:inset 0 0 0 1px var(--drag-border);}
+.view-pop-row[data-preset-name][draggable="true"]{cursor:grab;transition:transform var(--motion-base) var(--ease-emphasis),opacity var(--motion-base) ease,background-color var(--motion-base) ease,box-shadow var(--motion-base) ease;}
+.view-pop-row[data-preset-name][draggable="true"]:active{cursor:grabbing;}
+.view-pop-row.preset-dragging{opacity:.56;transform:scale(.992);}
+.view-pop-row.preset-drag-target{background:var(--drag-surface)!important;box-shadow:inset 0 0 0 1px var(--drag-border);}
+
+/* Toasts: softer entrance, clearer exit, and motion-safe rhythm. */
+.toast-host{gap:var(--space-3);}
+.toast{
+  border-radius:var(--radius-md);
+  box-shadow:var(--chart-tooltip-shadow);
+  transform:translate3d(20px,0,0) scale(.985);
+  transition:opacity var(--motion-base) ease,transform var(--motion-slow) var(--ease-emphasis);
+  will-change:transform,opacity;
+}
+.toast.show{transform:translate3d(0,0,0) scale(1);}
+.toast.hide{transform:translate3d(10px,0,0) scale(.985);}
+.toast-close:focus-visible{outline:2px solid var(--accent);outline-offset:1px;box-shadow:none;}
+
+/* Consistent chart/tooltip chrome in both themes. */
+.chart-tooltip{
+  background:var(--chart-tooltip-bg);
+  color:var(--chart-tooltip-text);
+  border:1px solid var(--chart-tooltip-border);
+  box-shadow:var(--chart-tooltip-shadow);
+  border-radius:var(--radius-md);
+}
+.chart-tooltip .ct-field{color:var(--chart-tooltip-muted);}
+html[data-theme="dark"] .chart-tooltip,
+html[data-theme="dark"] .qd-field-tag{
+  background:var(--chart-tooltip-bg);
+  color:var(--chart-tooltip-text);
+  border-color:var(--chart-tooltip-border);
+  box-shadow:var(--chart-tooltip-shadow);
+}
+html[data-theme="dark"] .chart-tooltip .ct-field,
+html[data-theme="dark"] .qd-field-tag .ic{color:var(--chart-tooltip-muted);}
+html[data-theme="dark"] .qft-meta{color:#B8CBE1;}
+
+@media(prefers-reduced-motion:reduce){
+  button,a.btn,.btn,[role="button"],.filter-field[data-filter-key],.view-pop-row[data-preset-name],.toast{transition:none!important;}
+  button:not(:disabled):active,a.btn:active,.btn:not(:disabled):active,[role="button"]:active{transform:none!important;}
+}
