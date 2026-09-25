@@ -8,17 +8,24 @@ Never run these scripts against production.
 ```bash
 python -m py_compile server.py reports.py
 node --check app.js
+node --check sfx.js
 python code_health.py
-python regression_smoke.py      # data rules, imports, KPI maths, backup/restore, security
-python http_smoke.py            # health/readiness + every public, export and admin-read route
-python smoke_test.py            # bundled dataset unchanged, core tabs/API respond
-python regression_test.py       # core endpoints + filter contract
-python regression_v64_3.py      # single response, malformed filters, drill totals, per-FY quarters, data-quality wiring
-python regression_v64_5.py      # freshness semantics, session revocation, backup cache, mutation revision
-python admin_ux_audit.py        # admin navigation contract
-python export_acceptance.py     # Excel/PDF/PPTX completeness + chart/table pairing
-python export_stress.py         # high-cardinality export stress
+python regression.py --suite regression_smoke
+python regression.py --suite regression_test
+python regression.py --suite regression_v64_3
+python regression.py --suite regression_v64_5
+python regression.py --suite regression_v64_6
+python regression.py --suite regression_period_comparison
+python http_smoke.py
+python smoke_test.py
+python admin_ux_audit.py
+python export_acceptance.py
+python export_stress.py
 ```
+
+`regression.py` is the unified regression runner. The suite names above replace the old
+`regression_smoke.py`, `regression_test.py`, `regression_v64_3.py`, `regression_v64_5.py`, and
+other deleted standalone test files that were previously referenced here.
 
 ## Export completeness rules
 - Excel/PDF/PPTX report tables preserve all source rows; no silent top-N truncation.
@@ -27,5 +34,6 @@ python export_stress.py         # high-cardinality export stress
 
 ## Production discipline
 Keep `DATABASE_URL` pointed at the production PostgreSQL service. Any schema or business-logic change
-must be followed by the complete gate. After deploying, verify `/api/admin/service_health` reports `latest_data_date` and `freshness_age_days`, then hard-refresh the browser (Ctrl+Shift+R) once so
-the new CSS/JS is loaded.
+must be followed by the complete gate. After deploying, verify `/api/admin/service_health` reports
+`latest_data_date` and `freshness_age_days`, then hard-refresh the browser (Ctrl+Shift+R) once so the
+new CSS/JS is loaded.
