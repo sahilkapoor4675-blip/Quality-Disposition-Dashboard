@@ -7,17 +7,6 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-
-## V65.0 follow-up — Admin hover hints + complete icon coverage
-- **Admin Field Name Hover Tag fixed:** the Admin hover-tag CSS and delegated pointer handler now load as separate executable blocks, so the cursor-following tag works across labels, headings, sidebar items, controls, tables, metrics and dynamically rendered content.
-- **Shared preference:** Admin continues to honor the dashboard `qdash_field_hints` setting.
-- **Admin icons completed:** sidebar navigation, panel headings, field labels, issue/command cards and generated action controls receive matching SVG line icons from the existing sprite.
-
-## V65.0 follow-up — consistent cursor field-name hover hints
-- The small field-name tag that follows the cursor is now applied consistently across the Dashboard and Admin console, including dynamic content.
-- Hover coverage includes form controls, buttons/links/tabs, filters and options, KPIs/metrics, tables, legends, sidebar sections, and titled/ARIA-labelled controls.
-- The existing Dashboard **Ctrl+K → Field Name Hints** switch is shared with Admin so the preference stays consistent across the webapp.
-
 ## What changed in V65.0 (presentation mode fits screen, field-name hover tag, icons; header/intro are the plain Classic look with a gradient accent + progress fill)
 - **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
 - **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
@@ -132,3 +121,6 @@ The regression suite is consolidated into a single `regression.py`; deleted lega
   by version.
 - **Uptime monitor shows the service down** – point it at `/healthz` (GET or HEAD).
 - **Admin says login required after a restore** – expected: restore replaces the user/session tables; log in again.
+
+### Header Design
+The dashboard uses the approved **Design 4 — Industrial Copper** header: static copper-base coil/plant artwork on a steel-inspired surface, JSL orange/graphite diagonal accents, and the existing Quality Intelligence typography preserved as-is. The compact right-side toolbar remains bottom-aligned with the date/time card above it. The same composition adapts for the dark theme.

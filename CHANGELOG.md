@@ -1,30 +1,11 @@
-## V65.0 — Admin console hover hints + complete icon coverage (2026-09-25)
 
-### Added / Fixed
-- **Admin cursor-following Field Name Hover Tag is now active and reliable.** Fixed the Admin inline script boundary so the hover-tag stylesheet and delegated pointer handler execute as separate scripts. The tag now covers Admin field labels, panel headings, sidebar sections, controls, tables, metrics, issue cards, command cards, and dynamically rendered content while continuing to respect the shared `qdash_field_hints` preference.
-- **Admin hover tag now uses the shared SVG tag icon** instead of an emoji, matching the dashboard icon system.
-- **Admin icon coverage completed.** Sidebar items, panel headings, field labels, issue cards, command cards, and dynamically generated action buttons now receive matching SVG line icons; existing icons remain untouched and leading emoji/arrow glyphs are removed only when the matching SVG replaces them.
-- **No data/API changes.** Only Admin presentation and client-side interaction behavior changed.
-
-### Checkpoint
-- Open `/admin` with a fine pointer: move across labels, buttons, sidebar sections, panel headings, stats, issue cards, command cards, and table cells; the field-name tag follows the cursor consistently.
-- Admin controls show consistent line icons rather than a mix of missing icons and emoji-only prefixes.
-
----
-
-## V65.0 — Follow-up: consistent cursor field-name hover tag across the webapp (2026-09-25)
-
-### Added / Fixed
-- **Field-name hover hint coverage is now consistent across the webapp.** The dashboard hover-tag resolver now covers generic form controls (inputs, selects, textareas), buttons, links, tabs, filter controls/options/search, metrics/stat cards, table headers/cells, KPI parts, legends and existing titled/labelled controls instead of only a small set of explicit field targets.
-- **Admin console now uses the same cursor-following field hint.** It covers dynamically rendered admin tables, form fields, sidebar sections, tabs, metrics, panel/action controls and title/ARIA-labelled controls through one delegated pointer listener, so late-rendered content gets the hint automatically.
-- **Existing hover-tag toggle is respected by Admin too.** The shared `qdash_field_hints` preference is used, so turning Field Name Hints off/on from the Dashboard command palette applies consistently across the webapp.
-- **Browser-native title popups are suppressed while the custom field tag is visible** and restored immediately when the cursor leaves, preventing competing hover hints.
-
-### Verification
-- Updated the Dashboard JS cache-buster to `65.1` so the browser loads the new field-hint logic without requiring a hard refresh.
-- No database, API, or data changes. Application version remains **V65.0**.
-
----
+## 2026-09-25 — Design 4 Industrial Copper Header
+- Implemented the approved static **Design 4** header treatment on the main dashboard.
+- Kept the existing **QUALITY INTELLIGENCE** script typography unchanged.
+- Switched the header artwork to a fixed industrial treatment with copper-base coil imagery, subtle steel texture, and JSL orange/graphite diagonal accents.
+- Preserved the compact header alignment: branding on the left; Last Updated/Live Data/Export/Commands along the bottom-right; date/time above the command toolbar.
+- Disabled decorative header motion so the Design 4 treatment remains static and professional.
+- Added matching dark-theme styling using graphite/navy steel tones while retaining the copper/industrial reference.
 
 ## V65.0 — Follow-up: header clock stacked above Commands again, intro "Enter Dashboard" delay removed (no version bump — same version) (2026-09-25)
 

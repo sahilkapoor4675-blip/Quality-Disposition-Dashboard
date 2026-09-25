@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/app.css?v=65.1">
+<link rel="stylesheet" href="/app.css?v=65.0">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -27,7 +27,8 @@
     var saved=localStorage.getItem('qdash_theme');
     if(saved==='dark')document.documentElement.setAttribute('data-theme','dark');
   }catch(e){}
-  // Simple plain header + intro (no Copper Mill artwork). No switch/toggle for this any more.
+  // Keep the intro screen in its existing classic state; the main dashboard header now
+  // uses the static Design 4 industrial copper-coil presentation below.
   document.documentElement.setAttribute('data-skin','classic');
 })();
 </script>
@@ -558,7 +559,8 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
 </script>
 
 <header class="app-header">
-  <!-- V65.0 "Copper Mill" theme header: factory bay with copper coils + flowing blue/copper ribbon waves behind the text. Decorative only; text/buttons sit above it. Switch to the classic plain header from Ctrl+K. -->
+  <!-- Static Design 4 industrial header: JSL branding + copper-base coils/plant reference.
+       Decorative only; text/buttons sit above it. No header animation is used. -->
   <div class="header-fx" aria-hidden="true">
     <span class="hfx-wash"></span>
     <svg class="hfx-scene" viewBox="0 0 720 200" preserveAspectRatio="xMaxYMid slice">
@@ -575,6 +577,9 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
       <rect width="720" height="200" fill="#fff" opacity=".08"/>
     </svg>
     <div class="hfx-layer hfx-blue"><svg viewBox="0 0 1600 200" preserveAspectRatio="none"><defs><linearGradient id="hfxFB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e96f0" stop-opacity=".40"/><stop offset="1" stop-color="#2e96f0" stop-opacity="0"/></linearGradient><linearGradient id="hfxFC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd0f5" stop-opacity=".34"/><stop offset="1" stop-color="#4fd0f5" stop-opacity="0"/></linearGradient></defs><path d="M-800 104 Q-600 36 -400 104 T0 104 T400 104 T800 104 T1200 104 T1600 104 V200 H-800Z" transform="translate(0 0)" fill="url(#hfxFB)"/><path d="M-800 122 Q-600 70 -400 122 T0 122 T400 122 T800 122 T1200 122 T1600 122 V200 H-800Z" transform="translate(300 0)" fill="url(#hfxFC)"/><path d="M-800 100 Q-600 32 -400 100 T0 100 T400 100 T800 100 T1200 100 T1600 100" transform="translate(0 0)" fill="none" stroke="#1f7fe0" stroke-opacity="0.84" stroke-width="1.88" vector-effect="non-scaling-stroke"/><path d="M-800 104 Q-600 36 -400 104 T0 104 T400 104 T800 104 T1200 104 T1600 104" transform="translate(40 0)" fill="none" stroke="#38a5f0" stroke-opacity="0.73" stroke-width="1.38" vector-effect="non-scaling-stroke"/><path d="M-800 109 Q-600 41 -400 109 T0 109 T400 109 T800 109 T1200 109 T1600 109" transform="translate(85 0)" fill="none" stroke="#86cdf9" stroke-opacity="0.7" stroke-width="1.25" vector-effect="non-scaling-stroke"/><path d="M-800 113 Q-600 53 -400 113 T0 113 T400 113 T800 113 T1200 113 T1600 113" transform="translate(150 0)" fill="none" stroke="#2d8ee6" stroke-opacity="0.59" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M-800 119 Q-600 67 -400 119 T0 119 T400 119 T800 119 T1200 119 T1600 119" transform="translate(260 0)" fill="none" stroke="#45b6f2" stroke-opacity="0.7" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M-800 127 Q-600 83 -400 127 T0 127 T400 127 T800 127 T1200 127 T1600 127" transform="translate(340 0)" fill="none" stroke="#1f6fd0" stroke-opacity="0.5" stroke-width="1.25" vector-effect="non-scaling-stroke"/></svg></div>
+    <div class="hfx-industrial-slash hfx-slash-left" aria-hidden="true"></div>
+    <div class="hfx-industrial-slash hfx-slash-main" aria-hidden="true"></div>
+    <div class="hfx-industrial-slash hfx-slash-shadow" aria-hidden="true"></div>
     <div class="hfx-layer hfx-copper"><svg viewBox="0 0 1600 200" preserveAspectRatio="none"><defs><linearGradient id="hfxFO" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f08a3c" stop-opacity=".40"/><stop offset="1" stop-color="#f08a3c" stop-opacity="0"/></linearGradient></defs><path d="M-800 116 Q-700 72 -600 116 T-400 116 T-200 116 T0 116 T200 116 T400 116 T600 116 T800 116 T1000 116 T1200 116 T1400 116 T1600 116 V200 H-800Z" transform="translate(100 0)" fill="url(#hfxFO)"/><path d="M-800 104 Q-700 60 -600 104 T-400 104 T-200 104 T0 104 T200 104 T400 104 T600 104 T800 104 T1000 104 T1200 104 T1400 104 T1600 104" transform="translate(0 0)" fill="none" stroke="#e8843a" stroke-opacity="0.91" stroke-width="1.75" vector-effect="non-scaling-stroke"/><path d="M-800 108 Q-700 64 -600 108 T-400 108 T-200 108 T0 108 T200 108 T400 108 T600 108 T800 108 T1000 108 T1200 108 T1400 108 T1600 108" transform="translate(30 0)" fill="none" stroke="#f6a85e" stroke-opacity="0.77" stroke-width="1.38" vector-effect="non-scaling-stroke"/><path d="M-800 113 Q-700 69 -600 113 T-400 113 T-200 113 T0 113 T200 113 T400 113 T600 113 T800 113 T1000 113 T1200 113 T1400 113 T1600 113" transform="translate(70 0)" fill="none" stroke="#f9caa0" stroke-opacity="0.84" stroke-width="1.25" vector-effect="non-scaling-stroke"/><path d="M-800 118 Q-700 78 -600 118 T-400 118 T-200 118 T0 118 T200 118 T400 118 T600 118 T800 118 T1000 118 T1200 118 T1400 118 T1600 118" transform="translate(120 0)" fill="none" stroke="#d9691f" stroke-opacity="0.7" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M-800 124 Q-700 88 -600 124 T-400 124 T-200 124 T0 124 T200 124 T400 124 T600 124 T800 124 T1000 124 T1200 124 T1400 124 T1600 124" transform="translate(190 0)" fill="none" stroke="#f3a25a" stroke-opacity="0.7" stroke-width="1.25" vector-effect="non-scaling-stroke"/></svg></div>
     <span class="hfx-veil"></span>
   </div>
@@ -969,6 +974,6 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=65.1" defer></script>
+<script src="/app.js?v=65.0" defer></script>
 </body>
 </html>

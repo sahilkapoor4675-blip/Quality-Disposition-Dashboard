@@ -2061,3 +2061,163 @@ html[data-skin="classic"] .logo-3d .header-logo{filter:drop-shadow(0 3px 7px rgb
   header .live-status{font-size:12px;}
   header .cmdk-open-btn{font-size:12px;}
 }
+
+/* ================================================================
+   FINAL HEADER — DESIGN 4 / INDUSTRIAL COPPER (STATIC)
+   Reference: approved Design 4 copper-coil header mockup.
+   - Keeps the existing Quality Intelligence typography untouched.
+   - Uses the existing inline industrial/copper-coil SVG artwork.
+   - Adds a restrained steel frame + JSL orange diagonal accents.
+   - No decorative header animations; this is intentionally static.
+   ================================================================ */
+header.app-header{
+  background:
+    linear-gradient(112deg, rgba(255,255,255,.985) 0%, rgba(247,249,251,.985) 42%, rgba(239,242,245,.97) 68%, rgba(229,232,235,.98) 100%) !important;
+  border:1px solid #aeb8c1 !important;
+  border-radius:14px !important;
+  box-shadow:
+    0 7px 20px rgba(39,55,68,.12),
+    inset 0 1px 0 rgba(255,255,255,.96),
+    inset 0 -1px 0 rgba(137,148,158,.16) !important;
+}
+header.app-header::before{
+  height:3px !important;
+  background:linear-gradient(90deg,#1b5fa7 0%,#2d84ca 38%,#b56a2b 72%,#e88b39 100%) !important;
+  box-shadow:0 1px 0 rgba(255,255,255,.65);
+}
+header.app-header::after{
+  content:'';
+  position:absolute;
+  left:0; right:0; bottom:0;
+  height:4px;
+  border-radius:0 0 14px 14px;
+  background:linear-gradient(90deg,rgba(217,128,43,0) 0%,rgba(217,128,43,0) 58%,rgba(217,128,43,.78) 74%,rgba(92,104,116,.62) 100%);
+  pointer-events:none;
+  z-index:1;
+}
+header.app-header .header-fx{display:block !important;}
+header.app-header .header-fx .hfx-wash{
+  background:
+    radial-gradient(52% 150% at 93% 90%,rgba(221,133,53,.24),transparent 66%),
+    radial-gradient(42% 130% at 8% 88%,rgba(64,123,176,.10),transparent 70%),
+    linear-gradient(100deg,rgba(255,255,255,.96) 0%,rgba(248,250,252,.92) 43%,rgba(244,245,246,.88) 63%,rgba(231,221,210,.76) 100%) !important;
+}
+header.app-header .header-fx .hfx-scene{
+  width:58% !important;
+  opacity:.92 !important;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 34%,#000 100%) !important;
+  mask-image:linear-gradient(90deg,transparent 0,#000 34%,#000 100%) !important;
+}
+header.app-header .header-fx .hfx-layer,
+header.app-header .header-fx .hfx-layer svg{
+  animation:none !important;
+  transform:none !important;
+  will-change:auto !important;
+}
+header.app-header .header-fx .hfx-layer{height:92% !important;}
+header.app-header .header-fx .hfx-blue{opacity:.26 !important;}
+header.app-header .header-fx .hfx-copper{opacity:.30 !important;}
+header.app-header .header-fx .hfx-veil{
+  background:linear-gradient(90deg,rgba(255,255,255,.90) 0%,rgba(255,255,255,.73) 34%,rgba(255,255,255,.28) 55%,rgba(255,255,255,.04) 74%) !important;
+}
+.hfx-industrial-slash{
+  position:absolute;
+  top:-8%;
+  bottom:-8%;
+  width:30px;
+  transform:skewX(-27deg);
+  pointer-events:none;
+  z-index:1;
+}
+.hfx-slash-left{
+  left:-16px;
+  width:18px;
+  background:rgba(236,128,32,.82);
+  box-shadow:0 0 0 1px rgba(255,255,255,.36) inset;
+}
+.hfx-slash-main{
+  left:60%;
+  width:46px;
+  background:linear-gradient(180deg,rgba(238,126,30,.96),rgba(220,111,22,.96));
+  box-shadow:0 0 0 1px rgba(255,255,255,.24) inset;
+}
+.hfx-slash-shadow{
+  left:63.2%;
+  width:18px;
+  background:rgba(88,103,116,.72);
+  z-index:0;
+}
+header.app-header .logo-3d .header-logo{
+  filter:
+    drop-shadow(0 1px 0 rgba(255,255,255,.95))
+    drop-shadow(1px 2px 0 rgba(112,132,154,.46))
+    drop-shadow(2px 4px 2px rgba(24,48,78,.18)) !important;
+}
+/* Keep the approved script styling exactly as before. */
+header.app-header .quality-intelligence-title,
+header.app-header .qi-quality,
+header.app-header .qi-intelligence{
+  font-family:'Allura','Brush Script MT',Georgia,'Times New Roman',serif !important;
+}
+header.app-header .quality-intelligence-title{font-size:36px !important;line-height:1.2 !important;}
+header.app-header .executive-kicker{color:#2388C9 !important;}
+header.app-header .plant-name{color:#31516B !important;}
+header.app-header .sub{color:#516477 !important;}
+header.app-header .updated-block{position:relative;z-index:3;}
+header.app-header .header-right-stack,
+header.app-header .header-actions,
+header.app-header .digital-clock-block{position:relative;z-index:3;}
+header.app-header .live-dot{animation:none !important;}
+
+/* Dark theme — same Design 4 geometry, with graphite/steel tones and copper coils retained. */
+html[data-theme="dark"] header.app-header{
+  background:
+    linear-gradient(112deg,#0d1724 0%,#122235 43%,#182c3e 68%,#241c17 100%) !important;
+  border-color:#3b4c5c !important;
+  box-shadow:0 8px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06),inset 0 -1px 0 rgba(0,0,0,.32) !important;
+}
+html[data-theme="dark"] header.app-header::after{
+  background:linear-gradient(90deg,rgba(217,128,43,0) 0%,rgba(217,128,43,0) 56%,rgba(232,139,57,.88) 74%,rgba(104,122,137,.68) 100%);
+}
+html[data-theme="dark"] header.app-header .header-fx .hfx-wash{
+  background:
+    radial-gradient(48% 150% at 94% 92%,rgba(228,126,44,.26),transparent 66%),
+    radial-gradient(42% 130% at 7% 92%,rgba(46,126,190,.22),transparent 70%),
+    linear-gradient(100deg,rgba(7,15,25,.94) 0%,rgba(10,28,44,.90) 48%,rgba(20,31,38,.78) 70%,rgba(43,28,19,.74) 100%) !important;
+}
+html[data-theme="dark"] header.app-header .header-fx .hfx-scene{
+  filter:brightness(.50) saturate(1.30) contrast(1.10) !important;
+  opacity:.92 !important;
+}
+html[data-theme="dark"] header.app-header .header-fx .hfx-blue{opacity:.42 !important;mix-blend-mode:screen;}
+html[data-theme="dark"] header.app-header .header-fx .hfx-copper{opacity:.48 !important;mix-blend-mode:screen;}
+html[data-theme="dark"] header.app-header .header-fx .hfx-veil{
+  background:linear-gradient(90deg,rgba(6,14,24,.88) 0%,rgba(7,19,31,.65) 34%,rgba(7,19,31,.18) 58%,rgba(7,19,31,0) 78%) !important;
+}
+html[data-theme="dark"] .hfx-slash-main{background:linear-gradient(180deg,rgba(241,139,57,.98),rgba(207,94,25,.98));}
+html[data-theme="dark"] .hfx-slash-shadow{background:rgba(122,145,164,.70);}
+html[data-theme="dark"] header.app-header .qi-quality{color:#ef5350 !important;}
+html[data-theme="dark"] header.app-header .qi-intelligence{color:#78b7ff !important;}
+html[data-theme="dark"] header.app-header .executive-kicker{color:#5eb6f6 !important;}
+html[data-theme="dark"] header.app-header .plant-name{color:#d6e4f1 !important;}
+html[data-theme="dark"] header.app-header .sub{color:#aec3d4 !important;}
+html[data-theme="dark"] header.app-header .digital-clock-block{background:rgba(11,26,41,.88) !important;border-color:#3b5266 !important;}
+html[data-theme="dark"] header.app-header .digital-clock-icon{background:linear-gradient(145deg,#e8843a 0%,#9b4b1b 100%) !important;}
+
+@media(max-width:1100px){
+  header.app-header .header-fx .hfx-scene{width:52% !important;}
+  .hfx-slash-main{left:58%;}
+  .hfx-slash-shadow{left:61.2%;}
+}
+@media(max-width:700px){
+  header.app-header .header-fx .hfx-scene{width:70% !important;opacity:.46 !important;}
+  .hfx-slash-main,.hfx-slash-shadow{display:none;}
+  header.app-header .header-fx .hfx-blue{opacity:.16 !important;}
+  header.app-header .header-fx .hfx-copper{opacity:.18 !important;}
+}
+@media(prefers-reduced-motion:reduce){
+  header.app-header .live-dot{animation:none!important;}
+}
+@media print{
+  header.app-header .header-fx{display:none!important;}
+}
