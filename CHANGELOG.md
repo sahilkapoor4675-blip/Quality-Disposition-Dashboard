@@ -1,4 +1,7 @@
 
+## Unreleased — Intro Hover Tag Fix
+- Disabled the cursor-following Field Name Hover Tag on the `#introScreen` / splash screen so the introduction remains presentation-only.
+
 ## 2026-09-25 — Design 4 Industrial Copper Header
 - Implemented the approved static **Design 4** header treatment on the main dashboard.
 - Kept the existing **QUALITY INTELLIGENCE** script typography unchanged.

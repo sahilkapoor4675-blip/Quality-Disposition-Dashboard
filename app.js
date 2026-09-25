@@ -1568,42 +1568,10 @@ function _fhCell(table,idx){
   const rows=table.tHead&&table.tHead.rows.length?table.tHead.rows:table.rows;
   const r=rows[rows.length?(table.tHead&&table.tHead.rows.length?rows.length-1:0):0]; return r&&r.cells[idx]?_fhClean(r.cells[idx].textContent):'';
 }
-function _fhLabelFor(el){
-  if(!(el instanceof Element)) return '';
-  const id=el.getAttribute('id');
-  if(id){
-    try{
-      const lab=document.querySelector(`label[for="${CSS.escape(id)}"]`);
-      if(lab) return _fhClean(lab.textContent);
-    }catch(e){}
-  }
-  const wrap=el.closest('.filter-field,.field,.form-field,.form-group,.audit-filter-grid > div,.filters .field');
-  if(wrap){
-    const lab=wrap.querySelector(':scope > label,label');
-    if(lab) return _fhClean(lab.textContent).replace(/^\P{L}+/u,'');
-  }
-  const aria=el.getAttribute('aria-label');
-  if(aria) return _fhClean(aria);
-  const ph=el.getAttribute('placeholder');
-  if(ph){
-    const clean=_fhClean(ph).replace(/[.…]+$/,'').trim();
-    if(clean) return clean;
-  }
-  return '';
-}
-function _fhControlKind(el){
-  const tag=el?.tagName||'';
-  if(tag==='BUTTON') return 'Button';
-  if(tag==='A') return 'Link';
-  if(tag==='SELECT') return 'Select';
-  if(tag==='TEXTAREA') return 'Text area';
-  if(tag==='INPUT') return (el.type||'text').replace(/^./,m=>m.toUpperCase())+' input';
-  if(el?.getAttribute('role')==='tab') return 'Tab';
-  if(el?.getAttribute('role')==='button') return 'Action';
-  return 'Field';
-}
 function resolveFieldInfo(t){
   if(!(t instanceof Element)) return null;
+  // The intro/splash screen is presentation-only; field-name hover tags should not appear there.
+  if(t.closest('#introScreen')) return null;
   if(t.closest('[data-tip],.qd-field-tag,.chart-tooltip,.analytics-presentation-backdrop')) return null;
   const ex=t.closest('[data-field]');
   if(ex) return {name:ex.getAttribute('data-field'),meta:ex.getAttribute('data-field-meta')||'Field'};
@@ -1625,34 +1593,12 @@ function resolveFieldInfo(t){
     if(t.closest('.kpi-targets,.kpi-target,.kpi-target-item')) return {name:'Target thresholds',meta:name};
     return {name:name,meta:'KPI'};
   }
-  const ff=t.closest('.filter-field,.filter-control');
-  if(ff){
-    const field=ff.closest('.filter-field')||ff;
-    const lab=_fhClean(field.querySelector(':scope > label,label')?.textContent||'').replace(/^\P{L}+/u,'')||'Filter';
-    const opt=t.closest('.filter-option,.filter-options > *');
-    if(opt) return {name:_fhClean(lab),meta:'Option: '+_fhClean(opt.textContent)};
-    if(t.closest('.filter-search')) return {name:_fhClean(lab),meta:'Search options'};
-    return {name:lab,meta:'Filter'};
-  }
+  const ff=t.closest('.filter-field');
+  if(ff){ const lab=_fhClean(ff.querySelector('label')&&ff.querySelector('label').textContent).replace(/^\P{L}+/u,''); const opt=t.closest('.filter-option,.filter-options > *'); return {name:lab||'Filter',meta:opt?('Option: '+_fhClean(opt.textContent)):'Filter'}; }
   const li=t.closest('.legend-item'); if(li) return {name:_fhClean(li.textContent),meta:'Legend'};
   const ex2=t.closest('.qcr-exec-item'); if(ex2){ const sm=ex2.querySelector('small'); if(sm) return {name:_fhClean(sm.textContent),meta:'Summary'}; }
-  const stat=t.closest('.stat-card,.stat');
-  if(stat){
-    const nm=_fhClean(stat.querySelector('label,.stat-label,.label,strong')?.textContent||stat.textContent).slice(0,80);
-    if(nm) return {name:nm,meta:'Metric'};
-  }
-  const tab=t.closest('.tab-btn,.qcr-tab-btn,[role="tab"]');
-  if(tab){ const nm=_fhClean(tab.textContent||tab.getAttribute('aria-label')||tab.getAttribute('title')); if(nm) return {name:nm,meta:'Tab'}; }
-  const control=t.closest('input,select,textarea,button,a,[role="button"],[role="combobox"],[role="switch"]');
-  if(control){
-    const nm=_fhLabelFor(control)||_fhClean(control.textContent)||_fhClean(control.getAttribute('title')||'');
-    if(nm){
-      const kind=_fhControlKind(control);
-      return {name:nm.length>80?nm.slice(0,79)+'…':nm,meta:kind,_titleEl:control.hasAttribute('title')?control:null};
-    }
-  }
   const ti=t.closest('[title],[aria-label]');
-  if(ti && !ti.closest('.cmdk-dialog')){
+  if(ti && (ti.tagName==='BUTTON'||ti.hasAttribute('title')) && !ti.closest('.cmdk-dialog')){
     const nm=_fhClean(ti.getAttribute('title')||ti.getAttribute('data-qd-title')||ti.getAttribute('aria-label')); if(nm) return {name:nm,meta:ti.tagName==='BUTTON'?'Button':'Info',_titleEl:ti.hasAttribute('title')?ti:null};
   }
   return null;
