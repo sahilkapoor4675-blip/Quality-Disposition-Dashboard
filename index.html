@@ -61,6 +61,33 @@
 @keyframes icRoll{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
 @keyframes icWaveBreath{from{transform:translate3d(0,0,0) scaleY(1)}to{transform:translate3d(0,-6px,0) scaleY(1.16)}}
 html[data-skin="classic"] #introScreen .intro-copper{display:none;}
+  /* ---- V65.0: quality-inspection scan (decorative — a coil being scanned + a PASS stamp; no live numbers) ---- */
+  #introScreen .intro-scan{display:flex;align-items:center;gap:16px;margin-top:22px;background:rgba(255,255,255,.88);backdrop-filter:blur(6px);border:1.5px solid #e7c9a8;border-radius:16px;padding:12px 20px;box-shadow:0 10px 26px rgba(150,73,26,.14);}
+  #introScreen .scan-coil{width:112px;height:auto;flex:none;border-radius:10px;}
+  #introScreen #scanLine{filter:drop-shadow(0 0 5px #37e0ff) drop-shadow(0 0 10px rgba(55,224,255,.7));}
+  #introScreen.intro-scan-run #scanLine{animation:scanSweep 1.85s cubic-bezier(.4,0,.2,1) 1 both;}
+  #introScreen.intro-scan-run #scanVeil{animation:scanVeilWipe 1.85s cubic-bezier(.4,0,.2,1) 1 both;}
+  @keyframes scanSweep{0%{transform:translateX(0)}100%{transform:translateX(120px)}}
+  @keyframes scanVeilWipe{0%{opacity:.55;transform:translateX(0)}92%{opacity:.45}100%{opacity:0;transform:translateX(118px)}}
+  #introScreen .scan-readout{display:flex;flex-direction:column;gap:5px;min-width:0;}
+  #introScreen .scan-badge{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font:800 12px/1 'DM Sans',sans-serif;letter-spacing:.4px;color:#1FA97C;background:rgba(31,169,124,.10);border:1px solid rgba(31,169,124,.35);border-radius:999px;padding:5px 11px 5px 9px;opacity:0;transform:translateY(3px) scale(.94);}
+  #introScreen .scan-badge svg{width:13px;height:13px;}
+  #introScreen.intro-scan-stamped .scan-badge{animation:scanStamp .5s cubic-bezier(.2,1.4,.4,1) forwards;}
+  @keyframes scanStamp{0%{opacity:0;transform:translateY(3px) scale(.7) rotate(-6deg)}60%{opacity:1;transform:translateY(0) scale(1.12) rotate(1deg)}100%{opacity:1;transform:translateY(0) scale(1) rotate(0)}}
+  #introScreen .scan-caption{font:600 11px/1.35 'DM Sans',sans-serif;color:#6b7684;}
+  @media(max-width:700px){#introScreen .intro-scan{margin-top:13px;padding:9px 14px;gap:11px;}#introScreen .scan-coil{width:78px;}#introScreen .scan-caption{display:none;}}
+  html[data-skin="classic"] #introScreen .intro-scan{display:none!important;}
+  @media(prefers-reduced-motion:reduce){#introScreen.intro-scan-run #scanLine,#introScreen.intro-scan-run #scanVeil,#introScreen.intro-scan-stamped .scan-badge{animation:none!important;}#introScreen .scan-badge{opacity:1;transform:none;}}
+
+  /* ---- V65.0: quality watermark icons + a second coil stack in the intro background ---- */
+  #introScreen .ic-stack{position:absolute;left:-4vw;bottom:-6vh;width:min(52vmin,440px);color:inherit;opacity:.16;animation:icStackDrift 13s ease-in-out infinite alternate;}
+  #introScreen .ic-quality,#introScreen .ic-gauge{position:absolute;color:#2388c9;opacity:.10;}
+  #introScreen .ic-quality{width:min(20vmin,150px);right:6vw;top:8vh;animation:icFloat 9s ease-in-out infinite alternate;}
+  #introScreen .ic-gauge{width:min(17vmin,130px);left:9vw;top:10vh;color:#dc7d34;opacity:.11;animation:icFloat 11s ease-in-out infinite alternate-reverse;}
+  @keyframes icStackDrift{from{transform:translateY(0) rotate(-1.2deg)}to{transform:translateY(-10px) rotate(1.2deg)}}
+  @media(max-width:700px){#introScreen .ic-stack,#introScreen .ic-quality,#introScreen .ic-gauge{opacity:.08;}#introScreen .ic-gauge{display:none;}}
+  @media(prefers-reduced-motion:reduce){#introScreen .ic-stack,#introScreen .ic-quality,#introScreen .ic-gauge{animation:none!important;}}
+
 @media(max-width:700px){#introScreen .ic-cu{display:none;}#introScreen .ic-copper{display:none;}}
 @media(prefers-reduced-motion:reduce){#introScreen .intro-copper,#introScreen .intro-copper *,#introScreen .ic-coil::after{animation:none!important;}#introScreen .intro-copper{opacity:1;}}
 /* 3D logo: layered depth shadows, slow swing and a glint that sweeps across the logo shape only */
@@ -109,6 +136,9 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
      the fix. JS below just toggles ".show" on each node at the right time. */
   #introScreen .iv{opacity:0;transform:translateY(14px);transition:opacity .5s cubic-bezier(.2,.8,.2,1),transform .5s cubic-bezier(.2,.8,.2,1)}
   #introScreen .iv.show{opacity:1;transform:translateY(0)}
+  /* V65.0 bug fix: each word is one nowrap unit, so a headline can only ever break BETWEEN
+     words ("QUALITY" / "INTELLIGENCE"), never inside one ("INTEL" / "LIGENCE"). */
+  #introScreen .ivw{display:inline-block;white-space:nowrap;}
   #introScreen .ivch{display:inline-block;opacity:0;transform:translateY(8px) scale(.82);transition:opacity .22s ease,transform .22s cubic-bezier(.2,.8,.2,1)}
   #introScreen .ivch.show{opacity:1;transform:translateY(0) scale(1)}
 
@@ -206,6 +236,37 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
     <span class="ic-cu">Cu<small>29</small></span>
     <span class="ic-coil a"></span>
     <span class="ic-coil b"></span>
+    <svg class="ic-stack" viewBox="0 0 300 200" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+      <defs>
+        <linearGradient id="icStackBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7d3813"/><stop offset=".3" stop-color="#e58a4a"/><stop offset=".45" stop-color="#f8c9a0"/><stop offset=".72" stop-color="#c25a22"/><stop offset="1" stop-color="#5f2609"/></linearGradient>
+        <radialGradient id="icStackFace" cx=".38" cy=".36" r=".85"><stop offset="0" stop-color="#f7b483"/><stop offset=".55" stop-color="#dc7a3c"/><stop offset="1" stop-color="#8f3e13"/></radialGradient>
+        <linearGradient id="icStackHole" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a4a60"/><stop offset="1" stop-color="#0c1626"/></linearGradient>
+      </defs>
+      <g id="icStackUnit">
+        <ellipse cx="52" cy="58" rx="24" ry="52" fill="url(#icStackBody)"/>
+        <ellipse cx="52" cy="58" rx="24" ry="52" fill="url(#icStackFace)" opacity=".55"/>
+        <ellipse cx="52" cy="58" rx="24" ry="52" fill="none" stroke="#8a3d14" stroke-opacity=".5" stroke-width="1.4"/>
+        <ellipse cx="52" cy="58" rx="18" ry="39" fill="none" stroke="#7a3512" stroke-opacity=".28" stroke-width="1"/>
+        <ellipse cx="52" cy="58" rx="12" ry="26" fill="none" stroke="#7a3512" stroke-opacity=".28" stroke-width="1"/>
+        <ellipse cx="52" cy="58" rx="7" ry="15" fill="url(#icStackHole)"/>
+        <path d="M34 30a24 52 0 0 1 8-14" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>
+      </g>
+      <use href="#icStackUnit" x="0" y="0"/>
+      <use href="#icStackUnit" x="86" y="18"/>
+      <use href="#icStackUnit" x="176" y="-4"/>
+      <use href="#icStackUnit" x="176" y="70" opacity=".85"/>
+      <use href="#icStackUnit" x="86" y="88" opacity=".85"/>
+    </svg>
+    <svg class="ic-quality" viewBox="0 0 200 200" aria-hidden="true">
+      <circle cx="100" cy="100" r="86" fill="none" stroke="currentColor" stroke-width="3"/>
+      <path d="M60 103l26 26 54-58" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <svg class="ic-gauge" viewBox="0 0 200 130" aria-hidden="true">
+      <path d="M14 116a86 86 0 0 1 172 0" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+      <path d="M14 116a86 86 0 0 1 60-82" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" opacity=".4"/>
+      <path d="M100 116L146 56" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="100" cy="116" r="9" fill="currentColor"/>
+    </svg>
     <div class="ic-waves"><div class="ic-layer ic-blue"><svg viewBox="0 0 1600 200" preserveAspectRatio="none"><defs><linearGradient id="icwFB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e96f0" stop-opacity=".40"/><stop offset="1" stop-color="#2e96f0" stop-opacity="0"/></linearGradient><linearGradient id="icwFC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd0f5" stop-opacity=".34"/><stop offset="1" stop-color="#4fd0f5" stop-opacity="0"/></linearGradient></defs><path d="M-800 104 Q-600 36 -400 104 T0 104 T400 104 T800 104 T1200 104 T1600 104 V200 H-800Z" transform="translate(0 0)" fill="url(#icwFB)"/><path d="M-800 122 Q-600 70 -400 122 T0 122 T400 122 T800 122 T1200 122 T1600 122 V200 H-800Z" transform="translate(300 0)" fill="url(#icwFC)"/><path d="M-800 100 Q-600 32 -400 100 T0 100 T400 100 T800 100 T1200 100 T1600 100" transform="translate(0 0)" fill="none" stroke="#1f7fe0" stroke-opacity="0.84" stroke-width="1.88" vector-effect="non-scaling-stroke"/><path d="M-800 104 Q-600 36 -400 104 T0 104 T400 104 T800 104 T1200 104 T1600 104" transform="translate(40 0)" fill="none" stroke="#38a5f0" stroke-opacity="0.73" stroke-width="1.38" vector-effect="non-scaling-stroke"/><path d="M-800 109 Q-600 41 -400 109 T0 109 T400 109 T800 109 T1200 109 T1600 109" transform="translate(85 0)" fill="none" stroke="#86cdf9" stroke-opacity="0.7" stroke-width="1.25" vector-effect="non-scaling-stroke"/><path d="M-800 113 Q-600 53 -400 113 T0 113 T400 113 T800 113 T1200 113 T1600 113" transform="translate(150 0)" fill="none" stroke="#2d8ee6" stroke-opacity="0.59" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M-800 119 Q-600 67 -400 119 T0 119 T400 119 T800 119 T1200 119 T1600 119" transform="translate(260 0)" fill="none" stroke="#45b6f2" stroke-opacity="0.7" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M-800 127 Q-600 83 -400 127 T0 127 T400 127 T800 127 T1200 127 T1600 127" transform="translate(340 0)" fill="none" stroke="#1f6fd0" stroke-opacity="0.5" stroke-width="1.25" vector-effect="non-scaling-stroke"/></svg></div><div class="ic-layer ic-copper"><svg viewBox="0 0 1600 200" preserveAspectRatio="none"><defs><linearGradient id="icwFO" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f08a3c" stop-opacity=".40"/><stop offset="1" stop-color="#f08a3c" stop-opacity="0"/></linearGradient></defs><path d="M-800 116 Q-700 72 -600 116 T-400 116 T-200 116 T0 116 T200 116 T400 116 T600 116 T800 116 T1000 116 T1200 116 T1400 116 T1600 116 V200 H-800Z" transform="translate(100 0)" fill="url(#icwFO)"/><path d="M-800 104 Q-700 60 -600 104 T-400 104 T-200 104 T0 104 T200 104 T400 104 T600 104 T800 104 T1000 104 T1200 104 T1400 104 T1600 104" transform="translate(0 0)" fill="none" stroke="#e8843a" stroke-opacity="0.91" stroke-width="1.75" vector-effect="non-scaling-stroke"/><path d="M-800 108 Q-700 64 -600 108 T-400 108 T-200 108 T0 108 T200 108 T400 108 T600 108 T800 108 T1000 108 T1200 108 T1400 108 T1600 108" transform="translate(30 0)" fill="none" stroke="#f6a85e" stroke-opacity="0.77" stroke-width="1.38" vector-effect="non-scaling-stroke"/><path d="M-800 113 Q-700 69 -600 113 T-400 113 T-200 113 T0 113 T200 113 T400 113 T600 113 T800 113 T1000 113 T1200 113 T1400 113 T1600 113" transform="translate(70 0)" fill="none" stroke="#f9caa0" stroke-opacity="0.84" stroke-width="1.25" vector-effect="non-scaling-stroke"/><path d="M-800 118 Q-700 78 -600 118 T-400 118 T-200 118 T0 118 T200 118 T400 118 T600 118 T800 118 T1000 118 T1200 118 T1400 118 T1600 118" transform="translate(120 0)" fill="none" stroke="#d9691f" stroke-opacity="0.7" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M-800 124 Q-700 88 -600 124 T-400 124 T-200 124 T0 124 T200 124 T400 124 T600 124 T800 124 T1000 124 T1200 124 T1400 124 T1600 124" transform="translate(190 0)" fill="none" stroke="#f3a25a" stroke-opacity="0.7" stroke-width="1.25" vector-effect="non-scaling-stroke"/></svg></div></div>
     <span class="ic-veil"></span>
   </div>
@@ -234,6 +295,32 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
       <div class="iv intro-card"><span class="ic-ico" aria-hidden="true">&#128295;</span><div><b>RCA</b><small>Root Cause Analysis</small></div></div>
       <div class="iv intro-card"><span class="ic-ico" aria-hidden="true">&#128202;</span><div><b>DATA</b><small>Live Analytics</small></div></div>
     </div>
+    <div class="iv intro-scan" id="ivScan" aria-hidden="true">
+      <svg viewBox="0 0 132 72" class="scan-coil" role="img" aria-label="Quality inspection of a copper coil">
+        <defs>
+          <linearGradient id="scBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7d3813"/><stop offset=".3" stop-color="#e58a4a"/><stop offset=".45" stop-color="#f8c9a0"/><stop offset=".72" stop-color="#c25a22"/><stop offset="1" stop-color="#5f2609"/></linearGradient>
+          <radialGradient id="scFace" cx=".38" cy=".36" r=".85"><stop offset="0" stop-color="#f7b483"/><stop offset=".55" stop-color="#dc7a3c"/><stop offset="1" stop-color="#8f3e13"/></radialGradient>
+          <linearGradient id="scHole" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a4a60"/><stop offset="1" stop-color="#0c1626"/></linearGradient>
+          <clipPath id="scClip"><rect x="4" y="4" width="124" height="64" rx="10"/></clipPath>
+        </defs>
+        <g clip-path="url(#scClip)">
+          <rect x="4" y="4" width="124" height="64" fill="#fbf3ea"/>
+          <path d="M4 60H128a30 30 0 0 0 0-52H4z" fill="url(#scBody)"/>
+          <ellipse cx="36" cy="36" rx="17" ry="32" fill="url(#scFace)"/>
+          <ellipse cx="36" cy="36" rx="17" ry="32" fill="none" stroke="#8a3d14" stroke-opacity=".5" stroke-width="1.2"/>
+          <ellipse cx="36" cy="36" rx="12" ry="23" fill="none" stroke="#7a3512" stroke-opacity=".3"/>
+          <ellipse cx="36" cy="36" rx="7" ry="14" fill="none" stroke="#7a3512" stroke-opacity=".3"/>
+          <ellipse cx="36" cy="36" rx="4" ry="8" fill="url(#scHole)"/>
+          <rect id="scanLine" x="4" y="4" width="2.4" height="64" fill="#37e0ff"/>
+          <rect x="4" y="4" width="34" height="64" fill="#eaf7fb" opacity="0" id="scanVeil"/>
+        </g>
+        <rect x="4.5" y="4.5" width="123" height="63" rx="10" fill="none" stroke="#dcd0c2" stroke-width="1"/>
+      </svg>
+      <div class="scan-readout">
+        <span class="scan-badge" id="scanBadge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l4.5 4.5 10.5-10.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>QC SCAN PASSED</span>
+        <span class="scan-caption">Automated defect inspection &middot; non-ferrous copper coil</span>
+      </div>
+    </div>
     <button id="introDashboardBtn" class="iv intro-cta" type="button" aria-label="Enter Dashboard" aria-disabled="true" tabindex="-1" disabled>
       <span>ENTER DASHBOARD</span><span class="cta-arrow" aria-hidden="true">&rarr;</span>
     </button>
@@ -260,12 +347,18 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
   // ever sit on top of anything else. ----
   function letters(el,text,extraClass){
     var out=[];
+    // Each word lives in its own nowrap group, so a narrow window / browser zoom can only
+    // wrap BETWEEN words ("QUALITY" / "INTELLIGENCE"), never in the middle of one.
+    var grp=null;
     for(var i=0;i<text.length;i++){
+      var isSpace=text[i]===' ';
+      if(!grp || isSpace){ grp=document.createElement('span'); grp.className='ivw'; el.appendChild(grp); }
       var s=document.createElement('span');
       s.className='ivch'+(extraClass?(' '+extraClass):'');
-      s.textContent=text[i]===' '?'\u00A0':text[i];
-      el.appendChild(s);
+      s.textContent=isSpace?'\u00A0':text[i];
+      grp.appendChild(s);
       out.push(s);
+      if(isSpace) grp=null;
     }
     return out;
   }
@@ -275,7 +368,7 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
   var qLetters=letters(titleEl,'QUALITY','q');
   letters(titleEl,' ');
   var iLetters=letters(titleEl,'INTELLIGENCE','i');
-  var titleLetters=Array.prototype.slice.call(titleEl.children);
+  var titleLetters=Array.prototype.slice.call(titleEl.querySelectorAll('.ivch'));
 
   // ---- Procedurally-generated "professional" sound design. Nothing is a
   // pre-baked audio file, so every cue is scheduled against the exact
@@ -283,7 +376,7 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
   // separate audio track happens to line up with the animation. ----
   var AC=window.AudioContext||window.webkitAudioContext;
   var ctx=AC?new AC():null;
-  function resumeAudio(){ if(ctx&&ctx.state==='suspended'){ ctx.resume()['catch'](function(){}); } }
+  function resumeAudio(){ if(ctx&&ctx.state==='suspended'){ ctx.resume().then(startPad)['catch'](function(){}); } else if(ctx&&ctx.state==='running'){ startPad(); } }
   ['pointerdown','keydown','touchstart'].forEach(function(ev){ window.addEventListener(ev,resumeAudio,{once:true,passive:true}); });
   resumeAudio();
   function tone(time,freq,dur,type,peak,glideTo){
@@ -327,6 +420,56 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
     }catch(e){}
   }
   function chime(time,freqs,dur){ (freqs||[]).forEach(function(f,idx){ tone(time+idx*.05,f,dur||.5,'sine',.065); }); }
+  // A rising, filtered "scanner" sweep — synced to the coil scan-line animation above.
+  function scanSweepSound(time,dur){
+    if(!ctx||reduceMotion||ctx.state!=='running') return;
+    try{
+      var osc=ctx.createOscillator(), gain=ctx.createGain(), filt=ctx.createBiquadFilter();
+      osc.type='sawtooth'; osc.frequency.setValueAtTime(180,time); osc.frequency.exponentialRampToValueAtTime(1300,time+dur*.92);
+      filt.type='bandpass'; filt.Q.value=6; filt.frequency.setValueAtTime(300,time); filt.frequency.exponentialRampToValueAtTime(2200,time+dur*.92);
+      gain.gain.setValueAtTime(0.0001,time); gain.gain.exponentialRampToValueAtTime(.05,time+.08);
+      gain.gain.setValueAtTime(.05,time+dur*.8); gain.gain.exponentialRampToValueAtTime(0.0001,time+dur);
+      osc.connect(filt).connect(gain).connect(ctx.destination); osc.start(time); osc.stop(time+dur+.05);
+    }catch(e){}
+  }
+  // A short, soft low-frequency "stamp" thud for the PASS badge.
+  function thud(time){
+    if(!ctx||reduceMotion||ctx.state!=='running') return;
+    try{
+      var osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.type='sine'; osc.frequency.setValueAtTime(210,time); osc.frequency.exponentialRampToValueAtTime(70,time+.16);
+      gain.gain.setValueAtTime(0.0001,time); gain.gain.exponentialRampToValueAtTime(.14,time+.012); gain.gain.exponentialRampToValueAtTime(0.0001,time+.22);
+      osc.connect(gain).connect(ctx.destination); osc.start(time); osc.stop(time+.25);
+    }catch(e){}
+  }
+  // A slow, very quiet ambient pad that swells in under the whole sequence for a
+  // cinematic feel, then fades out as the intro is dismissed (see leave() below).
+  var padNodes=null;
+  function startPad(){
+    if(!ctx||reduceMotion||ctx.state!=='running'||padNodes) return;
+    try{
+      var t=now(), master=ctx.createGain(); master.gain.setValueAtTime(0.0001,t); master.gain.exponentialRampToValueAtTime(.028,t+2.4);
+      var filt=ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1100;
+      master.connect(filt).connect(ctx.destination);
+      var oscs=[130.81,164.81,196.0].map(function(f){
+        var o=ctx.createOscillator(), g=ctx.createGain();
+        o.type='triangle'; o.frequency.value=f; g.gain.value=.5;
+        o.connect(g).connect(master); o.start(t);
+        return o;
+      });
+      padNodes={master:master,oscs:oscs};
+    }catch(e){}
+  }
+  function stopPad(){
+    if(!padNodes) return;
+    try{
+      var t=now(); padNodes.master.gain.cancelScheduledValues(t); padNodes.master.gain.setValueAtTime(padNodes.master.gain.value,t);
+      padNodes.master.gain.exponentialRampToValueAtTime(0.0001,t+.6);
+      padNodes.oscs.forEach(function(o){ o.stop(t+.65); });
+    }catch(e){}
+    padNodes=null;
+  }
+  at(150,startPad);
 
   // ---- Single timeline drives both the visuals and the audio, so the two
   // can never drift apart. Every tone below is scheduled at now() — read
@@ -385,9 +528,21 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
   });
   var cardsEnd=titleEnd+300+cardEls.length*150;
 
-  at(cardsEnd+150,function(){ show(btn); });
+  // Quality-inspection scan: a purely decorative beat (no live figures) — a
+  // scan line sweeps the coil, a soft "scan" sweep sound plays under it, then
+  // a PASS badge stamps in with a thud + a bright confirm chime.
+  at(cardsEnd+120,function(){
+    var scan=document.getElementById('ivScan');
+    if(scan){ show(scan); screen.classList.add('intro-scan-run'); scanSweepSound(now(),1.85); }
+  });
+  at(cardsEnd+120+1650,function(){
+    screen.classList.add('intro-scan-stamped');
+    thud(now()); chime(now()+.1,[587,932],.5);
+  });
 
-  var readyAt=cardsEnd+520;
+  at(cardsEnd+120+1650+380,function(){ show(btn); });
+
+  var readyAt=cardsEnd+120+1650+380+520;
   at(readyAt,function(){
     screen.classList.add('intro-ready');
     btn.removeAttribute('disabled'); btn.removeAttribute('aria-disabled'); btn.setAttribute('tabindex','0');
@@ -401,6 +556,7 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
     screen.setAttribute('data-leaving','1');
     screen.classList.add('intro-hidden');
     root.classList.remove('intro-active');
+    stopPad();
     setTimeout(function(){ screen.remove(); if(ctx) ctx.close()['catch'](function(){}); },650);
   }
   btn.addEventListener('click',function(){ if(btn.hasAttribute('disabled')) return; leave(); });
