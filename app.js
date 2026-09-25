@@ -14,25 +14,6 @@ function qdIc(name,cls){ return `<svg class="ic${cls?' '+cls:''}" aria-hidden="t
 
 let currentFilters = {};
 FILTER_DEFS.forEach(f => currentFilters[f.key] = "All");
-
-// V65.1: persist visual ordering for filters/presets without changing their values.
-const FILTER_ORDER_KEY = "qdash_filter_order_v1";
-const PRESET_ORDER_KEY = "qdash_saved_view_order_v1";
-function readOrder(key){ try { const v=JSON.parse(localStorage.getItem(key)||"[]"); return Array.isArray(v)?v.filter(Boolean):[]; } catch(e){ return []; } }
-function writeOrder(key,values){ try { localStorage.setItem(key,JSON.stringify(values)); } catch(e){} }
-function orderNames(names,key){
-  const known=new Set(names);
-  const saved=readOrder(key).filter(n=>known.has(n));
-  const rest=names.filter(n=>!saved.includes(n));
-  const ordered=saved.concat(rest);
-  writeOrder(key,ordered);
-  return ordered;
-}
-function plainLabel(s){ return String(s||"").replace(/^\s*[📅🏭🧪⚖️🗓️📊📆🏷️]\s*/u,"").trim(); }
-function setFilterControlExpanded(control,expanded){
-  const trigger=control?.querySelector('.filter-trigger');
-  if(trigger) trigger.setAttribute('aria-expanded', expanded?'true':'false');
-}
 let previousKpiValues = new Map();
 let previousKpiTrend = new Map();
 let kpiAnimationToken = 0;
@@ -394,11 +375,11 @@ async function loadFilters(){
     const field = document.createElement("div"); field.className = "filter-field"; field.dataset.filterKey = f.key;
     const label = document.createElement("label"); label.textContent = f.label;
     const control = document.createElement("div"); control.className = "filter-control";
-    const trigger = document.createElement("button"); trigger.type="button"; trigger.className="filter-trigger"; trigger.setAttribute('aria-haspopup','listbox'); trigger.setAttribute('aria-expanded','false'); trigger.setAttribute('aria-label',plainLabel(f.label));
+    const trigger = document.createElement("button"); trigger.type="button"; trigger.className="filter-trigger";
     const valueSpan = document.createElement("span"); valueSpan.textContent="All";
     trigger.appendChild(valueSpan); trigger.insertAdjacentHTML("beforeend",`<span class='chevron'>${qdIc('chevron-down')}</span>`);
-    const menu = document.createElement("div"); menu.className="filter-menu"; menu.id=`filterMenu-${f.key}`; menu.setAttribute('role','listbox'); menu.setAttribute('aria-label',`${plainLabel(f.label)} options`); trigger.setAttribute('aria-controls',menu.id);
-    const search = document.createElement("input"); search.className="filter-search"; search.placeholder="Search options…"; search.type="text"; search.setAttribute('aria-label',`${plainLabel(f.label)} search`); search.setAttribute('autocomplete','off');
+    const menu = document.createElement("div"); menu.className="filter-menu";
+    const search = document.createElement("input"); search.className="filter-search"; search.placeholder="Search options…"; search.type="text";
     const list = document.createElement("div"); list.className="filter-options";
     menu.appendChild(search); menu.appendChild(list); control.appendChild(trigger); control.appendChild(menu); field.appendChild(label); field.appendChild(control); container.appendChild(field);
     const raw = options[f.key] || ["All"];
@@ -410,7 +391,7 @@ async function loadFilters(){
       const source=field._filterItems || items;
       const filtered=source.filter(x=>String(x.label).toLowerCase().includes(q));
       filtered.forEach((x,i)=>{
-        const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":""); opt.setAttribute('role','option'); opt.setAttribute('aria-selected',currentFilters[f.key]===x.value?'true':'false');
+        const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
         opt.textContent=x.label;
         opt.addEventListener("click",()=>{
           currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); field.classList.toggle("filter-active", x.value!=="All"); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();
@@ -419,26 +400,13 @@ async function loadFilters(){
       if(!filtered.length) list.innerHTML='<div class="filter-empty">No matching options</div>';
     };
     field._filterRenderOptions = renderOptions;
-    trigger.addEventListener("click",()=>{document.querySelectorAll('.filter-control.open').forEach(c=>{if(c!==control){c.classList.remove('open');setFilterControlExpanded(c,false);}}); const open=control.classList.toggle('open'); setFilterControlExpanded(control,open); if(open){search.focus();renderOptions(search.value);}});
+    trigger.addEventListener("click",()=>{document.querySelectorAll('.filter-control.open').forEach(c=>{if(c!==control)c.classList.remove('open')}); control.classList.toggle('open'); if(control.classList.contains('open')){search.focus();renderOptions(search.value);}});
     search.addEventListener("input",()=>renderOptions(search.value));
     renderOptions();
     field.classList.toggle("filter-active", currentFilters[f.key]!=="All");
   });
-  // V65.1: reorder filters with clear drag affordance + persisted order.
-  const filterOrder=orderNames([...document.querySelectorAll('.filter-field')].map(el=>el.dataset.filterKey),FILTER_ORDER_KEY);
-  filterOrder.forEach(key=>{const el=container.querySelector(`.filter-field[data-filter-key="${CSS.escape(key)}"]`); if(el) container.appendChild(el);});
-  let draggedFilter=null;
-  container.querySelectorAll('.filter-field[data-filter-key]').forEach(field=>{
-    field.draggable=true;
-    field.addEventListener('dragstart',e=>{draggedFilter=field;field.classList.add('filter-dragging');container.classList.add('filter-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',field.dataset.filterKey);});
-    field.addEventListener('dragover',e=>{if(!draggedFilter||draggedFilter===field)return;e.preventDefault();e.dataTransfer.dropEffect='move';field.classList.add('filter-drag-target');});
-    field.addEventListener('dragleave',()=>field.classList.remove('filter-drag-target'));
-    field.addEventListener('drop',e=>{e.preventDefault();if(!draggedFilter||draggedFilter===field)return;field.classList.remove('filter-drag-target');container.insertBefore(draggedFilter,field);writeOrder(FILTER_ORDER_KEY,[...container.querySelectorAll('.filter-field[data-filter-key]')].map(el=>el.dataset.filterKey));});
-    field.addEventListener('dragend',()=>{draggedFilter?.classList.remove('filter-dragging');container.classList.remove('filter-dragging');container.querySelectorAll('.filter-drag-target').forEach(el=>el.classList.remove('filter-drag-target'));draggedFilter=null;});
-    field.tabIndex=0; field.setAttribute('aria-label',`${plainLabel(f.label)} filter. Use Alt+ArrowUp or Alt+ArrowDown to reorder.`); field.addEventListener('keydown',e=>{if(!e.altKey||!['ArrowUp','ArrowDown'].includes(e.key))return; e.preventDefault(); const dir=e.key==='ArrowUp'?'previousElementSibling':'nextElementSibling'; const target=field[dir]; if(!target?.classList.contains('filter-field'))return; if(e.key==='ArrowUp') container.insertBefore(field,target); else container.insertBefore(target,field); writeOrder(FILTER_ORDER_KEY,[...container.querySelectorAll('.filter-field[data-filter-key]')].map(el=>el.dataset.filterKey)); field.classList.add('filter-drag-target'); setTimeout(()=>field.classList.remove('filter-drag-target'),260);});
-  });
-  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); setFilterControlExpanded(c,false); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();});
-  document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>{c.classList.remove('open');setFilterControlExpanded(c,false);});});
+  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();});
+  document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));});
   updateActiveFilterBadge();
 }
 function updateActiveFilterBadge(){
@@ -928,7 +896,7 @@ function refreshFilterSummary(recordCount){
   renderSavedViews();
 }
 function savedViews(){try{return JSON.parse(localStorage.getItem('qdash_saved_views')||'{}')}catch(e){return {}}}
-function renderSavedViews(){const sel=document.getElementById('savedViewSelect'); if(!sel)return; const views=savedViews(); const names=orderNames(Object.keys(views),PRESET_ORDER_KEY); sel.innerHTML='<option value="">Saved Views</option>'+names.map(n=>`<option value="${escQcr(n)}">${escQcr(n)}</option>`).join('');}
+function renderSavedViews(){const sel=document.getElementById('savedViewSelect'); if(!sel)return; const views=savedViews(); sel.innerHTML='<option value="">Saved Views</option>'+Object.keys(views).sort().map(n=>`<option value="${escQcr(n)}">${escQcr(n)}</option>`).join('');}
 function saveCurrentView(){
   // Replaces the old window.prompt() flow with an inline, named-preset
   // popover: type a name, hit Save — no browser dialog.
@@ -949,9 +917,9 @@ function saveCurrentView(){
 function closeViewPopover(){ document.getElementById('viewPopover')?.classList.add('hidden'); }
 function renderManagePresetsList(){
   const pop=document.getElementById('viewPopover'); if(!pop) return;
-  const views=savedViews(); const names=orderNames(Object.keys(views),PRESET_ORDER_KEY);
+  const views=savedViews(); const names=Object.keys(views).sort();
   const listHtml = names.length
-    ? `<div class="view-pop-list">${names.map(n=>`<div class="view-pop-row" data-name="${escQcr(n)}" data-preset-name="${escQcr(n)}" draggable="true"><span class="view-pop-name">${escQcr(n)}</span><button class="view-pop-load" type="button" title="Load this preset" aria-label="Load preset ${escQcr(n)}">Load</button><button class="view-pop-del" type="button" title="Delete this preset" aria-label="Delete preset ${escQcr(n)}">🗑</button></div>`).join('')}</div>`
+    ? `<div class="view-pop-list">${names.map(n=>`<div class="view-pop-row" data-name="${escQcr(n)}"><span class="view-pop-name">${escQcr(n)}</span><button class="view-pop-load" type="button" title="Load this preset">Load</button><button class="view-pop-del" type="button" title="Delete this preset">🗑</button></div>`).join('')}</div>`
     : `<div class="view-pop-empty">No saved presets yet — use “Save Preset” to name your current filter combination.</div>`;
   pop.innerHTML=`<div class="view-pop-title">${qdIc('list-edit')}Saved filter presets</div>${listHtml}<div class="view-pop-actions"><button class="btn" id="viewPopCloseBtn" type="button">Close</button></div>`;
   pop.classList.remove('hidden');
@@ -960,19 +928,9 @@ function renderManagePresetsList(){
     applySavedView(name); const sel=document.getElementById('savedViewSelect'); if(sel) sel.value=name;
     closeViewPopover();
   }));
-  let draggedPreset=null;
-  pop.querySelectorAll('.view-pop-row[data-preset-name]').forEach(row=>{
-    row.addEventListener('dragstart',e=>{draggedPreset=row;row.classList.add('preset-dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',row.dataset.presetName);});
-    row.addEventListener('dragover',e=>{if(!draggedPreset||draggedPreset===row)return;e.preventDefault();e.dataTransfer.dropEffect='move';row.classList.add('preset-drag-target');});
-    row.addEventListener('dragleave',()=>row.classList.remove('preset-drag-target'));
-    row.addEventListener('drop',e=>{e.preventDefault();if(!draggedPreset||draggedPreset===row)return;row.classList.remove('preset-drag-target');pop.querySelector('.view-pop-list')?.insertBefore(draggedPreset,row);writeOrder(PRESET_ORDER_KEY,[...pop.querySelectorAll('.view-pop-row[data-preset-name]')].map(el=>el.dataset.presetName));renderSavedViews();});
-    row.addEventListener('dragend',()=>{draggedPreset?.classList.remove('preset-dragging');pop.querySelectorAll('.preset-drag-target').forEach(el=>el.classList.remove('preset-drag-target'));draggedPreset=null;});
-    row.tabIndex=0; row.setAttribute('aria-label',`Preset ${row.dataset.presetName}. Use Alt+ArrowUp or Alt+ArrowDown to reorder.`); row.addEventListener('keydown',e=>{if(!e.altKey||!['ArrowUp','ArrowDown'].includes(e.key))return; e.preventDefault(); const list=pop.querySelector('.view-pop-list'); const target=row[e.key==='ArrowUp'?'previousElementSibling':'nextElementSibling']; if(!target?.classList.contains('view-pop-row'))return; if(e.key==='ArrowUp') list.insertBefore(row,target); else list.insertBefore(target,row); writeOrder(PRESET_ORDER_KEY,[...list.querySelectorAll('.view-pop-row[data-preset-name]')].map(el=>el.dataset.presetName)); renderSavedViews(); row.classList.add('preset-drag-target'); setTimeout(()=>row.classList.remove('preset-drag-target'),260);});
-  });
   pop.querySelectorAll('.view-pop-del').forEach(b=>b.addEventListener('click',e=>{
     const row=e.target.closest('.view-pop-row'); const name=row.dataset.name;
     const v=savedViews(); delete v[name];
-    const nextOrder=readOrder(PRESET_ORDER_KEY).filter(n=>n!==name); writeOrder(PRESET_ORDER_KEY,nextOrder);
     try{ localStorage.setItem('qdash_saved_views',JSON.stringify(v)); }catch(err){}
     renderSavedViews(); renderManagePresetsList();
   }));

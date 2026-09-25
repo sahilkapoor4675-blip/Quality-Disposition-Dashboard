@@ -7,23 +7,6 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
-## V65.0 UI polish — consistency, micro-interactions, dark mode and accessibility (2026-09-25)
-- **Design tokens extended across the app:** the existing glass-token system is now complemented by shared spacing, radius, shadow, motion, focus and drag-state tokens, and the main Dashboard + Admin surfaces consume the same values for consistent UI rhythm and depth.
-- **Micro-interactions refined:** buttons have clearer pressed feedback, toast enter/exit transitions are smoother, and drag targets expose stronger visual feedback instead of relying on cursor movement alone.
-- **Filters and presets are reorderable:** saved presets and dashboard filters support drag-and-drop reordering with visible drag/drop states; the order persists in local storage. Keyboard users can reorder with **Alt + ↑ / ↓** as a non-pointer fallback.
-- **Dark/OLED chart polish:** chart tooltips use dedicated dark-mode contrast tokens so tooltip text, labels and surfaces remain readable against OLED-friendly chart backgrounds.
-- **Focus treatment unified:** interactive controls use a shared focus-ring treatment across Dashboard and Admin, including keyboard-visible states.
-- **Icon-only accessibility:** icon-only actions were audited and now expose explicit accessible names; the final audit found **0 missing ARIA labels** for icon-only buttons.
-- **ARIA for interactive filter/preset UI:** menu/listbox state, selected options and controlled popovers expose `aria-*` relationships/states consistently for assistive technology.
-- **Reduced-motion support preserved:** decorative transitions remain disabled or minimized under `prefers-reduced-motion: reduce`.
-
-### UI polish checkpoints
-- Drag a filter or saved preset: the source, insertion target and drop state are visibly distinct, and the order survives a refresh.
-- Reorder the same controls with **Alt + ↑ / ↓** without using a pointer.
-- Tab through Dashboard and Admin controls: focus rings remain consistently visible in both light and dark themes.
-- Open chart tooltips in dark/OLED mode: text and tooltip surfaces maintain readable contrast.
-- Inspect icon-only buttons with accessibility tooling: each has an accessible name; audit result is 0 missing labels.
-
 ## What changed since V65.0 (intro screen side imagery)
 - **Intro screen — clean side imagery, no baked-in text:** the splash screen now shows real plant photography faded in along the left and right edges (industrial plant on the left, copper-coil warehouse on the right) instead of the old illustrated coil background. The images sit behind the text and fade toward the centre, so they never overlap the headline, cards or "Enter Dashboard" button; they also narrow and dim on phone-width screens. All text stays live DOM/CSS, not baked into any image.
 

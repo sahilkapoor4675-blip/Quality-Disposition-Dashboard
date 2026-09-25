@@ -1295,14 +1295,14 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
 })();
 </script>
 
-<style id="admin-field-hints-style">
+<style id="admin-field-hints">
 .qd-field-tag{position:fixed;left:0;top:0;z-index:2147483001;display:flex;align-items:center;gap:8px;max-width:300px;padding:6px 10px 6px 8px;border-radius:9px;background:rgba(15,42,74,.95);border:1px solid rgba(143,208,255,.28);color:#fff;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;will-change:transform}
 .qd-field-tag.show{opacity:1;visibility:visible}.qd-field-tag .ic{width:15px;height:15px;margin:0;color:#8fd0ff;flex:none}.qd-field-tag .qft-copy{min-width:0}.qd-field-tag .qft-name{display:block;font-size:12px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.qd-field-tag .qft-meta{display:block;margin-top:2px;font-size:10px;line-height:1.2;color:#B8D3EA;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html[data-theme="dark"] .qd-field-tag{background:rgba(232,240,252,.96);color:#0f2a4a;border-color:rgba(15,42,74,.2);box-shadow:0 10px 28px rgba(0,0,0,.34)}
 html[data-theme="dark"] .qd-field-tag .ic{color:#1d5fa8}.qd-field-tag-hide{display:none!important}
 @media(prefers-reduced-motion:reduce){.qd-field-tag{transition:none!important}}
 </style>
-<script id="admin-field-hints-script">
+<script id="admin-field-hints">
 /* V65.1: cursor-following field-name hints cover the full Admin UI.
    The intro/splash screen is excluded globally so presentation-only content never gets a tag. */
 (function initAdminFieldHints(){
@@ -1333,43 +1333,4 @@ html[data-theme="dark"] .qd-field-tag .ic{color:#1d5fa8}.qd-field-tag-hide{displ
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
 </script>
-
-
-<style id="admin-v65-ui-foundation">
-/* V65.1 shared admin tokens — mirrors dashboard spacing/elevation rhythm. */
-:root{
-  --space-1:4px;--space-2:6px;--space-3:8px;--space-4:12px;--space-5:16px;--space-6:20px;--space-7:24px;--space-8:32px;
-  --radius-xs:6px;--radius-sm:8px;--radius-md:10px;--radius-lg:12px;--radius-xl:16px;--radius-pill:999px;
-  --shadow-1:0 1px 2px rgba(25,55,90,.06);--shadow-2:0 4px 12px rgba(25,55,90,.08);--shadow-3:0 10px 24px rgba(25,55,90,.12);--shadow-4:0 18px 42px rgba(25,55,90,.16);
-  --admin-focus:0 0 0 3px rgba(35,136,201,.25);
-  --admin-ease:cubic-bezier(.2,.65,.25,1);
-}
-html[data-theme="dark"]{
-  --shadow-1:0 1px 2px rgba(0,0,0,.28);--shadow-2:0 4px 12px rgba(0,0,0,.34);--shadow-3:0 10px 26px rgba(0,0,0,.42);--shadow-4:0 18px 44px rgba(0,0,0,.52);
-  --admin-focus:0 0 0 3px rgba(108,180,255,.34);
-}
-
-/* Shared press feedback + focus contract. */
-button,.btn,.delete,.sidebar-link,.command-card,a[role="button"]{
-  transition:transform 120ms var(--admin-ease),box-shadow 180ms var(--admin-ease),border-color 180ms var(--admin-ease),background-color 180ms var(--admin-ease),color 180ms var(--admin-ease),opacity 180ms ease;
-}
-button:not(:disabled):active,.btn:not(:disabled):active,.delete:not(:disabled):active,.sidebar-link:active,.command-card:active,a[role="button"]:active{transform:translateY(1px) scale(.985);transition-duration:60ms;}
-:where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:2px solid color-mix(in srgb,var(--blue) 84%,white 16%);outline-offset:2px;box-shadow:var(--admin-focus)!important;}
-
-/* Token adoption for dominant admin surfaces. */
-.top,.panel,.login,.admin-kpi,.admin-prod-card,.recovery-card,.command-card{border-radius:var(--radius-lg);}
-.table-wrap{border-radius:var(--radius-sm);box-shadow:var(--shadow-1);}
-.filebox{border-radius:var(--radius-md);}
-.stat,.connection-box,.quality-score,.issue,.result{border-radius:var(--radius-sm);}
-.btn{border-radius:var(--radius-sm);box-shadow:var(--shadow-1);}
-.btn:hover{box-shadow:var(--shadow-2);}
-.delete{border-radius:var(--radius-xs);}
-
-/* Drop feedback for existing file-import drag/drop zones. */
-.filebox.drag-over{transform:translateY(-1px);box-shadow:0 0 0 3px rgba(35,136,201,.13),var(--shadow-3);}
-
-/* Keep motion optional for users who request reduced motion. */
-@media(prefers-reduced-motion:reduce){button,.btn,.delete,.sidebar-link,.command-card,a[role="button"]{transition:none!important}.filebox.drag-over{transform:none;}}
-</style>
-
 </body></html>
