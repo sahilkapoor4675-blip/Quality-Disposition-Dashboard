@@ -1,3 +1,33 @@
+## V65.0 — Overall UI polish: tokens, micro-interactions, OLED contrast and accessibility (2026-09-25)
+
+### Added
+- **Shared UI token layer:** extended the existing glass design tokens with app-wide spacing, radius, shadow, motion, focus and drag-state tokens so Dashboard and Admin components use a common visual system.
+- **Drag/drop affordances:** dashboard filters and saved presets can be reordered with explicit drag-over/drop feedback. The saved order persists in `localStorage`.
+- **Keyboard reorder fallback:** filter and preset items expose the same ordering workflow through **Alt + ↑ / ↓**, so reordering does not depend on pointer drag-and-drop.
+- **ARIA state wiring:** filter/preset popovers and list-style controls now expose relationships and state through `aria-controls`, `aria-expanded`, `aria-haspopup`, `role`, `aria-selected` and related attributes where applicable.
+
+### Changed
+- **Button press feedback:** added a consistent pressed-state interaction using the shared motion/transform tokens.
+- **Toast transitions:** refined toast entrance/exit timing and easing to make feedback feel less abrupt.
+- **Focus rings:** unified keyboard focus treatment across the Dashboard and Admin UI and kept it visible against both light and dark surfaces.
+- **Dark/OLED chart tooltips:** moved tooltip surface/text contrast onto dedicated theme tokens so tooltip labels remain legible in dark and OLED modes.
+- **Icon-only controls:** added/normalized explicit accessible names for icon-only actions, including dynamically rendered actions.
+- **Reduced motion:** preserved the existing `prefers-reduced-motion: reduce` behavior and extended token-driven transitions so nonessential motion is suppressed consistently.
+
+### Verification
+- Admin UX audit: PASS
+- Unified regression: **6/6 suites PASS**
+- Smoke test: PASS, **4,936 records unchanged**
+- Code health: PASS
+- Export acceptance: PASS
+- JavaScript syntax checks: PASS
+- Python syntax checks: PASS
+- Icon-only ARIA audit: **0 missing accessible names**
+
+### Notes
+- No database, API, schema, or seed-data changes were made by this UI polish pass.
+- This remains **V65.0**; the entry documents a same-version UI refinement rather than a new application-version release.
+
 
 ### Intro screen — clean side imagery (v8), no baked-in text
 - Replaced the old copper/coil illustrated intro background with real plant photography: a faded industrial-plant image on the left edge and a copper-coil warehouse image on the right edge of the splash screen, each anchored to the screen edge and fading to transparent toward the centre.
