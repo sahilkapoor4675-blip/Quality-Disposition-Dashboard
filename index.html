@@ -27,8 +27,8 @@
     var saved=localStorage.getItem('qdash_theme');
     if(saved==='dark')document.documentElement.setAttribute('data-theme','dark');
   }catch(e){}
-  // V65.0 'Copper Mill' skin is the default look; 'classic' (plain white header, no intro artwork) is opt-in from Ctrl+K.
-  try{ document.documentElement.setAttribute('data-skin', localStorage.getItem('qdash_skin')==='classic' ? 'classic' : 'copper'); }catch(e){ document.documentElement.setAttribute('data-skin','copper'); }
+  // Simple plain header + intro (no Copper Mill artwork). No switch/toggle for this any more.
+  document.documentElement.setAttribute('data-skin','classic');
 })();
 </script>
 
