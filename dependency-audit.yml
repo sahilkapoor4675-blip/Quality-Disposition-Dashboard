@@ -1,0 +1,65 @@
+name: Dependency vulnerability scan
+
+# Why this exists: requirements.txt is pinned with the compatible-release
+# operator (~=), which lets patch versions move on every fresh `pip install`
+# (Render's build step runs one on every deploy) without anyone reviewing
+# what changed. That's the right trade-off for getting security/bug fixes
+# automatically, but it means a newly-disclosed CVE in a dependency can start
+# shipping to production the next time the app redeploys, with no human in
+# the loop. This workflow is the check on that: it scans the exact pinned
+# range for known vulnerabilities on every change to requirements.txt, on
+# every PR, and once a week on its own (so a CVE disclosed *after* the last
+# commit still gets caught, not just ones introduced by a diff).
+#
+# Scope: this project's runtime dependencies are Python-only (see
+# requirements.txt) -- there is no package.json/node_modules here, so there
+# is nothing for `npm audit` to scan. If a package.json is ever added
+# (a build tool, a lint config, etc.), add an `npm audit --audit-level=high`
+# job alongside this one rather than assuming Python coverage is enough.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "requirements.txt"
+      - ".github/workflows/dependency-audit.yml"
+  pull_request:
+    paths:
+      - "requirements.txt"
+      - ".github/workflows/dependency-audit.yml"
+  schedule:
+    # Every Monday 03:00 UTC -- catches CVEs disclosed after the last commit
+    # touched requirements.txt, not just ones a diff would trigger on.
+    - cron: "0 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: pip-audit (Python dependencies)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+
+      - name: Audit requirements.txt for known vulnerabilities
+        run: |
+          # --strict: also fail on a resolution/dependency error (a missing
+          # or yanked release) instead of only on a matched vulnerability, so
+          # a broken pin can't silently pass this check.
+          # -r requirements.txt: audits exactly what Render installs on
+          # deploy, not whatever happens to be in this runner's environment.
+          pip-audit -r requirements.txt --strict --desc
+
+      - name: Summary if vulnerabilities were found
+        if: failure()
+        run: |
+          echo "::error::pip-audit found known vulnerabilities (or a resolution error) in requirements.txt. Review the job log above, then either bump the affected package's pin in requirements.txt or, if no fixed release exists yet, document the accepted risk in requirements.txt as a comment before merging."

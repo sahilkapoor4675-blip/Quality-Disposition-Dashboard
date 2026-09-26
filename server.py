@@ -94,7 +94,13 @@ class _QualityHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 from urllib.parse import urlparse, parse_qs
 
-from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report
+from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report, _stream_csv
+from logging_setup import configure_logging, get_logger, tail_log_file
+from session_store import (
+    db_session_upsert, db_session_fetch, db_session_delete, db_sessions_delete_by_user,
+    db_cleanup_expired_sessions, db_login_check, db_login_record_failure, db_login_clear,
+    db_login_attempts_snapshot,
+)
 
 def _csv_safe_value(value):
     """Return CSV text that spreadsheet programs treat as literal text.
@@ -224,6 +230,12 @@ def _pick_persistent_dir():
         return os.path.join(APP_DIR, "data")
 
 _PERSISTENT_DIR = _pick_persistent_dir()
+# Structured, rotating logging -- see logging_setup.py for the full rationale.
+# Configured as early as possible (right after we know where the persistent
+# data directory lives) so every later print()-turned-log call in this file
+# has somewhere to go. Console output is unchanged; this only adds a
+# JSON-lines file alongside the database/backups.
+log = configure_logging(_PERSISTENT_DIR)
 _DEFAULT_PERSISTENT_DB = os.path.join(_PERSISTENT_DIR, "quality.db")
 DB_PATH = os.environ.get("DB_PATH", _DEFAULT_PERSISTENT_DB)
 PG_POOL = None
@@ -248,6 +260,7 @@ IMPORT_PREVIEW_LOCK = threading.RLock()
 DISPOSITION_WRITE_LOCK = threading.RLock()
 ACTIVITY_CLEANUP_LOCK = threading.RLock()
 ACTIVITY_CLEANUP_LAST = 0.0
+_SESSION_DB_CLEANUP_LAST = 0.0
 BACKUP_WRITE_LOCK = threading.RLock()
 AUDIT_CLEANUP_LOCK = threading.RLock()
 AUDIT_CLEANUP_LAST = 0.0
@@ -294,7 +307,7 @@ def _ensure_database():
         # DB_PATH was explicitly pointed at the bundled file itself (env override) —
         # respect that choice, but warn: this file ships with the app and WILL be
         # overwritten by the next code update/redeploy.
-        print("WARNING: DB_PATH points at the app-bundled quality.db. This file is "
+        log.warning("DB_PATH points at the app-bundled quality.db. This file is "
               "replaced on every app update/redeploy, so uploaded data (disposition "
               "imports, 6M Fishbone Master) will be lost then. Set DB_PATH to a path "
               "outside the app folder, or DATABASE_URL to an external Postgres "
@@ -306,9 +319,9 @@ def _ensure_database():
     if not os.path.exists(DB_PATH):
         if os.path.exists(_BUNDLED_SEED_DB):
             shutil.copy2(_BUNDLED_SEED_DB, DB_PATH)
-            print(f"Seeded persistent database at {DB_PATH} from bundled quality.db (first run).")
+            log.info(f"Seeded persistent database at {DB_PATH} from bundled quality.db (first run).")
     else:
-        print(f"Using existing persistent database at {DB_PATH} (not re-seeded).")
+        log.info(f"Using existing persistent database at {DB_PATH} (not re-seeded).")
 
 _ensure_database()
 
@@ -612,6 +625,11 @@ class _PGCursor:
         return self.cur.executemany(sql, seq)
     def fetchone(self): return self.cur.fetchone()
     def fetchall(self): return self.cur.fetchall()
+    def fetchmany(self, size=None):
+        # Used by the streaming CSV export (see reports._stream_csv) to pull
+        # a bounded batch of rows at a time out of a multi-million-row result
+        # set instead of materializing the whole thing with fetchall().
+        return self.cur.fetchmany(size) if size is not None else self.cur.fetchmany()
     def close(self):
         try: self.cur.close()
         except Exception: pass
@@ -1393,6 +1411,14 @@ def _cleanup_sessions():
             victims = sorted(SESSIONS.items(), key=lambda kv: kv[1].get("expires", 0))[:excess]
             for token, _ in victims:
                 SESSIONS.pop(token, None)
+    # Multi-instance (Postgres) housekeeping: purge expired rows from the
+    # shared session table too. Cheap no-op on SQLite. Throttled the same way
+    # ACTIVITY_CLEANUP/AUDIT_CLEANUP are elsewhere in this file, so this never
+    # runs on every single request.
+    global _SESSION_DB_CLEANUP_LAST
+    if USE_POSTGRES and now - _SESSION_DB_CLEANUP_LAST > 300:
+        _SESSION_DB_CLEANUP_LAST = now
+        db_cleanup_expired_sessions(get_conn, USE_POSTGRES, now)
 
 def _login_allowed(ip):
     now = time.time()
@@ -1408,7 +1434,16 @@ def _login_allowed(ip):
             oldest = sorted(LOGIN_ATTEMPTS.items(), key=lambda kv: kv[1].get("window", now))[:len(LOGIN_ATTEMPTS)-MAX_LOGIN_TRACKED_IPS]
             for key, _ in oldest:
                 LOGIN_ATTEMPTS.pop(key, None)
-        return True, 0
+    # Cross-instance brute-force protection: an attacker who spreads login
+    # attempts across multiple app instances (round-robin behind a load
+    # balancer) must not get LOGIN_MAX_ATTEMPTS *per instance* for free. The
+    # shared Postgres counter is authoritative when present; the in-memory
+    # check above still applies too (defense in depth, and the only check at
+    # all on SQLite).
+    allowed_db, retry_db = db_login_check(get_conn, USE_POSTGRES, ip, now, LOGIN_WINDOW, LOGIN_MAX_ATTEMPTS)
+    if not allowed_db:
+        return False, retry_db
+    return True, 0
 
 def _record_login_failure(ip):
     now = time.time()
@@ -1418,10 +1453,12 @@ def _record_login_failure(ip):
             rec = {"count": 0, "window": now}
         rec["count"] = rec.get("count", 0) + 1
         LOGIN_ATTEMPTS[ip] = rec
+    db_login_record_failure(get_conn, USE_POSTGRES, ip, now, LOGIN_WINDOW)
 
 def _clear_login_failures(ip):
     with LOGIN_LOCK:
         LOGIN_ATTEMPTS.pop(ip, None)
+    db_login_clear(get_conn, USE_POSTGRES, ip)
 
 def _csrf_value(handler):
     return _cookie_value(handler.headers.get("Cookie", ""), CSRF_COOKIE)
@@ -1451,18 +1488,43 @@ def _cookie_value(cookie_header, name):
 def _admin_meta(handler):
     _cleanup_sessions()
     token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_admin")
+    if not token:
+        return None
+    now = _dt.datetime.now().timestamp()
     with SESSION_LOCK:
         meta = SESSIONS.get(token)
-        if not meta:
-            return None
-        now = _dt.datetime.now().timestamp()
+    if meta is None and USE_POSTGRES:
+        # Cache miss on this instance: the session may have been created on a
+        # different instance behind the load balancer. Check the shared table
+        # before giving up -- this is the crux of multi-instance readiness for
+        # admin sessions.
+        db_meta, db_expires = db_session_fetch(get_conn, USE_POSTGRES, token)
+        if db_meta is not None and db_expires and db_expires >= now:
+            meta = db_meta
+            with SESSION_LOCK:
+                SESSIONS[token] = meta
+    if not meta:
+        return None
+    with SESSION_LOCK:
         if meta.get("expires", 0) < now:
             SESSIONS.pop(token, None)
+            db_session_delete(get_conn, USE_POSTGRES, token)
             return None
         meta["expires"] = now + SESSION_TTL
-        if meta.get("role") not in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") or not bool(meta.get("active", True)):
-            return None
-        return dict(meta)
+        SESSIONS[token] = meta
+    if meta.get("role") not in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") or not bool(meta.get("active", True)):
+        return None
+    # Throttle the DB write-through: every request renews `expires` locally,
+    # but syncing that to Postgres on every single request would turn a
+    # cheap in-memory check into a DB round-trip per API call. Re-sync at
+    # most once a minute per session -- other instances still see the
+    # session as valid (their own read just checks `expires >= now`, and a
+    # session's TTL is hours, so a minute of drift on the stored expiry is
+    # immaterial).
+    if USE_POSTGRES and now - meta.get("_db_synced_at", 0) > 60:
+        meta["_db_synced_at"] = now
+        db_session_upsert(get_conn, USE_POSTGRES, token, meta, meta["expires"])
+    return dict(meta)
 
 def _is_admin(handler):
     return _admin_meta(handler) is not None
@@ -1540,23 +1602,37 @@ def _revoke_user_sessions(user_id):
             if smeta.get("user_id") == user_id:
                 SESSIONS.pop(tok, None)
                 removed += 1
+    db_sessions_delete_by_user(get_conn, USE_POSTGRES, user_id)
     return removed
 
 
 def _viewer_meta(handler):
     _cleanup_sessions()
     token = _cookie_value(handler.headers.get("Cookie", ""), "qdash_user")
+    if not token:
+        return None
     with SESSION_LOCK:
         meta = SESSIONS.get(token)
-        if not meta or meta.get("role") not in ("viewer", "admin", "qa_manager", "qa_engineer", "importer", "auditor"):
-            return None
-        if meta.get("expires", 0) < _dt.datetime.now().timestamp():
+    if meta is None and USE_POSTGRES:
+        now0 = _dt.datetime.now().timestamp()
+        db_meta, db_expires = db_session_fetch(get_conn, USE_POSTGRES, token)
+        if db_meta is not None and db_expires and db_expires >= now0:
+            meta = db_meta
+            with SESSION_LOCK:
+                SESSIONS[token] = meta
+    if not meta or meta.get("role") not in ("viewer", "admin", "qa_manager", "qa_engineer", "importer", "auditor"):
+        return None
+    if meta.get("expires", 0) < _dt.datetime.now().timestamp():
+        with SESSION_LOCK:
             SESSIONS.pop(token, None)
-            return None
-        if not bool(meta.get("active", True)):
+        db_session_delete(get_conn, USE_POSTGRES, token)
+        return None
+    if not bool(meta.get("active", True)):
+        with SESSION_LOCK:
             SESSIONS.pop(token, None)
-            return None
-        return dict(meta)
+        db_session_delete(get_conn, USE_POSTGRES, token)
+        return None
+    return dict(meta)
 
 def _is_viewer(handler):
     # Viewer authentication is currently disabled by design. The dashboard is
@@ -1580,6 +1656,7 @@ def _activity_event(handler, event_type, tab="", filters=None, visitor_id=""):
     # Activity is anonymous. visitor_id is a browser-generated random identifier
     # used only to count currently active dashboard users without requiring login.
     global ACTIVITY_CLEANUP_LAST
+    conn = None
     try:
         conn = get_conn()
         meta = _viewer_meta(handler)
@@ -1587,7 +1664,7 @@ def _activity_event(handler, event_type, tab="", filters=None, visitor_id=""):
         conn.execute("INSERT INTO activity_log (user_id,event_type,tab,filters_json,user_agent,ip_address,visitor_id) VALUES (?,?,?,?,?,?,?)",
                      (user_id, event_type, tab or "", json.dumps(filters or {}, separators=(",",":")),
                       (handler.headers.get("User-Agent", "")[:300]), _client_ip(handler), str(visitor_id or "")[:100]))
-        conn.commit(); conn.close()
+        conn.commit(); conn.close(); conn = None
         now = time.time(); should_cleanup = False
         with ACTIVITY_CLEANUP_LOCK:
             if now - ACTIVITY_CLEANUP_LAST >= 300:
@@ -1603,7 +1680,16 @@ def _activity_event(handler, event_type, tab="", filters=None, visitor_id=""):
                     try: cleanup_conn.close()
                     except Exception: pass
     except Exception:
-        pass
+        # Activity logging is best-effort and must never break the request it
+        # rode in on -- but a bare `except: pass` here used to leak `conn` on
+        # any failure (a transient lock, a closed socket, etc.), leaving an
+        # unclosed connection holding whatever lock it had acquired for the
+        # rest of the process's life. On SQLite that can turn one momentary
+        # contention into a permanent "database is locked" for every write
+        # that follows. Always close what was opened, even on the failure path.
+        if conn is not None:
+            try: conn.close()
+            except Exception: pass
 
 def _viewer_auth_error(handler):
     # Retained for compatibility with older clients; current dashboard does not use it.
@@ -2508,7 +2594,7 @@ def _write_backup_file(reason="manual"):
             if 'tmp_path' in locals() and os.path.exists(tmp_path): os.remove(tmp_path)
         except Exception:
             pass
-        print(f"WARNING: backup failed ({reason}): {e}")
+        log.warning(f"Backup failed ({reason}): {e}")
         return None
 
 # How often a backup happens automatically even with no import activity at all
@@ -2546,7 +2632,7 @@ def _scheduled_backup_loop():
     # warning on every cold start.
     while not STARTUP_READY:
         if STARTUP_ERROR:
-            print(f"Scheduled backup disabled for this process because startup failed: {STARTUP_ERROR}", flush=True)
+            log.warning(f"Scheduled backup disabled for this process because startup failed: {STARTUP_ERROR}")
             return
         time.sleep(1)
     while True:
@@ -2555,9 +2641,9 @@ def _scheduled_backup_loop():
             if age is None or age >= interval_seconds:
                 result = _write_backup_file("scheduled")
                 if result:
-                    print(f"Scheduled backup created: {result['filename']}")
+                    log.info(f"Scheduled backup created: {result['filename']}")
         except Exception as e:
-            print(f"WARNING: scheduled backup loop error: {e}")
+            log.warning(f"Scheduled backup loop error: {e}")
         time.sleep(check_every)
 
 def _list_backups():
@@ -3003,6 +3089,25 @@ def _ensure_admin_schema():
             record_id INTEGER, details TEXT DEFAULT '{}', ip_address TEXT DEFAULT '', user_agent TEXT DEFAULT '',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    # Cross-instance session + login-throttle store. Only needed (and only
+    # created) on Postgres: SQLite is a single local file, so a SQLite
+    # deployment is single-instance by construction and the existing
+    # in-memory SESSIONS/LOGIN_ATTEMPTS dicts are already correct for it.
+    # On Postgres -- the configuration that makes horizontal scaling
+    # (multiple app instances/dynos) possible in the first place -- a login
+    # on instance A must be recognised by instance B, and a brute-force
+    # lockout must apply across every instance, not just the one that saw
+    # the failed attempts. These two tables back that: the in-memory dicts
+    # remain the fast path on every request, and fall back to / sync with
+    # these tables only on a local cache miss or at session-mutating
+    # moments (login, logout, revoke) — see _session_store.py.
+    if USE_POSTGRES:
+        conn.execute("""CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY, payload TEXT NOT NULL, expires DOUBLE PRECISION NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS login_attempts (
+            ip TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, window_start DOUBLE PRECISION NOT NULL
+        )""")
     # Runtime mutation metadata used for optimistic import-confirm validation.
     # It is intentionally kept out of backups because it has meaning only for
     # the current database instance and is re-created idempotently on startup.
@@ -3122,11 +3227,11 @@ def _ensure_admin_schema():
             conn.execute(idx_sql)
             conn.commit()
         else:
-            print(f"WARNING: normalized BATCH NO uniqueness not enabled; {dup_count} duplicate group(s) require review", flush=True)
+            log.warning(f"Normalized BATCH NO uniqueness not enabled; {dup_count} duplicate group(s) require review")
     except Exception as e:
         try: conn.rollback()
         except Exception: pass
-        print(f"WARNING: batch uniqueness index check skipped: {e}", flush=True)
+        log.warning(f"Batch uniqueness index check skipped: {e}")
 
     # 6M Fishbone (Man/Machine/Material/Method/Measurement/Environment)
     # master reference data — imported by an admin from the 6M Defect
@@ -3389,16 +3494,16 @@ def _export_recursion_response(kind, exc):
     try:
         tb = exc.__traceback__
         frames = traceback.extract_tb(tb)
-        print(f"EXPORT {kind} FAILED — RecursionError (limit={sys.getrecursionlimit()}, stack depth={len(frames)})", flush=True)
+        log.error(f"EXPORT {kind} FAILED — RecursionError (limit={sys.getrecursionlimit()}, stack depth={len(frames)})")
         if frames:
-            print(f"RECURSION {kind}: deepest frames —", flush=True)
+            log.error(f"RECURSION {kind}: deepest frames —")
             for f in frames[-10:]:
-                print(f"  {f.filename}:{f.lineno} in {f.name}", flush=True)
+                log.error(f"  {f.filename}:{f.lineno} in {f.name}")
             from collections import Counter
             counts = Counter((os.path.basename(f.filename), f.name) for f in frames)
-            print(f"RECURSION {kind}: most-repeated frames across full stack —", flush=True)
+            log.error(f"RECURSION {kind}: most-repeated frames across full stack —")
             for (fn, name), c in counts.most_common(5):
-                print(f"  {name} ({fn}) — {c} occurrences", flush=True)
+                log.error(f"  {name} ({fn}) — {c} occurrences")
             top_fn, top_name = counts.most_common(1)[0][0]
             top_count = counts.most_common(1)[0][1]
             deepest = frames[-1]
@@ -3409,7 +3514,7 @@ def _export_recursion_response(kind, exc):
                 if f.filename.endswith(("server.py", "reports.py")):
                     our_frame = f
             our_site = f"{os.path.basename(our_frame.filename)}:{our_frame.lineno} in {our_frame.name}()" if our_frame else "not found in traceback"
-            print(f"RECURSION {kind}: last call site in our own code — {our_site}", flush=True)
+            log.error(f"RECURSION {kind}: last call site in our own code — {our_site}")
 
             # Sample the real object at the point of failure straight off the live frames.
             # Describe it SHALLOWLY (keys/length only, never a full repr) -- repr() on a
@@ -3442,7 +3547,7 @@ def _export_recursion_response(kind, exc):
                             v = loc[key]
                             desc = _shallow_describe(v)
                             line = f"  sample local in {fr.f_code.co_name} ({os.path.basename(fr.f_code.co_filename)}:{fr.f_lineno}): {key} = {type(v).__name__}: {desc}"
-                            print(line, flush=True)
+                            log.error(line)
                             if not sample_info:
                                 sample_info = f"{type(v).__name__}: {desc}"
                             break
@@ -3533,7 +3638,7 @@ def _export_data(filters):
     try:
         intel = compute_qcr_intelligence(filters, monthly, defects, wcg, kpis)
     except Exception:
-        print("EXPORT: intelligence section degraded —", flush=True)
+        log.warning("EXPORT: intelligence section degraded —")
         traceback.print_exc()
         intel = {"comparison":{"current":None,"previous":None,"rows":[]},"why_changed":None,
                  "forecast":{},"early_warnings":[],"kpi_ranking":[],
@@ -4153,7 +4258,7 @@ class Handler(BaseHTTPRequestHandler):
             # Never hand raw exception text (SQL fragments, file paths, driver messages) to the
             # browser. The real message goes to the server log under the same reference id.
             try:
-                print(f"[{rid}] {getattr(self, 'command', '')} {getattr(self, 'path', '')} -> {status}: {payload.get('error')}", flush=True)
+                log.error(f"[{rid}] {getattr(self, 'command', '')} {getattr(self, 'path', '')} -> {status}: {payload.get('error')}", extra={"request_id": rid})
             except Exception:
                 pass
             payload = dict(payload)
@@ -4393,7 +4498,7 @@ class Handler(BaseHTTPRequestHandler):
                         return fn()
                     except Exception as exc:
                         section_errors[name] = str(exc)[:240]
-                        print(f"QCR section '{name}' degraded:", section_errors[name])
+                        log.warning(f"QCR section '{name}' degraded: {section_errors[name]}")
                         return default
 
                 k = _safe("k", lambda: compute_kpis(filters), {"kpis": []})
@@ -4422,7 +4527,7 @@ class Handler(BaseHTTPRequestHandler):
                              "health_score":{"score":0,"status":"amber","reasons":[],"components":[]},
                              "risk_matrix":{"work_centers":[],"grades":[]},"recurring_patterns":[]}
                     intel_error = str(intel_exc)[:240]
-                    print("QCR intelligence degraded:", intel_error)
+                    log.warning(f"QCR intelligence degraded: {intel_error}")
                 payload = {"k": k, "d": d, "w": w, "m": m, "fr": fr, "intel": intel,
                            "intel_error": intel_error, "section_errors": section_errors}
                 # A payload with degraded sections is still real data for the sections
@@ -4488,7 +4593,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = _export_data(_export_filters(qs))
             except Exception as e:
-                print("EXPORT excel FAILED (assembling data) —", flush=True); traceback.print_exc()
+                log.error("EXPORT excel FAILED (assembling data) —", exc_info=True)
                 self._send_json({"error": str(e)}, status=500); return
             if not _EXPORT_SEMAPHORE.acquire(timeout=EXPORT_WAIT_TIMEOUT_S):
                 self._send_json({"error": f"The server is already generating {EXPORT_CONCURRENCY} other report(s). Please retry in a few seconds."}, status=503); return
@@ -4499,7 +4604,7 @@ class Handler(BaseHTTPRequestHandler):
             except RecursionError as e:
                 self._send_json({"error": _export_recursion_response("excel", e)}, status=500)
             except Exception as e:
-                print("EXPORT excel FAILED —", flush=True); traceback.print_exc()
+                log.error("EXPORT excel FAILED —", exc_info=True)
                 self._send_json({"error": str(e)}, status=500)
             finally:
                 _EXPORT_SEMAPHORE.release()
@@ -4507,7 +4612,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = _export_data(_export_filters(qs))
             except Exception as e:
-                print("EXPORT pdf FAILED (assembling data) —", flush=True); traceback.print_exc()
+                log.error("EXPORT pdf FAILED (assembling data) —", exc_info=True)
                 self._send_json({"error": str(e)}, status=500); return
             if not _EXPORT_SEMAPHORE.acquire(timeout=EXPORT_WAIT_TIMEOUT_S):
                 self._send_json({"error": f"The server is already generating {EXPORT_CONCURRENCY} other report(s). Please retry in a few seconds."}, status=503); return
@@ -4518,7 +4623,7 @@ class Handler(BaseHTTPRequestHandler):
             except RecursionError as e:
                 self._send_json({"error": _export_recursion_response("pdf", e)}, status=500)
             except Exception as e:
-                print("EXPORT pdf FAILED —", flush=True); traceback.print_exc()
+                log.error("EXPORT pdf FAILED —", exc_info=True)
                 self._send_json({"error": str(e)}, status=500)
             finally:
                 _EXPORT_SEMAPHORE.release()
@@ -4526,7 +4631,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = _export_data(_export_filters(qs))
             except Exception as e:
-                print("EXPORT pptx FAILED (assembling data) —", flush=True); traceback.print_exc()
+                log.error("EXPORT pptx FAILED (assembling data) —", exc_info=True)
                 self._send_json({"error": str(e)}, status=500); return
             if not _EXPORT_SEMAPHORE.acquire(timeout=EXPORT_WAIT_TIMEOUT_S):
                 self._send_json({"error": f"The server is already generating {EXPORT_CONCURRENCY} other report(s). Please retry in a few seconds."}, status=503); return
@@ -4537,19 +4642,47 @@ class Handler(BaseHTTPRequestHandler):
             except RecursionError as e:
                 self._send_json({"error": _export_recursion_response("pptx", e)}, status=500)
             except Exception as e:
-                print("EXPORT pptx FAILED —", flush=True); traceback.print_exc()
+                log.error("EXPORT pptx FAILED —", exc_info=True)
                 self._send_json({"error": str(e)}, status=500)
             finally:
                 _EXPORT_SEMAPHORE.release()
         elif path == "/api/export/csv":
             try:
                 filters = _export_filters(qs); where_sql, params = build_where(filters)
-                conn = get_conn(); cur = conn.cursor(); cur.execute(f"SELECT insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params); rows=cur.fetchall(); conn.close()
-                out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(["Insp Lot Date","HEAT NO","BATCH NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"]); [w.writerow([_csv_safe_value(v) for v in r]) for r in rows]
+                # Log the export before opening the (potentially long-lived,
+                # streamed) SELECT below, not after: this endpoint's cursor
+                # stays open for the lifetime of the streamed response rather
+                # than being fully consumed and closed up front like the
+                # buffered exports, so writing the activity_log row while that
+                # cursor is still open would hold a read lock on the same
+                # SQLite file at the same moment as this INSERT -- exactly the
+                # kind of self-inflicted "database is locked" a busy_timeout
+                # eventually surfaces as a 500 on totally unrelated requests.
                 _activity_event(self, "export_csv", filters=filters)
-                _send_bytes(self,out.getvalue().encode('utf-8-sig'),"text/csv; charset=utf-8",_safe_filename(filters,".csv"))
+                conn = get_conn(); cur = conn.cursor()
+                cur.execute(f"SELECT insp_lot_date,heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,month,week,quarter,financial_year FROM disposition {where_sql} ORDER BY id", params)
+
+                def _row_gen(cur=cur, conn=conn):
+                    # fetchmany keeps at most one batch of rows in memory at a
+                    # time instead of the whole (potentially multi-million-row)
+                    # result set -- see _stream_csv's docstring in reports.py.
+                    try:
+                        while True:
+                            batch = cur.fetchmany(2000)
+                            if not batch:
+                                break
+                            for r in batch:
+                                yield [_csv_safe_value(v) for v in r]
+                    finally:
+                        try: cur.close()
+                        except Exception: pass
+                        conn.close()
+
+                _stream_csv(self, _safe_filename(filters, ".csv"),
+                            ["Insp Lot Date","HEAT NO","BATCH NO","Work Center","Grade","Output Weight (MT)","Main Defect","Defect Intensity","Quality Decision","Month","Week","Quarter","Financial Year"],
+                            _row_gen())
             except Exception as e:
-                print("EXPORT csv FAILED —", flush=True); traceback.print_exc()
+                log.error("EXPORT csv FAILED —", exc_info=True)
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/health":
             self._send_json({"status": "ok", "database": database_status()})
@@ -4873,6 +5006,68 @@ class Handler(BaseHTTPRequestHandler):
                     sessions.sort(key=lambda x:(not x["current"],x["username"]))
                     self._send_json({"active_sessions":len(sessions),"sessions":sessions[:50],"session_ttl_hours":SESSION_TTL/3600,"login_max_attempts":LOGIN_MAX_ATTEMPTS})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/rate_limit_status":
+            # Inspection window onto the two in-memory throttles this process
+            # enforces (ACTIVITY_RATE = general per-IP request rate limit,
+            # LOGIN_ATTEMPTS = brute-force lockout on the login endpoints) so
+            # an admin can see who is being throttled and why, without having
+            # to SSH in and read process memory. Both dicts are per-process;
+            # on Postgres, LOGIN_ATTEMPTS is also mirrored into a shared table
+            # (see session_store.py) so brute-force protection is consistent
+            # across multiple instances -- that shared view is included below
+            # as "login_attempts_shared" whenever USE_POSTGRES is on.
+            if not _require_role(self, "admin"): return
+            else:
+                try:
+                    now = time.time()
+                    with ACTIVITY_RATE_LOCK:
+                        activity_top = sorted(
+                            ({"ip": ip, "requests_in_window": rec[1], "window_started": max(0, int(now - rec[0]))} for ip, rec in ACTIVITY_RATE.items()),
+                            key=lambda x: -x["requests_in_window"],
+                        )[:50]
+                        activity_tracked = len(ACTIVITY_RATE)
+                    with LOGIN_LOCK:
+                        login_top = sorted(
+                            ({"ip": ip, "failed_count": rec.get("count", 0),
+                              "locked_out": rec.get("count", 0) >= LOGIN_MAX_ATTEMPTS and (now - rec.get("window", now)) < LOGIN_WINDOW,
+                              "window_started": max(0, int(now - rec.get("window", now)))} for ip, rec in LOGIN_ATTEMPTS.items()),
+                            key=lambda x: (-x["failed_count"]),
+                        )[:50]
+                        login_tracked = len(LOGIN_ATTEMPTS)
+                    shared_login = db_login_attempts_snapshot(get_conn, USE_POSTGRES, limit=50) if USE_POSTGRES else []
+                    self._send_json({
+                        "multi_instance_note": (
+                            "LOGIN_ATTEMPTS is synchronized across instances via the shared "
+                            "Postgres table below because DATABASE_URL is set."
+                            if USE_POSTGRES else
+                            "Running on SQLite: both throttles below are specific to THIS "
+                            "process only. SQLite is a single local file, so this is expected "
+                            "for a single-instance deployment -- set DATABASE_URL (Postgres) "
+                            "to run more than one instance with a shared, consistent view."
+                        ),
+                        "activity_rate": {"tracked_ips": activity_tracked, "limit_per_minute": 120, "top": activity_top},
+                        "login_attempts": {"tracked_ips": login_tracked, "max_attempts": LOGIN_MAX_ATTEMPTS, "window_seconds": LOGIN_WINDOW, "top": login_top},
+                        "login_attempts_shared": shared_login,
+                    })
+                except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/system_log":
+            # Tail of this process's structured rotating log file (see
+            # logging_setup.py). Per-process by nature -- see the note baked
+            # into the response for why that matters on a multi-instance
+            # deployment.
+            if not _require_role(self, "admin"): return
+            else:
+                try:
+                    qs = parse_qs(urlparse(self.path).query)
+                    n = max(10, min(int((qs.get("lines", ["200"])[0])), 1000))
+                    entries = tail_log_file(max_lines=n)
+                    self._send_json({
+                        "entries": entries,
+                        "count": len(entries),
+                        "note": "This is this process's own log file only. On a multi-instance "
+                                "deployment, other instances have their own separate log files.",
+                    })
+                except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/admin/data_quality":
             if not _is_admin(self): _auth_error(self)
             else:
@@ -5131,9 +5326,13 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store")
                     secure=self.headers.get("X-Forwarded-Proto","").lower()=="https"; cookie=f"qdash_user={token}; Path=/; HttpOnly; SameSite=Lax"; cookie += "; Secure" if secure else ""; self.send_header("Set-Cookie",cookie); self.end_headers(); self.wfile.write(json.dumps({"authenticated":True,"username":username,"display_name":display,"role":role}).encode())
                     meta={"user_id":uid,"username":username,"display_name":display,"role":role}
+                    final_meta=None
                     with SESSION_LOCK:
                         if token in SESSIONS:
                             SESSIONS[token].update(meta)
+                            final_meta = dict(SESSIONS[token])
+                    if final_meta is not None:
+                        db_session_upsert(get_conn, USE_POSTGRES, token, final_meta, final_meta["expires"])
                     _activity_event(self,"login")
                 else:
                     _record_login_failure(ip)
@@ -5146,6 +5345,7 @@ class Handler(BaseHTTPRequestHandler):
             with SESSION_LOCK:
                 meta=dict(SESSIONS.get(token) or {})
                 SESSIONS.pop(token,None)
+            db_session_delete(get_conn, USE_POSTGRES, token)
             if meta: _activity_event(self,"logout")
             self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Set-Cookie","qdash_user=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); self.end_headers(); self.wfile.write(b'{"authenticated":false}'); return
 
@@ -5158,6 +5358,7 @@ class Handler(BaseHTTPRequestHandler):
                     for tok,meta in list(SESSIONS.items()):
                         if tok!=current and meta.get("username")==target:
                             SESSIONS.pop(tok,None); removed+=1
+                            db_session_delete(get_conn, USE_POSTGRES, tok)
                 _audit(self,"session_revoked",details={"username":target,"count":removed})
                 self._send_json({"ok":True,"removed":removed})
             except Exception as e: self._send_json({"error":str(e)},status=400)
@@ -5184,9 +5385,11 @@ class Handler(BaseHTTPRequestHandler):
                     for tok, smeta in list(SESSIONS.items()):
                         if tok != current_token and smeta.get("username") == meta.get("username"):
                             SESSIONS.pop(tok, None)
+                            db_session_delete(get_conn, USE_POSTGRES, tok)
                     if current_token in SESSIONS:
                         SESSIONS[current_token]["expires"] = _dt.datetime.now().timestamp() + SESSION_TTL
                         SESSIONS[current_token]["must_reset"] = False
+                        db_session_upsert(get_conn, USE_POSTGRES, current_token, SESSIONS[current_token], SESSIONS[current_token]["expires"])
                 _activity_event(self, "admin_password_changed")
                 self._send_json({"ok":True,"message":"Password changed. Please sign in again on other devices."})
             except Exception as e:
@@ -5281,6 +5484,7 @@ class Handler(BaseHTTPRequestHandler):
                     must_reset = bool(row[6]) if row else False
                     with SESSION_LOCK:
                         SESSIONS[token] = {"username": username or ADMIN_USERNAME, "display_name": display, "role": (row[4] if row else "admin"), "user_id": (row[0] if row else None), "active": True, "expires": now + SESSION_TTL, "csrf": csrf, "must_reset": must_reset}
+                    db_session_upsert(get_conn, USE_POSTGRES, token, SESSIONS[token], now + SESSION_TTL)
                     secure = self.headers.get("X-Forwarded-Proto", "").lower() == "https"
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -5317,6 +5521,7 @@ class Handler(BaseHTTPRequestHandler):
             # no behavior change on the logout response itself.
             with SESSION_LOCK:
                 SESSIONS.pop(token, None)
+            db_session_delete(get_conn, USE_POSTGRES, token)
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -5882,7 +6087,7 @@ def _run_startup_tasks():
         started = time.time()
         try:
             fn()
-            print(f"Startup: {label} ready in {time.time() - started:.1f}s", flush=True)
+            log.info(f"Startup: {label} ready in {time.time() - started:.1f}s")
         except Exception as exc:
             errors.append(f"{label}: {exc}")
             print(f"Startup ERROR: {label} failed after "
@@ -5894,9 +6099,9 @@ def _run_startup_tasks():
         # 503 and Render can restart the unhealthy deployment.
         STARTUP_READY = not errors
     if STARTUP_READY:
-        print("Startup: all initialisation complete.", flush=True)
+        log.info("Startup: all initialisation complete.")
     else:
-        print("Startup: initialization FAILED; service is not ready.", flush=True)
+        log.error("Startup: initialization FAILED; service is not ready.")
 
 
 def main():
@@ -5916,14 +6121,14 @@ def main():
     # Bind FIRST. The host's health check only needs an open port; everything
     # below is allowed to take as long as it needs without risking the deploy.
     server = _QualityHTTPServer(("0.0.0.0", port), Handler)
-    print(f"Quality Disposition Dashboard listening on 0.0.0.0:{port}", flush=True)
+    log.info(f"Quality Disposition Dashboard listening on 0.0.0.0:{port}")
     if not (ADMIN_USERNAME and ADMIN_PASSWORD):
-        print("INFO: ADMIN_USERNAME/ADMIN_PASSWORD are not set; administrator authentication will use the existing users table. Set both environment variables for first-time provisioning.", flush=True)
+        log.info("ADMIN_USERNAME/ADMIN_PASSWORD are not set; administrator authentication will use the existing users table. Set both environment variables for first-time provisioning.")
 
     threading.Thread(target=_run_startup_tasks, daemon=True, name="startup").start()
     if BACKUP_SCHEDULE_HOURS > 0:
         threading.Thread(target=_scheduled_backup_loop, daemon=True, name="scheduled-backup").start()
-        print(f"Scheduled backups enabled: every {BACKUP_SCHEDULE_HOURS:g}h (BACKUP_SCHEDULE_HOURS).", flush=True)
+        log.info(f"Scheduled backups enabled: every {BACKUP_SCHEDULE_HOURS:g}h (BACKUP_SCHEDULE_HOURS).")
     server.serve_forever()
 
 

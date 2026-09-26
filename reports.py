@@ -12,6 +12,8 @@ risk of a circular import.
 
 import io
 import re
+import csv
+import logging
 from datetime import datetime
 
 try:
@@ -85,6 +87,65 @@ def _send_bytes(self, data, content_type, filename):
         # this call, so there's no partial state to clean up -- just don't
         # let a normal client-side cancel look like a server crash.
         pass
+
+def _stream_csv(handler, filename, header, row_iter):
+    """Stream a CSV response row-by-row instead of building the whole file in
+    memory first (like `_send_bytes` does for the other export formats).
+
+    Why: a plain `csv.writer` into a StringIO, then `.getvalue().encode(...)`,
+    then `_send_bytes`, keeps the ENTIRE export -- rows-as-tuples, the CSV
+    text, and its encoded bytes, three full copies -- in memory at once for
+    the duration of the request. For a small filtered export that's fine;
+    for the disposition table's largest imports (this app is designed to
+    hold multi-million-row "Fishbone Master" datasets) an unfiltered export
+    can be large enough to spike process memory noticeably and hold the
+    request thread for a long time before the first byte goes out.
+    Streaming writes small batches to the socket as they're produced, so
+    memory stays bounded to one batch regardless of total row count, and the
+    client starts receiving data immediately instead of waiting for the
+    whole file to be assembled first.
+
+    Framing: no Content-Length (the row count/size isn't known up front) and
+    an explicit `Connection: close`. That's exactly how this handler already
+    behaves by default (BaseHTTPRequestHandler here runs HTTP/1.0), so this
+    isn't a protocol change -- the browser already reads a download until
+    the connection closes; this just means the bytes arrive incrementally
+    instead of all at once.
+    """
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/csv; charset=utf-8")
+    handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Connection", "close")
+    handler.end_headers()
+    try:
+        handler.wfile.write(b"\xef\xbb\xbf")  # UTF-8 BOM, same as the buffered CSV exports use
+        buf = io.StringIO(newline='')
+        w = csv.writer(buf)
+        w.writerow(header)
+        BATCH_ROWS = 500
+        pending = 0
+        for row in row_iter:
+            w.writerow(row)
+            pending += 1
+            if pending >= BATCH_ROWS:
+                handler.wfile.write(buf.getvalue().encode('utf-8'))
+                buf.seek(0); buf.truncate(0)
+                pending = 0
+        if pending:
+            handler.wfile.write(buf.getvalue().encode('utf-8'))
+    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+        # Client cancelled the download mid-stream -- nothing left to clean up.
+        pass
+    except Exception:
+        # The response has already started (status + headers were sent above),
+        # so there is no way to turn this into a clean JSON error response at
+        # this point -- the client just gets a truncated file. Log it via the
+        # app's "qdash" logger by name (not by importing logging_setup/server,
+        # which would create a circular import) so it still lands in the
+        # normal rotating log for later diagnosis.
+        logging.getLogger("qdash").error("EXPORT csv streaming FAILED mid-response —", exc_info=True)
+
 
 def _kpi_rows(kpis):
     rows=[]

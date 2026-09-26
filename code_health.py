@@ -44,8 +44,20 @@ html_all = (ROOT/"index.html").read_text(encoding="utf-8") + (ROOT/"admin.html")
 js_all = (ROOT/"app.js").read_text(encoding="utf-8")
 haystack = html_all + js_all
 css_classes = sorted({m.group(1) for sel in selectors for m in re.finditer(r'\.([a-zA-Z][\w-]*)', sel)})
+
+# Dynamic-class awareness: app.js frequently builds a class name at runtime
+# instead of writing it out literally — e.g. `` `status-${status}` `` or
+# `'toast-'+(kind||'info')` — so a plain substring search on css_classes would
+# wrongly call "status-good"/"toast-error" orphaned even though they're the
+# exact strings those two lines produce. Detect the *prefix* used in either
+# pattern and treat any CSS class starting with a live prefix as referenced.
+dynamic_prefixes = set(re.findall(r'([a-zA-Z][\w-]*-)\$\{', haystack))
+dynamic_prefixes |= set(re.findall(r"""([a-zA-Z][\w-]*-)['"]\s*\+""", haystack))
+
 orphans=[]
 for cls in css_classes:
+    if any(cls.startswith(p) for p in dynamic_prefixes):
+        continue
     if not re.search(r'(?<![\w-])'+re.escape(cls)+r'(?![\w-])', haystack):
         orphans.append(cls)
 if orphans:
