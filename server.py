@@ -747,6 +747,30 @@ def get_conn():
     conn.execute("PRAGMA busy_timeout=3000")
     conn.execute("PRAGMA temp_store=MEMORY")
     conn.execute("PRAGMA cache_size=-16000")
+    try:
+        # WAL (write-ahead log) mode lets readers proceed concurrently with a
+        # writer instead of the default rollback-journal mode's "one writer
+        # OR readers, never both" file lock. This app is exactly the shape
+        # that benefits most: many concurrent dashboard viewers doing SELECTs
+        # while an import/backup/admin action occasionally writes -- under
+        # the old default, a single slow write (or a long-running read, like
+        # the streamed CSV export) could make every other request queue for
+        # up to `busy_timeout` before either succeeding or surfacing as
+        # "database is locked". This is a one-time, per-database-file mode
+        # change (SQLite persists it in the file header), not a data
+        # migration -- it changes nothing about the schema or rows, and is
+        # trivially reversible (`PRAGMA journal_mode=DELETE`) if ever needed.
+        # `synchronous=NORMAL` is WAL's standard, still-durable pairing:
+        # committed transactions remain safe, only the fsync of the WAL file
+        # itself (not the main database) is relaxed, which is the accepted
+        # default for this mode. Wrapped in try/except because a handful of
+        # exotic filesystems (some network mounts) don't support WAL; on
+        # those this silently keeps the previous (still correct, just less
+        # concurrent) journal mode rather than failing every request.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except Exception:
+        pass
     return conn
 
 
@@ -3447,7 +3471,17 @@ def database_status():
         provider = "PostgreSQL"
         persistent = True
     else:
+        # WAL mode (enabled in get_conn() for concurrent-read performance)
+        # keeps recent, not-yet-checkpointed writes in DB_PATH+"-wal" rather
+        # than the main file, and a small DB_PATH+"-shm" index alongside it.
+        # Counting only the main file would under-report real disk usage --
+        # and this number feeds a disk-quota percentage below, so it has to
+        # reflect what's actually on disk, not just the main file.
         size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+        for suffix in ("-wal", "-shm"):
+            sidecar = DB_PATH + suffix
+            if os.path.exists(sidecar):
+                size += os.path.getsize(sidecar)
         used_mb = size / (1024*1024)
         limit_mb = float(os.environ.get("DB_LIMIT_MB", "500"))
         pct = (used_mb / limit_mb * 100) if limit_mb else 0

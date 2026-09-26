@@ -119,7 +119,7 @@
   @keyframes legendEnter{0%{opacity:.25;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}
   .tab-btn{font-size:14px;font-weight:700;padding:9px 15px;}
   /* Sticky dashboard filters: remain accessible while scrolling through KPIs/charts/tables. */
-  .filters{position:sticky;top:0;z-index:1000;padding:17px;gap:13px;border-radius:var(--radius-card);box-shadow:var(--shadow-sticky);background:var(--glass-bg-2);backdrop-filter:blur(var(--glass-blur-2));-webkit-backdrop-filter:blur(var(--glass-blur-2));}
+  .filters{position:sticky;top:0;z-index:1000;padding:17px;gap:13px;border-radius:var(--radius-card);box-shadow:var(--shadow-sticky);background:var(--glass-bg-2);backdrop-filter:blur(var(--glass-blur-2));-webkit-backdrop-filter:blur(var(--glass-blur-2));will-change:backdrop-filter;}
   .filters::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.9);}
 
   .filter-trigger{font-size:14px;min-height:38px;}
@@ -189,9 +189,20 @@
   header{position:relative;}
   .header-actions{display:flex;align-items:center;gap:10px;}
   /* FINAL: dashboard filters must remain fixed/sticky at the viewport top while scrolling. */
-  .filters{position:-webkit-sticky !important;position:sticky !important;top:0 !important;z-index:9999 !important;align-self:start;display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:14px 14px 16px;border-radius:var(--radius-card);box-shadow:var(--shadow-sticky);background:var(--glass-bg-2);backdrop-filter:blur(var(--glass-blur-2));-webkit-backdrop-filter:blur(var(--glass-blur-2));}
+  .filters{position:-webkit-sticky !important;position:sticky !important;top:0 !important;z-index:9999 !important;align-self:start;display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:14px 14px 16px;border-radius:var(--radius-card);box-shadow:var(--shadow-sticky);background:var(--glass-bg-2);backdrop-filter:blur(var(--glass-blur-2));-webkit-backdrop-filter:blur(var(--glass-blur-2));will-change:backdrop-filter;}
   @media(max-width:1050px){.filters{grid-template-columns:repeat(2,minmax(180px,1fr));}}
   @media(max-width:600px){.filters{position:static !important;top:auto !important;z-index:auto !important;grid-template-columns:1fr;padding:12px;gap:10px;}.filter-menu{max-height:55vh;}.filter-options{max-height:180px;}}
+  /* The sticky filter bar's live backdrop-filter blur has to be recomputed by
+     the browser on every scroll frame while it stays pinned and the page
+     scrolls underneath it -- `will-change:backdrop-filter` above hints the
+     browser to keep a dedicated compositing surface ready for that instead
+     of recalculating it cold each frame (the standard fix for sticky/fixed
+     "glass" bars). For anyone who has asked their OS for reduced motion,
+     drop the live blur entirely in favor of a solid tinted background:
+     zero per-frame blur cost, and glass/parallax-style effects are exactly
+     what reduced-motion settings are meant to opt users out of.
+  */
+  @media(prefers-reduced-motion:reduce){.filters{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;background:var(--card) !important;}}
   .filter-toolbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:2px;}
   .filter-toolbar-title{font-size:14px;font-weight:800;color:var(--navy);letter-spacing:.4px;text-transform:uppercase;}
   .filter-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
