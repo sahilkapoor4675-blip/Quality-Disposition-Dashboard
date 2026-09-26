@@ -1996,10 +1996,56 @@ header.app-header .header-fx .hfx-layer svg{
 }
 header.app-header .header-fx .hfx-layer{height:92% !important;}
 header.app-header .header-fx .hfx-blue{opacity:.26 !important;}
-header.app-header .header-fx .hfx-copper{opacity:.30 !important;}
+/* Keep the copper wave alive as the sole continuous decorative motion. The SVG is
+   already rendered at 200% width with a repeating path, so -50% is a seamless loop. */
+header.app-header .header-fx .hfx-copper{opacity:.24 !important;}
+header.app-header .header-fx .hfx-copper svg{
+  animation:hfxCopperWaveLoop 44s linear infinite !important;
+  transform:translateX(0);
+  will-change:transform;
+}
 header.app-header .header-fx .hfx-veil{
   background:linear-gradient(90deg,rgba(255,255,255,.90) 0%,rgba(255,255,255,.73) 34%,rgba(255,255,255,.28) 55%,rgba(255,255,255,.04) 74%) !important;
 }
+@keyframes hfxCopperWaveLoop{
+  from{transform:translateX(0);}
+  to{transform:translateX(-50%);}
+}
+/* Sticky executive header: stays available while reviewing long tables/charts.
+   The JS only toggles .is-scrolled after a small threshold, avoiding per-frame style churn. */
+header.app-header{
+  position:sticky !important;
+  top:0;
+  z-index:9000;
+  transition:
+    padding .28s ease,
+    background-color .28s ease,
+    box-shadow .28s ease,
+    border-color .28s ease,
+    backdrop-filter .28s ease,
+    -webkit-backdrop-filter .28s ease;
+}
+header.app-header.is-scrolled{
+  background:
+    linear-gradient(100deg,rgba(255,255,255,.83) 0%,rgba(247,249,251,.76) 54%,rgba(236,224,212,.72) 100%) !important;
+  backdrop-filter:blur(12px) saturate(125%);
+  -webkit-backdrop-filter:blur(12px) saturate(125%);
+  box-shadow:
+    0 10px 26px rgba(39,55,68,.16),
+    inset 0 1px 0 rgba(255,255,255,.86),
+    inset 0 -1px 0 rgba(137,148,158,.13) !important;
+}
+header.app-header.is-scrolled .header-logo{
+  transform:scale(.95);
+  transform-origin:left center;
+}
+header.app-header .header-logo{transition:transform .28s ease,filter .28s ease;}
+header.app-header .header-fx{transition:opacity .28s ease;}
+header.app-header.is-scrolled .header-fx{opacity:.86;}
+/* The dashboard filters share the viewport with the sticky header. Keep their sticky
+   top edge below the header's measured height so they never cover its controls. */
+.filters{top:var(--header-sticky-offset,0px) !important;}
+
 .hfx-industrial-slash{
   position:absolute;
   top:-8%;
@@ -2049,12 +2095,36 @@ header.app-header .header-actions,
 header.app-header .digital-clock-block{position:relative;z-index:3;}
 header.app-header .live-dot{animation:livePulse 1.8s ease-in-out infinite !important; transform-origin:center; will-change:transform,opacity; }
 
+@media (min-width:1001px){
+  header.app-header.is-scrolled{padding-top:7px !important;padding-bottom:8px !important;}
+}
+@media (min-width:701px) and (max-width:1000px){
+  header.app-header.is-scrolled{padding-top:10px !important;padding-bottom:10px !important;}
+}
+@media (max-width:700px){
+  header.app-header.is-scrolled{padding-top:9px !important;padding-bottom:9px !important;}
+}
+@media (prefers-reduced-motion:reduce){
+  header.app-header{transition:none !important;}
+  header.app-header .header-logo{transition:none !important;}
+  header.app-header .header-fx{transition:none !important;}
+  header.app-header.is-scrolled .header-logo{transform:none !important;}
+  header.app-header.is-scrolled .header-fx{opacity:1 !important;}
+  header.app-header .header-fx .hfx-copper svg{animation:none !important;transform:none !important;will-change:auto !important;}
+}
 /* Dark theme — same Design 4 geometry, with graphite/steel tones and copper coils retained. */
 html[data-theme="dark"] header.app-header{
   background:
     linear-gradient(112deg,#0d1724 0%,#122235 43%,#182c3e 68%,#241c17 100%) !important;
   border-color:#3b4c5c !important;
   box-shadow:0 8px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06),inset 0 -1px 0 rgba(0,0,0,.32) !important;
+}
+html[data-theme="dark"] header.app-header.is-scrolled{
+  background:
+    linear-gradient(100deg,rgba(10,22,36,.82) 0%,rgba(15,33,50,.76) 54%,rgba(52,31,19,.70) 100%) !important;
+  backdrop-filter:blur(12px) saturate(120%);
+  -webkit-backdrop-filter:blur(12px) saturate(120%);
+  box-shadow:0 12px 28px rgba(0,0,0,.50),inset 0 1px 0 rgba(255,255,255,.06),inset 0 -1px 0 rgba(0,0,0,.25) !important;
 }
 html[data-theme="dark"] header.app-header::after{
   background:linear-gradient(90deg,rgba(217,128,43,0) 0%,rgba(217,128,43,0) 56%,rgba(232,139,57,.88) 74%,rgba(104,122,137,.68) 100%);
@@ -2100,4 +2170,23 @@ html[data-theme="dark"] header.app-header .digital-clock-icon{background:linear-
 }
 @media print{
   header.app-header .header-fx{display:none!important;}
+}
+
+/* LIVE DATA status cue: keep the pulse informative but restrained. The glow breathes with
+   the dot instead of flashing, while the reduced-motion block above disables it entirely. */
+header.app-header .live-dot{animation:livePulseGlow 2.2s ease-in-out infinite !important;}
+@keyframes livePulseGlow{
+  0%,100%{
+    opacity:1;
+    transform:scale(1);
+    box-shadow:0 0 0 3px rgba(34,197,94,.15),0 0 8px rgba(34,197,94,.45);
+  }
+  50%{
+    opacity:.86;
+    transform:scale(.93);
+    box-shadow:0 0 0 4px rgba(34,197,94,.11),0 0 12px rgba(34,197,94,.62);
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  header.app-header .live-dot{animation:none !important;transform:none !important;}
 }

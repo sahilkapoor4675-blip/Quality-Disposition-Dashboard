@@ -3125,7 +3125,56 @@ function setRefreshed(){
 }
 setInterval(()=>{ if(document.visibilityState==='visible') renderLastUpdatedLabel(); }, 30000);
 
+function initHeaderMotion(){
+  const header=document.querySelector('header.app-header');
+  if(!header) return;
+
+  const root=document.documentElement;
+  const reduceMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const syncStickyOffset=()=>{
+    const h=Math.ceil(header.getBoundingClientRect().height);
+    root.style.setProperty('--header-sticky-offset', `${h}px`);
+  };
+  const applyScrollState=()=>{
+    const next=window.scrollY > 18;
+    if(header.classList.contains('is-scrolled')===next) return;
+    header.classList.toggle('is-scrolled', next);
+    // Padding changes the real sticky box height; refresh the filter offset after
+    // the browser applies the class so filters never cover the header.
+    requestAnimationFrame(syncStickyOffset);
+  };
+
+  syncStickyOffset();
+  applyScrollState();
+
+  let scrollQueued=false;
+  const onScroll=()=>{
+    if(scrollQueued) return;
+    scrollQueued=true;
+    requestAnimationFrame(()=>{
+      scrollQueued=false;
+      applyScrollState();
+    });
+  };
+  window.addEventListener('scroll',onScroll,{passive:true});
+  window.addEventListener('resize',syncStickyOffset,{passive:true});
+
+  if('ResizeObserver' in window){
+    const observer=new ResizeObserver(syncStickyOffset);
+    observer.observe(header);
+  }
+
+  // Keep motion preference changes live without reloading the page. CSS handles
+  // the animation shutdown; this listener simply refreshes the sticky geometry.
+  if(reduceMotion?.addEventListener){
+    reduceMotion.addEventListener('change',syncStickyOffset);
+  }else if(reduceMotion?.addListener){
+    reduceMotion.addListener(syncStickyOffset);
+  }
+}
+
 async function init(){
+  initHeaderMotion();
   setRefreshed();
   startDigitalClock();
   startLiveUserTracking();
@@ -3164,5 +3213,13 @@ async function init(){
   } else {
     try { await loadKpis(); finishTabLoad('dashboard'); } catch(e) { finishTabLoad('dashboard', e); }
   }
+  // Warm the QCR cache right after the landing tab finishes rendering, the
+  // same way triggerFilterRefresh() already does on every later filter
+  // change. Without this, only a *second* visit to the Quality Control Room
+  // tab was fast (fetchQcrCore had nothing cached yet) — the very first
+  // click always paid the full /api/qcr round trip. Skipped when the QCR
+  // tab is itself the landing tab, since it's already fetching its own data
+  // above and a second parallel request would just be wasted.
+  if(startTab !== 'controlroom') prefetchQcrCore({...currentFilters});
 }
 init();

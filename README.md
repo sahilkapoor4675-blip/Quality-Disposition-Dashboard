@@ -1,3 +1,15 @@
+## Header Motion Polish — 2026-09-26 (no version bump)
+
+This follow-up changes only the main dashboard header. The existing Design 4 industrial/copper artwork, branding, and data behaviour remain intact.
+
+- **Continuous copper wave:** the existing inline copper SVG is reused as a low-opacity 44-second `translateX(-50%)` loop. No new image asset is introduced and the branding/content does not move.
+- **Scroll state:** the main header is sticky. After a small 18px scroll threshold it slightly reduces vertical padding, applies a restrained transparent glass/blur treatment, and scales the JSL logo to `0.95` in sync with the state.
+- **Sticky-filter safety:** the dashboard's existing sticky filter bar reads a live `--header-sticky-offset` value measured from the header, so it stays below the header instead of covering controls.
+- **LIVE DATA:** the existing status dot uses a subtle 2.2-second `livePulseGlow` breathing halo with minimal scale/opacity change.
+- **Reduced motion:** `prefers-reduced-motion: reduce` disables the copper wave, LIVE pulse, logo shrink transform, and related transitions. The sticky/glass state remains usable without animation.
+
+**Verification:** `VERSION.txt` remains `APP_VERSION=V65.0`; smoke, regression, Admin UX, code-health, JavaScript syntax, and Python compile checks passed after the patch.
+
 # Quality Disposition Control Dashboard — V65.0
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
@@ -147,6 +159,9 @@ The regression suite is consolidated into a single `regression.py`; deleted lega
   by version.
 - **Uptime monitor shows the service down** – point it at `/healthz` (GET or HEAD).
 - **Admin says login required after a restore** – expected: restore replaces the user/session tables; log in again.
+- **Quality Control Room tab felt slow the first time it was opened, but instant after that** – fixed: `app.js`
+  now warms the QCR data cache (`prefetchQcrCore()`) in the background right after the landing tab (usually
+  Dashboard) finishes loading, instead of only warming it after a later filter change. See `CHANGELOG.md`.
 
 ### Header Design
 The dashboard uses the approved **Design 4 — Industrial Copper** header: static copper-base coil/plant artwork on a steel-inspired surface, JSL orange/graphite diagonal accents, and the existing Quality Intelligence typography preserved as-is. The compact right-side toolbar remains bottom-aligned with the date/time card above it. The same composition adapts for the dark theme.

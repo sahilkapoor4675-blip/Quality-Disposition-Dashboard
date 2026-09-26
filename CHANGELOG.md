@@ -1,3 +1,29 @@
+# Header Motion Polish — 2026-09-26 (no version bump)
+
+### Changed
+- Restored a **single subtle copper SVG wave loop** in the Design 4 header. It uses the existing 200%-width copper artwork and a slow `translateX(-50%)` loop (44s), so the wave moves continuously without adding a new asset or moving the branding/content.
+- Added a **sticky scroll state** to the main dashboard header. After a small 18px scroll threshold, the header becomes slightly more compact, gains a restrained glass/blur treatment, and the JSL logo scales in sync with the header state.
+- Kept the existing **LIVE DATA** indicator, but made its pulse a quieter glow/scale rhythm rather than a hard visual flash.
+- Added a live CSS-variable offset for the existing sticky filters so they remain below the sticky header instead of covering it.
+- `prefers-reduced-motion: reduce` now disables the decorative copper wave, LIVE pulse, and logo shrink motion; the scroll state remains usable without animated transitions.
+
+### Verification
+- Version file unchanged (`VERSION.txt` remains at its existing value).
+- No application/data/API files changed.
+- Added/reviewed CSS and JavaScript only in `app.css` and `app.js`; README/changelog document the change.
+- Validation run after patching: CSS/HTML asset checks, `node --check app.js`, Python syntax compile, and dashboard smoke checks.
+
+
+## V65.0 — Follow-up: first-visit Quality Control Room (QCR) tab load delay fixed (no version bump — same version)
+
+### Fixed
+- **The Quality Control Room tab was slow only the *first* time it was opened in a session** — every visit after that felt instant. Root cause: `fetchQcrCore()` already caches its `/api/qcr` response for 30s, and `prefetchQcrCore()` exists specifically to warm that cache in the background, but it was only ever called from `triggerFilterRefresh()` — i.e. after the user changed a filter while sitting on the Dashboard tab. On a fresh page load (the normal case — land on Dashboard, then click "Quality Control Room"), nothing warmed the cache first, so that first click always paid the full `/api/qcr` round trip (KPIs, defect register, work-center/grade breakdowns, monthly trend, and problem-finder/RCA intelligence, all computed fresh) before anything rendered.
+- `init()` now calls `prefetchQcrCore()` in the background right after the landing tab finishes rendering (Dashboard or any other non-QCR start tab), the same call `triggerFilterRefresh()` already made after a filter change. By the time the user actually clicks into the Quality Control Room tab, its data is normally already sitting in cache, so `loadControlRoom()` resolves immediately instead of waiting on the network. Skipped when the Quality Control Room tab is itself the saved/URL-restored landing tab, since it is already fetching its own data at that point and a second parallel request would be wasted. Fire-and-forget, matching the existing `prefetchQcrCore()` contract — no new UI state, no change to what the tab shows, no change to `/api/qcr` itself.
+
+### Verified
+- `node --check app.js` — clean.
+- Manually traced both `init()` paths (Dashboard as landing tab, and a non-QCR tab restored from a saved default/shared URL) to confirm the new prefetch fires exactly once, after the landing tab's own load, and is skipped when Quality Control Room is the landing tab itself.
+- No change to `/api/qcr`, `fetchQcrCore()`'s caching/retry logic, or `loadControlRoom()`'s rendering — this only adds one additional (existing) prefetch call site.
 
 ## V65.0 — Follow-up: SQLite WAL mode (concurrency/lag fix), sticky-filter scroll-jank fix (no version bump — same version)
 
