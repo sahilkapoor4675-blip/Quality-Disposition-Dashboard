@@ -5302,7 +5302,21 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/logout":
             token = _cookie_value(self.headers.get("Cookie", ""), "qdash_admin")
-            SESSIONS.pop(token, None)
+            # Every other place in this file that mutates SESSIONS (login, viewer
+            # logout, revoke_session, change_password, user_toggle, the periodic
+            # _cleanup_sessions sweep) takes SESSION_LOCK first, because
+            # ThreadingHTTPServer runs each request on its own thread and several
+            # of those call sites iterate `list(SESSIONS.items())` while holding
+            # the lock. This admin-logout handler was the one exception: an
+            # unlocked `SESSIONS.pop()` running concurrently with one of those
+            # locked iterations can still race under the GIL and intermittently
+            # raise "RuntimeError: dictionary changed size during iteration" in
+            # whichever request happened to be mid-iteration, surfacing as a
+            # sporadic 500 on an unrelated endpoint under concurrent admin
+            # traffic. Wrapping the pop in the same lock removes the race with
+            # no behavior change on the logout response itself.
+            with SESSION_LOCK:
+                SESSIONS.pop(token, None)
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")

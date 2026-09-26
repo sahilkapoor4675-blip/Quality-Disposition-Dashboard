@@ -7,6 +7,10 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
+## What changed in V65.0 (follow-up audit: session-lock race fixed, no version bump)
+- **Fixed:** the admin `/api/logout` endpoint removed a session from the shared, in-memory session store without taking the `SESSION_LOCK` that every other session read/write in `server.py` uses (login, viewer logout, revoke-session, change-password, user-toggle, and the periodic session-cleanup sweep all take it, since the server runs one thread per request). Under concurrent admin traffic this could occasionally race with one of those locked operations and surface as an unrelated request failing with a dictionary-mutation error. The pop is now taken under the same lock as everywhere else; the logout response and cookies are unchanged.
+- **Verified:** every release-gate script (smoke test, all regression suites including security/session hardening, HTTP smoke across 47 endpoints, admin UX audit) plus a Python compile check and a JavaScript syntax check of `app.js` all pass. This was the only defect found in this pass.
+
 ## What changed in V65.0 (full audit pass, one bug fixed)
 - **Fixed:** `admin.html` had two elements sharing `id="admin-field-hints"` (a `<style>` tag and a `<script>` tag), which is invalid HTML and was failing the project's own `admin_ux_audit.py` check. Renamed to `admin-field-hints-style` / `admin-field-hints-script`; nothing else referenced the old id, so this is a pure fix with no behavior change.
 - **Verified:** every release-gate script (smoke test, all regression suites, HTTP smoke across 47 endpoints, code-health, admin UX audit, Excel/PDF/PPTX export acceptance and stress tests) passes, plus a full Python compile check and a JavaScript syntax check of every inline script in `index.html` and `admin.html`. This was the only defect found.
