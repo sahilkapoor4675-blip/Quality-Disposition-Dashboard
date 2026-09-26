@@ -1,3 +1,18 @@
+## V65.0 — Follow-up: QCR target breach accuracy, cache bounds, target precision
+
+### Fixed
+- **QCR Target Breaches now exclude neutral KPIs.** `qcrRenderExecutive()` counts only `amber` and `bad` statuses, so KPIs without a configured target are not reported as breaches.
+- **Bounded the QCR core response cache.** `qcrCoreCache` now removes entries older than 60 seconds when the cache grows beyond 15 entries and evicts the oldest remaining entry when the limit is still exceeded.
+- **Corrected `num3` target formatting.** `fmtTarget()` now renders `num3` values with three decimal places.
+- **Removed an unused QCR executive variable.**
+
+### Verified
+- `node --check app.js` — clean.
+- Targeted checks confirm the QCR breach filter, cache cleanup, `num3` precision, and unused-variable cleanup are present.
+- Existing v2 animated header implementation and earlier frontend fixes remain intact.
+- No API, database, schema, or data changes are involved.
+
+
 ## V65.0 — Follow-up: animated header accent lines
 
 ### Added

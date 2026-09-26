@@ -78,6 +78,14 @@ The bundled `quality.db` is unchanged (4,936 disposition rows).
 - Overview production-health content and KPI target history live inside their logical parent sections; Import History is in the navigation.
 - There is no global search bar in Admin; use **Latest Records** (search + date filters + export/delete).
 
+## V65.0 follow-up fixes
+
+- QCR target breach counts now include only KPIs in `amber` or `bad` status; KPIs with no configured target remain `neutral` and are excluded.
+- The QCR core response cache is bounded to 15 entries and removes entries older than 60 seconds during overflow cleanup.
+- `num3` QCR targets now display three decimal places.
+- Removed an unused QCR executive variable.
+- The header accent animation uses the v2 transform-based implementation with separate top/bottom motion, reduced-motion handling, and print handling.
+
 ## What it does
 - **Dashboard** – live filters (Month, Week, Quarter, Financial Year, Work Center, Grade, Quality
   Decision, Defect Intensity), KPI cards with period-over-period change, drill-down to underlying coils.

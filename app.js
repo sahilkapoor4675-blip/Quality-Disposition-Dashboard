@@ -553,7 +553,7 @@ function fmtTarget(v,fmt){
   const n=Number(v); if(!Number.isFinite(n)) return '—';
   if(fmt==='pct') return (n*100).toFixed(1)+'%';
   if(fmt==='int') return Math.round(n).toLocaleString();
-  if(fmt==='num3') return n.toFixed(2);
+  if(fmt==='num3') return n.toFixed(3);
   return n.toFixed(2);
 }
 function kpiTargetData(label){return KPI_TARGETS[label]||null;}
@@ -722,9 +722,9 @@ const _tableSortState = new Map(); // tableId -> {col, dir}; absent = natural/se
 const _tableNormalOrder = new Map(); // tableId -> {rows: HTMLElement[], totals: HTMLElement[]}
 function _parseSortCell(text){
   const t = String(text == null ? '' : text).trim()
-    .replace(/[,%]/g, '')                      // "1,234%" -> "1234"
-    .replace(/^\+\s*/, '')                     // "+1.23" -> "1.23"
-    .replace(/\s*(pp|pts|mt|coils)\s*$/i, '')  // strip supported unit suffixes
+    .replace(/[,%]/g, '')
+    .replace(/^\+\s*/, '')
+    .replace(/\s*(pp|pts|mt|coils)\s*$/i, '')
     .trim();
   if(!t) return null;
   if(!/^-?\d*\.?\d+$/.test(t)) return null;
@@ -2652,6 +2652,16 @@ async function fetchQcrCore(filters, signal){
       if(!r.ok || data?.error) throw new Error(data?.error || ('QCR request failed (HTTP '+r.status+')'));
       if(!data || !data.k || !data.d || !data.w){throw new Error('QCR response is incomplete');}
       qcrCoreCache.set(key,{ts:Date.now(),data});
+      if(qcrCoreCache.size>15){
+        const now=Date.now();
+        for(const [k,v] of qcrCoreCache){
+          if(now-v.ts>60000) qcrCoreCache.delete(k);
+        }
+        if(qcrCoreCache.size>15){
+          const oldest=[...qcrCoreCache.entries()].sort((a,b)=>a[1].ts-b[1].ts)[0];
+          if(oldest) qcrCoreCache.delete(oldest[0]);
+        }
+      }
       try{sessionStorage.setItem(qcrSessionKey(filters),JSON.stringify({ts:Date.now(),data}));}catch(_){}
       return data;
     }catch(e){
@@ -2665,6 +2675,16 @@ async function fetchQcrCore(filters, signal){
     const saved=JSON.parse(sessionStorage.getItem(qcrSessionKey(filters))||'null');
     if(saved?.data?.k && saved?.data?.d && saved?.data?.w){
       qcrCoreCache.set(key,{ts:Date.now(),data:saved.data});
+      if(qcrCoreCache.size>15){
+        const now=Date.now();
+        for(const [k,v] of qcrCoreCache){
+          if(now-v.ts>60000) qcrCoreCache.delete(k);
+        }
+        if(qcrCoreCache.size>15){
+          const oldest=[...qcrCoreCache.entries()].sort((a,b)=>a[1].ts-b[1].ts)[0];
+          if(oldest) qcrCoreCache.delete(oldest[0]);
+        }
+      }
       return saved.data;
     }
   }catch(_){}
@@ -2831,22 +2851,12 @@ function qcrRenderTargetHistory(rows,target){
 function qcrRenderExecutive(intel, critical, comparisonRows, intelError){
   const health=intel?.health_score||{}; const h=Number(health.score||0); const pf=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
   const crit=pf.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
-  const att=pf.filter(x=>String(x.severity||'').toLowerCase()==='attention').length;
   const top=pf[0];
   const prev=comparisonRows?.length>1?comparisonRows[comparisonRows.length-2]:null, cur=comparisonRows?.length?comparisonRows[comparisonRows.length-1]:null;
   let trend='●', trendText='Stable', trendClass='neutral';
   if(prev&&cur){const a=Number(prev.fpy||prev.fpy_pct||0),b=Number(cur.fpy||cur.fpy_pct||0);if(b<a){trend='▼';trendText='Quality declining';trendClass='bad';}else if(b>a){trend='▲';trendText='Quality improving';trendClass='good';}}
   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  const breaches=critical.filter(k=>qcrStatus(k.label,k.value)!=='good').length;
-  // When the intelligence engine (health score / problem finder) failed to
-  // compute for this request — e.g. a transient DB connection error — the
-  // server still returns a well-formed but FAKE health_score of {score:0,
-  // status:"amber"} and an empty problem_finder, purely so the rest of the
-  // payload isn't blanked. Rendering that as-is looks like a real, confident
-  // "0/100, Attention, No material issue" result, which directly contradicts
-  // the Target Breaches count (computed independently from real KPI data)
-  // sitting right next to it. Surface the failure honestly instead of
-  // presenting fabricated numbers as if they were a real analysis.
+  const breaches=critical.filter(k=>{const s=qcrStatus(k.label,k.value);return s==='amber'||s==='bad';}).length;
   if(intelError){
     set('qcrExecHealth','—/100');set('qcrExecHealthState','Unavailable');
     set('qcrExecCritical','—');set('qcrExecBreaches',breaches);
