@@ -2101,3 +2101,11 @@ html[data-theme="dark"] header.app-header .digital-clock-icon{background:linear-
 @media print{
   header.app-header .header-fx{display:none!important;}
 }
+
+/* Filter change signal: a soft expanding ring around the sticky filter bar. */
+.filter-pulse{animation:filterPulse .42s ease-out;}
+@keyframes filterPulse{
+  0%  {box-shadow:var(--shadow-sticky),0 0 0 0 rgba(35,136,201,.38);}
+  100%{box-shadow:var(--shadow-sticky),0 0 0 15px rgba(35,136,201,0);}
+}
+@media(prefers-reduced-motion:reduce){.filter-pulse{animation:none;}}

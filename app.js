@@ -520,7 +520,10 @@ async function triggerFilterRefresh(){
   const page=document.querySelector('.container'); if(page) page.classList.add('dashboard-refreshing');
   document.querySelectorAll('.kpi-card').forEach(c=>c.classList.add('shimmering'));
   document.querySelectorAll('.chart-scroll').forEach(c=>c.classList.add('chart-refreshing'));
-  document.querySelector('.filters')?.classList.add('filter-pulse');
+  // Retrigger the filter pulse on every refresh by removing the class,
+  // forcing a reflow, and adding it back before the animation starts.
+  const filterBar=document.querySelector('.filters');
+  if(filterBar){ filterBar.classList.remove('filter-pulse'); void filterBar.offsetWidth; filterBar.classList.add('filter-pulse'); }
   const t0=performance.now();
   try{await TAB_LOADERS[activeTab](signal); if(activeTab==='dashboard') prefetchQcrCore({...currentFilters}); finishTabLoad(activeTab);}catch(e){finishTabLoad(activeTab,e);}finally{
     const elapsed=performance.now()-t0; const wait=Math.max(0,250-elapsed);
@@ -673,7 +676,9 @@ function animateKpiValue(el, from, to, fmt, token){
   const duration = 620;
   const ease = t => 1 - Math.pow(1 - t, 3);
   const step = now => {
-    if(token !== kpiAnimationToken) return;
+    // Dashboard and QCR share this helper but use separate cancellation
+    // counters. Continue while the token matches either active counter.
+    if(token !== kpiAnimationToken && token !== qcrAnimationToken) return;
     const p = Math.min(1, (now - start) / duration);
     const v = from + (to - from) * ease(p);
     el.textContent = fmtValue(v, fmt);
@@ -720,9 +725,17 @@ const SORTABLE_TABLE_IDS = ["decisionTable","defectTable","intensityTable","mont
 const _tableSortState = new Map(); // tableId -> {col, dir}; absent = natural/server order
 const _tableNormalOrder = new Map(); // tableId -> {rows: HTMLElement[], totals: HTMLElement[]}
 function _parseSortCell(text){
-  const t=text.trim().replace(/[,%]/g,'');
-  const n=parseFloat(t);
-  return (t!=='' && !isNaN(n) && /^-?[\d.]+$/.test(t)) ? n : null;
+  // Remove thousands separators and percent signs, leading plus signs, and
+  // trailing unit suffixes so numeric sort columns are compared numerically.
+  const t = String(text == null ? '' : text).trim()
+    .replace(/[,%]/g, '')                      // "1,234%" -> "1234"
+    .replace(/^\+\s*/, '')                     // "+1.23" -> "1.23"
+    .replace(/\s*(pp|pts|mt|coils)\s*$/i, '')  // strip supported unit suffixes
+    .trim();
+  if(!t) return null;
+  if(!/^-?\d*\.?\d+$/.test(t)) return null;
+  const n = parseFloat(t);
+  return Number.isFinite(n) ? n : null;
 }
 function rememberTableNormalOrder(tableId){
   const tbody=document.querySelector(`#${tableId} tbody`); if(!tbody) return;
@@ -1027,11 +1040,22 @@ function goToDrillLevel(i){
 }
 function renderDrillPage(page=1){
   const {metric,title,extra}=currentDrill(), modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
-  currentDrill().page=page; { const dt=document.getElementById('drillTitle'); const dtt=dt&&dt.querySelector('.drill-title-text'); (dtt||dt).textContent=title||'Underlying Records'; } document.getElementById('drillSubtitle').textContent=activeFilterSummary();
-  content.innerHTML='<div class="drill-empty">Loading underlying records…</div>'; document.getElementById('drillCount').textContent='Loading…';
-  const qs=drilldownFiltersQuery(Object.assign({metric,page,page_size:250},extra)); document.getElementById('drillExportBtn').href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric},extra));
+  currentDrill().page=page;
+  // Guard optional drilldown elements so partial renders or future refactors
+  // cannot throw and abort the entire drilldown flow.
+  const dt=document.getElementById('drillTitle');
+  if(dt){ const dtt=dt.querySelector('.drill-title-text'); (dtt||dt).textContent=title||'Underlying Records'; }
+  const subEl=document.getElementById('drillSubtitle'); if(subEl) subEl.textContent=activeFilterSummary();
+  content.innerHTML='<div class="drill-empty">Loading underlying records…</div>';
+  const cntEl=document.getElementById('drillCount'); if(cntEl) cntEl.textContent='Loading…';
+  const qs=drilldownFiltersQuery(Object.assign({metric,page,page_size:250},extra));
+  const expEl=document.getElementById('drillExportBtn');
+  if(expEl) expEl.href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric},extra));
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
-    if(data.error)throw new Error(data.error); document.getElementById('drillCount').textContent=Number(data.count||0).toLocaleString()+' coils'; document.getElementById('drillScope').textContent=(data.scope||'')+' • '+Number(data.row_count||data.rows?.length||0).toLocaleString()+' records';
+    if(data.error)throw new Error(data.error);
+    if(cntEl) cntEl.textContent=Number(data.count||0).toLocaleString()+' coils';
+    const scEl=document.getElementById('drillScope');
+    if(scEl) scEl.textContent=(data.scope||'')+' • '+Number(data.row_count||data.rows?.length||0).toLocaleString()+' records';
     if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('No underlying records found for this KPI/selection.','Try a wider date range or clear a filter.')+'</div>';return;}
     const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     const fmtDate=v=>{const s=String(v||''); if(/^\d{4}-\d{2}-\d{2}/.test(s)){const [y,m,d]=s.slice(0,10).split('-'); return `${d}-${m}-${y}`;} return s;};
@@ -1041,7 +1065,10 @@ function renderDrillPage(page=1){
     html+=`</tbody><tfoot><tr class="grand-total-row"><td colspan="2">Grand Total — ${Number(data.count||0).toLocaleString()} coils</td><td></td><td></td><td></td><td></td><td></td><td>Records: ${Number(data.row_count||0).toLocaleString()}</td><td>${Number(data.total_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr></tfoot></table></div>`;
     if(Number(data.total_pages||1)>1) html+=`<div class="drill-pagination"><button type="button" data-drill-page="${Math.max(1,Number(data.page||1)-1)}" ${Number(data.page||1)<=1?'disabled':''}>‹ Previous</button><span>Page ${Number(data.page||1)} of ${Number(data.total_pages||1)}</span><button type="button" data-drill-page="${Math.min(Number(data.total_pages||1),Number(data.page||1)+1)}" ${Number(data.page||1)>=Number(data.total_pages||1)?'disabled':''}>Next ›</button></div>`;
     content.innerHTML=html;
-  }).catch(e=>{content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('Unable to load records.',String(e.message||e))+'</div>';document.getElementById('drillCount').textContent='Error';});
+  }).catch(e=>{
+    content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('Unable to load records.',String(e.message||e))+'</div>';
+    if(cntEl) cntEl.textContent='Error';
+  });
 }
 // Opens a fresh drill-down as the FIRST level (e.g. clicking a defect bar on
 // a chart) — resets any previous breadcrumb trail, since this is a new,

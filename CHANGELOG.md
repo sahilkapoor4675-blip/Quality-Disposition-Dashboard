@@ -1,3 +1,20 @@
+## V65.0 — Follow-up: frontend sorting, QCR KPI animation, drilldown null-safety, filter refresh pulse
+
+### Fixed
+- **Table sorting now handles signed numbers and unit-suffixed values correctly.** `_parseSortCell()` now removes thousands separators and percent signs, accepts a leading `+` sign, strips common trailing units (`pp`, `pts`, `MT`, `coils`), and validates the remaining value as one numeric token. This prevents change/trend cells such as `+1.23%` or `−0.50%`, and values such as `12.5 MT`, from falling back to string comparison and producing the wrong order.
+- **Quality Control Room KPI count-up animation was restored.** `animateKpiValue()` is shared by the Dashboard and QCR, but the two areas maintain separate cancellation tokens (`kpiAnimationToken` and `qcrAnimationToken`). The animation guard now accepts either active token, so a QCR animation is no longer cancelled immediately because the Dashboard token differs.
+- **Drilldown rendering is now null-safe.** `renderDrillPage()` now guards the optional title, subtitle, count, scope, and export elements before reading or writing them. The error path uses the already-captured count element as well, so a partial/future refactor of the drilldown markup cannot turn a missing optional element into a full render crash.
+- **Filter refresh pulse now retriggers on every filter change.** `triggerFilterRefresh()` removes the existing `filter-pulse` class, forces a reflow, and then adds it again. This makes the CSS animation replay for each filter change instead of only the first time the class is added.
+
+### Added
+- **`.filter-pulse` CSS animation.** Added a short expanding blue ring around the sticky filter bar as a visual signal that a filter change has triggered a refresh. The animation is disabled under `prefers-reduced-motion: reduce`.
+
+### Verified
+- `node --check` on the updated `app.js` — clean.
+- Targeted validation of `_parseSortCell()` for signed numeric values, percentages, and the supported unit suffixes — correct numeric parsing.
+- Confirmed the requested functions/classes are present exactly once in the updated source and that no unrelated sections were intentionally modified.
+- No database, API, schema, or data changes are involved in this frontend-only patch.
+
 
 ## V65.0 — Follow-up: first-visit Quality Control Room (QCR) tab load delay fixed (no version bump — same version)
 
