@@ -1,3 +1,13 @@
+## What changed in V65.0 (follow-up: export chart reliability)
+- **Decision Distribution export supports all seven disposition categories.** The pie chart now cycles the available palette to the exact number of nonzero slices, so exports remain valid when all seven decision types have quantity.
+- **Per-chart export isolation.** Individual chart rendering failures are logged and skipped instead of aborting the complete Excel/PDF/PowerPoint export.
+
+## What changed in V65.0 (follow-up: backend consistency and cleanup)
+- **"WITHOUT INTENSITY" now treats both blank values and legacy `NONE` values as missing intensity** in the KPI aggregation and drilldown path, matching the existing filter behavior.
+- **Expired admin sessions release `SESSION_LOCK` before the shared-database delete**, preventing a slow database call from blocking other session-authenticated requests.
+- **Fishbone style refresh cleanup** removes an unreachable update branch after the style table has already been reset for a full import.
+- **PostgreSQL seed import cursor is closed explicitly** after the batch insert.
+
 # Quality Disposition Control Dashboard — V65.0
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python

@@ -200,8 +200,9 @@ def _chart_png(kind, title, labels, values, second=None, second_label=None, perc
             # Labels go in a side legend rather than on the wedges — on-slice category labels
             # overlap and become unreadable once a slice is small, same problem the legend-based
             # charts elsewhere in this file already avoid.
+            pie_colors=[palette[i % len(palette)] for i in range(len(vs))]
             wedges,_,_=ax.pie(vs, autopct=lambda p: f"{p:.1f}%" if p>=4 else "", startangle=90,
-                   colors=[blue,green,orange,red,purple,"#64748B"][:len(vs)],
+                   colors=pie_colors,
                    wedgeprops={"linewidth":1.2,"edgecolor":"white"}, pctdistance=0.72,
                    textprops={"fontsize":8,"color":"white","fontweight":"bold"})
             ax.legend(wedges, labs, loc="center left", bbox_to_anchor=(1.02,0.5), fontsize=8.5, frameon=False)
@@ -331,34 +332,45 @@ def _export_charts(payload):
     d=payload["defects"]; wc=payload["wcg"]["by_work_center"]; gr=payload["wcg"]["by_grade"]
     kp=payload.get("kpis",{}) or {}
     charts=[]
+    def _safe_chart(name, *args, **kwargs):
+        try:
+            png=_chart_png(*args, **kwargs)
+            return (name,png) if png else None
+        except Exception as e:
+            print(f"EXPORT chart '{name}' failed: {e}", flush=True)
+            return None
     decisions=[r for r in (kp.get("decision_table") or []) if r.get("qty")]
     if decisions:
-        charts.append(("Decision Distribution",_chart_png("pie","Quality Decision Distribution",[r["decision"] for r in decisions],[r["qty"] for r in decisions])))
+        c=_safe_chart("Decision Distribution","pie","Quality Decision Distribution",[r["decision"] for r in decisions],[r["qty"] for r in decisions])
+        if c: charts.append(c)
     if d.get("pareto"):
-        charts.append(("Defect Pareto",_chart_png("pareto","Top Defect Pareto — Output Qty",[r["defect"] for r in d["pareto"]],[r["qty"] for r in d["pareto"]],[r["cum_pct"] for r in d["pareto"]])))
+        c=_safe_chart("Defect Pareto","pareto","Top Defect Pareto — Output Qty",[r["defect"] for r in d["pareto"]],[r["qty"] for r in d["pareto"]],[r["cum_pct"] for r in d["pareto"]])
+        if c: charts.append(c)
     it=[r for r in (kp.get("intensity_table") or []) if r.get("qty") or r.get("coils")]
     if it:
-        charts.append(("Defect Intensity",_chart_png("bar","Defect Intensity — Output Qty (MT)",[r["intensity"] for r in it],[r["qty"] for r in it])))
-    # Chart VISUALS stay readable and fast on high-cardinality data: only the largest bars / the
-    # most recent points are drawn (the paired tables always list every row).
+        c=_safe_chart("Defect Intensity","bar","Defect Intensity — Output Qty (MT)",[r["intensity"] for r in it],[r["qty"] for r in it])
+        if c: charts.append(c)
     def _top_by_qty(rows,n=_CHART_MAX_BARS):
         rows=list(rows)
         if len(rows)<=n: return rows,""
         return sorted(rows,key=lambda r:float(r.get("output_qty") or 0),reverse=True)[:n],f" (Top {n} of {len(rows)})"
     if wc:
         wc_top,wc_sfx=_top_by_qty(wc)
-        charts.append(("Work Center",_chart_png("bar","Output Quantity by Work Center"+wc_sfx,[r["name"] for r in wc_top],[r["output_qty"] for r in wc_top])))
+        c=_safe_chart("Work Center","bar","Output Quantity by Work Center"+wc_sfx,[r["name"] for r in wc_top],[r["output_qty"] for r in wc_top])
+        if c: charts.append(c)
     if gr:
         gr_top,gr_sfx=_top_by_qty(gr)
-        charts.append(("Grade",_chart_png("bar","Output Quantity by Grade"+gr_sfx,[r["name"] for r in gr_top],[r["output_qty"] for r in gr_top])))
+        c=_safe_chart("Grade","bar","Output Quantity by Grade"+gr_sfx,[r["name"] for r in gr_top],[r["output_qty"] for r in gr_top])
+        if c: charts.append(c)
     for title,key in [("Monthly Trend","monthly"),("Weekly Trend","period"),("Quarterly Trend","quarterly"),("Financial Year Trend","yearly")]:
         rows=payload[key]["rows"]
         if rows:
             sfx=""
             if len(rows)>_CHART_MAX_POINTS:
                 sfx=f" (latest {_CHART_MAX_POINTS} of {len(rows)})"; rows=rows[-_CHART_MAX_POINTS:]
-            charts.append((title,_chart_png("line",title+sfx,[r["name"] for r in rows],[r["output_qty"] for r in rows])))
-    return [(n,b) for n,b in charts if b]
+            c=_safe_chart(title,"line",title+sfx,[r["name"] for r in rows],[r["output_qty"] for r in rows])
+            if c: charts.append(c)
+    return charts
 
 def _xl_embed_charts(ws, charts_dict, names, start_row=3, anchor_col="J", width=500, height=225, gap_rows=13):
     """Place named chart PNGs one below another, starting at anchor_col/start_row, so a

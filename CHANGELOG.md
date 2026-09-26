@@ -1,3 +1,28 @@
+## V65.0 — Follow-up: export chart reliability
+
+### Fixed
+- **Decision Distribution export now supports all seven disposition categories.** The pie-chart color palette is cycled to match every nonzero slice, preventing the Excel/PDF/PowerPoint export path from failing when all decision types contain quantity.
+- **Export charts are isolated per chart.** A failure in one chart is logged and skipped so the remaining charts and export tables can still be generated.
+
+### Verified
+- Seven-slice Decision Distribution PNG generation succeeds.
+- A synthetic single-chart failure is isolated without dropping the remaining charts.
+- Python compile check passes for `reports.py`.
+
+## V65.0 — Follow-up: intensity drilldown consistency, session-lock DB access, Fishbone import cleanup, Postgres seed cursor cleanup
+
+### Fixed
+- **"WITHOUT INTENSITY" now includes legacy `NONE` values** in both the intensity chart aggregation and drilldown filtering, keeping chart totals and drilldown rows consistent with the existing filter behavior.
+- **Admin session expiry cleanup no longer performs the database delete while holding `SESSION_LOCK`.** The session is removed under the lock first, then the shared-session delete runs after the lock is released.
+- **Fishbone style refresh no longer contains a dead update branch.** The function already performs a full style-table reset before inserting imported styles, so the unreachable existing-category lookup and update path were removed.
+- **PostgreSQL seed import now closes its cursor explicitly** after `executemany()` before committing the transaction.
+
+### Verified
+- Python compile check passes for `server.py`.
+- Targeted checks confirm the intensity `NONE` handling, lock-release before session deletion, Fishbone import path, and explicit Postgres seed cursor close.
+- Existing frontend changes and documentation remain intact.
+- No schema migration or intentional data transformation was introduced by this patch.
+
 ## V65.0 — Follow-up: QCR target breach accuracy, cache bounds, target precision
 
 ### Fixed

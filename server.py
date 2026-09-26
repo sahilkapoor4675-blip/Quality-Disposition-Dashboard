@@ -925,7 +925,7 @@ def compute_kpis(filters, _skip_prev=False):
 
     # Defect intensity breakdown
     intensity_map = {}
-    cur.execute(f"SELECT CASE WHEN TRIM(COALESCE(defect_intensity,''))='' THEN 'WITHOUT INTENSITY' ELSE defect_intensity END, COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY 1", params)
+    cur.execute(f"SELECT CASE WHEN TRIM(COALESCE(defect_intensity,''))='' OR UPPER(TRIM(defect_intensity))='NONE' THEN 'WITHOUT INTENSITY' ELSE defect_intensity END, COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql} GROUP BY 1", params)
     for r in cur.fetchall(): intensity_map[str(r[0])] = (int(r[1] or 0), float(r[2] or 0))
     intensity_table = []
     for level in ["LIGHT", "MEDIUM", "DEEP", "WITHOUT INTENSITY"]:
@@ -1529,13 +1529,17 @@ def _admin_meta(handler):
                 SESSIONS[token] = meta
     if not meta:
         return None
+    stale = False
     with SESSION_LOCK:
         if meta.get("expires", 0) < now:
             SESSIONS.pop(token, None)
-            db_session_delete(get_conn, USE_POSTGRES, token)
-            return None
-        meta["expires"] = now + SESSION_TTL
-        SESSIONS[token] = meta
+            stale = True
+        else:
+            meta["expires"] = now + SESSION_TTL
+            SESSIONS[token] = meta
+    if stale:
+        db_session_delete(get_conn, USE_POSTGRES, token)
+        return None
     if meta.get("role") not in ("admin", "qa_manager", "qa_engineer", "importer", "auditor") or not bool(meta.get("active", True)):
         return None
     # Throttle the DB write-through: every request renews `expires` locally,
@@ -2421,7 +2425,6 @@ def _replace_fishbone_master(bundle, filename, imported_by):
         )
 
     style_updated = 0
-    existing_cats = {r[0] for r in conn.execute("SELECT category FROM fishbone_style").fetchall()}
     for s in style_records:
         cat = s.get("category")
         if not cat:
@@ -2430,14 +2433,7 @@ def _replace_fishbone_master(bundle, filename, imported_by):
         color = s.get("color") or defaults.get("color")
         icon = s.get("icon") or defaults.get("icon")
         label = defaults.get("label", cat.title())
-        if cat in existing_cats:
-            conn.execute(
-                "UPDATE fishbone_style SET label=?, icon=COALESCE(?,icon), color=COALESCE(?,color), updated_at=CURRENT_TIMESTAMP WHERE category=?",
-                (label, icon, color, cat),
-            )
-        else:
-            conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, label, icon, color))
-            existing_cats.add(cat)
+        conn.execute("INSERT INTO fishbone_style (category,label,icon,color) VALUES (?,?,?,?)", (cat, label, icon, color))
         style_updated += 1
 
     conn.execute(
@@ -3453,9 +3449,11 @@ def _seed_postgres_if_empty():
             rows = [dict(r, batch_no="", insp_lot_date="", ud_date="") for r in rows]
         src.close()
         if rows:
-            conn.cursor().executemany("""INSERT INTO disposition
+            cur = conn.cursor()
+            cur.executemany("""INSERT INTO disposition
                 (heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", [tuple(r) for r in rows])
+            cur.close()
             conn.commit()
     conn.close()
 
@@ -4152,12 +4150,9 @@ def _drilldown_where(filters, metric, drill_value=None):
     elif metric == 'month_category':
         clauses.append("month = ?"); extra.append(drill_value or '')
     elif metric == 'intensity_category':
-        # Mirrors the "WITHOUT INTENSITY" bucketing used to build intensity_table:
-        # blank/NULL defect_intensity groups under that label rather than under
-        # the literal (empty) value, for any level of defect (including none).
         level = str(drill_value or '').strip()
         if level.upper() == 'WITHOUT INTENSITY':
-            clauses.append("TRIM(COALESCE(defect_intensity,'')) = ''")
+            clauses.append("TRIM(COALESCE(defect_intensity,'')) IN ('', 'NONE')")
         else:
             clauses.append("defect_intensity = ?"); extra.append(level)
     elif metric == 'heat_detail':
