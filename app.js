@@ -520,8 +520,6 @@ async function triggerFilterRefresh(){
   const page=document.querySelector('.container'); if(page) page.classList.add('dashboard-refreshing');
   document.querySelectorAll('.kpi-card').forEach(c=>c.classList.add('shimmering'));
   document.querySelectorAll('.chart-scroll').forEach(c=>c.classList.add('chart-refreshing'));
-  // Retrigger the filter pulse on every refresh by removing the class,
-  // forcing a reflow, and adding it back before the animation starts.
   const filterBar=document.querySelector('.filters');
   if(filterBar){ filterBar.classList.remove('filter-pulse'); void filterBar.offsetWidth; filterBar.classList.add('filter-pulse'); }
   const t0=performance.now();
@@ -676,8 +674,6 @@ function animateKpiValue(el, from, to, fmt, token){
   const duration = 620;
   const ease = t => 1 - Math.pow(1 - t, 3);
   const step = now => {
-    // Dashboard and QCR share this helper but use separate cancellation
-    // counters. Continue while the token matches either active counter.
     if(token !== kpiAnimationToken && token !== qcrAnimationToken) return;
     const p = Math.min(1, (now - start) / duration);
     const v = from + (to - from) * ease(p);
@@ -725,8 +721,6 @@ const SORTABLE_TABLE_IDS = ["decisionTable","defectTable","intensityTable","mont
 const _tableSortState = new Map(); // tableId -> {col, dir}; absent = natural/server order
 const _tableNormalOrder = new Map(); // tableId -> {rows: HTMLElement[], totals: HTMLElement[]}
 function _parseSortCell(text){
-  // Remove thousands separators and percent signs, leading plus signs, and
-  // trailing unit suffixes so numeric sort columns are compared numerically.
   const t = String(text == null ? '' : text).trim()
     .replace(/[,%]/g, '')                      // "1,234%" -> "1234"
     .replace(/^\+\s*/, '')                     // "+1.23" -> "1.23"
@@ -1041,8 +1035,6 @@ function goToDrillLevel(i){
 function renderDrillPage(page=1){
   const {metric,title,extra}=currentDrill(), modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
   currentDrill().page=page;
-  // Guard optional drilldown elements so partial renders or future refactors
-  // cannot throw and abort the entire drilldown flow.
   const dt=document.getElementById('drillTitle');
   if(dt){ const dtt=dt.querySelector('.drill-title-text'); (dtt||dt).textContent=title||'Underlying Records'; }
   const subEl=document.getElementById('drillSubtitle'); if(subEl) subEl.textContent=activeFilterSummary();
