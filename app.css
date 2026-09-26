@@ -2109,3 +2109,104 @@ html[data-theme="dark"] header.app-header .digital-clock-icon{background:linear-
   100%{box-shadow:var(--shadow-sticky),0 0 0 15px rgba(35,136,201,0);}
 }
 @media(prefers-reduced-motion:reduce){.filter-pulse{animation:none;}}
+
+/* ================================================================
+   ANIMATED HEADER ACCENT LINES (V65.0)
+   The thin brand strips along the header's top and bottom edges
+   (the blue→copper gradient on top, the copper shimmer on the
+   bottom) now gently flow sideways instead of sitting frozen.
+
+   HOW IT WORKS
+   - Each line uses a gradient whose pattern TILES ONCE across the
+     full 200%-wide canvas, so the animation loops with no visible
+     seam when it restarts.
+   - The animation slides background-position (a compositor-only
+     property): no layout work, no repaint of the header's own
+     content, no effect on KPI cards, filters or charts.
+   - Top and bottom run at different speeds (12s / 16s) and in
+     opposite directions, so the two never sync into a "blinking"
+     pattern and the header reads as gently alive.
+   - Disabled under prefers-reduced-motion (lines hold a pleasant
+     fixed position) and under @media print (never animated into a
+     printed page).
+   ================================================================ */
+
+/* ---- Top accent line: flowing blue → copper gradient ---- */
+header.app-header::before{
+  background:linear-gradient(90deg,
+    #1b5fa7 0%,
+    #2d84ca 17%,
+    #b56a2b 33%,
+    #1b5fa7 50%,
+    #2d84ca 67%,
+    #b56a2b 83%,
+    #1b5fa7 100%
+  ) !important;
+  background-size:200% 100% !important;
+  background-position:0% 50% !important;
+  animation:headerTopFlow 12s linear infinite;
+}
+@keyframes headerTopFlow{
+  0%   {background-position:0% 50%;}
+  100% {background-position:100% 50%;}
+}
+
+/* ---- Bottom accent line: copper shimmer flowing the other way ---- */
+header.app-header::after{
+  background:linear-gradient(90deg,
+    rgba(217,128,43,0)    0%,
+    rgba(217,128,43,.78)  17%,
+    rgba(92,104,116,.62)  33%,
+    rgba(217,128,43,0)    50%,
+    rgba(217,128,43,.78)  67%,
+    rgba(92,104,116,.62)  83%,
+    rgba(217,128,43,0)    100%
+  ) !important;
+  background-size:200% 100% !important;
+  background-position:100% 50% !important;
+  animation:headerBottomFlow 16s linear infinite;
+}
+@keyframes headerBottomFlow{
+  0%   {background-position:100% 50%;}
+  100% {background-position:0% 50%;}
+}
+
+/* ---- Dark theme: brighter, more saturated tones so the flow reads
+   clearly on the dark header without going muddy. ---- */
+html[data-theme="dark"] header.app-header::before{
+  background:linear-gradient(90deg,
+    #3b82c9 0%,
+    #4fd0f5 17%,
+    #e8843a 33%,
+    #3b82c9 50%,
+    #4fd0f5 67%,
+    #e8843a 83%,
+    #3b82c9 100%
+  ) !important;
+  background-size:200% 100% !important;
+}
+html[data-theme="dark"] header.app-header::after{
+  background:linear-gradient(90deg,
+    rgba(232,139,57,0)    0%,
+    rgba(232,139,57,.88)  17%,
+    rgba(104,122,137,.68) 33%,
+    rgba(232,139,57,0)    50%,
+    rgba(232,139,57,.88)  67%,
+    rgba(104,122,137,.68) 83%,
+    rgba(232,139,57,0)    100%
+  ) !important;
+  background-size:200% 100% !important;
+}
+
+/* ---- Accessibility + print safety ---- */
+@media(prefers-reduced-motion:reduce){
+  header.app-header::before,
+  header.app-header::after{
+    animation:none!important;
+    background-position:50% 50% !important;
+  }
+}
+@media print{
+  header.app-header::before,
+  header.app-header::after{animation:none!important;}
+}

@@ -1,3 +1,16 @@
+## V65.0 — Follow-up: animated header accent lines
+
+### Added
+- **Animated header accent lines.** The thin blue-to-copper top strip and copper/steel bottom strip now use tiled 200%-width gradients that flow sideways at separate speeds and in opposite directions, adding restrained motion to the existing Design 4 header without changing the header layout or content.
+- **Theme-aware accent animation.** Dark mode uses brighter blue/cyan/copper tones so the motion remains legible against the graphite header.
+- **Reduced-motion and print safety.** Both accent-line animations stop under `prefers-reduced-motion: reduce` and in print, with the strips held at a fixed midpoint position for reduced-motion users.
+
+### Verified
+- Added only at the end of `app.css`; existing header structure, controls, KPI cards, filters, charts, data, API, and layout logic are unchanged.
+- Confirmed the new keyframes/selectors occur once and the CSS block is the final content of the updated stylesheet.
+- `node --check` on `app.js` remains clean; no JavaScript or backend changes are introduced by this patch.
+
+
 ## V65.0 — Follow-up: frontend sorting, QCR KPI animation, drilldown null-safety, filter refresh pulse
 
 ### Fixed

@@ -7,6 +7,12 @@ frontend CDN or build step.
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
 header). `CHANGELOG.md` is the version history; this README always describes the current build only.
 
+## What changed in V65.0 (follow-up: animated header accent lines)
+- **Animated header accent lines.** The thin blue-to-copper top strip and copper/steel bottom strip now flow gently sideways using tiled gradients, with different speeds and opposite directions for restrained continuous motion.
+- **Dark-theme tuning.** Dark mode uses brighter blue/cyan/copper tones so the moving accents stay visible against the graphite header.
+- **Reduced-motion and print safety.** The accent animations stop under `prefers-reduced-motion: reduce` and print; reduced-motion users keep the strips at a fixed midpoint.
+- No data, API, schema, or layout logic changes are introduced by this frontend-only addition.
+
 ## What changed in V65.0 (follow-up: frontend sorting, QCR KPI animation, drilldown safety, filter refresh feedback)
 - **Table sorting handles signed numeric and unit-suffixed values correctly.** Sorting now normalises signed numbers, percentages, and common `pp` / `pts` / `MT` / `coils` suffixes before comparison, so trend/change columns sort by their numeric value instead of their displayed string.
 - **Quality Control Room KPI count-up animation fixed.** The shared KPI animation helper now accepts both the Dashboard and QCR animation cancellation tokens, restoring QCR numeric count-up on refreshes.
