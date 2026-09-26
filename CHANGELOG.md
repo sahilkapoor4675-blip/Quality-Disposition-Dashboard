@@ -1,18 +1,3 @@
-# Header Motion Polish — 2026-09-26 (no version bump)
-
-### Changed
-- Restored a **single subtle copper SVG wave loop** in the Design 4 header. It uses the existing 200%-width copper artwork and a slow `translateX(-50%)` loop (44s), so the wave moves continuously without adding a new asset or moving the branding/content.
-- Added a **sticky scroll state** to the main dashboard header. After a small 18px scroll threshold, the header becomes slightly more compact, gains a restrained glass/blur treatment, and the JSL logo scales in sync with the header state.
-- Kept the existing **LIVE DATA** indicator, but made its pulse a quieter glow/scale rhythm rather than a hard visual flash.
-- Added a live CSS-variable offset for the existing sticky filters so they remain below the sticky header instead of covering it.
-- `prefers-reduced-motion: reduce` now disables the decorative copper wave, LIVE pulse, and logo shrink motion; the scroll state remains usable without animated transitions.
-
-### Verification
-- Version file unchanged (`VERSION.txt` remains at its existing value).
-- No application/data/API files changed.
-- Added/reviewed CSS and JavaScript only in `app.css` and `app.js`; README/changelog document the change.
-- Validation run after patching: CSS/HTML asset checks, `node --check app.js`, Python syntax compile, and dashboard smoke checks.
-
 
 ## V65.0 — Follow-up: first-visit Quality Control Room (QCR) tab load delay fixed (no version bump — same version)
 

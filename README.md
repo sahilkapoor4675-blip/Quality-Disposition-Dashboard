@@ -1,15 +1,3 @@
-## Header Motion Polish — 2026-09-26 (no version bump)
-
-This follow-up changes only the main dashboard header. The existing Design 4 industrial/copper artwork, branding, and data behaviour remain intact.
-
-- **Continuous copper wave:** the existing inline copper SVG is reused as a low-opacity 44-second `translateX(-50%)` loop. No new image asset is introduced and the branding/content does not move.
-- **Scroll state:** the main header is sticky. After a small 18px scroll threshold it slightly reduces vertical padding, applies a restrained transparent glass/blur treatment, and scales the JSL logo to `0.95` in sync with the state.
-- **Sticky-filter safety:** the dashboard's existing sticky filter bar reads a live `--header-sticky-offset` value measured from the header, so it stays below the header instead of covering controls.
-- **LIVE DATA:** the existing status dot uses a subtle 2.2-second `livePulseGlow` breathing halo with minimal scale/opacity change.
-- **Reduced motion:** `prefers-reduced-motion: reduce` disables the copper wave, LIVE pulse, logo shrink transform, and related transitions. The sticky/glass state remains usable without animation.
-
-**Verification:** `VERSION.txt` remains `APP_VERSION=V65.0`; smoke, regression, Admin UX, code-health, JavaScript syntax, and Python compile checks passed after the patch.
-
 # Quality Disposition Control Dashboard — V65.0
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
