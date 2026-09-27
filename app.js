@@ -24,13 +24,32 @@ let kpiFirstPaintDone = false;
 const _kpiTiltEnabled = window.matchMedia('(pointer:fine)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function attachKpiTilt(card){
   const maxDeg=5;
-  card.addEventListener('mousemove',e=>{
-    const r=card.getBoundingClientRect();
-    const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+  let rect=null, pendingX=0, pendingY=0, rafId=null;
+  const applyTilt=()=>{
+    rafId=null;
+    const px=(pendingX-rect.left)/rect.width, py=(pendingY-rect.top)/rect.height;
     card.style.setProperty('--tiltY',((px-0.5)*2*maxDeg).toFixed(2)+'deg');
     card.style.setProperty('--tiltX',((0.5-py)*2*maxDeg).toFixed(2)+'deg');
+  };
+  // getBoundingClientRect() forces a layout read — calling it on every single
+  // mousemove (which can fire 60-120+ times/second) was the actual source of
+  // jitter here. The card's size doesn't change mid-hover, so it's measured
+  // once on entry and reused for the whole gesture; each mousemove after that
+  // only stores the latest pointer position and schedules (at most) one
+  // requestAnimationFrame callback to apply it, so a burst of mousemove
+  // events between two frames collapses into a single style write instead of
+  // one per event.
+  card.addEventListener('mouseenter',()=>{ rect=card.getBoundingClientRect(); });
+  card.addEventListener('mousemove',e=>{
+    if(!rect) rect=card.getBoundingClientRect();
+    pendingX=e.clientX; pendingY=e.clientY;
+    if(rafId==null) rafId=requestAnimationFrame(applyTilt);
   });
-  card.addEventListener('mouseleave',()=>{ card.style.setProperty('--tiltX','0deg'); card.style.setProperty('--tiltY','0deg'); });
+  card.addEventListener('mouseleave',()=>{
+    if(rafId!=null){ cancelAnimationFrame(rafId); rafId=null; }
+    rect=null;
+    card.style.setProperty('--tiltX','0deg'); card.style.setProperty('--tiltY','0deg');
+  });
 }
 
 // ---- Global search: quickly find any defect / grade / work center -----
@@ -1396,13 +1415,49 @@ let _chartResizeTimer = null;
 const _chartResizeObserver = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(entries => {
   entries.forEach(e => _chartResizeQueue.add(e.target));
   clearTimeout(_chartResizeTimer);
+  // The 120ms timer just lets a drag-resize settle before we bother redrawing
+  // at all. The actual redraw work is then deferred one more step, onto
+  // requestAnimationFrame, so it lands right before the browser's next paint
+  // instead of at the arbitrary moment a setTimeout callback happens to fire —
+  // that misalignment is what let several charts visibly pop mid-frame
+  // (the resize/sidebar-toggle "flicker") instead of updating in the same
+  // frame as everything else.
   _chartResizeTimer = setTimeout(() => {
-    const targets = [..._chartResizeQueue]; _chartResizeQueue.clear();
-    targets.forEach(t => {
-      if(!t._qdRedraw || !t.isConnected) return;
-      const cw = chartAvailWidth(t);
-      // Height changes (a redraw changes the chart's height) must NOT trigger another redraw.
-      if(cw > 0 && Math.abs(cw - (t._qdCw||0)) >= 6){ try { t._qdRedraw(); } catch(err){ console.error('Chart redraw failed', err); } }
+    requestAnimationFrame(() => {
+      const targets = [..._chartResizeQueue]; _chartResizeQueue.clear();
+      // Read phase first: measure every queued chart's width before redrawing
+      // any of them. Interleaving "measure this one, redraw it, measure the
+      // next one, redraw it..." forces the browser to recompute layout on
+      // every single measurement (classic layout thrashing) whenever more
+      // than one chart resizes at once — e.g. every chart on a tab when the
+      // window itself is resized. Measuring all of them up front means the
+      // layout is only ever read once per batch.
+      const widths = targets.map(t => (t._qdRedraw && t.isConnected) ? chartAvailWidth(t) : null);
+      // Write phase: redraw only the ones whose width actually changed
+      // enough to matter (height-only changes, caused by a redraw itself,
+      // must not trigger another redraw). A brief chart-refreshing→chart-ready
+      // class toggle — the same transition already used for filter-triggered
+      // refreshes — turns the SVG swap into a soft fade instead of an
+      // instant pop, so a resize redraw reads as a smooth transition rather
+      // than a jarring flash.
+      targets.forEach((t, i) => {
+        const cw = widths[i];
+        if(cw == null || cw <= 0) return;
+        if(Math.abs(cw - (t._qdCw||0)) < 6) return;
+        t.classList.add('chart-refreshing');
+        // One frame for the fade-out to actually register, then redraw and
+        // hold briefly before fading back in — swapping content immediately
+        // would just be an imperceptible flash, not the smooth dip-and-return
+        // the rest of the app's refresh transitions use.
+        requestAnimationFrame(() => {
+          try { t._qdRedraw(); } catch(err){ console.error('Chart redraw failed', err); }
+          setTimeout(() => {
+            t.classList.remove('chart-refreshing');
+            t.classList.add('chart-ready');
+            setTimeout(() => t.classList.remove('chart-ready'), 700);
+          }, 90);
+        });
+      });
     });
   }, 120);
 }) : null;

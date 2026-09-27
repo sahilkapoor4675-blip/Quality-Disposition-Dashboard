@@ -1,3 +1,21 @@
+## V65.0 — Follow-up: performance-linked UX — rAF-throttled chart resize redraws, fixed KPI-tilt jitter (no version bump — same version)
+
+### Changed
+- **Chart resize redraws now go through requestAnimationFrame, with reads and writes batched separately.** The `ResizeObserver` that redraws charts when their container's width changes (browser zoom, window resize, sidebar reflow, a hidden tab becoming visible) previously ran every queued chart's redraw *synchronously inside a `setTimeout` callback* — an arbitrary point relative to the browser's render pipeline, and each redraw individually called `chartAvailWidth()` (a layout read) right before mutating the DOM, so N charts resizing together meant N interleaved read→write→read→write cycles (layout thrashing). Now: the 120ms settle timer still exists (so a drag-resize doesn't redraw on every intermediate frame), but the actual batch is deferred one more step onto `requestAnimationFrame`, every queued chart's width is measured *up front* in one read pass, and only the charts that changed width are redrawn in a second write pass. Each redrawn chart also gets a brief `chart-refreshing → chart-ready` fade (the same transition already used for filter-triggered refreshes) instead of an instant content pop, so a resize reads as a smooth dip-and-return instead of a flicker.
+- **Fixed a real jitter bug in the KPI card hover-tilt effect.** `attachKpiTilt()`'s `mousemove` handler was calling `getBoundingClientRect()` (a forced layout read) on *every single mousemove event* — which can fire 60–120+ times/second — then writing two CSS custom properties synchronously, with no throttling at all. The card's bounding rect is now measured once on `mouseenter` and reused for the whole hover gesture; each `mousemove` only records the latest pointer position and schedules at most one `requestAnimationFrame` callback to apply it, so a burst of events between two frames collapses into a single style write instead of one per event.
+
+### Unchanged
+- No application-version bump: this remains **V65.0**.
+- No API, schema, or data changes — this pass only touches `app.js` (the resize-redraw `ResizeObserver` callback and `attachKpiTilt`). `app.css` is untouched — the fade transition reuses the existing `.chart-refreshing`/`.chart-ready` classes and their `prefers-reduced-motion` guard from the previous passes, so nothing new needed adding there.
+- The KPI count-up animations (`animateKpiValue`/`animateNumericSpan`) were already frame-synced via `requestAnimationFrame` with `performance.now()` timing — checked, not touched.
+- Fast data loading on the network/backend side (SQLite WAL mode, streaming exports, request cancellation on rapid filter changes via the existing `AbortController` in `triggerFilterRefresh`) was already addressed in earlier passes — checked, not duplicated here.
+- Only `app.js` was touched for this pass.
+
+### Verified
+- `node --check app.js` — clean.
+- Manually traced the new resize-redraw path: read phase (`chartAvailWidth` for every queued target) fully completes before the write phase (`_qdRedraw`) begins for any target, confirming no interleaved layout thrashing.
+- Confirmed the reused `.chart-refreshing`/`.chart-ready` classes already respect `prefers-reduced-motion: reduce` (existing CSS), so the new fade is disabled for anyone with that preference, same as the filter-refresh transition.
+
 ## V65.0 — Follow-up: professionalism pass — spacing scale, typography hierarchy, top-of-page loading bar (no version bump — same version)
 
 ### Changed
