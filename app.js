@@ -1814,6 +1814,59 @@ function loadingStateMarkup(caption){
   return `<div class="empty-state empty-state-loading"><div class="loading-skel-lines" aria-hidden="true"><div class="skeleton-line" style="width:78%"></div><div class="skeleton-line" style="width:56%"></div><div class="skeleton-line" style="width:40%"></div></div><div class="empty-state-sub">${escQcr(caption||'Loading…')}</div></div>`;
 }
 
+// ---- Global top-of-page loading bar: a thin YouTube-style strip that fills
+// in while dashboard data is loading (filter change, tab switch, initial
+// load) and sweeps to 100% + fades out once every in-flight request settles.
+// Implemented as a fetch() wrapper so every current and future data loader
+// (loadKpis, loadFilters, fetchQcrCore, drilldown, fishbone, root_cause,
+// qcr_target_history, kpi_targets, ...) is covered automatically without
+// each call site having to remember to start/stop it. Background polling
+// (heartbeat/live-user pings, the silent data-revision check) and the
+// export flow (which already drives its own detailed progress toast, see
+// runExport above) are excluded so the bar only appears for the kind of
+// load that actually blocks what's on screen.
+(function(){
+  const EXCLUDE=[/\/api\/activity\//,/\/api\/data_revision/,/\/api\/export\//];
+  let active=0,bar,fillEl,hideTimer,trickleTimer,pct=0;
+  function ensureBar(){
+    if(bar) return bar;
+    bar=document.createElement('div'); bar.className='page-progress-bar';
+    fillEl=document.createElement('div'); fillEl.className='page-progress-fill';
+    bar.appendChild(fillEl); document.body.appendChild(bar);
+    return bar;
+  }
+  function setPct(p,animated){
+    pct=p; if(!fillEl) return;
+    fillEl.style.transition=animated===false?'none':'width .3s ease';
+    fillEl.style.width=p+'%';
+  }
+  function start(){
+    active++; if(active>1) return;
+    ensureBar(); clearTimeout(hideTimer); clearInterval(trickleTimer);
+    bar.classList.remove('done'); void bar.offsetWidth; bar.classList.add('visible');
+    setPct(0,false); requestAnimationFrame(()=>setPct(20));
+    trickleTimer=setInterval(()=>{ setPct(Math.min(88,pct+(88-pct)*0.15)); },350);
+  }
+  function done(){
+    active=Math.max(0,active-1); if(active>0) return;
+    clearInterval(trickleTimer); if(!bar) return;
+    setPct(100);
+    hideTimer=setTimeout(()=>{
+      bar.classList.remove('visible');
+      setTimeout(()=>setPct(0,false),200);
+    },200);
+  }
+  const origFetch=window.fetch.bind(window);
+  window.fetch=function(input,init){
+    const url=typeof input==='string'?input:(input&&input.url)||'';
+    const track=url.indexOf('/api/')!==-1 && !EXCLUDE.some(re=>re.test(url));
+    if(track) start();
+    const p=origFetch(input,init);
+    if(track) p.then(done,done);
+    return p;
+  };
+})();
+
 // ---- Toast notifications: a visual, top-right sliding confirmation for
 // success/error/info, so people who keep sound muted (see sfx.js) still get
 // a clear confirmation an action finished — sound and toast are independent

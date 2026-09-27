@@ -1,3 +1,22 @@
+## V65.0 — Follow-up: professionalism pass — spacing scale, typography hierarchy, top-of-page loading bar (no version bump — same version)
+
+### Changed
+- **Consistent spacing scale.** Added an explicit `--sp-1` … `--sp-8` (4/8/12/16/20/24/28/32px) token scale to `:root`. Retrofitted the layout-level paddings/gaps/margins that had drifted into one-off values — `.container` (24px/28px/30px → 24/28/28), `.kpi-grid`/`.kpi-card` (13px/14px/16px/18px → 12/16), `.filters` (14px/16px/17px → 16px, gap 12/13px → 12px), `.panel`/`.panel-body`/`.panel h3` (16px/18px → 16px throughout), `.qcr-hero` (18px/20px → 16/20), and the export dialog's head/options/option/foot (10/14/16/18/20/22/24px → 12/16/20/24) — onto the shared scale. Small form-control paddings tuned to a specific line-height (buttons, selects, filter chips) were left alone; this targeted the card/panel/section-level spacing that actually reads as inconsistent.
+- **Typography hierarchy strengthened.** Added `--fw-heading`/`--fw-value`/`--fw-label`/`--fw-meta` and matching `--ls-*` letter-spacing tokens. Fixed a real inversion in the KPI cards: the small uppercase **label** was set heavier (`font-weight:800`) than the big **value** underneath it (`700`) — backwards from the hierarchy the design was going for. Labels now recede (`650`, wider `.6px` tracking, unchanged size/caps) while values lead (`800`, tighter `-.6px` tracking), so the number is what draws the eye first. Panel/QCR-hero headings now consistently use the same `--fw-heading` (800) tier.
+- **Top-of-page loading bar.** Added a thin (3px), YouTube-style progress strip (`.page-progress-bar`) that fills in from the left whenever dashboard data is loading — filter changes, tab switches, the initial page load — and sweeps to 100% + fades out once every in-flight request settles. Implemented as a `fetch()` wrapper in `app.js` (right above the toast code) that auto-tracks any `/api/…` call, so every current loader (`loadKpis`, `loadFilters`, `fetchQcrCore`, drilldown, fishbone, root-cause, `qcr_target_history`, `kpi_targets`) and any future one is covered without per-function wiring. Background polling (activity heartbeat/live-user ping, the silent data-revision check) and the export flow are excluded — exports already drive their own detailed progress toast with live % and ETA, and heartbeat polling shouldn't visibly flicker the bar.
+- **Toast notifications — reviewed, not rebuilt.** The top-right, slide-in, auto-dismissing toast system (`showToast`, `.toast-host`) already matched the ask; only its padding was snapped onto the new spacing scale (13px/14px → 12px/16px). No behavioural changes.
+
+### Unchanged
+- No application-version bump: this remains **V65.0**.
+- No API, schema, or data changes — this pass only touches `app.css` (spacing tokens + retrofits, typography tokens + retrofits, new `.page-progress-bar` styles) and `app.js` (the new fetch-wrapper progress-bar module). `admin.html` and `index.html` don't define their own copies of these components (`admin.html` is fully self-contained and doesn't load `app.css`/`app.js`), so nothing there needed touching.
+- Only `app.css` and `app.js` were touched for this pass.
+
+### Verified
+- `node --check app.js` — clean.
+- CSS brace balance checked programmatically after all edits (1445/1445).
+- Confirmed via grep that `admin.html`/`index.html` contain no inline duplicates of `.kpi-card`, `.toast-host`, or the new `.page-progress-bar` that would need a matching edit.
+- Manually traced the fetch-wrapper's exclude list against every `fetch(...)` call site in `app.js` to confirm heartbeat/live/activity/data_revision/export calls are excluded and every real data loader is not.
+
 ## V65.0 — Follow-up: visual polish — consistent shadow elevation, shimmering text-only loaders, friendlier empty/error/success states, dark-mode copper contrast audit (no version bump — same version)
 
 ### Changed
