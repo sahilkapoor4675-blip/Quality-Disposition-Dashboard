@@ -87,6 +87,38 @@ DR_S3_ENDPOINT_URL            https://s3.us-west-002.backblazeb2.com
 Save and let Render redeploy. Then open `/admin` → check that a new backup
 shows **remote: verified**, not `disabled`/`failed`.
 
+### Step 2B — Encrypt the off-site backup (optional, recommended)
+
+By default the dump uploaded to Backblaze is readable as-is by anyone who
+gets into that bucket. Adding one more secret makes `dr_pg_backup.py`
+encrypt the dump *before* it leaves the runner, so the bucket only ever
+holds ciphertext.
+
+1. Generate a key (run this once, anywhere with Python + `pip install
+   cryptography`):
+   ```
+   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   ```
+2. Add it as **one more GitHub secret** (and Render env var, if you also want
+   Render's own snapshot path encrypted the same way):
+   ```
+   DR_ENCRYPTION_KEY   (the key printed above)
+   ```
+3. Save this key **outside GitHub/Render too** (password manager, same place
+   as your break-glass note in Step 4) — if you lose it, the encrypted
+   backups become unrecoverable, by design.
+4. Nothing else changes. Once this secret exists, every future scheduled
+   backup uploads as `<key>.enc` instead of `<key>`; without it, uploads
+   continue exactly as before.
+
+**To restore an encrypted backup later:** download the `.enc` file from
+Backblaze, then run:
+```
+python3 dr_pg_backup.py decrypt path/to/file.dump.enc --output path/to/file.dump
+```
+(with `DR_ENCRYPTION_KEY` set in that shell), then `verify`/`restore` the
+resulting plaintext dump exactly as documented in `DR_RUNBOOK.md`.
+
 ### Step 3 — Add a second copy of your source code
 
 GitHub can also go down or your account could get blocked/deleted — never let

@@ -8,6 +8,7 @@ Commands:
   dump     Create a PostgreSQL custom-format backup + manifest.
   verify   Verify the dump is readable and the manifest hash matches.
   restore  Restore a verified dump into a target PostgreSQL database.
+  decrypt  Decrypt a dump previously encrypted for off-site upload.
 
 Security:
   * DATABASE_URL is never printed.
@@ -17,6 +18,14 @@ Security:
     the schema so the application can recreate them.
   * Restores are destructive; require --yes and run with the app write path
     frozen/offline.
+  * Off-site encryption (optional): if DR_ENCRYPTION_KEY is set, the dump is
+    encrypted (Fernet/AES128-CBC+HMAC via the `cryptography` package) before
+    it leaves this machine, so the off-site bucket only ever holds ciphertext
+    even if that bucket/provider is later compromised. The uploaded object
+    key gets a ".enc" suffix. Manifests are left in plaintext (metadata only,
+    no row data) so a restore operator can inspect them without the key.
+    This is opt-in and backward compatible: with no DR_ENCRYPTION_KEY set,
+    dumps upload exactly as before.
 """
 from __future__ import annotations
 
@@ -33,6 +42,52 @@ from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlparse
 
 RUNTIME_TABLES = ("public.sessions", "public.login_attempts")
+
+def _get_fernet():
+    """Build a Fernet cipher from DR_ENCRYPTION_KEY, or return None if unset.
+
+    DR_ENCRYPTION_KEY must be a 32-byte urlsafe-base64 key, e.g. generated
+    with: python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    """
+    key = os.environ.get("DR_ENCRYPTION_KEY")
+    if not key:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError as exc:
+        raise SystemExit(
+            "DR_ENCRYPTION_KEY is set but the 'cryptography' package is not "
+            "installed in this environment (pip install cryptography)"
+        ) from exc
+    try:
+        return Fernet(key.encode("ascii"))
+    except Exception as exc:  # invalid key format/length
+        raise SystemExit(f"DR_ENCRYPTION_KEY is not a valid Fernet key: {exc}") from exc
+
+
+def _encrypt_file(path: Path) -> Path:
+    """Encrypt path in place-adjacent, returning the new .enc file path."""
+    fernet = _get_fernet()
+    assert fernet is not None
+    enc_path = path.with_suffix(path.suffix + ".enc")
+    with open(path, "rb") as f:
+        plaintext = f.read()
+    ciphertext = fernet.encrypt(plaintext)
+    enc_path.write_bytes(ciphertext)
+    return enc_path
+
+
+def _decrypt_bytes(ciphertext: bytes) -> bytes:
+    fernet = _get_fernet()
+    if fernet is None:
+        raise SystemExit("Set DR_ENCRYPTION_KEY to decrypt this file")
+    from cryptography.fernet import InvalidToken
+    try:
+        return fernet.decrypt(ciphertext)
+    except InvalidToken as exc:
+        raise SystemExit("Decryption failed: wrong DR_ENCRYPTION_KEY or corrupted file") from exc
+
+
 APP_FILES = (
     # Application/server code
     "server.py", "reports.py", "session_store.py", "logging_setup.py",
@@ -146,6 +201,7 @@ def dump(database_url: str, output: Path, root: Path) -> int:
         "excluded_runtime_data": list(RUNTIME_TABLES),
         "app_manifest": _app_manifest(root),
         "source_database_url_present": bool(database_url),
+        "encrypted": bool(os.environ.get("DR_ENCRYPTION_KEY")),
     }
     manifest_path = output.with_suffix(output.suffix + ".manifest.json")
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -165,6 +221,24 @@ def _remote_upload(path: Path, object_key: str, app_version: str) -> None:
     upload_file(str(path), object_key, sha256=digest, app_version=app_version, content_type="application/octet-stream")
     if not verify_uploaded_file(str(path), object_key, expected_sha256=digest):
         raise SystemExit(f"Remote backup verification failed: {object_key}")
+
+
+def _remote_upload_dump(dump_path: Path, object_key: str, app_version: str) -> str:
+    """Upload the dump off-site, encrypting first if DR_ENCRYPTION_KEY is set.
+
+    Returns the object key actually used remotely (unchanged, or with a
+    ".enc" suffix when encryption was applied) so the caller can report it.
+    """
+    if os.environ.get("DR_ENCRYPTION_KEY"):
+        enc_path = _encrypt_file(dump_path)
+        try:
+            remote_key = object_key + ".enc"
+            _remote_upload(enc_path, remote_key, app_version)
+            return remote_key
+        finally:
+            enc_path.unlink(missing_ok=True)  # never leave ciphertext copy on the runner disk
+    _remote_upload(dump_path, object_key, app_version)
+    return object_key
 
 
 def verify(dump_path: Path, manifest_path: Path | None) -> int:
@@ -247,6 +321,9 @@ def main() -> int:
     p_restore.add_argument("--database-url", default=os.environ.get("DATABASE_URL"), help="Target PostgreSQL URL; prefer env DATABASE_URL")
     p_restore.add_argument("dump")
     p_restore.add_argument("--yes", action="store_true")
+    p_decrypt = sub.add_parser("decrypt", help="Decrypt a .enc dump downloaded from off-site storage")
+    p_decrypt.add_argument("encrypted", help="Path to the downloaded .enc file")
+    p_decrypt.add_argument("--output", required=True, help="Path to write the decrypted dump to")
     args = ap.parse_args()
 
     if args.cmd == "dump":
@@ -258,10 +335,10 @@ def main() -> int:
             manifest_path = output.with_suffix(output.suffix + ".manifest.json")
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             app_version = str((manifest.get("app_manifest") or {}).get("app_version") or "")
-            _remote_upload(output, args.remote_key, app_version)
+            used_key = _remote_upload_dump(output, args.remote_key, app_version)
             remote_manifest_key = args.remote_manifest_key or (args.remote_key + ".manifest.json")
             _remote_upload(manifest_path, remote_manifest_key, app_version)
-            print(f"REMOTE VERIFY OK: {args.remote_key}")
+            print(f"REMOTE VERIFY OK: {used_key}")
             print(f"REMOTE MANIFEST VERIFY OK: {remote_manifest_key}")
         return result
     if args.cmd == "verify":
@@ -270,6 +347,16 @@ def main() -> int:
         if not args.database_url:
             raise SystemExit("Set DATABASE_URL or pass --database-url")
         return restore(args.database_url, Path(args.dump).resolve(), args.yes)
+    if args.cmd == "decrypt":
+        enc_path = Path(args.encrypted).resolve()
+        if not enc_path.is_file():
+            raise SystemExit(f"Encrypted file not found: {enc_path}")
+        plaintext = _decrypt_bytes(enc_path.read_bytes())
+        out_path = Path(args.output).resolve()
+        out_path.write_bytes(plaintext)
+        print(f"DECRYPT OK: {out_path}")
+        print(f"SHA256: {_sha256(out_path)}")
+        return 0
     return 2
 
 

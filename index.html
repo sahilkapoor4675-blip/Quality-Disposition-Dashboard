@@ -575,6 +575,10 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
 })();
 </script>
 
+<div id="offlineBanner" class="offline-banner" hidden>
+  You're offline — showing the last data loaded from the server.
+</div>
+
 <header class="app-header">
   <!-- Static Design 4 industrial header: JSL branding + copper-base coils/plant reference.
        Decorative only; text/buttons sit above it. No header animation is used. -->
@@ -992,5 +996,16 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
 
 <script src="/sfx.js?v=1.0" defer></script>
 <script src="/app.js?v=65.0" defer></script>
+<script>
+  // Offline/PWA support: only the public dashboard registers a worker, so
+  // admin.html never caches any admin data to disk. Registration failure
+  // (unsupported browser, blocked by policy, etc.) is silently ignored —
+  // the dashboard works the same either way, just without offline caching.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
+</script>
 </body>
 </html>

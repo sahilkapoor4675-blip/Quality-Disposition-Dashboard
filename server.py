@@ -4801,6 +4801,26 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(payload, status=(200 if path == "/healthz" or STARTUP_READY else 503))
             return
 
+        # Service worker: must NOT be far-future cached like the other static
+        # assets above, or browsers will keep running a stale worker for up
+        # to a year. Serve it with a short/no cache so update checks land
+        # promptly (the browser still re-checks this file on every load).
+        if path == "/sw.js":
+            asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sw.js")
+            if os.path.isfile(asset):
+                with open(asset, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Service-Worker-Allowed", "/")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self._write_body(body)
+                return
+            else:
+                self.send_error(404)
+                return
+
         # Versioned static CSS/JS: aggressively cached by browsers.
         if path in {"/app.css", "/app.js", "/sfx.js"}:
             asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))

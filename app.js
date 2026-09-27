@@ -1780,6 +1780,19 @@ function placeFieldTag(x,y){
   if(L+r.width>innerWidth-8) L=x-r.width-12; if(T+r.height>innerHeight-8) T=y-r.height-14;
   el.style.transform='translate3d('+Math.max(6,L)+'px,'+Math.max(6,T)+'px,0)';
 }
+// Shows/hides the "You're offline" banner using the browser's online/offline
+// events. Purely a UI signal — the service worker (sw.js) is what actually
+// keeps the last-loaded dashboard data visible while offline; this just
+// tells the person why numbers may be stale.
+function initOfflineBanner(){
+  const banner = document.getElementById('offlineBanner');
+  if (!banner) return;
+  const update = () => { banner.hidden = navigator.onLine; };
+  window.addEventListener('online', update);
+  window.addEventListener('offline', update);
+  update();
+}
+
 function initFieldHints(){
   if(initFieldHints._wired) return; initFieldHints._wired=true;
   if(!window.matchMedia('(pointer: fine)').matches) return;
@@ -3423,6 +3436,7 @@ async function init(){
   wireExportDialog();
   initCommandPalette();
   initChartTooltips();
+  initOfflineBanner();
   initFieldHints();
   // No tab in the URL (a fresh visit, not a shared link)? Fall back to
   // whichever tab this person picked as their default landing tab (Command

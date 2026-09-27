@@ -1,3 +1,8 @@
+## What changed in V66.1 (follow-up: offline support, CSS cleanup, off-site backup encryption)
+- **Offline support for the public dashboard**: a service worker (`sw.js`) caches the app shell and last-loaded dashboard data, so the page keeps working (showing an "offline" banner) if the network drops. Scoped to `index.html` only — `admin.html` never registers it, so no admin/audit data is cached on disk.
+- **Orphaned CSS cleanup**: removed all 24 classes `code_health.py` flagged as unreferenced (previously deferred). The lint check now reports 0.
+- **Off-site backup encryption (optional)**: setting `DR_ENCRYPTION_KEY` makes `dr_pg_backup.py` encrypt the PostgreSQL dump before it leaves the runner, so the off-site bucket only ever stores ciphertext. Not required — with no key set, uploads work exactly as before. See `PLATFORM_CONTINUITY_SETUP.md` Step 2B for setup and `dr_pg_backup.py decrypt` for restores.
+
 ## V66.1 Disaster Recovery / Future-Safe Deployment
 
 The production database is PostgreSQL and is the single source of truth for live data. The bundled `quality.db` is bootstrap/seed data only. V66.1 adds a provider-independent recovery architecture: application recovery points for every persistent revision, PostgreSQL-native dumps from an independent runner, off-site private storage, integrity verification, restore validation, and a tested provider-switch procedure.

@@ -1,4 +1,10 @@
 
+## V66.1 — Offline support, CSS cleanup, off-site backup encryption (2026-09-27)
+
+- Added a service worker (`sw.js`) for the public dashboard: app-shell assets and last-loaded dashboard API responses are cached, so the page still loads (with an "offline" banner) if the network drops. Scoped to the public dashboard only — `admin.html` does not register it, so no admin/audit data is ever cached to disk.
+- Removed all 24 orphaned CSS classes flagged by `code_health.py`'s lint check (previously deferred to "a future pass"); `orphaned CSS classes: 0` now.
+- Added optional client-side encryption for off-site backups: when `DR_ENCRYPTION_KEY` is set, `dr_pg_backup.py` encrypts the dump (Fernet/AES128-CBC+HMAC) before upload, so the Backblaze bucket only ever holds ciphertext. Backward compatible — with no key set, uploads are unchanged. Adds a `decrypt` subcommand for restores.
+
 ## V66.1 — DR / Security Hardening (2026-09-27)
 
 - Added complete provider-independent disaster recovery architecture and emergency runbook.
