@@ -331,7 +331,7 @@ header .sub{font-weight:800!important;letter-spacing:.2px;}
 .toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;pointer-events:none;}
 .toast-host::-webkit-scrollbar{width:6px;}
 .toast-host::-webkit-scrollbar-thumb{background:rgba(120,140,160,.35);border-radius:6px;}
-.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--slate);border-radius:10px;padding:12px 12px;box-shadow:0 10px 28px rgba(15,42,74,.16);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--slate);border-radius:16px;padding:13px 14px;box-shadow:0 10px 28px rgba(15,42,74,.16);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);overflow:hidden;}
 .toast.show{opacity:1;transform:translateX(0) scale(1);}
 .toast.hide{opacity:0;transform:translateX(12px) scale(.97);}
 .toast-success{border-left-color:var(--green);}
@@ -341,9 +341,25 @@ header .sub{font-weight:800!important;letter-spacing:.2px;}
 .toast-body{flex:1;min-width:0;}
 .toast-title{font:800 13.5px Manrope,sans-serif;color:var(--heading);}
 .toast-msg{font:600 12.5px Manrope,sans-serif;color:var(--muted);margin-top:2px;line-height:1.4;word-break:break-word;}
-.toast-close{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 4px;line-height:1;flex:none;}
-.toast-close:hover{color:var(--heading);}
+.toast-close{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:4px;line-height:1;flex:none;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,color .15s ease;}
+.toast-close:hover{color:var(--heading);background:rgba(120,140,160,.16);}
 @media(max-width:600px){.toast-host{left:12px;right:12px;top:12px;max-width:none;}}
+
+/* Export progress bar inside a toast (see showToast's opts.progress / setProgress in app.js).
+   Rounded, pill-shaped track+fill with a soft moving shimmer so a busy wait still reads as
+   "alive", plus a meta row (percent · ETA) so people can see both how far and how long. */
+.toast-progress-row{margin-top:9px;}
+.toast-progress-track{height:7px;border-radius:999px;background:rgba(120,140,160,.22);overflow:hidden;}
+.toast-progress-fill{position:relative;height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#4FC3F7);transition:width .18s linear;overflow:hidden;}
+.toast-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 0%,rgba(255,255,255,.55) 45%,transparent 62%);background-size:250% 100%;animation:toastShimmer 1.15s linear infinite;}
+.toast-error .toast-progress-fill{background:linear-gradient(90deg,var(--red),#F87171);}
+@keyframes toastShimmer{from{background-position:180% 0;}to{background-position:-70% 0;}}
+.toast-progress-meta{display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px;}
+.toast-progress-pct{font:800 12px Manrope,sans-serif;color:var(--accent);flex:none;font-variant-numeric:tabular-nums;}
+.toast-error .toast-progress-pct{color:var(--red);}
+.toast-progress-eta{font:600 11px Manrope,sans-serif;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;}
+@media (prefers-reduced-motion: reduce){.toast-progress-fill::after{animation:none;}}
+
 .kpi-grid{gap:14px;}
 .kpi-card{background:linear-gradient(180deg,#FFFFFF 0%,#FBFDFF 100%);border-color:#DCE6EF;border-radius:var(--radius-card);box-shadow:var(--shadow-card);}
 .kpi-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-card-hover);}

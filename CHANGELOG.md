@@ -1,3 +1,41 @@
+## V65.0 — Follow-up: export progress bar polish — fast counting %, live ETA, rounder toast (no version bump — same version)
+
+### Changed
+- **The percentage now visibly counts up quickly, one step at a time**, instead of jumping straight to whatever number the current phase computed. A fast ticker (every 80ms) eases the displayed number toward a moving "target" percent — always advancing by at least 1% per tick, faster when the gap to the target is bigger — so it reads as continuous, lively motion rather than occasional jumps.
+- **A real-time "~Ns left" estimate now sits next to the percentage.** It's derived every tick from elapsed time vs. percent-so-far (`estimatedTotal = elapsed ÷ (percent/100)`), so it keeps re-estimating itself as the real download phase kicks in and naturally self-corrects instead of showing a single fixed guess. Shows "Calculating…" for the first couple of percent (too little signal yet), "Almost done…" under a second, `~Ns left` under a minute, and `~Nm Ns left` beyond that; flips to "Done" at 100%.
+- **The export toast — and toast notifications generally — now use a rounder, softer shape.** Corner radius increased (10px → 16px), the dismiss "✕" button is now a circular hover target instead of a bare glyph in the corner, and the toast clips its content to the rounded shape so nothing (including the accent-color left edge) reads as square.
+- **The progress bar itself is now a full pill shape with a soft moving shimmer highlight** (disabled under `prefers-reduced-motion: reduce`), so it doesn't look like a flat, static rectangle while a report is generating.
+- The percentage and ETA now sit on their own line under the bar (`percent` left, `ETA` right) instead of squeezed beside the track, so both stay easy to read as the numbers change quickly.
+
+### Unchanged
+- No application-version bump: this remains **V65.0**.
+- No API, schema, or data changes — this pass only touches `app.js` (the ticking/ETA logic in `showToast`/`exportDashboard`) and `app.css` (toast + progress-bar styling). The two-phase progress model (simulated 0→90% while the server assembles the report, real bytes 90→99% once headers arrive, 100% on handoff to the browser) from the previous pass is unchanged.
+- Only `app.js` and `app.css` were touched for this pass.
+
+### Verified
+- `node --check app.js` — clean.
+- Manually traced the ticker/ETA math across the full range (early "Calculating…" state, mid-flight re-estimation, sub-minute and multi-minute formatting, and the 100%/"Done" handoff) and confirmed the shimmer respects `prefers-reduced-motion`.
+
+## V65.0 — Follow-up: live progress bar on the export toast (no version bump — same version)
+
+### Changed
+- **The "Generating … report" toast (top-right, shown while an Excel/PDF/PPT/CSV export runs) now shows a live progress bar and percentage**, instead of just a static "this can take up to a minute" message with no feedback until it finishes or fails.
+  - `showToast()` in `app.js` gained an opt-in `opts.progress` mode: it renders a thin track + fill bar and a `NN%` label inside the toast body, and attaches a `.setProgress(pct)` method to the same dismiss-function the caller already gets back — every other existing `showToast(...)` call site is untouched, since the new markup and method only appear when a caller explicitly asks for it.
+  - `exportDashboard()` drives that bar in two phases:
+    1. **0→90%** while the server is assembling the report — there's no real signal yet at this stage (the export endpoints build the whole file in memory before sending a single byte), so the bar eases forward on a smooth curve instead of sitting frozen.
+    2. **90→99%** once the response headers arrive: real bytes received are tracked against the response's `Content-Length` (when the server sends one) via a streamed `ReadableStream` read, so the last stretch reflects the actual download rather than a guess. If the browser can't stream the body or the server didn't send a `Content-Length` (e.g. the streamed CSV path), it falls back to holding at 96% until the file is fully in hand.
+    3. **100%** is set the moment the file is handed to the browser to save, immediately before the existing "Export ready" success toast and the download itself.
+- Failure and "already generating" behavior is unchanged: an error still dismisses the progress toast and shows the existing red "Export failed" toast; a repeat click while busy still shows the existing "is already being generated" info toast.
+
+### Unchanged
+- No application-version bump: this remains **V65.0**.
+- No API, schema, or data changes. Purely a frontend (`app.js` + `app.css`) UX addition — the request/response flow, filenames, and file contents produced by `/api/export/*` are identical to before.
+- Only `app.js` and `app.css` were touched for this pass.
+
+### Verified
+- `node --check app.js` — clean.
+- Manually traced both progress paths (streamed body with `Content-Length`, and the no-`Content-Length`/no-stream fallback) and the existing success/error/duplicate-click toast behavior — all unchanged apart from the added bar.
+
 ## V65.0 — Follow-up: 3-decimal precision for KPI pp-change and QCR Critical KPIs (no version bump — same version)
 
 ### Changed

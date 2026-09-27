@@ -1,3 +1,9 @@
+## What changed in V65.0 (follow-up: export progress bar polish — fast counting %, live ETA, rounder toast)
+- **Percentage now counts up quickly one step at a time**, plus a real-time "~Ns left" estimate next to it that keeps re-estimating itself as the download progresses. **Toast corners are rounder** (10px → 16px) with a circular close button, and the progress bar is a full pill with a subtle moving shimmer (off under reduced-motion). Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
+
+## What changed in V65.0 (follow-up: live progress bar on the export toast)
+- **The export toast now shows a live progress bar and percentage** instead of a static "please wait" message. It eases forward while the server assembles the report, then tracks real download bytes once the file starts arriving, reaching 100% right as the download starts. Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
+
 ## What changed in V65.0 (follow-up: 3-decimal precision for KPI pp-change and QCR Critical KPIs)
 - **KPI card pp-change and the QCR Critical KPIs grid (value + target-gap) now show 3 decimal places** instead of 2, matching the precision the main Dashboard KPI headline values already use. Display-only; no data or API change.
 

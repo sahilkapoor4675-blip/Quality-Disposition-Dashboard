@@ -335,7 +335,18 @@ function fmtDonutPct3(v){ return (Number(v||0)*100).toFixed(3) + "%"; }
 
 // ---- Report exports (Excel / PDF / PPT / raw CSV) ----
 // Triggered from the header's "⬇ Export" button via the export dialog.
-// Progress is shown as a toast, since large reports can take a while.
+// Progress is shown as a toast with a live percentage + a "~Ns left" ETA, since large
+// reports can take a while:
+//  - A fast ticker (every 80ms) drives the NUMBER shown: it always counts up by at least
+//    1% per tick toward a moving "target" percent, so it visibly climbs quickly one step
+//    at a time rather than jumping straight to a new value.
+//  - The target itself comes from two phases: 0→90% is a smooth easing curve while the
+//    server assembles the report (there's no real signal yet at that point — the export
+//    endpoints build the whole file before sending a single byte), then 90→99% switches
+//    to real bytes received vs. the response's Content-Length once headers arrive, so the
+//    last stretch reflects the actual download instead of a guess.
+//  - The ETA is derived from elapsed time vs. percent-so-far (estTotal = elapsed/pct%),
+//    so it updates in real time and self-corrects as the real download phase kicks in.
 const EXPORT_LABELS={excel:'Excel report',pdf:'PDF report',pptx:'PowerPoint report',csv:'Raw data (CSV)'};
 const _exportBusy={};
 function exportDashboard(format){
@@ -344,14 +355,65 @@ function exportDashboard(format){
   _exportBusy[format]=true;
   const params=new URLSearchParams(currentFilters).toString();
   const url=`/api/export/${format}?${params}`;
-  const endProgress=showToast('info','Generating '+label+'…','Large reports can take up to a minute. The download starts automatically.',{duration:300000});
+  const endProgress=showToast('info','Generating '+label+'…','The download starts automatically once it\'s ready.',{duration:300000,progress:true});
+
+  const startedAt=performance.now();
+  let targetPct=0;     // where the bar is heading — set by the phases below
+  let displayedPct=0;  // what's actually shown; always counts up toward targetPct
+  const render=()=>{
+    const elapsedMs=performance.now()-startedAt;
+    let etaSeconds=null;
+    if(displayedPct>=3 && displayedPct<100){
+      const estTotalMs=elapsedMs/(displayedPct/100);
+      etaSeconds=Math.max(0,(estTotalMs-elapsedMs)/1000);
+    }
+    endProgress.setProgress(displayedPct,displayedPct>=100?0:etaSeconds);
+  };
+  const tick=()=>{
+    if(displayedPct<targetPct){
+      // Catch up faster when the gap is big (real bytes can jump ahead of the sim curve),
+      // but always by a visible step of at least 1 — never a silent instant jump.
+      displayedPct=Math.min(targetPct,displayedPct+Math.max(1,Math.round((targetPct-displayedPct)/4)));
+    }
+    render();
+  };
+  const ticker=setInterval(tick,80);
+  const stopTicker=()=>clearInterval(ticker);
+
+  let simTarget=0;
+  const simTimer=setInterval(()=>{ simTarget+=(90-simTarget)*0.05; targetPct=Math.max(targetPct,simTarget); },200);
+  const stopSim=()=>clearInterval(simTimer);
+
   fetch(url,{cache:'no-store'}).then(res=>{
     if(!res.ok) return res.json().catch(()=>null).then(j=>{ throw new Error((j&&j.error)?j.error:('Export failed (HTTP '+res.status+').')); });
+    stopSim();
     const cd=res.headers.get('Content-Disposition')||'';
     const m=/filename="?([^";]+)"?/i.exec(cd);
     const filename=m?m[1]:(`export.${format==='pptx'?'pptx':format}`);
-    return res.blob().then(blob=>({blob,filename}));
+    const contentType=res.headers.get('Content-Type')||'';
+    const total=parseInt(res.headers.get('Content-Length')||'0',10);
+    // Some export paths (e.g. streamed CSV) don't send a Content-Length, or the browser
+    // may not expose a readable stream — fall back to a simple blob() read in that case,
+    // just letting the target sit just-short-of-done until the file is actually in hand.
+    if(!total || !res.body || !res.body.getReader){
+      targetPct=96;
+      return res.blob().then(blob=>({blob,filename}));
+    }
+    const reader=res.body.getReader();
+    const chunks=[];
+    let received=0;
+    const pump=()=>reader.read().then(({done,value})=>{
+      if(done) return;
+      chunks.push(value);
+      received+=value.length;
+      targetPct=90+Math.min(9,(received/total)*9);
+      return pump();
+    });
+    return pump().then(()=>({blob:new Blob(chunks,{type:contentType}),filename}));
   }).then(({blob,filename})=>{
+    stopTicker(); stopSim();
+    displayedPct=100; targetPct=100;
+    endProgress.setProgress(100,0);
     const dlUrl=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=dlUrl; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(dlUrl),4000);
@@ -359,6 +421,7 @@ function exportDashboard(format){
     showToast('success','Export ready',filename+' has finished downloading.');
     if(window.SFX) SFX.play('success');
   }).catch(e=>{
+    stopSim(); stopTicker();
     endProgress();
     showToast('error','Export failed',String(e.message||e));
     if(window.SFX) SFX.play('error');
@@ -1729,9 +1792,10 @@ function ensureToastHost(){
 function showToast(kind,title,message,opts={}){
   const host=ensureToastHost();
   const el=document.createElement('div');
-  el.className='toast toast-'+(kind||'info');
+  el.className='toast toast-'+(kind||'info')+(opts.progress?' toast-has-progress':'');
   const icon=kind==='success'?'✅':kind==='error'?'⚠️':'ℹ️';
-  el.innerHTML=`<span class="toast-icon" aria-hidden="true">${icon}</span><div class="toast-body"><div class="toast-title"></div><div class="toast-msg"></div></div><button class="toast-close" type="button" aria-label="Dismiss notification">✕</button>`;
+  const progressMarkup=opts.progress?'<div class="toast-progress-row"><div class="toast-progress-track"><div class="toast-progress-fill"></div></div><div class="toast-progress-meta"><span class="toast-progress-pct">0%</span><span class="toast-progress-eta">Calculating…</span></div></div>':'';
+  el.innerHTML=`<span class="toast-icon" aria-hidden="true">${icon}</span><div class="toast-body"><div class="toast-title"></div><div class="toast-msg"></div>${progressMarkup}</div><button class="toast-close" type="button" aria-label="Dismiss notification">✕</button>`;
   el.querySelector('.toast-title').textContent=title||'';
   const msgEl=el.querySelector('.toast-msg');
   if(message) msgEl.textContent=message; else msgEl.remove();
@@ -1749,7 +1813,28 @@ function showToast(kind,title,message,opts={}){
   if(active.length>=MAX_VISIBLE_TOASTS){ active.slice(0,active.length-MAX_VISIBLE_TOASTS+1).forEach(old=>{ if(old._dismiss) old._dismiss(); }); }
   const timer=setTimeout(dismiss,dur);
   el.querySelector('.toast-close').addEventListener('click',()=>{clearTimeout(timer);dismiss();});
-  return ()=>{clearTimeout(timer);dismiss();};
+  const endFn=()=>{clearTimeout(timer);dismiss();};
+  // Progress-enabled toasts (currently just the export flow) get a .setProgress(pct, etaSeconds)
+  // method attached to the same function the caller already holds for dismissing — no new
+  // return shape, so every existing showToast() call site is unaffected.
+  if(opts.progress){
+    const fill=el.querySelector('.toast-progress-fill');
+    const pctEl=el.querySelector('.toast-progress-pct');
+    const etaEl=el.querySelector('.toast-progress-eta');
+    endFn.setProgress=(pct,etaSeconds)=>{
+      const p=Math.max(0,Math.min(100,Math.round(pct)));
+      if(fill) fill.style.width=p+'%';
+      if(pctEl) pctEl.textContent=p+'%';
+      if(etaEl){
+        if(p>=100) etaEl.textContent='Done';
+        else if(etaSeconds==null) etaEl.textContent='Calculating…';
+        else if(etaSeconds<1) etaEl.textContent='Almost done…';
+        else if(etaSeconds<60) etaEl.textContent='~'+Math.ceil(etaSeconds)+'s left';
+        else etaEl.textContent='~'+Math.floor(etaSeconds/60)+'m '+Math.round(etaSeconds%60)+'s left';
+      }
+    };
+  }
+  return endFn;
 }
 
 function makePieChart(container, items, valueKey, labelKey, opts={}){
