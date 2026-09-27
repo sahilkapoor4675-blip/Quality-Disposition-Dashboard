@@ -30,26 +30,32 @@ Neither of these needs a paid plan.
 
 ## The 4 things only you can set up (10–15 minutes total)
 
-I can't create accounts or click buttons in your Render/Supabase/Cloudflare/
+I can't create accounts or click buttons in your Render/Supabase/Backblaze/
 GitHub dashboards — only you can, since they're tied to your login. Everything
 else (code, workflow, docs) is already done and tested. Here is exactly what
 to do:
 
-### Step 1 — Create a free off-site bucket (Cloudflare R2 recommended)
+### Step 1 — Create a free off-site bucket (Backblaze B2 recommended)
 
-Cloudflare R2 has a free tier (10 GB storage, no egress fees), which fits a
-free-tier project well.
+Backblaze B2 has a free tier (10 GB storage) and — unlike Cloudflare R2 —
+does **not** ask for a card/bank account, as long as the bucket stays
+**private** (a public bucket needs payment history on file; a private one,
+which is what backups should be anyway, only needs email verification).
 
-1. Sign up / log in at https://dash.cloudflare.com → **R2**.
-2. Create a bucket, e.g. `quality-disposition-recovery`. Keep it **private**.
-3. **R2 → Manage API tokens → Create API token** → permissions: Object
-   Read & Write, scoped to that bucket only.
-4. Note down: Account ID, Access Key ID, Secret Access Key.
-   Your endpoint URL will be `https://<account-id>.r2.cloudflarestorage.com`.
+1. Sign up at https://www.backblaze.com/cloud-storage → verify your email.
+2. **B2 Cloud Storage → Buckets → Create a Bucket**, e.g.
+   `quality-disposition-recovery`. Set it to **Private**.
+3. **Account → App Keys → Add a New Application Key** → scope it to that
+   bucket only, with Read & Write permission.
+4. Note down: `keyID` (→ Access Key ID), `applicationKey` (→ Secret Access
+   Key), and the bucket's **Endpoint** shown on the bucket page, e.g.
+   `s3.us-west-002.backblazeb2.com`. The region is the part in the middle,
+   e.g. `us-west-002`.
 
-(AWS S3 works too and additionally supports Object Lock/WORM retention — see
-`DISASTER_RECOVERY_ARCHITECTURE.md` §6 — but costs egress fees; R2 is the
-simpler free choice for most users.)
+(Cloudflare R2 and AWS S3 also work with the same code — R2 additionally
+requires billing info even on the free tier, and S3 supports Object Lock/WORM
+retention but costs egress fees; see `DISASTER_RECOVERY_ARCHITECTURE.md` §6.
+Backblaze B2 is the no-card free choice.)
 
 ### Step 2 — Add the same secrets in **two** places
 
@@ -59,10 +65,10 @@ Add:
 ```
 DATABASE_URL             (your Supabase pooler connection string)
 DR_S3_BUCKET              quality-disposition-recovery
-DR_S3_ACCESS_KEY_ID
-DR_S3_SECRET_ACCESS_KEY
-DR_S3_REGION              auto
-DR_S3_ENDPOINT_URL        https://<account-id>.r2.cloudflarestorage.com
+DR_S3_ACCESS_KEY_ID       (Backblaze keyID)
+DR_S3_SECRET_ACCESS_KEY   (Backblaze applicationKey)
+DR_S3_REGION              us-west-002   (the region part of your endpoint)
+DR_S3_ENDPOINT_URL        https://s3.us-west-002.backblazeb2.com
 ```
 Then go to the **Actions** tab → "DR - PostgreSQL off-site backup" → **Run
 workflow** once, and confirm it finishes green before trusting the schedule.
@@ -73,10 +79,10 @@ Render service → **Environment**, add:
 DR_REMOTE_ENABLED             true
 DR_REMOTE_REQUIRED_FOR_MUTATIONS   true   (start with false if you want to test first)
 DR_S3_BUCKET                  quality-disposition-recovery
-DR_S3_ACCESS_KEY_ID
-DR_S3_SECRET_ACCESS_KEY
-DR_S3_REGION                  auto
-DR_S3_ENDPOINT_URL            https://<account-id>.r2.cloudflarestorage.com
+DR_S3_ACCESS_KEY_ID           (Backblaze keyID)
+DR_S3_SECRET_ACCESS_KEY       (Backblaze applicationKey)
+DR_S3_REGION                  us-west-002   (the region part of your endpoint)
+DR_S3_ENDPOINT_URL            https://s3.us-west-002.backblazeb2.com
 ```
 Save and let Render redeploy. Then open `/admin` → check that a new backup
 shows **remote: verified**, not `disabled`/`failed`.
@@ -95,7 +101,7 @@ GitHub be the only copy. Cheapest options, pick one:
 In a password manager or a printed sealed note — **never in the repo**:
 - Supabase login + project ref
 - Render login
-- Cloudflare login + the R2 access keys
+- Backblaze login + the B2 application keys
 - Domain/DNS registrar login (if you have a custom domain)
 
 This is the "break-glass" record `DISASTER_RECOVERY_ARCHITECTURE.md` §7 calls for.
@@ -105,7 +111,7 @@ This is the "break-glass" record `DISASTER_RECOVERY_ARCHITECTURE.md` §7 calls f
 ## What actually happens if something is blocked/shut down
 
 ### Render blocks/deletes your account
-Your data is untouched (it lives in Supabase, plus off-site dumps in R2).
+Your data is untouched (it lives in Supabase, plus off-site dumps in Backblaze B2).
 Deploy this exact code (Dockerfile included, so it runs on Railway, Fly.io,
 a plain VPS, or any Docker host) with the same `DATABASE_URL`. Point DNS at
 the new host. Nothing about the app needs to change — it only needs a
