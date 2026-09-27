@@ -1104,14 +1104,14 @@ function renderDrillPage(page=1){
   const dt=document.getElementById('drillTitle');
   if(dt){ const dtt=dt.querySelector('.drill-title-text'); (dtt||dt).textContent=title||'Underlying Records'; }
   const subEl=document.getElementById('drillSubtitle'); if(subEl) subEl.textContent=activeFilterSummary();
-  content.innerHTML='<div class="drill-empty">Loading underlying records…</div>';
-  const cntEl=document.getElementById('drillCount'); if(cntEl) cntEl.textContent='Loading…';
+  content.innerHTML='<div class="drill-empty">'+loadingStateMarkup('Loading underlying records…')+'</div>';
+  const cntEl=document.getElementById('drillCount'); if(cntEl){ cntEl.textContent='Loading…'; cntEl.classList.add('loading-pulse-text'); }
   const qs=drilldownFiltersQuery(Object.assign({metric,page,page_size:250},extra));
   const expEl=document.getElementById('drillExportBtn');
   if(expEl) expEl.href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric},extra));
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
     if(data.error)throw new Error(data.error);
-    if(cntEl) cntEl.textContent=Number(data.count||0).toLocaleString()+' coils';
+    if(cntEl){ cntEl.textContent=Number(data.count||0).toLocaleString()+' coils'; cntEl.classList.remove('loading-pulse-text'); }
     const scEl=document.getElementById('drillScope');
     if(scEl) scEl.textContent=(data.scope||'')+' • '+Number(data.row_count||data.rows?.length||0).toLocaleString()+' records';
     if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('No underlying records found for this KPI/selection.','Try a wider date range or clear a filter.')+'</div>';return;}
@@ -1124,8 +1124,8 @@ function renderDrillPage(page=1){
     if(Number(data.total_pages||1)>1) html+=`<div class="drill-pagination"><button type="button" data-drill-page="${Math.max(1,Number(data.page||1)-1)}" ${Number(data.page||1)<=1?'disabled':''}>‹ Previous</button><span>Page ${Number(data.page||1)} of ${Number(data.total_pages||1)}</span><button type="button" data-drill-page="${Math.min(Number(data.total_pages||1),Number(data.page||1)+1)}" ${Number(data.page||1)>=Number(data.total_pages||1)?'disabled':''}>Next ›</button></div>`;
     content.innerHTML=html;
   }).catch(e=>{
-    content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('Unable to load records.',String(e.message||e))+'</div>';
-    if(cntEl) cntEl.textContent='Error';
+    content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('Unable to load records.',String(e.message||e),'error')+'</div>';
+    if(cntEl){ cntEl.textContent='Error'; cntEl.classList.remove('loading-pulse-text'); }
   });
 }
 // Opens a fresh drill-down as the FIRST level (e.g. clicking a defect bar on
@@ -1783,8 +1783,35 @@ function yAxisTitleH(text, h, padT, padB){
 // modal, instead of a bare line of text. `sub` is optional supporting text
 // (e.g. a hint to widen the filter); an inline SVG icon keeps this
 // dependency-free and themeable via currentColor.
-function emptyStateMarkup(title, sub){
-  return `<div class="empty-state"><svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="32" cy="32" r="29" stroke="currentColor" stroke-width="2.5" stroke-dasharray="4 5"/><path d="M20 40 L28 30 L36 35 L44 22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="44" cy="22" r="2.8" fill="currentColor"/><circle cx="36" cy="35" r="2.8" fill="currentColor"/><circle cx="28" cy="30" r="2.8" fill="currentColor"/><circle cx="20" cy="40" r="2.8" fill="currentColor"/></svg><div class="empty-state-title">${escQcr(title)}</div>${sub?`<div class="empty-state-sub">${escQcr(sub)}</div>`:''}</div>`;
+// ---- Empty / error / success placeholder states, used anywhere a panel has
+// nothing to show (no data, a defect not mapped, a load failure, etc). One
+// consistent icon+title(+sub) layout with a kind-based icon/colour so every
+// such message reads the same way instead of each spot being plain text:
+//   'empty'   (default) — neutral, nothing to show right now
+//   'error'   — something failed to load; ⚠ the reader should know why
+//   'success' — an explicitly good "nothing wrong found" result
+// opts.rawTitle/opts.rawSub let a caller pass pre-built HTML (e.g. a <b> name
+// or a nested <span>) instead of having it escaped, for the couple of call
+// sites that need inline markup inside the message.
+const EMPTY_STATE_ICONS={
+  empty:'<svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="32" cy="32" r="29" stroke="currentColor" stroke-width="2.5" stroke-dasharray="4 5"/><path d="M20 40 L28 30 L36 35 L44 22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="44" cy="22" r="2.8" fill="currentColor"/><circle cx="36" cy="35" r="2.8" fill="currentColor"/><circle cx="28" cy="30" r="2.8" fill="currentColor"/><circle cx="20" cy="40" r="2.8" fill="currentColor"/></svg>',
+  error:'<svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M32 9 L59 55 L5 55 Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M32 26 L32 39" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="46.5" r="2.7" fill="currentColor"/></svg>',
+  success:'<svg class="empty-state-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="32" cy="32" r="29" stroke="currentColor" stroke-width="2.5"/><path d="M20 33 L28 41 L45 23" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+function emptyStateMarkup(title, sub, kind, opts){
+  kind = EMPTY_STATE_ICONS[kind] ? kind : 'empty';
+  opts = opts||{};
+  const titleHtml = opts.rawTitle ? title : escQcr(title);
+  const subHtml = sub ? (opts.rawSub ? sub : escQcr(sub)) : '';
+  return `<div class="empty-state empty-state-${kind}">${EMPTY_STATE_ICONS[kind]}<div class="empty-state-title">${titleHtml}</div>${subHtml?`<div class="empty-state-sub">${subHtml}</div>`:''}</div>`;
+}
+// A loading placeholder for spots that used to just show plain "Loading…"
+// text — now a couple of shimmering skeleton lines (reusing the same
+// .skeleton-line shimmer as the chart/table skeletons) plus a caption, so a
+// text-only loading state gets the same shimmer treatment as the rest of the
+// app instead of sitting there static.
+function loadingStateMarkup(caption){
+  return `<div class="empty-state empty-state-loading"><div class="loading-skel-lines" aria-hidden="true"><div class="skeleton-line" style="width:78%"></div><div class="skeleton-line" style="width:56%"></div><div class="skeleton-line" style="width:40%"></div></div><div class="empty-state-sub">${escQcr(caption||'Loading…')}</div></div>`;
 }
 
 // ---- Toast notifications: a visual, top-right sliding confirmation for
@@ -2371,7 +2398,7 @@ function qcrTargetText(label){ const c=KPI_TARGETS[label]; if(!c)return 'Target 
 // "Recurring" / risk badge inline instead of a whole extra card.
 function qcrRenderContribPanel(id, rows, kind, meta){
   const el=document.getElementById(id); if(!el)return;
-  if(!rows.length){el.innerHTML='<div class="qcr-empty">No data available for current selection.</div>';return;}
+  if(!rows.length){el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('No data available for current selection.')+'</div>';return;}
   el.innerHTML=rows.map((r,i)=>{
     let name,metricText,sev,attrs,action,badges='';
     if(kind==='defect'){
@@ -2494,9 +2521,9 @@ document.addEventListener('change', e=>{
 });
 function qcrRenderFishboneDiagram(item){
   const el=document.getElementById('qcrFishboneDiagram'); if(!el) return;
-  if(!item){ el.innerHTML='<div class="qcr-empty">No defect selected.</div>'; return; }
+  if(!item){ el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('No defect selected.')+'</div>'; return; }
   if(!item.matched){
-    el.innerHTML=`<div class="qcr-empty">No 6M Fishbone mapping found for <b>${escQcr(item.defect)}</b> yet. Ask an admin to import/update the 6M Fishbone Master, or add a defect mapping in Admin → 6M Fishbone Analysis.</div>`;
+    el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup(`No 6M Fishbone mapping found for <b>${escQcr(item.defect)}</b> yet.`, 'Ask an admin to import/update the 6M Fishbone Master, or add a defect mapping in Admin → 6M Fishbone Analysis.', 'empty', {rawTitle:true})+'</div>';
     return;
   }
   const c=item.causes||{};
@@ -2519,15 +2546,15 @@ function qcrLoadFishbone(topDefects){
   const chipsEl=document.getElementById('qcrFishboneChips'), diagEl=document.getElementById('qcrFishboneDiagram');
   if(!chipsEl || !diagEl) return;
   const names=(topDefects||[]).map(r=>r.defect).filter(n=>n && n!=='—').slice(0,5);
-  if(!names.length){ chipsEl.innerHTML=''; diagEl.innerHTML='<div class="qcr-empty">No defect data available for the current selection.</div>'; return; }
-  diagEl.innerHTML='<div class="qcr-empty">Loading 6M fishbone analysis…</div>';
+  if(!names.length){ chipsEl.innerHTML=''; diagEl.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('No defect data available for the current selection.')+'</div>'; return; }
+  diagEl.innerHTML='<div class="qcr-empty">'+loadingStateMarkup('Loading 6M fishbone analysis…')+'</div>';
   fetch('/api/fishbone?defects='+encodeURIComponent(names.join('|')),{cache:'no-store'}).then(r=>r.json()).then(d=>{
     if(d.error) throw new Error(d.error);
     if(d.style) FISHBONE_STYLE=Object.assign({},FISHBONE_STYLE,d.style);
     qcrFishboneData=d;
     qcrRenderFishboneChips(d.items||[]);
     qcrRenderFishboneDiagram((d.items||[])[0]);
-  }).catch(()=>{ diagEl.innerHTML='<div class="qcr-empty">6M fishbone data unavailable.</div>'; });
+  }).catch(()=>{ diagEl.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('6M fishbone data unavailable.',null,'error')+'</div>'; });
 }
 document.getElementById('qcrFishboneChips')?.addEventListener('click',e=>{
   const b=e.target.closest('.qcr-fishbone-chip'); if(!b)return;
@@ -2702,9 +2729,9 @@ function buildFishboneSvg(item, availUnits){
 function dashRenderFishboneDiagram(item){
   const el=document.getElementById('dashFishboneDiagram'); if(!el) return;
   chartRemember(el, ()=>dashRenderFishboneDiagram(item));
-  if(!item){ el.innerHTML='<div class="qcr-empty">No defect data available for the current selection.</div>'; return; }
+  if(!item){ el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('No defect data available for the current selection.')+'</div>'; return; }
   if(!item.matched){
-    el.innerHTML=`<div class="qcr-empty">No 6M Fishbone mapping found for <b>${escQcr(item.defect)}</b> yet. Ask an admin to import/update the 6M Fishbone Master, or add a defect mapping in Admin → 6M Fishbone Analysis.</div>`;
+    el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup(`No 6M Fishbone mapping found for <b>${escQcr(item.defect)}</b> yet.`, 'Ask an admin to import/update the 6M Fishbone Master, or add a defect mapping in Admin → 6M Fishbone Analysis.', 'empty', {rawTitle:true})+'</div>';
     return;
   }
   const note = item.match_type==='fuzzy' ? `<div class="qcr-fb-note">Matched to master defect "${escQcr(item.matched_defect)}" (closest match, ${Math.round((item.confidence||0)*100)}% confidence). If this looks wrong, fix it in Admin → 6M Fishbone Analysis.</div>` : '';
@@ -2717,15 +2744,15 @@ function dashLoadFishbone(topDefects){
   const chipsEl=document.getElementById('dashFishboneChips'), diagEl=document.getElementById('dashFishboneDiagram');
   if(!chipsEl || !diagEl) return;
   const names=(topDefects||[]).map(r=>r.defect).filter(n=>n && n!=='—').slice(0,5);
-  if(!names.length){ chipsEl.innerHTML=''; diagEl.innerHTML='<div class="qcr-empty">No defect data available for the current selection.</div>'; return; }
-  diagEl.innerHTML='<div class="qcr-empty">Loading 6M fishbone analysis…</div>';
+  if(!names.length){ chipsEl.innerHTML=''; diagEl.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('No defect data available for the current selection.')+'</div>'; return; }
+  diagEl.innerHTML='<div class="qcr-empty">'+loadingStateMarkup('Loading 6M fishbone analysis…')+'</div>';
   fetch('/api/fishbone?defects='+encodeURIComponent(names.join('|')),{cache:'no-store'}).then(r=>r.json()).then(d=>{
     if(d.error) throw new Error(d.error);
     if(d.style) FISHBONE_STYLE=Object.assign({},FISHBONE_STYLE,d.style);
     dashFishboneData=d;
     dashRenderFishboneChips(d.items||[]);
     dashRenderFishboneDiagram((d.items||[])[0]);
-  }).catch(()=>{ diagEl.innerHTML='<div class="qcr-empty">6M fishbone data unavailable.</div>'; });
+  }).catch(()=>{ diagEl.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('6M fishbone data unavailable.',null,'error')+'</div>'; });
 }
 document.getElementById('dashFishboneChips')?.addEventListener('click',e=>{
   const b=e.target.closest('.qcr-fishbone-chip'); if(!b)return;
@@ -2740,7 +2767,7 @@ function qcrRenderHealthReasons(intel){
   box.innerHTML=reasons.map(r=>{const n=Math.abs(Number(r[1]||0));return `<span class="negative">-${n.toFixed(1)} pts <b>${escQcr(r[0])}</b></span>`;}).join('');
 }
 function qcrRenderComparison(rows){
-  const el=document.getElementById('qcrComparison'); if(!rows.length){el.innerHTML='<div class="qcr-empty">Monthly comparison is not available.</div>';return;}
+  const el=document.getElementById('qcrComparison'); if(!rows.length){el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Monthly comparison is not available.')+'</div>';return;}
   const cur=rows[rows.length-1], prev=rows.length>1?rows[rows.length-2]:null;
   const metrics=[['Defect %','defect_pct',true,'lower'],['First Pass Yield % (Prime%)','first_pass_yield_pct',true,'higher'],['Reject % Qty','reject_pct_qty',true,'lower'],['Output Qty (MT)','output_qty',false,'higher'],['Coils','coils',false,'higher']];
   const cell=(m,row)=>m[2] ? (Number(row?.[m[1]]||0)*100).toFixed(2)+'%' : Number(row?.[m[1]]||0).toLocaleString(undefined,{maximumFractionDigits:2});
@@ -2812,7 +2839,7 @@ function qcrRenderTrendPrediction(rows,d,w){
   try{
     const valid=Array.isArray(rows)?rows.filter(r=>Number.isFinite(Number(r?.first_pass_yield_pct))):[];
     const recent=valid.slice(-4);
-    if(recent.length<3){el.innerHTML='<div class="qcr-empty">Need at least 3 monthly periods for trend intelligence.</div>';return;}
+    if(recent.length<3){el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Need at least 3 monthly periods for trend intelligence.')+'</div>';return;}
     const fpy=recent.map(r=>Number(r.first_pass_yield_pct)||0), rej=recent.map(r=>Number(r.reject_pct_qty)||0);
     const slope=a=>{const n=a.length,xm=(n-1)/2,ym=a.reduce((x,y)=>x+y,0)/n,den=a.reduce((x,_,i)=>x+(i-xm)*(i-xm),0);return den? a.reduce((x,y,i)=>x+(i-xm)*(y-ym),0)/den:0;};
     const sf=slope(fpy),sr=slope(rej),deteriorating=sf<-0.001||sr>0.001,stable=!deteriorating&&Math.abs(sf)<0.0005&&Math.abs(sr)<0.0005;
@@ -2820,11 +2847,11 @@ function qcrRenderTrendPrediction(rows,d,w){
     // Contributors (Grade/Defect/Work Center) are intentionally not repeated
     // here — they're already ranked in "Top Contributors" above.
     el.innerHTML=`<div class="qcr-intel-status ${cls}">${status}</div><div class="qcr-intel-main">FPY ${ (fpy[fpy.length-1]*100).toFixed(2)}% <span>→ projected ${(next*100).toFixed(2)}%</span></div><div class="qcr-intel-meta">Last ${recent.length} months: ${recent.map(r=>escQcr(r.name)).join(' → ')}</div><div class="qcr-intel-meta">${sf<0?'FPY is trending down.':'FPY is not declining.'} ${sr>0?'Reject % is increasing.':'Reject % is not increasing.'}</div>`;
-  }catch(e){console.error('QCR trend intelligence',e);el.innerHTML='<div class="qcr-empty">Trend intelligence unavailable.</div>';}
+  }catch(e){console.error('QCR trend intelligence',e);el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Trend intelligence unavailable.',null,'error')+'</div>';}
 }
 document.getElementById('qcrRootCause')?.addEventListener('click',e=>{const b=e.target.closest('.qcr-root-link');if(!b)return; const container=document.getElementById('qcrRootCause'); const defect=container?.dataset.defect||''; openDrilldown('defect_category',`Root Cause: ${b.dataset.rootGrade||'—'} → ${b.dataset.rootWc||'—'}`,{drill_value:defect,grade:b.dataset.rootGrade||'All',work_center:b.dataset.rootWc||'All'});});
 function loadRootCause(defect){
-  const el=document.getElementById('qcrRootCause'); if(!el||!defect)return Promise.resolve(); el.innerHTML='<div class="qcr-empty">Loading root-cause path…</div>';
+  const el=document.getElementById('qcrRootCause'); if(!el||!defect)return Promise.resolve(); el.innerHTML='<div class="qcr-empty">'+loadingStateMarkup('Loading root-cause path…')+'</div>';
   // The defect this panel is currently showing has to be recoverable later
   // when a path button is clicked (see the click handler below) — stash it
   // on the container itself instead of relying on a CSS class that was
@@ -2840,7 +2867,7 @@ function loadRootCause(defect){
     // itself? No — dataset lives on the element node, not its innerHTML, so
     // it survives. Kept here as a defensive re-set in case that ever changes.
     el.dataset.defect=defect;
-  }).catch(()=>{el.innerHTML='<div class="qcr-empty">Root-cause data unavailable.</div>';});
+  }).catch(()=>{el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Root-cause data unavailable.',null,'error')+'</div>';});
 }
 // NOTE: Grade Concentration and "Why changed?" used to also be computed here
 // via extra client-side API calls. That logic is dead weight now — the
@@ -2857,7 +2884,7 @@ function qcrRenderProblemFinder(intel, intelError){
   // Biggest Problem card showing "Analysis unavailable" right above it.
   if(intelError){
     if(count){count.textContent='Unavailable';}
-    el.innerHTML='<div class="qcr-empty">⚠ Quality analysis could not run for this request (temporary error) — this is not a confirmed zero-issue result. Refresh to retry.</div>';
+    el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Quality analysis could not run for this request.','This is a temporary error, not a confirmed zero-issue result — refresh to retry.','error')+'</div>';
     return;
   }
   const all=Array.isArray(intel?.problem_finder)?intel.problem_finder:[];
@@ -2865,7 +2892,7 @@ function qcrRenderProblemFinder(intel, intelError){
   const critCount=all.filter(x=>String(x.severity||'').toLowerCase()==='critical').length;
   const shownNote=all.length>rows.length?` · top ${rows.length} shown`:'';
   if(count)count.textContent=all.length?(critCount>0?`${critCount} critical issue${critCount===1?'':'s'}${shownNote}`:`${all.length} issue${all.length===1?'':'s'}${shownNote}`):'0 issues';
-  if(!rows.length){el.innerHTML='<div class="qcr-empty">✓ No material quality problem detected for the current selection. Continue monitoring.</div>';return;}
+  if(!rows.length){el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('No material quality problem detected for the current selection.','Continue monitoring.','success')+'</div>';return;}
   el.innerHTML=rows.map((x,i)=>{
     const sev=String(x.severity||'Observation').toUpperCase(); const conf=String(x.confidence||'MEDIUM').toUpperCase();
     const driver=x.driver_path||x.where||'—'; const change=x.change|| (x.impact_qty?`${Number(x.impact_qty).toFixed(2)} MT`:'—');
@@ -2901,7 +2928,7 @@ function qcrRenderWhyDecomposition(intel){
   // Grade/Defect/Work Center names it used to repeat here are already
   // ranked in "Top Contributors" above, so they're not re-listed.
   const el=document.getElementById('qcrWhyChanged');if(!el)return; const z=intel?.why_changed;
-  if(!z||!z.current||!z.previous){el.innerHTML='<div class="qcr-empty">Previous period comparison is not available for this selection.</div>';return;}
+  if(!z||!z.current||!z.previous){el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Previous period comparison is not available for this selection.')+'</div>';return;}
   el.innerHTML=`<div class="qcr-why-grid"><div><b>FPY ${Number(z.fpy_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.fpy_change_pp||0)).toFixed(2)} pp</b></div><div><b>Reject ${Number(z.reject_change_pp||0)>=0?'↑':'↓'} ${Math.abs(Number(z.reject_change_pp||0)).toFixed(2)} pp</b></div></div><div class="qcr-story-text">${escQcr(z.statement||'')}</div>`;
 }
 function qcrInvestigation(extra={}, title='QCR Investigation'){
@@ -2956,7 +2983,7 @@ function qcrWireProblemActions(){
 }
 function qcrRenderTargetHistory(rows,target){
   const el=document.getElementById('qcrTargetHistory'); if(!el)return;
-  if(!rows.length){el.innerHTML='<div class="qcr-empty">No historical monthly data available.</div>';return;}
+  if(!rows.length){el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('No historical monthly data available.')+'</div>';return;}
   el.innerHTML=`<div class="qcr-target-summary">Target <b>${(Number(target||0)*100).toFixed(1)}%</b> • % Target Achieved shows how much of the target was reached each period (100% = target fully met)</div><div class="qcr-target-table"><table class="qcr-compare"><thead><tr><th>Period</th><th>Target</th><th>Actual</th><th>% Target Achieved</th><th>Gap</th></tr></thead><tbody>${rows.map(r=>{const a=Number(r.actual||0),t=Number(r.target||0),att=Number(r.attainment||0);const cls=att>=0.97?'good':att>=0.90?'amber':'bad';return `<tr><td>${escQcr(r.period)}</td><td>${(t*100).toFixed(1)}%</td><td>${(a*100).toFixed(2)}%</td><td><span class="qcr-delta ${cls}">${(att*100).toFixed(1)}%</span></td><td>${Number(r.gap_pp||0)>=0?'+':''}${Number(r.gap_pp||0).toFixed(2)} pp</td></tr>`}).join('')}</tbody></table></div>`;
 }
 
@@ -3047,8 +3074,8 @@ async function loadControlRoom(signal){
       console.error('QCR load failed',e);
       const msg=String(e?.message||'Unable to load Control Room data');
       const ids=['qcrProblemFinder','qcrQualityStory','qcrQualityImprovements','qcrCriticalKpis','qcrContribDefect','qcrContribWc','qcrContribGrade','qcrComparison','qcrWhyChanged','qcrTrendPrediction','qcrTargetHistory'];
-      ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="qcr-empty">Unable to load this QCR section. <span class="qcr-error-detail">'+escQcr(msg)+'</span></div>';});
-      const root=document.getElementById('qcrRootCause');if(root)root.innerHTML='<div class="qcr-empty">Root-cause data unavailable until QCR data reconnects.</div>';
+      ids.forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Unable to load this QCR section.',escQcr(msg),'error',{rawSub:true})+'</div>';});
+      const root=document.getElementById('qcrRootCause');if(root)root.innerHTML='<div class="qcr-empty">'+emptyStateMarkup('Root-cause data unavailable until QCR data reconnects.',null,'error')+'</div>';
       const qs=document.getElementById('qcrQualityStatus');if(qs){qs.className='qcr-quality-status amber';const st=qs.querySelector('strong');if(st)st.textContent='UNAVAILABLE';}
     }
   }

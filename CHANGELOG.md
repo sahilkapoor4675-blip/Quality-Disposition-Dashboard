@@ -1,3 +1,22 @@
+## V65.0 — Follow-up: visual polish — consistent shadow elevation, shimmering text-only loaders, friendlier empty/error/success states, dark-mode copper contrast audit (no version bump — same version)
+
+### Changed
+- **Shadow elevation system.** Documented and extended the existing `--shadow-*` token scale (`card < card-hover < sticky < overlay < menu < modal`), adding a new `--shadow-overlay` tier for floating, self-dismissing surfaces like toasts. Retrofitted the toast, `.view-popover` (light + dark), and the whole QCR card family (`.qcr-card`, `.qcr-exec-item`, `.qcr-quality-status`, `.qcr-problem-card`, `.qcr-fb-branch`, resting + hover states) from bespoke near-duplicate `box-shadow` values onto these shared tokens, so every "card-like" surface now genuinely renders the same shadow instead of a dozen slightly-different one-off blurs/opacities.
+- **Skeleton loaders — shimmer for the text-only spots.** Added `loadingStateMarkup(caption)`, which renders a few shimmering skeleton lines (reusing the existing `.skeleton-line` shimmer already used by the chart/table skeletons) plus a caption, and swapped it into every place that previously just showed static "Loading…" text: the drill-modal's record list, and the QCR tab's "Loading 6M fishbone analysis…" (×2) and "Loading root-cause path…" states. The one small inline counter that's too tight for skeleton lines (the drill-modal's record-count badge) instead got a lightweight `.loading-pulse-text` opacity pulse.
+- **Empty/error/success states — one consistent, friendlier look.** Extended `emptyStateMarkup(title, sub, kind)` with a `kind` ('empty' | 'error' | 'success'), each with its own icon and colour: the existing neutral dotted-circle icon for "nothing to show", a new triangle-exclamation icon in `--red` for failures, and a new check-in-circle icon in `--green` for explicitly good "nothing wrong found" results. Converted all ~20 of the QCR tab's and drill-modal's plain-text `qcr-empty`/`drill-empty` messages to use it with the appropriate kind — including the "6M fishbone mapping not found" message (kept its `<b>` defect name via a new `rawTitle` option) and the "quality analysis could not run" / "no material quality problem detected" pair, which were previously indistinguishable plain text despite being opposite outcomes (temporary failure vs. genuinely good news).
+- **Dark-mode accent-colour contrast — audited against WCAG AA.** Manually computed relative-luminance contrast ratios for the dark-mode `--accent` (#4DA3FF) and `--amber` (#FBBF24, the app's closest "copper/warm" accent) against the dark card background (#141B2C): **6.53:1** and **10.28:1** respectively — both comfortably clear WCAG AA's 4.5:1 for normal text (the dark-mode palette was already well-tuned here). The genuine "washed out" issue turned out to be the *decorative* header copper-coil artwork, not a text/contrast problem: in dark mode it was rendered at `opacity:.48` with `mix-blend-mode:screen`, which reads as faint against the dark header gradient. Bumped it to `opacity:.66` with `filter:saturate(1.45) brightness(1.2)` so the copper coils stay visible and rich instead of fading into the background.
+
+### Unchanged
+- No application-version bump: this remains **V65.0**.
+- No API, schema, or data changes — this pass only touches `app.js` (`emptyStateMarkup`/`loadingStateMarkup` and their ~20 call sites) and `app.css` (elevation tokens, empty/error/success/loading styles, header copper-coil dark-mode filter). All previous passes (export progress bar, rounded toasts, spring KPI count-up, tab fade-in, button ripple, staggered chart grow-in) are untouched.
+- Only `app.js` and `app.css` were touched for this pass.
+
+### Verified
+- `node --check app.js` — clean.
+- CSS brace/parenthesis balance checked programmatically after all edits (1439/1439 braces, 1201/1201 parens).
+- Grepped for the old `qcr-error-detail` class after converting its one call site — no longer referenced anywhere, so nothing was left orphaned.
+- Manually walked the WCAG contrast math (sRGB → linear → relative luminance → (L1+0.05)/(L2+0.05)) for the two dark-mode colours above rather than asserting compliance without checking.
+
 ## V65.0 — Follow-up: micro-interactions — spring KPI count-up, tab fade-in, button ripple, staggered chart grow-in (no version bump — same version)
 
 ### Changed
