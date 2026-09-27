@@ -388,20 +388,36 @@ function exportDashboard(format){
     }
     endProgress.setProgress(displayedPct,displayedPct>=100?0:etaSeconds);
   };
-  const tick=()=>{
-    if(displayedPct<targetPct){
-      // Catch up faster when the gap is big (real bytes can jump ahead of the sim curve),
-      // but always by a visible step of at least 1 — never a silent instant jump.
-      displayedPct=Math.min(targetPct,displayedPct+Math.max(1,Math.round((targetPct-displayedPct)/4)));
-    }
-    render();
-  };
-  const ticker=setInterval(tick,80);
-  const stopTicker=()=>clearInterval(ticker);
-
+  // Both loops below used to be independent setInterval() timers (80ms /
+  // 200ms). setInterval fires on its own clock, not synced to the browser's
+  // paint cycle, so the bar could visibly micro-stutter under any load.
+  // Driving both from one requestAnimationFrame loop — using elapsed real
+  // time to decide when each logical "tick" is due — keeps the exact same
+  // pacing/math but renders every update right before a repaint.
+  let lastTickAt=performance.now();
+  let lastSimAt=performance.now();
   let simTarget=0;
-  const simTimer=setInterval(()=>{ simTarget+=(90-simTarget)*0.05; targetPct=Math.max(targetPct,simTarget); },200);
-  const stopSim=()=>clearInterval(simTimer);
+  let rafId=null;
+  const frame=(now)=>{
+    if(now-lastSimAt>=200){
+      lastSimAt=now;
+      simTarget+=(90-simTarget)*0.05;
+      targetPct=Math.max(targetPct,simTarget);
+    }
+    if(now-lastTickAt>=80){
+      lastTickAt=now;
+      if(displayedPct<targetPct){
+        // Catch up faster when the gap is big (real bytes can jump ahead of the sim curve),
+        // but always by a visible step of at least 1 — never a silent instant jump.
+        displayedPct=Math.min(targetPct,displayedPct+Math.max(1,Math.round((targetPct-displayedPct)/4)));
+      }
+      render();
+    }
+    rafId=requestAnimationFrame(frame);
+  };
+  rafId=requestAnimationFrame(frame);
+  const stopTicker=()=>{ if(rafId!=null){ cancelAnimationFrame(rafId); rafId=null; } };
+  const stopSim=stopTicker; // one shared loop now drives both phases
 
   fetch(url,{cache:'no-store'}).then(res=>{
     if(!res.ok) return res.json().catch(()=>null).then(j=>{ throw new Error((j&&j.error)?j.error:('Export failed (HTTP '+res.status+').')); });

@@ -255,7 +255,7 @@
   @keyframes dropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
   .filter-search{width:100%;padding:7px 8px;border:1px solid #dbe3ec;border-radius:7px;font-size:13.5px;outline:none;margin-bottom:6px;}
   .filter-search:focus{border-color:#8bbcf2;box-shadow:0 0 0 3px rgba(17,141,255,.08);}
-  .filter-options{max-height:220px;overflow:auto;}
+  .filter-options{max-height:220px;overflow:auto;-webkit-overflow-scrolling:touch;}
   .filter-option{padding:7px 8px;border-radius:6px;font-size:13.5px;cursor:pointer;color:#334155;display:flex;align-items:center;justify-content:space-between;gap:8px;}
   .filter-option:hover{background:#f1f6fb;}
   .filter-option.selected{background:#eaf4ff;color:#075985;font-weight:800;}
@@ -375,7 +375,7 @@ header .sub{font-weight:800!important;letter-spacing:.2px;}
 /* ---- Toast notifications: top-right, stacked, auto-dismissing. ----
    max-height + overflow-y keeps a long stack from spilling past the viewport
    edge (JS also caps how many can be visible at once — see showToast). */
-.toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;pointer-events:none;}
+.toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;pointer-events:none;-webkit-overflow-scrolling:touch;}
 .toast-host::-webkit-scrollbar{width:6px;}
 .toast-host::-webkit-scrollbar-thumb{background:rgba(120,140,160,.35);border-radius:6px;}
 .toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--slate);border-radius:16px;padding:var(--sp-3) var(--sp-4);box-shadow:var(--shadow-overlay);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);overflow:hidden;}
@@ -473,19 +473,19 @@ tfoot td,tr.grand-total-row td{background:linear-gradient(180deg,#2f93cf 0%,#1f6
      table header remains frozen while all underlying records are scrolled. */
   .drill-body{display:flex;flex-direction:column;min-height:0;overflow:hidden;}
   .drill-body #drillContent{flex:1;min-height:0;overflow:hidden;}
-  .drill-body #drillContent .table-scroll{height:100%;max-height:none;overflow:auto!important;position:relative;}
+  .drill-body #drillContent .table-scroll{height:100%;max-height:none;overflow:auto!important;position:relative;-webkit-overflow-scrolling:touch;}
   .drill-body #drillContent .drill-table{border-collapse:separate!important;border-spacing:0!important;}
   .drill-body #drillContent .drill-table thead th{position:sticky!important;top:0!important;z-index:50!important;background:#f3f7fa!important;box-shadow:0 1px 0 #cbd9e5,0 3px 8px rgba(31,61,90,.08)!important;}
 
   /* Drill-down: the records area scrolls independently so the table header stays frozen. */
   .drill-body{display:flex;flex-direction:column;min-height:0;overflow:hidden;}
   .drill-body #drillContent{flex:1;min-height:0;overflow:hidden;}
-  .drill-body #drillContent .table-scroll{height:100%;max-height:none;overflow:auto!important;position:relative;}
+  .drill-body #drillContent .table-scroll{height:100%;max-height:none;overflow:auto!important;position:relative;-webkit-overflow-scrolling:touch;}
   .drill-body #drillContent .drill-table{border-collapse:separate!important;border-spacing:0!important;}
   .drill-body #drillContent .drill-table thead th{position:sticky!important;top:0!important;z-index:50!important;background:#f3f7fb!important;box-shadow:0 1px 0 #cbd9e5,0 3px 8px rgba(31,61,90,.08)!important;}
 
 /* Exact JSL Jindal Stainless logo watermark — background only; all app UI stays above it. */
-html{background:#F8FAFC;}
+html{background:#F8FAFC;scroll-behavior:smooth;}
 body{
   background:linear-gradient(180deg,#F8FAFC 0%,#F3F7FB 100%) !important;
   position:relative;
@@ -734,7 +734,7 @@ button,select,input,.filters,.filters *{font-family:var(--font-body);}
 body.drill-modal-open .filters{z-index:1;}
 
 @media(max-width:700px){
-  .tabs{grid-template-columns:repeat(5,minmax(118px,1fr));overflow-x:auto;overflow-y:hidden;padding-bottom:3px;scrollbar-width:thin;}
+  .tabs{grid-template-columns:repeat(5,minmax(118px,1fr));overflow-x:auto;overflow-y:hidden;padding-bottom:3px;scrollbar-width:thin;-webkit-overflow-scrolling:touch;}
   .tabs .tab-btn{white-space:nowrap;}
   .drill-modal{padding:8px;}
   .drill-dialog{width:100%;height:95vh;}
@@ -780,7 +780,7 @@ html[data-theme="dark"] .drill-resize-handle:hover::after{border-color:var(--acc
 .drill-breadcrumb-crumb.current:hover{background:none;}
 .drill-breadcrumb-sep{color:#aebccb;}
 .drill-export{background:#edf7ff;border-color:#abd0ea;color:#12669d;}
-.drill-body{padding:12px 15px;overflow:auto;flex:1;min-height:0;}
+.drill-body{padding:12px 15px;overflow:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch;}
 .drill-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;font:600 15.5px Manrope,sans-serif;color:#5b7183;}
 .drill-count{font-weight:800;color:var(--heading);}
 .drill-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font:600 13.5px Manrope,sans-serif;}
@@ -950,7 +950,7 @@ html[data-theme="dark"] .drill-resize-handle:hover::after{border-color:var(--acc
 .qcr-ranked-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #edf2f6;}
 .qcr-ranked-row:last-child{border-bottom:0;}
 .qcr-fishbone-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;justify-content:center;}
-.qcr-fishbone-chip{border:1.5px solid var(--red);background:#fff;color:var(--heading);font:800 13px Manrope,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer;transition:all .15s ease;}
+.qcr-fishbone-chip{border:1.5px solid var(--red);background:#fff;color:var(--heading);font:800 13px Manrope,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease;}
 .qcr-fishbone-chip:hover{border-color:var(--red);color:var(--red);}
 .qcr-fishbone-chip.active{background:var(--red);border-color:var(--red);color:#fff;}
 .qcr-fb-title{font:800 15px Sora,Manrope,sans-serif;color:var(--heading);margin-bottom:8px;}
@@ -976,7 +976,7 @@ html[data-theme="dark"] .drill-resize-handle:hover::after{border-color:var(--acc
 .qcr-rca-cause-filter{font:700 12.5px Manrope,sans-serif;color:var(--heading);border:1px solid #E2E8F0;border-radius:8px;padding:5px 9px;background:#fff;cursor:pointer;}
 .qcr-rca-count{font:700 10.5px Manrope,sans-serif;color:var(--muted);margin-top:4px;text-align:center;}
 html[data-theme="dark"] .qcr-rca-cause-filter{background:#141B2C;border-color:#2A3B54;color:var(--text);}
-.qcr-rca-table-wrap{overflow-x:auto;border:1px solid #E2E8F0;border-radius:12px;}
+.qcr-rca-table-wrap{overflow-x:auto;border:1px solid #E2E8F0;border-radius:12px;-webkit-overflow-scrolling:touch;}
 .qcr-rca-table{width:100%;border-collapse:collapse;font:600 12.5px Manrope,sans-serif;min-width:760px;}
 .qcr-rca-table thead th{background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%);color:#fff;font:800 11.5px Manrope,sans-serif;text-transform:uppercase;letter-spacing:.3px;padding:9px 10px;text-align:center;white-space:nowrap;border:1px solid #2B78A8;}
 .qcr-rca-table tbody td{padding:9px 10px;border-top:1px solid #EEF2F7;color:#324156;vertical-align:middle;text-align:center;line-height:1.4;}
@@ -988,7 +988,7 @@ html[data-theme="dark"] .qcr-rca-table-wrap{border-color:#2A3B54;}
 html[data-theme="dark"] .qcr-rca-table tbody td{border-color:#2A3B54;color:var(--text);}
 html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B2C;}
 #dashFishboneDiagram{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px 10px 6px;}
-#dashFishboneDiagram{overflow-x:auto;}
+#dashFishboneDiagram{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 /* Natural size (--fb-natural-w, set per diagram) is both the cap on wide screens and the floor on
    narrow ones, so fishbone text stays a fixed CSS size and follows browser zoom; the card scrolls
    sideways instead of shrinking the text. Phones keep the old shrink-to-fit behaviour. */
@@ -1731,7 +1731,7 @@ body.analytics-presentation-open{overflow:hidden!important;}
 .analytics-presentation-panel>.chart-scroll{flex:1 1 0;min-height:0;min-width:0;max-height:none;display:flex;flex-direction:column;overflow:hidden;padding:8px 14px;}
 .analytics-presentation-panel>.chart-scroll>.legend{flex:0 0 auto;margin:0 0 6px;}
 .analytics-presentation-panel>.chart-scroll>.chart-svg{flex:1 1 0;min-height:0;width:100%;height:100%;max-width:100%;}
-.analytics-presentation-panel>.panel-body{flex:0 1 auto;min-height:0;max-height:38%;overflow:auto;padding:0 14px 12px;}
+.analytics-presentation-panel>.panel-body{flex:0 1 auto;min-height:0;max-height:38%;overflow:auto;padding:0 14px 12px;-webkit-overflow-scrolling:touch;}
 .analytics-presentation-panel>.subhead{flex:0 0 auto;}
 .analytics-presentation-panel>.qcr-fishbone-chips{flex:0 0 auto;margin:10px 12px 8px;}
 .analytics-presentation-panel>.qcr-fishbone-diagram{flex:1 1 0;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;}
@@ -2294,3 +2294,8 @@ button:active,.drill-export:active{transform:scale(.97);}
    live numbers. */
 .offline-banner{position:sticky;top:0;z-index:60;background:#fef3c7;color:#92400e;border-bottom:1px solid #f2d495;font:700 13px 'Manrope',sans-serif;text-align:center;padding:7px 12px;letter-spacing:.15px;}
 html[data-theme="dark"] .offline-banner{background:#3a2f14;color:#f4d58d;border-bottom-color:#5a4a1e;}
+
+/* Respect reduced-motion for the site-wide smooth scroll added above —
+   programmatic scrolls jump instantly instead of easing for anyone who has
+   asked their OS/browser to minimize motion. */
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}

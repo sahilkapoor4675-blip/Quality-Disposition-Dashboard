@@ -1,4 +1,11 @@
 
+## V66.1 — Scroll & animation smoothness pass (2026-09-27)
+
+- Export progress bar (Excel/PDF/PPT/CSV downloads) now runs off `requestAnimationFrame` instead of two independent `setInterval` timers (80ms/200ms). Same pacing/math, but every update now lands right before a repaint instead of on its own clock, removing the occasional visible micro-stutter under load.
+- Added site-wide `scroll-behavior:smooth` (auto-disabled under `prefers-reduced-motion`).
+- Added `-webkit-overflow-scrolling:touch` to every internally-scrolling container (drill-down body, table scroll areas, tab strip, QCR RCA table, fishbone diagram, filter dropdown lists, toast stack) for smooth momentum scrolling on iOS.
+- Narrowed one remaining `transition: all` (fishbone chip buttons) to only the properties that actually change on hover/active, avoiding an unnecessary full-property transition watch.
+
 ## V66.1 — Offline support, CSS cleanup, off-site backup encryption (2026-09-27)
 
 - Added a service worker (`sw.js`) for the public dashboard: app-shell assets and last-loaded dashboard API responses are cached, so the page still loads (with an "offline" banner) if the network drops. Scoped to the public dashboard only — `admin.html` does not register it, so no admin/audit data is ever cached to disk.
