@@ -1,5 +1,58 @@
+## V66.1 Disaster Recovery / Future-Safe Deployment
+
+The production database is PostgreSQL and is the single source of truth for live data. The bundled `quality.db` is bootstrap/seed data only. V66.1 adds a provider-independent recovery architecture: application recovery points for every persistent revision, PostgreSQL-native dumps from an independent runner, off-site private storage, integrity verification, restore validation, and a tested provider-switch procedure.
+
+Read **`DISASTER_RECOVERY_ARCHITECTURE.md`** before production deployment and use **`DR_RUNBOOK.md`** for restores. For sensitive data, do not enable remote DR until the private storage bucket, credentials, retention, encryption and recovery drill have been tested.
+
+V66.1 also fixes PostgreSQL ID sequence resynchronisation after application-level restores, preventing a subsequent insert from reusing a restored `BIGSERIAL`/identity value.
+
 ## What changed in V65.0 (follow-up: performance-linked UX — rAF-throttled chart resize redraws, fixed KPI-tilt jitter)
 - **Chart redraws on resize are now throttled through `requestAnimationFrame`**, with every chart's width measured before any of them redraw (instead of measure-redraw-measure-redraw per chart), which is what was causing multiple charts to visibly flicker together on a window resize or sidebar toggle. Each redrawn chart now fades out/in smoothly instead of popping instantly. **Fixed a genuine jitter bug**: the KPI card hover-tilt effect was forcing a layout read on every single mousemove — now it measures once per hover and throttles updates to one per animation frame. Frontend-only (`app.js`); no API, schema, or data change.
+
+## V66.0 Disaster Recovery / Future-Safe Deployment
+
+V66 treats **PostgreSQL as the live source of truth**. `quality.db` remains a first-run seed for local/initial bootstrap; its original 4,936 rows are not the production backup. Every subsequent live revision is tracked with a durable `data_revision` and captured in V5 recovery points.
+
+### What a V5 recovery point contains
+- All persistent application tables currently present in the database, discovered from the live schema.
+- Full current rows for disposition data, users, audit/activity/import history, KPI targets/history, Fishbone/RCA/style/alias configuration and `app_state` business state.
+- Schema/column manifest and schema fingerprint to prevent restoring into an incompatible database shape.
+- Application version, Git/deployment commit when provided, Python version, dependency-file hash and hashes of critical application/deployment files.
+- SHA-256 integrity checksum over the entire recovery payload.
+
+Runtime session tokens and login-throttle state are intentionally excluded and are recreated after restore. Passwords are never stored in plaintext; password hashes are part of the persistent user state.
+
+### Recovery-point lifecycle
+1. High-risk mutations take a **pre-change safety snapshot**.
+2. Successful persistent mutations create a **post-change current-state recovery point**.
+3. A background scheduler checks for any `data_revision` newer than the latest recovery point and creates a recovery point within `BACKUP_CHECK_SECONDS` (default 60s). It also creates an hourly periodic point by default.
+4. If an S3-compatible bucket is configured, each local point is uploaded and HEAD-verified for both byte length and the stored SHA-256 metadata before a mutation is considered safely replicated.
+
+This means an import that grows the dataset from 4,936 to 5,500 to 10,000 rows is backed up at those current live states; the backup process never reverts to the bundled seed database.
+
+### Off-site backup configuration
+Set these as platform secrets/environment variables: `DR_REMOTE_ENABLED=true`, `DR_S3_BUCKET`, `DR_S3_ACCESS_KEY_ID`, `DR_S3_SECRET_ACCESS_KEY`, and optionally `DR_S3_ENDPOINT_URL`/`DR_S3_REGION` for S3-compatible providers. Keep the bucket private. Enable versioning/immutability and a lifecycle policy at the storage provider. Do not put recovery files or credentials in Git.
+
+`DR_REMOTE_REQUIRED_FOR_MUTATIONS=true` is intentionally conservative: once remote DR is enabled, an admin mutation is blocked if the pre-change safety snapshot cannot be verified remotely. Set it to `false` only if the operational policy explicitly accepts local-only safety.
+
+### Restore procedure
+**UI:** Admin → Backups → Restore from a verified `.json.gz` recovery point. The app first creates a pre-restore safety point, validates checksum/schema, restores transactionally, clears active sessions, and creates a post-restore recovery point.
+
+**CLI:**
+```bash
+python3 dr_recovery.py verify backups/backup_YYYYMMDD_HHMMSS_reason_UUID.json.gz
+DATABASE_URL='...' python3 dr_recovery.py restore --yes backups/backup_YYYYMMDD_HHMMSS_reason_UUID.json.gz
+```
+Run CLI restore with application writes frozen/offline. A restore is destructive by design; the pre-restore safety backup is the rollback point if the operation itself fails.
+
+### Provider migration
+The app is intentionally portable: deploy the same source/dependency release (or the included `Dockerfile`) to a new host, point `DATABASE_URL` to a new PostgreSQL instance, restore the latest verified recovery point, configure the environment variables, then switch the independent DNS record. Recovery manifests record the exact Python version and versions of packages declared by `requirements.txt`; use that manifest when rebuilding the runtime. Keep the application source in a secondary Git mirror as well as the primary Git provider.
+
+### Backup policy recommendation
+Keep multiple independent recovery horizons: recent hourly points, daily points, weekly archives, and an immutable/off-site monthly archive. The exact retention is controlled locally by `BACKUP_KEEP`; remote retention should be enforced by the storage provider lifecycle/versioning policy.
+
+> **Important:** a local backup file beside the application is not a disaster-recovery copy. True DR requires an independent storage location that remains accessible after the application host is unavailable.
+
 
 ## What changed in V65.0 (follow-up: professionalism pass — spacing scale, typography hierarchy, top-of-page loading bar)
 - **Consistent 4px spacing scale** — cards, panels, the filter bar, and the export dialog now snap to shared `--sp-*` tokens instead of one-off values like 13px/17px/18px. **Typography hierarchy strengthened** — fixed KPI cards where the small label was actually heavier than the value above it; labels now recede (lighter, wider-tracked), values lead (heavier, tighter-tracked). **New thin top-of-page loading bar** (YouTube-style) fills in during any filter change, tab switch, or initial load, and auto-covers every data loader via a `fetch()` wrapper — no per-call wiring needed. **Toast notifications were reviewed against the ask** (top-right, slide-in, auto-dismiss) — they already worked this way; only padding was retouched. Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
@@ -33,7 +86,7 @@
 - **Fishbone style refresh cleanup** removes an unreachable update branch after the style table has already been reset for a full import.
 - **PostgreSQL seed import cursor is closed explicitly** after the batch insert.
 
-# Quality Disposition Control Dashboard — V65.0
+# Quality Disposition Control Dashboard — V66.0
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
@@ -222,3 +275,6 @@ The field-name hover tag is enabled across the main dashboard and Admin UI, incl
 - The **LIVE DATA** indicator includes a subtle pulsing status dot in the main dashboard header.
 - The pulse is CSS-based and remains unobtrusive while indicating the live state.
 - Existing Dashboard/Admin cursor-following field hints remain enabled; the Intro/Splash screen is excluded.
+
+### Hardened remote retention
+Set `DR_S3_OBJECT_LOCK_DAYS` and `DR_S3_OBJECT_LOCK_MODE` only after provisioning a versioned Object-Lock-enabled bucket and testing retention semantics.

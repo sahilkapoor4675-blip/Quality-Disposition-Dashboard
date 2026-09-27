@@ -92,3 +92,21 @@ substitute for output escaping, which is applied separately (see below).
 ## Do not commit
 `.env`, database credentials, exported production data, or generated
 backups. See `.gitignore`.
+
+## V66 disaster-recovery controls
+- V5 recovery points dynamically include all persistent database tables and record a schema fingerprint; runtime sessions/login-attempt throttles are excluded by design.
+- Persistent mutations advance `data_revision`, and successful mutation paths create current-state recovery points; the scheduler detects any recovery-point lag.
+- Off-site recovery is S3-compatible and optional. When enabled, credentials remain environment-only, uploads are verified with a HEAD check, and `DR_REMOTE_REQUIRED_FOR_MUTATIONS=true` can block a mutation until the remote safety copy is verified.
+- Recovery archives contain user records and password hashes; the off-site bucket must be private and access-controlled. Do not expose recovery archives through public buckets or Git.
+- V5 restore validates checksum, schema/table set and column ordering before transactionally replacing persistent state. Active sessions are invalidated after restore.
+
+
+## Disaster recovery security controls
+
+Recovery snapshots contain sensitive application state, including account records and audit history. Keep local recovery directories private, never commit recovery artifacts to Git, use TLS for PostgreSQL, keep the remote bucket private and least-privilege, and use versioning/immutable retention where the provider supports it. Verify recovery points before restore and perform restore drills in an isolated environment. The application intentionally does not back up active session tokens or login-throttle state.
+
+For low-RPO sensitive-data deployments, use PostgreSQL PITR/WAL archiving in addition to application snapshots and logical dumps.
+
+### Immutable off-site recovery
+
+For sensitive production recovery, enable a private, versioned backup bucket with immutable retention where the storage provider supports it. The application supports optional S3 Object Lock parameters (`DR_S3_OBJECT_LOCK_DAYS` and `DR_S3_OBJECT_LOCK_MODE`). Do not enable these variables until the target bucket has Object Lock enabled and a restore/retention test has been completed.

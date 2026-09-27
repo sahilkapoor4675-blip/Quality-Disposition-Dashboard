@@ -1,0 +1,27 @@
+{
+  "version": "V66.1",
+  "audit_date": "2026-09-27",
+  "changed_file_count": 20,
+  "changed_files": [
+    ".env.example",
+    ".gitignore",
+    "CHANGELOG.md",
+    "DISASTER_RECOVERY_ARCHITECTURE.md",
+    "DR_AUDIT_REPORT.md",
+    "DR_RUNBOOK.md",
+    "Dockerfile",
+    "README.md",
+    "SECURITY.md",
+    "VERSION.txt",
+    "admin.html",
+    "dr_pg_backup.py",
+    "dr_recovery.py",
+    "dr_storage.py",
+    "index.html",
+    "regression.py",
+    "render.yaml",
+    "requirements.txt",
+    "server.py",
+    "test_disaster_recovery.py"
+  ]
+}

@@ -1,3 +1,47 @@
+
+## V66.1 — DR / Security Hardening (2026-09-27)
+
+- Added complete provider-independent disaster recovery architecture and emergency runbook.
+- Added independent PostgreSQL custom-format backup/verify/restore helper (`dr_pg_backup.py`).
+- Added optional S3 Object Lock retention for sensitive off-site recovery copies.
+- Fixed PostgreSQL sequence resynchronisation after application-level snapshot restore.
+- Fixed import/disposition history transaction split so import history can commit atomically with imported rows.
+- Made audit-trail persistence failures observable in logs rather than silently swallowed.
+- Hardened local recovery artifacts with restrictive filesystem permissions where supported.
+- Added DR audit report and explicit production activation gates.
+
+# V66.1 — Disaster Recovery hardening
+
+- Added `DISASTER_RECOVERY_ARCHITECTURE.md` with the complete provider-independent DR model, backup layers, RPO/RTO, security controls, migration procedure and validation gates.
+- Added `DR_RUNBOOK.md` for emergency host/database recovery and restore drills.
+- Added `dr_pg_backup.py` for independent PostgreSQL custom-format dump, verify and restore operations; credentials are passed through libpq environment variables rather than printed/embedded in commands.
+- Fixed PostgreSQL BIGSERIAL/identity sequence resynchronisation after application-level recovery-point restore so the next insert cannot collide with a restored primary key.
+- Initial startup now creates a current-state recovery point when the durable revision is ahead of the last backup.
+- Local recovery directories/files receive restrictive permissions where supported; backup timestamps use UTC.
+- Recovery manifests now fall back to `git rev-parse HEAD` when deployment-provided commit metadata is unavailable.
+- Recovery artifacts are explicitly excluded from Git.
+
+# V66.0 — Disaster Recovery + full persistence hardening
+
+## Changed
+- **Full-state recovery points:** upgraded the application snapshot format from V4 to **V5**. The backup now discovers every persistent database table at runtime, captures its schema/column manifest, current data revision and application file hashes, while explicitly excluding runtime session/login-throttle state. This prevents future tables/configuration from being silently omitted from backups.
+- **Live-data continuity:** recovery points are generated from the live database state, so the original 4,936 seed rows are just the starting point; later inserts, updates, deletes, KPI changes, Fishbone/RCA/configuration changes, user changes and audit/import history are captured at the current revision.
+- **Mutation coverage:** added pre-change safety snapshots and post-change recovery points to direct record writes, imports, deletes/bulk deletes, KPI targets, user creation/toggle/password changes/reset, Fishbone imports and alias changes.
+- **Recovery freshness:** added durable `data_revision` / `data_changed_at` tracking and a scheduler that detects any change newer than the latest recovery point.
+- **Off-site replication:** added optional S3-compatible encrypted-at-rest/off-site replication with upload verification. Local-only mode remains functional; when remote DR is configured, safety mutations can require a verified remote copy.
+- **Restore integrity:** V5 restores verify checksum, table set, schema fingerprint and exact column order before replacing persistent state transactionally. Runtime sessions/login throttles are cleared after restore and must be recreated.
+- **Recovery observability:** Admin Backup/Recovery UI now shows live revision, last-backed-up revision, off-site status and stale/current state instead of treating the newest local file as automatically “protected.”
+- **Portability:** added `dr_recovery.py` for explicit backup verification/restore and added deployment/DR environment templates.
+- **Input validation fix:** `user_toggle.active` now requires a real JSON boolean; strings such as `"false"` are rejected instead of being truthy-coerced.
+
+## Verified
+- `python3 -m py_compile server.py dr_storage.py dr_recovery.py test_disaster_recovery.py`
+- `node --check app.js`
+- Existing regression/smoke/export/admin suites re-run after V66 changes.
+- New V66 DR tests cover V5 snapshots, round-trip restore and strict boolean validation.
+
+---
+
 ## V65.0 — Follow-up: performance-linked UX — rAF-throttled chart resize redraws, fixed KPI-tilt jitter (no version bump — same version)
 
 ### Changed

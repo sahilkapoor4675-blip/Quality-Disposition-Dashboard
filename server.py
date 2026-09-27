@@ -96,6 +96,7 @@ from urllib.parse import urlparse, parse_qs
 
 from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report, _stream_csv
 from logging_setup import configure_logging, tail_log_file
+from dr_storage import is_remote_configured, upload_file as dr_upload_file, verify_uploaded_file as dr_verify_uploaded_file
 from session_store import (
     db_session_upsert, db_session_fetch, db_session_delete, db_sessions_delete_by_user,
     db_cleanup_expired_sessions, db_login_check, db_login_record_failure, db_login_clear,
@@ -123,7 +124,7 @@ def _read_version_file():
     except OSError:
         pass
     return None
-APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V65.0"
+APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V66.0"
 
 # ---- Automatic cache-busting for /app.css, /app.js, /sfx.js -----------------
 # These three are served with a one-year "immutable" Cache-Control (see the
@@ -322,10 +323,18 @@ _ensure_database()
 # from a small JSON file — and the admin can also download/keep copies off-server at
 # no cost. Backups live next to the database (inside the persistent `data/` folder),
 # never inside the app's bundled files, and old ones are pruned automatically.
-BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH) if not USE_POSTGRES else _PERSISTENT_DIR, "backups")
-BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "20"))
+_DEFAULT_BACKUP_DIR = os.path.join(os.path.dirname(DB_PATH) if not USE_POSTGRES else _PERSISTENT_DIR, "backups")
+BACKUP_DIR = os.environ.get("BACKUP_DIR", _DEFAULT_BACKUP_DIR).strip() or _DEFAULT_BACKUP_DIR
+BACKUP_KEEP = max(2, int(os.environ.get("BACKUP_KEEP", "30") or "30"))
+DR_REMOTE_ENABLED = str(os.environ.get("DR_REMOTE_ENABLED", "false")).lower() in ("1", "true", "yes", "on")
+DR_REMOTE_REQUIRED_FOR_MUTATIONS = str(os.environ.get("DR_REMOTE_REQUIRED_FOR_MUTATIONS", "true")).lower() in ("1", "true", "yes", "on")
+DR_REMOTE_PREFIX = os.environ.get("DR_S3_PREFIX", "quality-disposition-dashboard/recovery/").strip("/") + "/"
 try:
-    os.makedirs(BACKUP_DIR, exist_ok=True)
+    os.makedirs(BACKUP_DIR, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(BACKUP_DIR, 0o700)
+    except OSError:
+        pass
 except Exception:
     pass
 
@@ -1593,8 +1602,11 @@ def _audit(handler, action, record_id=None, details=None):
                      (meta.get("user_id"),meta.get("username","Anonymous"),meta.get("role",""),str(action),record_id,json.dumps(details or {},ensure_ascii=False),_client_ip(handler),handler.headers.get("User-Agent","")[:500]))
         conn.commit(); conn.close()
         _cleanup_audit_trail()
-    except Exception:
-        pass
+    except Exception as exc:
+        # Audit failures must never be silently invisible. Keep the business
+        # request available, but make the loss observable for operational DR
+        # monitoring and incident review.
+        log.warning("Audit trail write failed: %s", exc)
 
 def _role(handler):
     meta = _admin_meta(handler)
@@ -1715,6 +1727,12 @@ def _json_body(handler):
     length = int(handler.headers.get("Content-Length", "0") or 0)
     raw = handler.rfile.read(length)
     return json.loads(raw.decode("utf-8")) if raw else {}
+
+
+def _strict_bool(value, field="value"):
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"{field} must be a boolean")
 
 
 def _auth_error(handler, message="Admin login required", status=401):
@@ -2050,44 +2068,74 @@ def _backup_list_cache_clear():
         BACKUP_LIST_CACHE["payload"] = None
 
 
-def _disposition_state(conn=None):
-    """Return the current data mutation revision/timestamp.
+def _app_state_get(conn, key, default=""):
+    row = conn.execute("SELECT value FROM app_state WHERE key=?", (key,)).fetchone()
+    return str(row[0]) if row and row[0] is not None else default
 
-    The revision is runtime/application metadata, not a replacement for the
-    source inspection date used for freshness. It exists to detect a change
-    between import preview and confirm, including concurrent Admin writes.
-    """
+
+def _app_state_set(conn, key, value):
+    if USE_POSTGRES:
+        conn.execute("INSERT INTO app_state (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value", (key, str(value)))
+    else:
+        conn.execute("INSERT OR REPLACE INTO app_state (key,value) VALUES (?,?)", (key, str(value)))
+
+
+def _data_state(conn=None):
     own_conn = conn is None
     if own_conn:
         conn = get_conn()
     try:
-        row = conn.execute("SELECT value FROM app_state WHERE key='disposition_revision'").fetchone()
-        changed = conn.execute("SELECT value FROM app_state WHERE key='disposition_changed_at'").fetchone()
         try:
-            revision = int(row[0]) if row and row[0] is not None else 0
+            revision = int(_app_state_get(conn, "data_revision", "0"))
         except (TypeError, ValueError):
             revision = 0
-        changed_at = str(changed[0]) if changed and changed[0] is not None else ""
-        return {"revision": revision, "changed_at": changed_at}
+        changed_at = _app_state_get(conn, "data_changed_at", "")
+        try:
+            disp_revision = int(_app_state_get(conn, "disposition_revision", "0"))
+        except (TypeError, ValueError):
+            disp_revision = 0
+        return {"revision": revision, "changed_at": changed_at, "disposition_revision": disp_revision}
     finally:
         if own_conn:
             try: conn.close()
             except Exception: pass
 
 
-def _mark_disposition_changed(conn):
-    """Increment disposition revision atomically inside the caller's transaction."""
-    row = conn.execute("SELECT value FROM app_state WHERE key='disposition_revision'").fetchone()
+def _disposition_state(conn=None):
+    """Return disposition and overall persistent-data mutation state."""
+    state = _data_state(conn)
+    return {"revision": state["disposition_revision"], "changed_at": state["changed_at"]}
+
+
+def _mark_persistent_change(conn, disposition=False):
+    """Advance the durable mutation revision inside the caller's transaction."""
     try:
-        revision = int(row[0]) if row and row[0] is not None else 0
+        revision = int(_app_state_get(conn, "data_revision", "0"))
     except (TypeError, ValueError):
         revision = 0
     revision += 1
     changed_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
-    conn.execute("UPDATE app_state SET value=? WHERE key='disposition_revision'", (str(revision),))
-    conn.execute("UPDATE app_state SET value=? WHERE key='disposition_changed_at'", (changed_at,))
+    _app_state_set(conn, "data_revision", revision)
+    _app_state_set(conn, "data_changed_at", changed_at)
+    if disposition:
+        try:
+            disp_revision = int(_app_state_get(conn, "disposition_revision", "0"))
+        except (TypeError, ValueError):
+            disp_revision = 0
+        disp_revision += 1
+        _app_state_set(conn, "disposition_revision", disp_revision)
+        _app_state_set(conn, "disposition_changed_at", changed_at)
     return {"revision": revision, "changed_at": changed_at}
 
+
+def _mark_disposition_changed(conn):
+    """Increment both overall and disposition revisions atomically."""
+    return _mark_persistent_change(conn, disposition=True)
+
+
+def _mark_non_disposition_changed(conn):
+    """Increment the overall durable-data revision for configuration/admin changes."""
+    return _mark_persistent_change(conn, disposition=False)
 
 def _cache_clear():
     global RESPONSE_CACHE_BYTES
@@ -2128,12 +2176,13 @@ def _cache_put(key, payload):
             RESPONSE_CACHE.pop(oldest_key, None)
             RESPONSE_CACHE_BYTES = max(0, RESPONSE_CACHE_BYTES - int(oldest[2]))
 
-def _insert_records(records):
-    """Insert/update disposition records under a serialized transaction.
+def _insert_records(records, import_history=None):
+    """Insert/update disposition records under one serialized transaction.
 
-    Normalized non-empty BATCH NO identifies one coil. Legacy duplicate groups are
-    preserved. PostgreSQL uses a transaction-scoped advisory lock; SQLite uses
-    BEGIN IMMEDIATE. This prevents concurrent imports from racing on new batches.
+    `import_history` can be supplied by import endpoints so the disposition
+    mutation and its audit/import-history row commit atomically. That avoids a
+    split-transaction state where live records exist but the corresponding import
+    history row failed silently.
     """
     with DISPOSITION_WRITE_LOCK:
         conn = get_conn(); cur = conn.cursor()
@@ -2167,8 +2216,22 @@ def _insert_records(records):
                 cur.execute("""UPDATE disposition SET heat_no=?,work_center=?,grade=?,output_weight=?,main_defect=?,defect_intensity=?,quality_decision=?,insp_lot_date=?,ud_date=?,month=?,week=?,quarter=?,financial_year=? WHERE id=?""", tuple(r[k] for k in fields)+(rid,))
             if inserted or updated:
                 _mark_disposition_changed(conn)
-            conn.commit()
             result={"inserted":inserted,"updated":updated,"duplicates":duplicates,"errors":errors}
+            if import_history is not None:
+                conn.execute(
+                    "INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",
+                    (
+                        str(import_history.get("filename", ""))[:255],
+                        int(import_history.get("detected", len(records))),
+                        int(import_history.get("valid", len(records))),
+                        int(result.get("duplicates", duplicates) if import_history.get("duplicates") is None else import_history.get("duplicates")),
+                        int(len(result.get("errors", [])) if import_history.get("errors") is None else import_history.get("errors")),
+                        int(result.get("updated", 0)),
+                        int(result.get("inserted", 0)),
+                        str(import_history.get("imported_by", ""))[:150],
+                    ),
+                )
+            conn.commit()
         except Exception:
             try: conn.rollback()
             except Exception: pass
@@ -2428,19 +2491,18 @@ def _replace_fishbone_master(bundle, filename, imported_by):
         "INSERT INTO fishbone_import_history (filename,detected,imported,imported_by,rca_detected,rca_imported,style_imported) VALUES (?,?,?,?,?,?,?)",
         (filename, len(records), len(rows), imported_by, len(rca_records), len(rca_rows), style_updated),
     )
+    _mark_non_disposition_changed(conn)
     conn.commit()
     conn.close()
     FISHBONE_CACHE["rows"] = None
     FISHBONE_CACHE["aliases"] = None
     RCA_CACHE["rows"] = None
     FISHBONE_STYLE_CACHE["rows"] = None
-    _write_backup_file("after_fishbone_import")
     return {"detected": len(records), "imported": len(rows), "rca_detected": len(rca_records), "rca_imported": len(rca_rows), "style_imported": style_updated}
 
 
 def _backup_jsonable(value):
-    """Convert DB-native date/time values to JSON-safe ISO strings without
-    changing the live database representation."""
+    """Convert DB-native date/time values to JSON-safe ISO strings."""
     if isinstance(value, (_dt.datetime, _dt.date)):
         return value.isoformat()
     return value
@@ -2448,6 +2510,120 @@ def _backup_jsonable(value):
 
 def _backup_rows_jsonable(rows):
     return [{k: _backup_jsonable(v) for k, v in dict(r).items()} for r in rows]
+
+
+def _backup_excluded_tables():
+    raw = os.environ.get("DR_BACKUP_EXCLUDE_TABLES", "sessions,login_attempts,sqlite_sequence")
+    return {x.strip() for x in raw.split(",") if x.strip()}
+
+
+def _backup_table_names(conn):
+    excluded = _backup_excluded_tables()
+    if USE_POSTGRES:
+        rows = conn.execute("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='public' ORDER BY tablename").fetchall()
+    else:
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall()
+    names = []
+    for row in rows:
+        name = str(row[0])
+        if name not in excluded and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            names.append(name)
+    return names
+
+
+def _backup_table_schema(conn, tables):
+    manifest = {}
+    for table in tables:
+        if USE_POSTGRES:
+            rows = conn.execute("""SELECT column_name,data_type,is_nullable,column_default,ordinal_position
+                                   FROM information_schema.columns
+                                   WHERE table_schema='public' AND table_name=?
+                                   ORDER BY ordinal_position""", (table,)).fetchall()
+            manifest[table] = [
+                {"name": str(r[0]), "type": str(r[1]), "nullable": str(r[2]), "default": r[3], "ordinal": int(r[4])}
+                for r in rows
+            ]
+        else:
+            rows = conn.execute(f"PRAGMA table_info(\"{table}\")").fetchall()
+            manifest[table] = [
+                {"name": str(r[1]), "type": str(r[2] or ""), "nullable": not bool(r[3]), "default": r[4], "ordinal": int(r[0])}
+                for r in rows
+            ]
+    return manifest
+
+
+def _schema_fingerprint(schema_manifest):
+    return hashlib.sha256(json.dumps(schema_manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
+
+
+def _file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+_RECOVERY_MANIFEST_FILES = (
+    "server.py", "reports.py", "session_store.py", "logging_setup.py", "app.js",
+    "app.css", "admin.html", "index.html", "requirements.txt", "Procfile",
+    "render.yaml", "VERSION.txt", ".env.example", ".gitignore"
+)
+
+
+def _application_manifest():
+    git_commit = str(os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or os.environ.get("COMMIT_SHA") or "")
+    if not git_commit:
+        try:
+            import subprocess
+            git_commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=APP_DIR, text=True, stderr=subprocess.DEVNULL, timeout=2
+            ).strip()
+        except Exception:
+            git_commit = ""
+    manifest = {"app_version": APP_VERSION, "git_commit": git_commit}
+    files = {}
+    for filename in _RECOVERY_MANIFEST_FILES:
+        path = os.path.join(APP_DIR, filename)
+        if os.path.isfile(path):
+            try:
+                files[filename] = _file_sha256(path)
+            except OSError:
+                pass
+    manifest["files_sha256"] = files
+    req_path = os.path.join(APP_DIR, "requirements.txt")
+    manifest["requirements_sha256"] = _file_sha256(req_path) if os.path.isfile(req_path) else ""
+    manifest["python_version"] = sys.version.split()[0]
+    # Record the exact installed versions for the packages declared by the app.
+    # This is metadata only: credentials, URLs, and environment secrets are never captured.
+    dependency_versions = {}
+    if os.path.isfile(req_path):
+        try:
+            from importlib import metadata as _importlib_metadata
+            with open(req_path, "r", encoding="utf-8") as req_file:
+                requirement_lines = req_file.read().splitlines()
+            for raw in requirement_lines:
+                line = raw.split("#", 1)[0].strip()
+                if not line or line.startswith("-"):
+                    continue
+                match = re.match(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)", line)
+                if not match:
+                    continue
+                dist_name = match.group(1)
+                try:
+                    dependency_versions[dist_name] = _importlib_metadata.version(dist_name)
+                except Exception:
+                    dependency_versions[dist_name] = "not-installed"
+        except Exception:
+            dependency_versions = {}
+    manifest["dependency_versions"] = dependency_versions
+    safe_env_keys = (
+        "DB_LIMIT_MB", "TRUST_PROXY_HEADERS", "BACKUP_KEEP", "BACKUP_SCHEDULE_HOURS",
+        "BACKUP_CHECK_SECONDS", "DR_REMOTE_ENABLED", "DR_REMOTE_REQUIRED_FOR_MUTATIONS",
+        "DR_S3_REGION", "DR_S3_PREFIX", "DR_BACKUP_EXCLUDE_TABLES", "PGSSLMODE",
+    )
+    manifest["safe_runtime_config"] = {k: os.environ.get(k, "") for k in safe_env_keys}
+    return manifest
 
 
 def _backup_prune():
@@ -2465,104 +2641,144 @@ def _backup_prune():
     except Exception:
         pass
 
-def _require_safety_backup(reason="safety"):
-    path = _write_backup_file(reason)
-    if not path:
-        raise RuntimeError("Safety backup failed; database mutation aborted")
-    return path
 
 def _backup_snapshot_transaction(reason="manual"):
-    """Create a consistent application snapshot from one read transaction.
+    """Create a consistent full persistent-state snapshot from one DB transaction.
 
-    Contract: the returned envelope is the exact JSON shape consumed by the
-    backup writer, backup validator and restore routine. Keeping the metadata
-    and table sections together prevents drift between snapshot creation and
-    file serialization.
+    V5 deliberately discovers tables from the live schema so future persistent
+    application tables are automatically included rather than silently omitted.
+    Runtime tables (sessions/login attempts) stay excluded and are recreated.
     """
     conn = get_conn()
-    # Full persistent application state. Runtime session/cache state is
-    # process-local and intentionally recreated after restore.
-    tables = [
-        "disposition", "users", "activity_log", "audit_trail",
-        "fishbone_master", "fishbone_alias", "fishbone_import_history",
-        "kpi_targets", "rca_master", "fishbone_style",
-        "kpi_target_history", "import_history"
-    ]
     try:
         if USE_POSTGRES:
             conn.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         else:
             conn.execute("BEGIN")
-
+        tables = _backup_table_names(conn)
+        schema_manifest = _backup_table_schema(conn, tables)
+        state = _data_state(conn)
         snap = {
-            "backup_version": 4,
-            "created_at": datetime.now().isoformat(),
+            "backup_version": 5,
+            "created_at": datetime.now(_dt.timezone.utc).isoformat(),
             "reason": str(reason or "manual"),
             "database_backend": "postgres" if USE_POSTGRES else "sqlite",
             "scope": "full_persistent_application_state",
-            "excluded_runtime_state": ["sessions", "response_cache", "import_previews"],
+            "excluded_runtime_state": sorted(_backup_excluded_tables() | {"response_cache", "import_previews"}),
+            "persistent_tables": tables,
+            "table_schema": schema_manifest,
+            "schema_fingerprint": _schema_fingerprint(schema_manifest),
+            "data_revision": state["revision"],
+            "data_changed_at": state["changed_at"],
+            "disposition_revision": state["disposition_revision"],
+            "application_manifest": _application_manifest(),
+            "tables": {},
+            "counts": {},
         }
-        counts = {}
         for table in tables:
-            fetched = conn.execute(f"SELECT * FROM {table}").fetchall()
-            normalized = _backup_rows_jsonable(fetched)
-            snap[table] = normalized
-            counts[table] = len(normalized)
-        snap["counts"] = counts
+            rows = conn.execute(f'SELECT * FROM "{table}"').fetchall()
+            # Runtime recovery metadata should never become part of the state it
+            # describes; it is written after the snapshot is persisted.
+            normalized = _backup_rows_jsonable(rows)
+            if table == "app_state":
+                normalized = [r for r in normalized if not str(r.get("key", "")).startswith("dr_")]
+            snap["tables"][table] = normalized
+            snap["counts"][table] = len(normalized)
         conn.rollback()
+        snap["integrity_sha256"] = _backup_integrity_sha256(snap)
         return snap
     except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
+        try: conn.rollback()
+        except Exception: pass
         raise
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except Exception: pass
+
 
 def _backup_integrity_payload(data):
     unsigned = dict(data)
     unsigned.pop("integrity_sha256", None)
-    return json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8")
+
 
 def _backup_integrity_sha256(data):
     return hashlib.sha256(_backup_integrity_payload(data)).hexdigest()
 
+
 def _backup_is_valid(data, require_integrity=False):
     if not isinstance(data, dict):
         return False, "Backup payload is not an object"
-    required = ("backup_version","created_at","counts","disposition","fishbone_master","fishbone_alias","kpi_targets","rca_master","fishbone_style","kpi_target_history","import_history")
-    missing = [k for k in required if k not in data]
     try:
         version = int(data.get("backup_version") or 0)
     except (TypeError, ValueError):
         return False, "Backup version is invalid"
-    if version >= 4:
-        missing.extend(k for k in ("users","activity_log","audit_trail","fishbone_import_history","scope") if k not in data)
+    if version >= 5:
+        for key in ("created_at", "counts", "persistent_tables", "table_schema", "schema_fingerprint", "tables", "scope", "data_revision"):
+            if key not in data:
+                return False, f"Missing section: {key}"
         if data.get("scope") != "full_persistent_application_state":
             return False, "Backup scope is invalid"
-    if missing:
-        return False, "Missing sections: " + ", ".join(sorted(set(missing)))
-    counts = data.get("counts")
-    if not isinstance(counts, dict):
-        return False, "Backup counts section is invalid"
-    required_sections = ("disposition","fishbone_master","fishbone_alias","kpi_targets","rca_master","fishbone_style","kpi_target_history","import_history")
-    if version >= 4:
-        required_sections += ("users","activity_log","audit_trail","fishbone_import_history")
-    for section in required_sections:
-        rows = data.get(section)
-        if not isinstance(rows, list):
-            return False, f"Backup section '{section}' is invalid"
-        recorded_count = counts.get(section)
-        if recorded_count is not None:
+        tables = data.get("persistent_tables")
+        table_data = data.get("tables")
+        counts = data.get("counts")
+        schema = data.get("table_schema")
+        if not isinstance(tables, list) or not all(isinstance(t, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", t) for t in tables):
+            return False, "Persistent table list is invalid"
+        if tables != sorted(set(tables)):
+            return False, "Persistent table list is not normalized"
+        if not isinstance(table_data, dict) or not isinstance(counts, dict) or not isinstance(schema, dict):
+            return False, "Backup table sections are invalid"
+        if set(table_data) != set(tables) or set(schema) != set(tables) or set(counts) != set(tables):
+            return False, "Backup table sections do not match persistent table list"
+        if _schema_fingerprint(schema) != str(data.get("schema_fingerprint")):
+            return False, "Backup schema fingerprint mismatch"
+        for table in tables:
+            rows = table_data.get(table)
+            if not isinstance(rows, list):
+                return False, f"Backup table '{table}' is invalid"
             try:
-                if int(recorded_count) != len(rows):
-                    return False, f"Backup count mismatch for {section}"
+                if int(counts.get(table)) != len(rows):
+                    return False, f"Backup count mismatch for {table}"
             except (TypeError, ValueError):
-                return False, f"Backup count for {section} is invalid"
+                return False, f"Backup count for {table} is invalid"
+            cols = schema.get(table)
+            if not isinstance(cols, list) or any(not isinstance(c, dict) or not isinstance(c.get("name"), str) for c in cols):
+                return False, f"Backup schema for {table} is invalid"
+            expected_cols = {c["name"] for c in cols}
+            for i, row in enumerate(rows, start=1):
+                if not isinstance(row, dict) or set(row) != expected_cols:
+                    return False, f"Backup row shape mismatch in {table} at row {i}"
+        try:
+            int(data.get("data_revision", 0))
+        except (TypeError, ValueError):
+            return False, "Backup data revision is invalid"
+    else:
+        required = ("backup_version", "created_at", "counts", "disposition", "fishbone_master", "fishbone_alias", "kpi_targets", "rca_master", "fishbone_style", "kpi_target_history", "import_history")
+        missing = [k for k in required if k not in data]
+        if version >= 4:
+            missing.extend(k for k in ("users", "activity_log", "audit_trail", "fishbone_import_history", "scope") if k not in data)
+            if data.get("scope") != "full_persistent_application_state":
+                return False, "Backup scope is invalid"
+        if missing:
+            return False, "Missing sections: " + ", ".join(sorted(set(missing)))
+        counts = data.get("counts")
+        if not isinstance(counts, dict):
+            return False, "Backup counts section is invalid"
+        required_sections = ("disposition", "fishbone_master", "fishbone_alias", "kpi_targets", "rca_master", "fishbone_style", "kpi_target_history", "import_history")
+        if version >= 4:
+            required_sections += ("users", "activity_log", "audit_trail", "fishbone_import_history")
+        for section in required_sections:
+            rows = data.get(section)
+            if not isinstance(rows, list):
+                return False, f"Backup section '{section}' is invalid"
+            recorded_count = counts.get(section)
+            if recorded_count is not None:
+                try:
+                    if int(recorded_count) != len(rows):
+                        return False, f"Backup count mismatch for {section}"
+                except (TypeError, ValueError):
+                    return False, f"Backup count for {section} is invalid"
     recorded = str(data.get("integrity_sha256") or "")
     if not recorded:
         if require_integrity:
@@ -2573,14 +2789,37 @@ def _backup_is_valid(data, require_integrity=False):
         return False, "Backup integrity checksum mismatch"
     return True, "Integrity checksum verified"
 
+
+def _set_backup_state(revision, created_at, filename, remote_status="disabled", remote_key="", remote_error=""):
+    conn = None
+    try:
+        conn = get_conn()
+        _app_state_set(conn, "dr_last_backup_revision", revision)
+        _app_state_set(conn, "dr_last_backup_at", created_at)
+        _app_state_set(conn, "dr_last_backup_filename", filename)
+        _app_state_set(conn, "dr_last_backup_remote_status", remote_status)
+        _app_state_set(conn, "dr_last_backup_remote_key", remote_key)
+        _app_state_set(conn, "dr_last_backup_error", remote_error[:500])
+        conn.commit()
+    except Exception as exc:
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+        log.warning(f"Backup state metadata update failed: {exc}")
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
 def _write_backup_file(reason="manual"):
-    """Create an atomic, gzip-compressed backup with an embedded integrity checksum."""
+    """Create an atomic V5 snapshot and optionally replicate it off-site."""
     try:
         with BACKUP_WRITE_LOCK:
             os.makedirs(BACKUP_DIR, exist_ok=True)
             data = _backup_snapshot_transaction(reason)
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_reason = re.sub(r"[^a-zA-Z0-9_-]", "", reason)[:40] or "manual"
+            ts = datetime.now(_dt.timezone.utc).strftime("%Y%m%d_%H%M%S")
+            safe_reason = re.sub(r"[^a-zA-Z0-9_-]", "", str(reason or "manual"))[:40] or "manual"
             fname = f"backup_{ts}_{safe_reason}_{uuid.uuid4().hex[:8]}.json.gz"
             fpath = os.path.join(BACKUP_DIR, fname)
             data["app_version"] = APP_VERSION
@@ -2589,55 +2828,133 @@ def _write_backup_file(reason="manual"):
             tmp_path = fpath + ".tmp"
             with open(tmp_path, "wb") as raw:
                 with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
-                    gz.write(json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+                    gz.write(json.dumps(data, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8"))
                     gz.flush()
                 raw.flush()
                 os.fsync(raw.fileno())
             os.replace(tmp_path, fpath)
+            try:
+                os.chmod(fpath, 0o600)
+            except OSError:
+                pass
             _backup_list_cache_clear()
             _backup_prune()
-            return {"filename": fname, "counts": data["counts"], "created_at": data["created_at"], "app_version": APP_VERSION}
+            remote_status = "disabled"
+            remote_key = ""
+            remote_error = ""
+            if DR_REMOTE_ENABLED or is_remote_configured():
+                remote_status = "pending"
+                try:
+                    remote_key = DR_REMOTE_PREFIX + fname
+                    dr_upload_file(fpath, remote_key, sha256=data["integrity_sha256"], app_version=APP_VERSION)
+                    if not dr_verify_uploaded_file(fpath, remote_key, expected_sha256=data["integrity_sha256"]):
+                        raise RuntimeError("Remote backup verification failed")
+                    remote_status = "verified"
+                except Exception as exc:
+                    remote_status = "failed"
+                    remote_error = str(exc)
+                    log.error(f"Off-site backup replication failed ({reason}): {exc}")
+            _set_backup_state(data["data_revision"], data["created_at"], fname, remote_status, remote_key, remote_error)
+            return {
+                "filename": fname, "counts": data["counts"], "created_at": data["created_at"],
+                "app_version": APP_VERSION, "backup_version": 5, "data_revision": data["data_revision"],
+                "data_changed_at": data.get("data_changed_at", ""), "remote_status": remote_status,
+                "remote_key": remote_key, "remote_error": remote_error,
+            }
     except Exception as e:
         try:
             if 'tmp_path' in locals() and os.path.exists(tmp_path): os.remove(tmp_path)
-        except Exception:
-            pass
+        except Exception: pass
         log.warning(f"Backup failed ({reason}): {e}")
         return None
 
-# How often a backup happens automatically even with no import activity at all
-# (imports already trigger their own backup — this is the safety net for the
-# gaps between them). Override with the BACKUP_SCHEDULE_HOURS env var; set to
-# "0" to disable.
-BACKUP_SCHEDULE_HOURS = float(os.environ.get("BACKUP_SCHEDULE_HOURS", "24") or "0")
+
+def _latest_local_backup_path():
+    files = []
+    try:
+        files = [f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_") and f.endswith(".json.gz") and os.path.isfile(os.path.join(BACKUP_DIR, f))]
+    except Exception:
+        return None
+    if not files:
+        return None
+    files.sort(key=lambda f: os.path.getmtime(os.path.join(BACKUP_DIR, f)), reverse=True)
+    return os.path.join(BACKUP_DIR, files[0])
+
+
+def _backup_status():
+    conn = None
+    try:
+        conn = get_conn()
+        state = _data_state(conn)
+        last_revision = int(_app_state_get(conn, "dr_last_backup_revision", "-1"))
+        last_at = _app_state_get(conn, "dr_last_backup_at", "")
+        filename = _app_state_get(conn, "dr_last_backup_filename", "")
+        remote_status = _app_state_get(conn, "dr_last_backup_remote_status", "disabled")
+        remote_key = _app_state_get(conn, "dr_last_backup_remote_key", "")
+        remote_error = _app_state_get(conn, "dr_last_backup_error", "")
+        latest_path = _latest_local_backup_path()
+        latest_name = os.path.basename(latest_path) if latest_path else ""
+        age_seconds = None
+        if latest_path:
+            try: age_seconds = max(0, time.time() - os.path.getmtime(latest_path))
+            except OSError: pass
+        stale = last_revision < state["revision"]
+        configured_remote = bool(DR_REMOTE_ENABLED or is_remote_configured())
+        return {
+            "ok": True, "data_revision": state["revision"], "data_changed_at": state["changed_at"],
+            "disposition_revision": state["disposition_revision"], "last_backup_revision": last_revision,
+            "last_backup_at": last_at, "last_backup_filename": filename or latest_name,
+            "local_backup_exists": bool(latest_path), "local_backup_age_seconds": age_seconds,
+            "stale": stale, "remote_configured": configured_remote,
+            "remote_status": remote_status if configured_remote else "disabled",
+            "remote_key": remote_key, "remote_error": remote_error,
+            "remote_required_for_mutations": DR_REMOTE_REQUIRED_FOR_MUTATIONS,
+        }
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+def _post_mutation_backup(reason="mutation"):
+    result = _write_backup_file(reason)
+    if result:
+        if result.get("remote_status") == "failed" and (DR_REMOTE_ENABLED or is_remote_configured()):
+            log.warning(f"Mutation backup local snapshot created but off-site copy failed: {result.get('remote_error','unknown error')}")
+        return result
+    return {"pending": True, "backup_status": "pending"}
+
+
+def _require_safety_backup(reason="safety"):
+    result = _write_backup_file(reason)
+    if not result:
+        raise RuntimeError("Safety backup failed; database mutation aborted")
+    remote_configured = bool(DR_REMOTE_ENABLED or is_remote_configured())
+    if remote_configured and DR_REMOTE_REQUIRED_FOR_MUTATIONS and result.get("remote_status") != "verified":
+        raise RuntimeError("Off-site safety backup could not be verified; database mutation aborted")
+    return result
+
+
+# Automatic DR safety net. Mutation endpoints create immediate snapshots; this
+# loop catches any post-mutation backup failure and also creates periodic
+# recovery points while the system is quiet.
+BACKUP_SCHEDULE_HOURS = max(0.05, float(os.environ.get("BACKUP_SCHEDULE_HOURS", "1") or "1")) if str(os.environ.get("BACKUP_SCHEDULE_HOURS", "1")).strip() not in ("0", "0.0") else 0
+BACKUP_CHECK_SECONDS = max(15, int(os.environ.get("BACKUP_CHECK_SECONDS", "60") or "60"))
+
 
 def _seconds_since_last_backup():
     try:
-        files = [f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_") and f.endswith(".json.gz")]
-        if not files:
-            return None
-        newest = max(os.path.getmtime(os.path.join(BACKUP_DIR, f)) for f in files)
-        return time.time() - newest
+        path = _latest_local_backup_path()
+        if not path: return None
+        return max(0, time.time() - os.path.getmtime(path))
     except Exception:
         return None
 
+
 def _scheduled_backup_loop():
-    """Background safety net: even if nobody imports data for a while, take a
-    periodic snapshot anyway (default every 24h) so a quiet stretch between
-    imports never becomes a gap in backup coverage. An import-triggered backup
-    counts too — this only fires once the configured interval has genuinely
-    elapsed since the most recent backup of any kind."""
     if BACKUP_SCHEDULE_HOURS <= 0:
         return
     interval_seconds = BACKUP_SCHEDULE_HOURS * 3600
-    check_every = min(interval_seconds, 3600)  # re-check at least hourly
-    # This runs on its own thread, started at the same time as (not after)
-    # _run_startup_tasks — on a fresh database the tables this backs up may
-    # not exist yet for the first second or two. Wait for schema setup to
-    # finish (or bail out after a generous ceiling, so a genuinely stuck
-    # schema step can't wedge this loop forever) before the first snapshot
-    # attempt, instead of racing it and logging a spurious "no such table"
-    # warning on every cold start.
     while not STARTUP_READY:
         if STARTUP_ERROR:
             log.warning(f"Scheduled backup disabled for this process because startup failed: {STARTUP_ERROR}")
@@ -2645,23 +2962,142 @@ def _scheduled_backup_loop():
         time.sleep(1)
     while True:
         try:
-            age = _seconds_since_last_backup()
-            if age is None or age >= interval_seconds:
-                result = _write_backup_file("scheduled")
+            status = _backup_status()
+            needs_current = status["last_backup_revision"] < status["data_revision"]
+            needs_periodic = status["local_backup_age_seconds"] is None or status["local_backup_age_seconds"] >= interval_seconds
+            if needs_current or needs_periodic:
+                result = _write_backup_file("scheduled_current_state" if needs_current else "scheduled")
                 if result:
-                    log.info(f"Scheduled backup created: {result['filename']}")
+                    log.info(f"Scheduled recovery point created: {result['filename']} revision={result['data_revision']} remote={result['remote_status']}")
+            elif status.get("remote_configured") and status.get("remote_status") == "failed" and status.get("last_backup_filename"):
+                path = os.path.join(BACKUP_DIR, os.path.basename(status["last_backup_filename"]))
+                if os.path.isfile(path):
+                    try:
+                        remote_key = status.get("remote_key") or (DR_REMOTE_PREFIX + os.path.basename(path))
+                        retry_sha256 = ""
+                        try:
+                            with gzip.open(path, "rt", encoding="utf-8") as retry_file:
+                                retry_payload = json.load(retry_file)
+                            retry_sha256 = str(retry_payload.get("integrity_sha256") or "")
+                        except Exception as exc:
+                            raise RuntimeError(f"Cannot read local backup checksum for remote retry: {exc}")
+                        if not retry_sha256:
+                            raise RuntimeError("Local backup has no integrity checksum; remote retry refused")
+                        dr_upload_file(path, remote_key, sha256=retry_sha256, app_version=APP_VERSION)
+                        if not dr_verify_uploaded_file(path, remote_key, expected_sha256=retry_sha256):
+                            raise RuntimeError("Remote backup verification failed on retry")
+                        _set_backup_state(status["last_backup_revision"], status.get("last_backup_at", ""), os.path.basename(path), "verified", remote_key, "")
+                        log.info(f"Retried off-site backup replication successfully: {path}")
+                    except Exception as exc:
+                        log.warning(f"Off-site backup retry failed: {exc}")
         except Exception as e:
             log.warning(f"Scheduled backup loop error: {e}")
-        time.sleep(check_every)
+        time.sleep(BACKUP_CHECK_SECONDS)
+
+
+def _reset_postgres_sequences(conn, tables):
+    """Resynchronise BIGSERIAL/identity sequences after inserting explicit IDs.
+
+    V5 snapshots restore complete rows, including primary-key IDs. PostgreSQL
+    sequences do not automatically advance when rows are inserted with explicit
+    IDs, so without this step the next normal INSERT could reuse an existing ID.
+    """
+    if not USE_POSTGRES:
+        return
+    for table in tables:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(table)):
+            continue
+        try:
+            has_id = conn.execute(
+                "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=? AND column_name='id'",
+                (table,),
+            ).fetchone()
+            if not has_id:
+                continue
+            seq_row = conn.execute("SELECT pg_get_serial_sequence(?, ?)", (f"public.{table}", "id")).fetchone()
+            sequence_name = str(seq_row[0]) if seq_row and seq_row[0] else ""
+            if not sequence_name:
+                continue
+            conn.execute(
+                'SELECT setval(?::regclass, COALESCE(m.max_id, 1), m.max_id IS NOT NULL) '
+                'FROM (SELECT MAX(id) AS max_id FROM "' + table + '") AS m',
+                (sequence_name,),
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Could not resynchronise ID sequence for table '{table}': {exc}") from exc
+
+
+def _restore_backup_data(data):
+    """Restore a V5 full persistent snapshot; retain compatibility with V4."""
+    version = int(data.get("backup_version") or 0)
+    if version < 5:
+        return _restore_backup_data_v4(data)
+    valid, reason = _backup_is_valid(data, require_integrity=True)
+    if not valid:
+        raise ValueError("Backup integrity validation failed: " + reason)
+    backup_tables = list(data["persistent_tables"])
+    conn = get_conn()
+    try:
+        if USE_POSTGRES:
+            conn.execute("BEGIN")
+        else:
+            conn.execute("BEGIN IMMEDIATE")
+        target_tables = _backup_table_names(conn)
+        if set(backup_tables) != set(target_tables):
+            missing = sorted(set(backup_tables) - set(target_tables))
+            extra = sorted(set(target_tables) - set(backup_tables))
+            raise ValueError(f"Database schema/table set differs from recovery point; missing={missing} extra={extra}. Restore into the matching application schema/version.")
+        target_schema = _backup_table_schema(conn, backup_tables)
+        for table in backup_tables:
+            expected = [c["name"] for c in data["table_schema"][table]]
+            actual = [c["name"] for c in target_schema.get(table, [])]
+            if expected != actual:
+                raise ValueError(f"Database columns differ for table '{table}'. Restore into the matching application version/schema.")
+        # Clear persistent tables in reverse order; no runtime sessions are in backup_tables.
+        for table in reversed(backup_tables):
+            conn.execute(f'DELETE FROM "{table}"')
+        for table in backup_tables:
+            cols = [c["name"] for c in data["table_schema"][table]]
+            quoted_cols = ",".join(f'"{c}"' for c in cols)
+            placeholders = ",".join("?" for _ in cols)
+            rows = data["tables"][table]
+            if rows:
+                conn.executemany(f'INSERT INTO "{table}" ({quoted_cols}) VALUES ({placeholders})', [tuple(row.get(c) for c in cols) for row in rows])
+        # Restore explicit IDs first, then resynchronise serial/identity sequences
+        # so the next normal INSERT cannot collide with a restored ID.
+        _reset_postgres_sequences(conn, backup_tables)
+        # Exact persistent mutation state is restored from app_state itself.
+        app_state_rows = data["tables"].get("app_state", [])
+        if app_state_rows:
+            # DR metadata is deliberately not stored in V5, so overwrite it to a clean state.
+            for key in ("dr_last_backup_revision", "dr_last_backup_at", "dr_last_backup_filename", "dr_last_backup_remote_status", "dr_last_backup_remote_key", "dr_last_backup_error"):
+                _app_state_set(conn, key, "")
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: conn.close()
+        except Exception: pass
+    FISHBONE_CACHE["rows"] = None
+    FISHBONE_CACHE["aliases"] = None
+    RCA_CACHE["rows"] = None
+    FISHBONE_STYLE_CACHE["rows"] = None
+    _cache_clear()
+    with SESSION_LOCK:
+        SESSIONS.clear()
+    with LOGIN_LOCK:
+        LOGIN_ATTEMPTS.clear()
+    counts = dict(data.get("counts", {}))
+    return counts
+
 
 def _list_backups():
     """Return backup metadata without reparsing unchanged snapshot payloads."""
     try:
         os.makedirs(BACKUP_DIR, exist_ok=True)
-        names = [
-            f for f in os.listdir(BACKUP_DIR)
-            if f.startswith("backup_") and f.endswith(".json.gz") and os.path.isfile(os.path.join(BACKUP_DIR, f))
-        ]
+        names = [f for f in os.listdir(BACKUP_DIR) if f.startswith("backup_") and f.endswith(".json.gz") and os.path.isfile(os.path.join(BACKUP_DIR, f))]
         names.sort(reverse=True)
         signature = []
         for f in names:
@@ -2671,34 +3107,37 @@ def _list_backups():
         signature = tuple(signature)
         now = time.time()
         with BACKUP_LIST_CACHE_LOCK:
-            if (BACKUP_LIST_CACHE.get("payload") is not None
-                    and BACKUP_LIST_CACHE.get("signature") == signature
-                    and now < float(BACKUP_LIST_CACHE.get("expires", 0))):
+            if BACKUP_LIST_CACHE.get("payload") is not None and BACKUP_LIST_CACHE.get("signature") == signature and now < BACKUP_LIST_CACHE.get("expires", 0):
                 return [dict(x) for x in BACKUP_LIST_CACHE["payload"]]
-
         out = []
+        recovery_status = _backup_status()
+        latest_backup_name = recovery_status.get("last_backup_filename", "")
         for f in names:
             fp = os.path.join(BACKUP_DIR, f)
-            m = re.match(r"backup_(\d{8})_(\d{6})_(.+)\.json\.gz", f)
-            reason = m.group(3) if m else "unknown"
+            m = re.match(r"backup_\d{8}_\d{6}_([a-zA-Z0-9_-]+)_", f)
+            reason = m.group(1) if m else "unknown"
             valid = True
             backup_version = None
+            data_revision = None
+            remote_status = ""
             try:
                 with gzip.open(fp, "rt", encoding="utf-8") as bf:
                     obj = json.load(bf)
                 backup_version = obj.get("backup_version")
+                data_revision = obj.get("data_revision")
                 valid, _why = _backup_is_valid(obj)
             except Exception:
                 valid = False
+            try:
+                remote_status = recovery_status.get("remote_status", "") if f == latest_backup_name else ""
+            except Exception:
+                remote_status = ""
             out.append({
-                "filename": f,
-                "reason": reason,
-                "size_kb": round(os.path.getsize(fp) / 1024, 1),
+                "filename": f, "reason": reason, "size_kb": round(os.path.getsize(fp) / 1024, 1),
                 "modified_at": datetime.fromtimestamp(os.path.getmtime(fp)).strftime("%d-%b-%Y %H:%M:%S"),
-                "valid": valid,
-                "backup_version": backup_version,
+                "valid": valid, "backup_version": backup_version, "data_revision": data_revision,
+                "remote_status": remote_status,
             })
-        out.sort(key=lambda x: x["filename"], reverse=True)
         with BACKUP_LIST_CACHE_LOCK:
             BACKUP_LIST_CACHE["signature"] = signature
             BACKUP_LIST_CACHE["payload"] = [dict(x) for x in out]
@@ -2707,7 +3146,8 @@ def _list_backups():
     except Exception:
         return []
 
-def _restore_backup_data(data):
+
+def _restore_backup_data_v4(data):
     """Atomically restore all snapshot sections.
 
     Data-safety rule: if *any* section fails, rollback the entire restore so the
@@ -2881,6 +3321,7 @@ def _restore_backup_data(data):
         "kpi_target_history": len(history_rows),
         "import_history": len(import_rows),
     }
+
 
 def _fishbone_master_rows(force=False):
     if FISHBONE_CACHE["rows"] is None or force:
@@ -3116,11 +3557,18 @@ def _ensure_admin_schema():
         conn.execute("""CREATE TABLE IF NOT EXISTS login_attempts (
             ip TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0, window_start DOUBLE PRECISION NOT NULL
         )""")
-    # Runtime mutation metadata used for optimistic import-confirm validation.
-    # It is intentionally kept out of backups because it has meaning only for
-    # the current database instance and is re-created idempotently on startup.
+    # Durable mutation metadata used for optimistic import-confirm validation
+    # and disaster-recovery freshness tracking. DR-only keys are excluded from
+    # V5 snapshots and rewritten after each backup; business/application state
+    # remains part of the recoverable snapshot.
     conn.execute("CREATE TABLE IF NOT EXISTS app_state (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
-    for key, default_value in (("disposition_revision", "0"), ("disposition_changed_at", "")):
+    for key, default_value in (
+        ("disposition_revision", "0"), ("disposition_changed_at", ""),
+        ("data_revision", "0"), ("data_changed_at", ""),
+        ("dr_last_backup_revision", "-1"), ("dr_last_backup_at", ""),
+        ("dr_last_backup_filename", ""), ("dr_last_backup_remote_status", "disabled"),
+        ("dr_last_backup_remote_key", ""), ("dr_last_backup_error", ""),
+    ):
         exists = conn.execute("SELECT 1 FROM app_state WHERE key=?", (key,)).fetchone()
         if not exists:
             conn.execute("INSERT INTO app_state (key,value) VALUES (?,?)", (key, default_value))
@@ -4987,6 +5435,21 @@ class Handler(BaseHTTPRequestHandler):
                     conn.close()
                     self._send_json({"total":total,"last_24h":recent,"actions":[dict(r) for r in actions],"users":[dict(r) for r in users]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/admin/disaster_recovery/status":
+            if not _require_role(self, "admin"): return
+            try:
+                status = _backup_status()
+                # Include lightweight live counts so the recovery dashboard can
+                # prove that a recovery point represents the current dataset.
+                conn = get_conn()
+                status["live_counts"] = {}
+                for table in ("disposition", "users", "fishbone_master", "fishbone_alias", "kpi_targets", "rca_master", "import_history", "audit_trail"):
+                    try: status["live_counts"][table] = int(conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0] or 0)
+                    except Exception: status["live_counts"][table] = None
+                conn.close()
+                self._send_json(status)
+            except Exception as e:
+                self._send_json({"ok":False,"error":str(e)}, status=500)
         elif path == "/api/admin/backup/verify":
             if not _require_role(self, "admin"): return
             else:
@@ -4995,7 +5458,7 @@ class Handler(BaseHTTPRequestHandler):
                     if not name.startswith("backup_") or not name.endswith(".json.gz") or not os.path.isfile(fpath): raise ValueError("Backup file not found")
                     with gzip.open(fpath,"rt",encoding="utf-8") as f: data=json.load(f)
                     valid, reason = _backup_is_valid(data)
-                    self._send_json({"valid":bool(valid),"filename":name,"reason":reason,"counts":data.get("counts",{}),"backup_version":data.get("backup_version"),"size_bytes":os.path.getsize(fpath)})
+                    self._send_json({"valid":bool(valid),"filename":name,"reason":reason,"counts":data.get("counts",{}),"backup_version":data.get("backup_version"),"data_revision":data.get("data_revision"),"scope":data.get("scope"),"size_bytes":os.path.getsize(fpath)})
                 except Exception as e: self._send_json({"valid":False,"error":str(e)},status=400)
         elif path == "/api/admin/validation_rules":
             if not _is_admin(self): _auth_error(self)
@@ -5245,7 +5708,7 @@ class Handler(BaseHTTPRequestHandler):
             if not _require_role(self, "admin"): return
             else:
                 try:
-                    self._send_json({"backups": _list_backups(), "backup_dir": BACKUP_DIR, "keep": BACKUP_KEEP})
+                    self._send_json({"backups": _list_backups(), "backup_dir": BACKUP_DIR, "keep": BACKUP_KEEP, "recovery": _backup_status()})
                 except Exception as e:
                     self._send_json({"error": str(e)}, status=500)
         elif path == "/api/admin/backup/download":
@@ -5396,7 +5859,8 @@ class Handler(BaseHTTPRequestHandler):
                 current_ok = bool(row and _verify_password(current, row[1]))
                 if not current_ok:
                     conn.close(); self._send_json({"error":"Current password is incorrect"}, status=401); return
-                conn.execute("UPDATE users SET password_hash=?, must_reset_password=? WHERE id=?", (_hash_password(new_password), (0 if not USE_POSTGRES else False), row[0])); conn.commit(); conn.close()
+                _require_safety_backup("before_admin_password_change")
+                conn.execute("UPDATE users SET password_hash=?, must_reset_password=? WHERE id=?", (_hash_password(new_password), (0 if not USE_POSTGRES else False), row[0])); _mark_non_disposition_changed(conn); conn.commit(); conn.close()
                 current_token = _cookie_value(self.headers.get("Cookie", ""), "qdash_admin")
                 with SESSION_LOCK:
                     for tok, smeta in list(SESSIONS.items()):
@@ -5408,7 +5872,8 @@ class Handler(BaseHTTPRequestHandler):
                         SESSIONS[current_token]["must_reset"] = False
                         db_session_upsert(get_conn, USE_POSTGRES, current_token, SESSIONS[current_token], SESSIONS[current_token]["expires"])
                 _activity_event(self, "admin_password_changed")
-                self._send_json({"ok":True,"message":"Password changed. Please sign in again on other devices."})
+                recovery_point = _post_mutation_backup("after_admin_password_change")
+                self._send_json({"ok":True,"recovery_point":recovery_point,"message":"Password changed. Please sign in again on other devices."})
             except Exception as e:
                 self._send_json({"error":str(e)}, status=400)
             return
@@ -5427,14 +5892,15 @@ class Handler(BaseHTTPRequestHandler):
                 if not username or not password: raise ValueError("Username and password are required")
                 if role not in ("viewer","admin","qa_manager","qa_engineer","importer","auditor"): raise ValueError("Invalid role")
                 if not _strong_password(password): raise ValueError("Password must be at least 12 characters and include uppercase, lowercase, number and special character")
-                conn=get_conn(); conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",(username,display_name,_hash_password(password),role,True)); conn.commit(); conn.close(); _audit(self,"user_create",details={"username":username,"role":role}); self._send_json({"ok":True})
+                _require_safety_backup("before_user_create")
+                conn=get_conn(); conn.execute("INSERT INTO users (username,display_name,password_hash,role,active) VALUES (?,?,?,?,?)",(username,display_name,_hash_password(password),role,True)); _mark_non_disposition_changed(conn); conn.commit(); conn.close(); _audit(self,"user_create",details={"username":username,"role":role}); recovery_point=_post_mutation_backup("after_user_create"); self._send_json({"ok":True,"recovery_point":recovery_point})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
         if path == "/api/admin/user_toggle":
             if not _require_role(self, "admin"): return
             try:
-                body=_json_body(self); uid=int(body.get("id")); active=bool(body.get("active")); conn=get_conn()
+                body=_json_body(self); uid=int(body.get("id")); active=_strict_bool(body.get("active"), "active"); conn=get_conn()
                 row=conn.execute("SELECT id,username,role,active FROM users WHERE id=?",(uid,)).fetchone()
                 if not row: conn.close(); self._send_json({"error":"User not found"},status=404); return
                 if not active and row[2] == "admin":
@@ -5445,12 +5911,13 @@ class Handler(BaseHTTPRequestHandler):
                     current_meta=dict(SESSIONS.get(current_token) or {})
                 if not active and row[1] == current_meta.get("username"):
                     conn.close(); self._send_json({"error":"You cannot disable your own active administrator account."},status=400); return
-                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); conn.commit(); conn.close()
+                _require_safety_backup("before_user_toggle")
+                conn.execute("UPDATE users SET active=? WHERE id=?",(active,uid)); _mark_non_disposition_changed(conn); conn.commit(); conn.close()
                 if not active:
                     _revoke_user_sessions(uid)
                 # Re-enabling an account never restores an old session token;
                 # a fresh login is required to establish a new session.
-                _audit(self,"user_toggle",record_id=uid,details={"active":active}); self._send_json({"ok":True})
+                _audit(self,"user_toggle",record_id=uid,details={"active":active}); recovery_point=_post_mutation_backup("after_user_toggle"); self._send_json({"ok":True,"recovery_point":recovery_point})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -5464,13 +5931,15 @@ class Handler(BaseHTTPRequestHandler):
             if not _require_role(self, "admin"): return
             try:
                 body=_json_body(self); uid=int(body.get("id"))
+                _require_safety_backup("before_admin_password_reset")
                 conn=get_conn(); row=conn.execute("SELECT id,username,role FROM users WHERE id=?",(uid,)).fetchone()
                 if not row: conn.close(); self._send_json({"error":"User not found"},status=404); return
                 temp_password=_generate_temp_password()
-                conn.execute("UPDATE users SET password_hash=?, must_reset_password=? WHERE id=?", (_hash_password(temp_password), (True if USE_POSTGRES else 1), uid)); conn.commit(); conn.close()
+                conn.execute("UPDATE users SET password_hash=?, must_reset_password=? WHERE id=?", (_hash_password(temp_password), (True if USE_POSTGRES else 1), uid)); _mark_non_disposition_changed(conn); conn.commit(); conn.close()
                 _revoke_user_sessions(row[0])
                 _audit(self,"admin_password_reset",record_id=uid,details={"username":row[1]})
-                self._send_json({"ok":True,"username":row[1],"temp_password":temp_password,"message":"Temporary password generated. Share it with the user through a secure channel — it will not be shown again — and they must set their own password on next admin login."})
+                recovery_point=_post_mutation_backup("after_admin_password_reset")
+                self._send_json({"ok":True,"username":row[1],"temp_password":temp_password,"recovery_point":recovery_point,"message":"Temporary password generated. Share it with the user through a secure channel — it will not be shown again — and they must set their own password on next admin login."})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -5599,8 +6068,10 @@ class Handler(BaseHTTPRequestHandler):
                 meta=_admin_meta(self) or {}; changed_by=meta.get("username", "Admin")
                 if oldrow:
                     conn.execute("""INSERT INTO kpi_target_history(label,old_target,new_target,old_warning,new_warning,old_critical,new_critical,old_direction,new_direction,effective_date,changed_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(label,oldrow[0],target,oldrow[1],warning,oldrow[2],critical,oldrow[3],direction,str(body.get("effective_date", "")).strip(),changed_by))
+                _mark_non_disposition_changed(conn)
                 conn.commit(); conn.close(); _cache_clear(); _activity_event(self,"kpi_target_update",tab="Admin"); _audit(self,"kpi_target_update",details={"label":label,"target":target,"effective_date":str(body.get("effective_date",""))})
-                self._send_json({"ok":True,"targets":get_kpi_targets()})
+                recovery_point = _post_mutation_backup("after_kpi_target_update")
+                self._send_json({"ok":True,"targets":get_kpi_targets(),"recovery_point":recovery_point})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -5609,13 +6080,17 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body = _json_body(self)
                 r = _record_from_values([body.get(k, "") for k in ["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"]], {k:i for i,k in enumerate(["heat_no","batch_no","work_center","grade","output_weight","main_defect","defect_intensity","quality_decision","insp_lot_date","month","week","quarter","financial_year"])})
+                # Protect the exact pre-change state; if the mutation succeeds,
+                # create a current-state recovery point before returning success.
+                _require_safety_backup("before_record_create")
                 result = _insert_records([r])
                 if result["errors"]:
                     self._send_json({"error": result["errors"][0]["error"]}, status=400)
                 elif result["duplicates"]:
                     self._send_json({"error": "This record already exists"}, status=409)
                 else:
-                    self._send_json({"ok": True, **result})
+                    backup = _post_mutation_backup("after_record_create") if (result.get("inserted") or result.get("updated")) else None
+                    self._send_json({"ok": True, **result, "recovery_point": backup})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -5712,12 +6187,22 @@ class Handler(BaseHTTPRequestHandler):
                     if int(item.get("disposition_revision",0)) != int(current_state.get("revision",0)):
                         raise ValueError("The database changed after this preview was generated. Please preview the import again before confirming.")
                     _require_safety_backup("before_disposition_import")
-                    result=_insert_records(item["records"]); meta=_admin_meta(self) or {}
-                    conn=get_conn(); conn.execute("INSERT INTO import_history(filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES(?,?,?,?,?,?,?,?)",(item["filename"],item["summary"]["detected"],item["summary"]["valid"],item["summary"]["duplicates"],item["summary"]["errors"],result.get("updated",item["summary"].get("updated",0)),result["inserted"],meta.get("username","Admin"))); conn.commit(); conn.close()
+                    meta=_admin_meta(self) or {}
+                    result=_insert_records(
+                        item["records"],
+                        import_history={
+                            "filename": item["filename"],
+                            "detected": item["summary"]["detected"],
+                            "valid": item["summary"]["valid"],
+                            "duplicates": item["summary"]["duplicates"],
+                            "errors": item["summary"]["errors"],
+                            "imported_by": meta.get("username", "Admin"),
+                        },
+                    )
                     with IMPORT_PREVIEW_LOCK: IMPORT_PREVIEWS.pop(pid,None)
                     _activity_event(self,"data_import_confirm",tab="Admin",filters={"filename":item["filename"],"inserted":result["inserted"]}); _audit(self,"data_import_confirm",details={"filename":item["filename"],"inserted":result["inserted"],"updated":result.get("updated",0)})
-                _write_backup_file("disposition_import")
-                self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"updated":result.get("updated",item["summary"].get("updated",0)),"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"]})
+                recovery_point = _post_mutation_backup("after_disposition_import") if (result.get("inserted") or result.get("updated")) else None
+                self._send_json({"ok":True,"filename":item["filename"],"detected":item["summary"]["detected"],"inserted":result["inserted"],"updated":result.get("updated",item["summary"].get("updated",0)),"duplicates":item["summary"]["duplicates"],"errors":item["summary"]["errors"],"recovery_point":recovery_point})
             except Exception as e: self._send_json({"error":str(e)},status=400)
             return
 
@@ -5741,20 +6226,21 @@ class Handler(BaseHTTPRequestHandler):
                 if len(records) > 10000:
                     raise ValueError("Import limited to 10,000 records per upload")
                 _require_safety_backup("before_disposition_import")
-                result = _insert_records(records)
-                try:
-                    meta = _admin_meta(self) or {}
-                    conn = get_conn()
-                    conn.execute(
-                        "INSERT INTO import_history (filename,detected,valid,duplicates,errors,updated,imported,imported_by) VALUES (?,?,?,?,?,?,?,?)",
-                        (uploaded[0], len(records), len(records), 0, 0, result.get("updated",0), result.get("inserted",0), meta.get("username",""))
-                    )
-                    conn.commit()
-                    conn.close()
-                except Exception:
-                    pass
+                meta = _admin_meta(self) or {}
+                result = _insert_records(
+                    records,
+                    import_history={
+                        "filename": uploaded[0],
+                        "detected": len(records),
+                        "valid": len(records),
+                        "duplicates": None,
+                        "errors": None,
+                        "imported_by": meta.get("username", ""),
+                    },
+                )
                 _audit(self,"direct_import",details={"filename":uploaded[0],"detected":len(records),"inserted":result.get("inserted",0),"updated":result.get("updated",0)})
-                self._send_json({"ok": True, "detected": len(records), **result})
+                recovery_point = _post_mutation_backup("after_disposition_import") if (result.get("inserted") or result.get("updated")) else None
+                self._send_json({"ok": True, "detected": len(records), **result, "recovery_point": recovery_point})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -5779,7 +6265,8 @@ class Handler(BaseHTTPRequestHandler):
                 meta = _admin_meta(self) or {}
                 result = _replace_fishbone_master(bundle, uploaded[0], meta.get("username", "Admin"))
                 _audit(self, "fishbone_master_import", details={"filename": uploaded[0], **result})
-                self._send_json({"ok": True, "filename": uploaded[0], **result})
+                recovery_point = _post_mutation_backup("after_fishbone_import") if (result.get("imported") or result.get("rca_imported") or result.get("style_imported")) else None
+                self._send_json({"ok": True, "filename": uploaded[0], **result, "recovery_point": recovery_point})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -5829,16 +6316,17 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError("Backup file not found")
                     with gzip.open(fpath, "rt", encoding="utf-8") as f:
                         data = json.load(f)
-                valid, reason = _backup_is_valid(data)
+                valid, reason = _backup_is_valid(data, require_integrity=True)
                 if not valid:
                     raise ValueError("Backup integrity validation failed: " + reason)
-                safety = _write_backup_file("before_restore")
-                if not safety:
-                    raise ValueError("Pre-restore safety backup failed. Restore was blocked to protect live data.")
+                actor = _admin_meta(self) or {}
+                safety = _require_safety_backup("before_restore")
                 counts = _restore_backup_data(data)
-                meta = _admin_meta(self) or {}
-                _audit(self, "backup_restore", details=counts)
-                self._send_json({"ok": True, "restored": counts})
+                # The restored snapshot clears active sessions. Record the actor
+                # before restore in the surviving audit history where possible.
+                _audit(self, "backup_restore", details={"restored":counts,"source_revision":data.get("data_revision"),"actor":actor.get("username","")})
+                recovery_point = _post_mutation_backup("after_restore")
+                self._send_json({"ok": True, "restored": counts, "recovery_point": recovery_point, "source_revision": data.get("data_revision")})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -5858,11 +6346,13 @@ class Handler(BaseHTTPRequestHandler):
                 conn.execute("DELETE FROM fishbone_alias WHERE norm_disposition_defect=?", (norm,))
                 conn.execute("INSERT INTO fishbone_alias (disposition_defect,norm_disposition_defect,master_defect,created_by) VALUES (?,?,?,?)",
                              (disp_defect, norm, master_defect, meta.get("username", "Admin")))
+                _mark_non_disposition_changed(conn)
                 conn.commit(); conn.close()
                 FISHBONE_CACHE["aliases"] = None
                 _cache_clear()
                 _audit(self, "fishbone_alias_set", details={"disposition_defect": disp_defect, "master_defect": master_defect})
-                self._send_json({"ok": True})
+                recovery_point = _post_mutation_backup("after_fishbone_alias_set")
+                self._send_json({"ok": True, "recovery_point": recovery_point})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -5875,11 +6365,13 @@ class Handler(BaseHTTPRequestHandler):
                 _require_safety_backup("before_fishbone_alias_delete")
                 conn = get_conn()
                 conn.execute("DELETE FROM fishbone_alias WHERE id=?", (aid,))
+                _mark_non_disposition_changed(conn)
                 conn.commit(); conn.close()
                 FISHBONE_CACHE["aliases"] = None
                 _cache_clear()
                 _audit(self, "fishbone_alias_delete", record_id=aid)
-                self._send_json({"ok": True})
+                recovery_point = _post_mutation_backup("after_fishbone_alias_delete")
+                self._send_json({"ok": True, "recovery_point": recovery_point})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -6044,7 +6536,8 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close()
                 _audit(self,"record_delete",record_id=record_id)
                 _cache_clear()
-                self._send_json({"ok": True, "deleted": cur.rowcount})
+                recovery_point = _post_mutation_backup("after_record_delete") if cur.rowcount else None
+                self._send_json({"ok": True, "deleted": cur.rowcount, "recovery_point": recovery_point})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -6071,7 +6564,8 @@ class Handler(BaseHTTPRequestHandler):
                 conn.close()
                 _audit(self,"record_bulk_delete",details={"record_ids":ids,"count":cur.rowcount})
                 _cache_clear()
-                self._send_json({"ok": True, "deleted": cur.rowcount})
+                recovery_point = _post_mutation_backup("after_record_bulk_delete") if cur.rowcount else None
+                self._send_json({"ok": True, "deleted": cur.rowcount, "recovery_point": recovery_point})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
             return
@@ -6117,6 +6611,19 @@ def _run_startup_tasks():
         STARTUP_READY = not errors
     if STARTUP_READY:
         log.info("Startup: all initialisation complete.")
+        try:
+            status = _backup_status()
+            if status.get("last_backup_revision", -1) < status.get("data_revision", 0):
+                created = _write_backup_file("startup_current_state")
+                if created:
+                    log.info(
+                        "Startup: current-state recovery point created: %s revision=%s remote=%s",
+                        created.get("filename"), created.get("data_revision"), created.get("remote_status")
+                    )
+                else:
+                    log.error("Startup: current-state recovery point could not be created; DR is degraded until the scheduler succeeds.")
+        except Exception as exc:
+            log.error("Startup: DR readiness check failed: %s", exc)
     else:
         log.error("Startup: initialization FAILED; service is not ready.")
 
