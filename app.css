@@ -532,7 +532,7 @@ body > *{position:relative;z-index:1;}
 .tabs .tab-btn{width:100%;min-width:0;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;}
 
 .tab-btn{position:relative;overflow:hidden;background:linear-gradient(180deg,#ffffff 0%,#f6f9fb 100%)!important;border:1.5px solid #d8e3ec!important;border-bottom-width:3px!important;border-radius:10px!important;color:#536b7e!important;box-shadow:0 2px 5px rgba(15,42,74,.07),0 8px 18px rgba(35,136,201,.08),inset 0 1px 0 rgba(255,255,255,.96)!important;transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease,background .22s ease!important;font-family:'DM Sans','Manrope',sans-serif!important;font-weight:800!important;}
-.tab-btn:hover{transform:translateY(-2px);border-color:#b8cad9!important;box-shadow:0 4px 8px rgba(15,42,74,.10),0 13px 26px rgba(15,42,74,.12),inset 0 1px 0 #fff!important;}
+.tab-btn:hover{transform:translateY(-2px) scale(1.02);border-color:#b8cad9!important;box-shadow:0 6px 14px rgba(15,42,74,.14),0 16px 30px rgba(15,42,74,.14),inset 0 1px 0 #fff!important;}
 .tab-btn.active{background:linear-gradient(135deg,#183A58 0%,#245b80 100%)!important;color:#fff!important;border-color:#183A58!important;box-shadow:0 6px 16px rgba(24,58,88,.20),inset 0 1px 0 rgba(255,255,255,.16)!important;}
 .tab-btn.active::after{content:"";position:absolute;left:10%;right:10%;bottom:3px;height:2px;border-radius:2px;background:rgba(255,255,255,.78);}
 .section-header,.panel h3{background:linear-gradient(180deg,#ffffff 0%,#f6f9fb 100%);color:var(--heading);border:1.5px solid #d8e3ec;border-bottom:3px solid #c7d7e4;border-radius:10px 10px 0 0;box-shadow:0 2px 5px rgba(15,42,74,.06),0 8px 18px rgba(15,42,74,.06),inset 0 1px 0 #fff;font-family:'DM Sans','Manrope',sans-serif;font-weight:800;letter-spacing:.15px;}
@@ -2217,4 +2217,52 @@ html[data-theme="dark"] header.app-header::after{
 @media print{
   header.app-header::before,
   header.app-header::after{animation:none !important;}
+}
+
+/* ================================================================
+   MICRO-INTERACTIONS — tab-switch fade+slide, button hover-lift +
+   click ripple, and staggered chart bar/slice grow-in. The KPI
+   count-up's spring easing lives in app.js (animateKpiValue /
+   animateNumericSpan) — no CSS involved there. All of this respects
+   prefers-reduced-motion via the guard at the bottom of this block.
+   ================================================================ */
+
+/* Tab switch: the newly-shown panel eases in with a short fade+slide instead
+   of just appearing. Relies on CSS animations not running while
+   display:none — toggling the .hidden class off restarts it every time,
+   so no JS timing code is needed for this one. */
+@keyframes tabPanelIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.tab-panel:not(.hidden){animation:tabPanelIn .13s ease-out both;}
+
+/* Buttons: a shared hover lift + click ripple for every real <button> in the
+   app (Export, Reset All, filter trigger, dialog Cancel/Save, Compare mode,
+   the command-palette trigger, etc.) plus the drill-modal's anchor-styled
+   export link, so every clickable control feels the same tactile way. The
+   ripple <span> itself is spawned by JS (see spawnRipple in app.js) — this
+   just supplies the positioning context, look, and grow/fade animation.
+   .tab-btn keeps its own more specific hover rule above (translateY+scale);
+   this generic one covers everything else that didn't already have a lift. */
+button:not(.tab-btn),.drill-export{position:relative;overflow:hidden;}
+button,.drill-export{transition:transform .15s ease,box-shadow .15s ease;}
+button:not(.tab-btn):hover,.drill-export:hover{transform:scale(1.02);box-shadow:0 6px 16px rgba(15,42,74,.14);}
+button:active,.drill-export:active{transform:scale(.97);}
+.ripple-effect{position:absolute;border-radius:50%;background:rgba(255,255,255,.55);transform:scale(0);opacity:.55;pointer-events:none;animation:rippleGrow .55s ease-out forwards;}
+.tab-btn:not(.active) .ripple-effect,.filter-trigger .ripple-effect,.reset-all .ripple-effect,.btn:not(.primary) .ripple-effect{background:rgba(24,58,88,.18);}
+@keyframes rippleGrow{to{transform:scale(1);opacity:0;}}
+
+/* Chart bars/donut slices: each one grows in with a small per-item stagger
+   instead of every bar/slice animating in lockstep. Each <rect class="chart-bar">
+   / <path class="chart-slice"> carries a --i custom property (its index,
+   set in app.js when the SVG string is built) that feeds the delay below;
+   elements with no --i (older/unrelated shapes) just fall back to delay 0. */
+.chart-ready .chart-bar{transform-origin:bottom;animation:barGrow .48s cubic-bezier(.22,.85,.32,1) calc(.06s + var(--i,0) * 35ms) both;}
+.chart-ready .chart-slice{animation:sliceGrow .5s cubic-bezier(.22,.85,.32,1) calc(.05s + var(--i,0) * 40ms) both;}
+@keyframes sliceGrow{0%{opacity:0;transform:scale(.55);}70%{opacity:1;}100%{opacity:1;transform:scale(1);}}
+
+@media (prefers-reduced-motion:reduce){
+  .tab-panel:not(.hidden){animation:none;}
+  button,.drill-export{transition:none;}
+  button:not(.tab-btn):hover,.drill-export:hover{transform:none;}
+  .ripple-effect{display:none;}
+  .chart-ready .chart-slice{animation:none;}
 }

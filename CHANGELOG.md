@@ -1,3 +1,23 @@
+## V65.0 — Follow-up: micro-interactions — spring KPI count-up, tab fade-in, button ripple, staggered chart grow-in (no version bump — same version)
+
+### Changed
+- **KPI count-up now uses a spring easing curve instead of a flat ease-out.** `animateKpiValue()` (headline value) and `animateNumericSpan()` (Prev/%/pp trend spans underneath) both switched from `1-(1-t)³` to a shared `easeSpringOut()` — a classic easeOutBack curve — so the number overshoots the target slightly and settles back instead of just decelerating smoothly into it. Duration nudged 620ms → 680ms to give the overshoot room to read.
+- **Switching tabs now fades + slides the new panel in** (130ms, opacity 0→1 + `translateY(8px)→0`) instead of the content just snapping into view. No JS timing code needed — the animation is defined on `.tab-panel:not(.hidden)` and CSS animations don't run on a `display:none` element, so toggling the existing `.hidden` class off replays it automatically every time.
+- **Every real `<button>` in the app (plus the drill-modal's anchor-styled export link) now lifts on hover and ripples on click.** Hover adds a `scale(1.02)` + a stronger drop shadow; `.tab-btn` keeps its existing (now-enhanced) `translateY(-2px) scale(1.02)` hover instead of the generic rule. Click spawns a small expanding-circle ripple from the exact click point via one delegated `document` click listener in `app.js` — covers Export, Reset All, Compare mode, filter triggers, dialog Cancel/Save buttons, the command-palette trigger, drill-modal Close/Export, etc. without needing a listener wired up per button.
+- **Chart bars and donut/pie slices now grow in with a small per-item stagger** instead of every shape animating in lockstep. Each generated `<rect class="chart-bar">` / `<path class="chart-slice">` now carries a `style="--i:N"` (its index, capped at 10) that feeds a `calc()` animation-delay, so a chart reads as a left-to-right / slice-by-slice ripple on load instead of one flat pop. Covers the horizontal bar chart, horizontal & vertical grouped bar charts, the combo (bar+line) chart, and the donut/pie chart.
+- All of the above respects `prefers-reduced-motion: reduce` (tab fade, button hover-lift, ripple, and slice stagger all turn off; the pre-existing bar-stagger reduced-motion guard already in place still applies).
+
+### Unchanged
+- No application-version bump: this remains **V65.0**.
+- No API, schema, or data changes — this pass only touches `app.js` (spring easing, ripple listener, `--i` index on chart markup) and `app.css` (tab fade-in, button hover/ripple styling, staggered bar/slice animation-delay). The two-phase export progress bar and its rounded-toast styling from the previous two passes are untouched.
+- Only `app.js` and `app.css` were touched for this pass.
+
+### Verified
+- `node --check app.js` — clean.
+- CSS brace/parenthesis balance checked programmatically after the addition (1427/1427 braces, 1189/1189 parens) — no stray/unclosed rules.
+- Manually traced the ripple listener against buttons without a distinguishing class (bare `<button>` tags like `#drillCloseBtn`, `#exportDialogCloseBtn`) to confirm the delegated `button,.drill-export` selector still catches them.
+- Confirmed the pre-existing `.chart-ready .chart-bar` reduced-motion override (already in app.css) still wins for that selector; added the matching guard for the new `.chart-ready .chart-slice` stagger.
+
 ## V65.0 — Follow-up: export progress bar polish — fast counting %, live ETA, rounder toast (no version bump — same version)
 
 ### Changed

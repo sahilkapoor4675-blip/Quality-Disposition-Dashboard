@@ -1,3 +1,6 @@
+## What changed in V65.0 (follow-up: micro-interactions — spring KPI count-up, tab fade-in, button ripple, staggered chart grow-in)
+- **KPI numbers now count up with a spring/overshoot easing** instead of a flat deceleration. **Switching tabs fades + slides the new panel in.** **Every button ripples on click and lifts on hover.** **Chart bars and donut slices grow in with a per-item stagger** instead of all at once. All respects reduced-motion. Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
+
 ## What changed in V65.0 (follow-up: export progress bar polish — fast counting %, live ETA, rounder toast)
 - **Percentage now counts up quickly one step at a time**, plus a real-time "~Ns left" estimate next to it that keeps re-estimating itself as the download progresses. **Toast corners are rounder** (10px → 16px) with a circular close button, and the progress bar is a full pill with a subtle moving shimmer (off under reduced-motion). Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
 

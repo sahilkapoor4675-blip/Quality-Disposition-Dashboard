@@ -728,14 +728,22 @@ function renderKpis(kpis){
 }
 async function loadKpiTargets(){try{const d=await fetch('/api/kpi_targets',{cache:'no-store'}).then(r=>r.json());KPI_TARGETS=d.targets||{};}catch(e){KPI_TARGETS={};}}
 
+// Shared "spring" easing for the KPI count-up animations (headline value and
+// the Prev/%/pp trend spans below it): a classic easeOutBack curve, so the
+// number overshoots the target slightly and settles back instead of just
+// decelerating smoothly into it — reads as a springy bounce, not a linear/
+// ease-out crawl.
+function easeSpringOut(t){
+  const c1=1.70158, c3=c1+1, p=t-1;
+  return 1 + c3*p*p*p + c1*p*p;
+}
 function animateKpiValue(el, from, to, fmt, token){
   const start = performance.now();
-  const duration = 620;
-  const ease = t => 1 - Math.pow(1 - t, 3);
+  const duration = 680;
   const step = now => {
     if(token !== kpiAnimationToken && token !== qcrAnimationToken) return;
     const p = Math.min(1, (now - start) / duration);
-    const v = from + (to - from) * ease(p);
+    const v = from + (to - from) * easeSpringOut(p);
     el.textContent = fmtValue(v, fmt);
     if(p < 1) requestAnimationFrame(step);
     else el.textContent = fmtValue(to, fmt);
@@ -747,12 +755,11 @@ function animateKpiValue(el, from, to, fmt, token){
 // can count up too instead of just snapping to their new text.
 function animateNumericSpan(el, from, to, formatFn, token){
   const start = performance.now();
-  const duration = 620;
-  const ease = t => 1 - Math.pow(1 - t, 3);
+  const duration = 680;
   const step = now => {
     if(token !== kpiAnimationToken) return;
     const p = Math.min(1, (now - start) / duration);
-    const v = from + (to - from) * ease(p);
+    const v = from + (to - from) * easeSpringOut(p);
     el.textContent = formatFn(v);
     if(p < 1) requestAnimationFrame(step);
     else el.textContent = formatFn(to);
@@ -1837,6 +1844,30 @@ function showToast(kind,title,message,opts={}){
   return endFn;
 }
 
+// ---- Button click ripple: a small expanding circle from the click point, on
+// every real <button> plus the drill-modal's anchor-styled export link — see
+// the shared hover-lift/ripple CSS block at the end of app.css. Delegated on
+// document so it also covers buttons created later (filter triggers, dialog
+// buttons, saved-view popover buttons, etc.) without needing individual
+// listeners wired up at each creation site.
+document.addEventListener('click',e=>{
+  const target=e.target.closest('button,.drill-export');
+  if(!target) return;
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const rect=target.getBoundingClientRect();
+  const size=Math.max(rect.width,rect.height)*1.6;
+  const ripple=document.createElement('span');
+  ripple.className='ripple-effect';
+  const cx=(typeof e.clientX==='number'&&(e.clientX||e.clientY))?e.clientX:rect.left+rect.width/2;
+  const cy=(typeof e.clientY==='number'&&(e.clientX||e.clientY))?e.clientY:rect.top+rect.height/2;
+  ripple.style.width=ripple.style.height=size+'px';
+  ripple.style.left=(cx-rect.left-size/2)+'px';
+  ripple.style.top=(cy-rect.top-size/2)+'px';
+  target.appendChild(ripple);
+  ripple.addEventListener('animationend',()=>ripple.remove());
+  setTimeout(()=>ripple.remove(),700); // safety net if animationend doesn't fire (e.g. element removed mid-animation)
+});
+
 function makePieChart(container, items, valueKey, labelKey, opts={}){
   chartRemember(container, ()=>makePieChart(container, items, valueKey, labelKey, opts));
   if(!items.length){ container.innerHTML = emptyStateMarkup('No data to display.','Try widening the date range or clearing a filter.'); return; }
@@ -1870,13 +1901,13 @@ function makePieChart(container, items, valueKey, labelKey, opts={}){
 
   // Pass 2: draw donut segments (outer arc out, inner arc back)
   let slices = "";
-  slicesData.forEach(s => {
+  slicesData.forEach((s, i) => {
     const ox1 = cx + r*Math.cos(s.a0), oy1 = cy + r*Math.sin(s.a0);
     const ox2 = cx + r*Math.cos(s.a1), oy2 = cy + r*Math.sin(s.a1);
     const ix1 = cx + innerR*Math.cos(s.a1), iy1 = cy + innerR*Math.sin(s.a1);
     const ix2 = cx + innerR*Math.cos(s.a0), iy2 = cy + innerR*Math.sin(s.a0);
     const largeArc = (s.a1 - s.a0) > Math.PI ? 1 : 0;
-    slices += `<path class="chart-slice" data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5" data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${fmtDonutPct3(s.frac)})"></path>`;
+    slices += `<path class="chart-slice" style="--i:${Math.min(i,10)}" data-drill-category="${escQcr(s.d[labelKey])}" data-drill-kind="decision" d="M${ox1},${oy1} A${r},${r} 0 ${largeArc} 1 ${ox2},${oy2} L${ix1},${iy1} A${innerR},${innerR} 0 ${largeArc} 0 ${ix2},${iy2} Z" fill="${svgFill(s.color, _pieTag)}" filter="${svgLift(_pieTag)}" stroke="var(--chart-halo)" stroke-width="2.5" data-tip="${escQcr(s.d[labelKey])}: ${(opts.valFmt?opts.valFmt(s.val):s.val.toFixed(2))} (${fmtDonutPct3(s.frac)})"></path>`;
   });
 
   // Center label: grand total
@@ -1977,7 +2008,7 @@ function makeHBarChart(container, items, valueKey, labelKey, opts={}){
     const y = padT + i * rowH + rowH*0.2;
     const barH = rowH * 0.6;
     const barColor = opts.color || CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect class="chart-bar"${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(barColor, _hbarTag)}" filter="${svgLift(_hbarTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}"></rect>`;
+    bars += `<rect class="chart-bar" style="--i:${Math.min(i,10)}"${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(barColor, _hbarTag)}" filter="${svgLift(_hbarTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.fmt ? opts.fmt(val) : val}"></rect>`;
     bars += `<text x="${padL + barW + 8}" y="${y + barH/2 + 4}" font-size="14.5" font-weight="700" fill="var(--chart-strong)">${opts.fmt ? opts.fmt(val) : val}</text>`;
     labels += `<text x="${padL - 10}" y="${y + barH/2 + 4}" font-size="12" font-weight="700" text-anchor="end" fill="var(--chart-label)" data-tip="${escQcr(d[labelKey])}">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
   });
@@ -2033,7 +2064,7 @@ function makeHGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const maxV = maxes[si];
       const barW = Math.max(0, (val / maxV) * plotW);
       const y = groupY + si * (barH + 5);
-      bars += `<rect class="chart-bar"${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(s.color, _hgTag)}" filter="${svgLift(_hgTag)}" rx="3" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
+      bars += `<rect class="chart-bar" style="--i:${Math.min(i*nSeries+si,10)}"${opts.drillKind?` data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind}"`:''} x="${padL}" y="${y}" width="${Math.max(barW,2)}" height="${barH}" fill="${svgFill(s.color, _hgTag)}" filter="${svgLift(_hgTag)}" rx="3" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
       bars += `<text x="${padL + barW + 10}" y="${y + barH/2 + 5}" font-size="16.5" font-weight="700" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${padL - 12}" y="${groupY + (barH+5)*nSeries/2 + 2}" font-size="12.5" font-weight="700" text-anchor="end" fill="var(--chart-label)">${escQcr(truncateLabel(d[labelKey], 26))}</text>`;
@@ -2087,7 +2118,7 @@ function makeGroupedBarChart(container, items, labelKey, seriesDefs, opts={}){
       const barH = Math.max(0, (val / maxV) * (h - padT - padB));
       const x = groupX + si * (barW + 6);
       const y = h - padB - barH;
-      bars += `<rect class="chart-bar" data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${svgFill(s.color, _vgTag)}" filter="${svgLift(_vgTag)}" rx="2" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
+      bars += `<rect class="chart-bar" style="--i:${Math.min(i*nSeries+si,10)}" data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="${opts.drillKind||'decision'}" x="${x}" y="${y}" width="${barW}" height="${barH}" fill="${svgFill(s.color, _vgTag)}" filter="${svgLift(_vgTag)}" rx="2" data-tip="${escQcr(s.label)} — ${escQcr(d[labelKey])}: ${s.fmt ? s.fmt(val) : val}"></rect>`;
       bars += `<text x="${x + barW/2}" y="${y - 6}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${s.fmt ? s.fmt(val) : val}</text>`;
     });
     labels += `<text x="${groupX + groupW/2}" y="${h - padB + 20}" font-size="11.5" font-weight="700" text-anchor="end" fill="var(--chart-label)" transform="rotate(-30 ${groupX+groupW/2} ${h-padB+20})" data-tip="${escQcr(d[labelKey])}">${escQcr(truncateLabel(d[labelKey], truncLen))}</text>`;
@@ -2186,7 +2217,7 @@ function makeComboChart(container, items, labelKey, barKey, lineKey, opts={}){
     const val=Number(d[barKey])||0, barH=(val/maxBar)*plotH;
     const x=padL+i*gap+(gap-barW)/2, y=h-padB-barH;
     const barColor = opts.barColor && !opts.colorful ? opts.barColor : CHART_COLORS[i % CHART_COLORS.length];
-    bars += `<rect class="chart-bar" data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${svgFill(barColor, _comboTag)}" filter="${svgLift(_comboTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}"></rect>`;
+    bars += `<rect class="chart-bar" style="--i:${Math.min(i,10)}" data-drill-category="${escQcr(d[labelKey])}" data-drill-kind="defect" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,0)}" fill="${svgFill(barColor, _comboTag)}" filter="${svgLift(_comboTag)}" rx="3" data-tip="${escQcr(d[labelKey])}: ${opts.barFmt?opts.barFmt(val):val}"></rect>`;
     bars += `<text x="${x+barW/2}" y="${Math.max(y-8,padT+12)}" font-size="14" font-weight="700" text-anchor="middle" fill="var(--chart-strong)">${opts.barFmt?opts.barFmt(val):val}</text>`;
     const lineVal=Math.max(0,Math.min(maxLine,Number(d[lineKey])||0));
     const lineY=h-padB-(lineVal/maxLine)*plotH, px=x+barW/2;
