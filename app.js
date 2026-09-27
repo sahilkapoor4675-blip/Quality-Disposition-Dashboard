@@ -390,7 +390,7 @@ async function loadFilters(){
       const q=term.trim().toLowerCase(); list.innerHTML="";
       const source=field._filterItems || items;
       const filtered=source.filter(x=>String(x.label).toLowerCase().includes(q));
-      filtered.forEach((x,i)=>{
+      filtered.forEach((x)=>{
         const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
         opt.textContent=x.label;
         opt.addEventListener("click",()=>{
@@ -623,10 +623,6 @@ function renderKpis(kpis){
     }
     const statusText=status==='good'?'ON TARGET':status==='amber'?'WATCH':status==='bad'?'ACTION':'REFERENCE';
     const valueColor=(k.label==='Total Coils'||k.label==='Output Quantity (MT)')?'#2388C9':(k.color||'#16324F');
-    const targetCfg=KPI_TARGETS[k.label]||null;
-    const directionText=targetCfg ? ((targetCfg.direction||'higher').toLowerCase()==='lower'?'Lower is better':'Higher is better') : 'Reference KPI';
-    const targetText=targetCfg ? fmtValue(targetCfg.target,k.fmt) : 'Not set';
-    const prevText=(k.prev!==null && k.prev!==undefined) ? fmtValue(k.prev,k.fmt) : 'N/A';
     card.innerHTML=`<div class="kpi-top"><div class="label"><span class="kpi-icon">${KPI_ICONS[k.label]||'📊'}</span>${escQcr(k.label)}</div><span class="kpi-status ${status}">${statusText}</span></div><div class="value" data-target="${cur}" style="color:${valueColor}">${fmtValue(cur,k.fmt)}</div><div class="kpi-bottom"><div class="kpi-meta">${kpiTargetMarkup(k.label,k.fmt)}<div class="kpi-trendline">${trendHtml}</div></div>${sparklineSvg(oldValue,cur,status)}</div>`;
     card.setAttribute('role','button'); card.setAttribute('tabindex','0'); card.setAttribute('aria-label',`Drill down into ${k.label}`); card.addEventListener('click',()=>openDrilldown(k.label,`${k.label} — Underlying Records`)); card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openDrilldown(k.label,`${k.label} — Underlying Records`);}}); grid.appendChild(card); const valueEl=card.querySelector('.value');
     if(_kpiTiltEnabled) attachKpiTilt(card);
@@ -2728,7 +2724,7 @@ function loadRootCause(defect){
     // itself? No — dataset lives on the element node, not its innerHTML, so
     // it survives. Kept here as a defensive re-set in case that ever changes.
     el.dataset.defect=defect;
-  }).catch(e=>{el.innerHTML='<div class="qcr-empty">Root-cause data unavailable.</div>';});
+  }).catch(()=>{el.innerHTML='<div class="qcr-empty">Root-cause data unavailable.</div>';});
 }
 // NOTE: Grade Concentration and "Why changed?" used to also be computed here
 // via extra client-side API calls. That logic is dead weight now — the
@@ -2925,7 +2921,7 @@ async function loadControlRoom(signal){
     qcrRenderWhyDecomposition(intel);
     qcrRenderHealthReasons(intel);
     qcrRenderTopContributors(topDefects,defectTotalQty,worstWc,worstGr,intel);
-    const loadToken=++window.qcrLoadToken;
+    ++window.qcrLoadToken;
     if(topDefects[0]?.defect) loadRootCause(topDefects[0].defect).finally(scheduleQcrLayout);
 
     markChartsReady();

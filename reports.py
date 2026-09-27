@@ -34,7 +34,7 @@ try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.enums import TA_LEFT
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image as RLImage
 except ImportError:
     SimpleDocTemplate = None
@@ -390,7 +390,7 @@ def _excel_report(payload):
     if Workbook is None:
         raise RuntimeError("Excel export requires openpyxl")
     wb=Workbook(); ws=wb.active; ws.title="Dashboard"
-    navy="0F2A4A"; accent="118DFF"; white="FFFFFF"; light="EEF4FF"
+    navy="0F2A4A"; accent="118DFF"; white="FFFFFF"
     charts_dict=dict(_export_charts(payload))
     thin=Side(style="thin", color="DCE6EF")
     def title(ws, text, row=1, cols=5):
@@ -737,7 +737,6 @@ def _pptx_report(payload):
             p2=tf.add_paragraph(); p2.text=sub; p2.font.size=Pt(10.5); p2.font.color.rgb=SUBTLE; p2.alignment=PP_ALIGN.LEFT
 
     def style_table(table, headers, rows, col_weights=None):
-        n=len(headers)
         if col_weights:
             total=sum(col_weights)
             for i,c in enumerate(table.columns): c.width=int(table._graphic_frame.width*col_weights[i]/total)

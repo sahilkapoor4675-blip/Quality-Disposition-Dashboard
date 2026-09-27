@@ -1,3 +1,7 @@
+## What changed in V65.0 (follow-up: dead-code cleanup)
+- **Removed unused imports and dead local variables** from `server.py`, `reports.py`, and `app.js` — no behavior, API, or visual change. See `CHANGELOG.md` for the full itemized list.
+- **Verified with the full release-gate suite** (all 6 `regression.py` suites, `smoke_test.py`, `http_smoke.py`, `export_acceptance.py`, `export_stress.py`, `code_health.py`, `admin_ux_audit.py`) plus fresh `pyflakes`/`eslint`/`py_compile`/`node --check` passes — all clean, identical results to before the cleanup.
+
 ## What changed in V65.0 (follow-up: export chart reliability)
 - **Decision Distribution export supports all seven disposition categories.** The pie chart now cycles the available palette to the exact number of nonzero slices, so exports remain valid when all seven decision types have quantity.
 - **Per-chart export isolation.** Individual chart rendering failures are logged and skipped instead of aborting the complete Excel/PDF/PowerPoint export.

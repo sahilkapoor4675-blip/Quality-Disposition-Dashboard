@@ -1,3 +1,22 @@
+## V65.0 — Follow-up: dead-code cleanup in server.py, reports.py, app.js (no version bump — same version)
+
+### Removed
+- **Unused imports in `server.py`.** `get_logger` (from `logging_setup`), and a full set of openpyxl/matplotlib/reportlab/pptx symbols (`Image as XLImage`, `Font`, `PatternFill`, `Alignment`, `Border`, `Side`, `FancyBboxPatch`, `colors`, `A4`, `landscape`, `getSampleStyleSheet`, `ParagraphStyle`, `TA_CENTER`, `TA_LEFT`, `Paragraph`, `Spacer`, `Table`, `TableStyle`, `PageBreak`, `Image as RLImage`, `Inches`, `Pt`, `RGBColor`, `PP_ALIGN`, `MSO_ANCHOR`, `MSO_SHAPE`) were imported but never referenced — the actual report-building code that needs these already lives in `reports.py`, which imports them itself. `server.py` only ever calls the already-imported `_excel_report` / `_pdf_report` / `_pptx_report` wrappers.
+- **Unused import in `reports.py`.** `TA_CENTER` (from `reportlab.lib.enums`) — `TA_LEFT` is used, `TA_CENTER` never was.
+- **Dead local variables (`server.py`):** an unused `ppm_defective` computation in `compute_kpis()` (never included in the 12-item KPI list), an unused `total_coils` aggregate inside `dimension_rows()`'s risk scoring (only `total_qty` is actually used), and an unused exception-binding (`except Exception as e`) in the public `/api/connection_status` handler, where the exception was already intentionally never surfaced to the caller.
+- **Dead local variable (`reports.py`):** an unused `light` color constant in `_excel_report()`, and an unused `n=len(headers)` in `style_table()`'s PPTX helper.
+- **Dead local variables (`app.js`):** an unused loop index in the filter-dropdown's `renderOptions()`; three unused strings (`directionText`, `targetText`, `prevText`) computed in the KPI card renderer but never inserted into the card markup (`kpiTargetMarkup()` already renders the equivalent target info); an unused `catch(e)` binding in `loadRootCause()`'s fallback; and an unused `loadToken` local in `loadControlRoom()` (the `++window.qcrLoadToken` increment itself is kept — only the unused local binding was removed).
+- **Two redundant f-string prefixes in `server.py`** on two `SELECT DISTINCT` queries that had no `{}` interpolation.
+- One float() parse of the (currently unused) `critical` threshold in `_kpi_target_status()` was kept, not removed — it silently validates that `critical` is present and numeric before returning a status; deleting it would have changed behavior (a missing/invalid `critical` config would then be silently un-validated).
+
+### Verified
+- Fresh `pyflakes` pass on `server.py` and `reports.py`: 0 warnings (previously 31 combined).
+- Fresh `eslint --no-unused-vars` pass on `app.js`: 0 warnings for genuinely-dead locals (2 remaining warnings are unused *parameters* of a shared rendering function, `qcrRenderTrendPrediction(rows, d, w)`, left as-is rather than changing a function signature for a cosmetic-only pass).
+- `python -m py_compile` on every changed `.py` file, `node --check app.js` — both clean.
+- Full regression pass: all 6 `regression.py` suites, `smoke_test.py`, `http_smoke.py` (47 endpoints), `export_acceptance.py`, `export_stress.py` (Excel/PDF/PPTX), `code_health.py`, `admin_ux_audit.py` — all pass, identical results to the pre-cleanup baseline (same 4936-record count, same 47 endpoints, same export byte sizes to within a few bytes of normal run-to-run timestamp variance).
+- No API, database, schema, data, or visual/behavioral change — this is a pure dead-code removal pass. Line counts: `server.py` 6164→6152, `reports.py` 912→911, `app.js` 3205→3202.
+- The 24 orphaned CSS classes and 161 duplicate-selector groups `code_health.py` reports in `app.css` were **not** touched in this pass — they were already reviewed in an earlier audit and are compound/shared selectors where a dead class rides along with a live one; removing them needs a careful per-rule check, not a bulk pass, to avoid breaking live styling.
+
 ## V65.0 — Follow-up: export chart reliability
 
 ### Fixed

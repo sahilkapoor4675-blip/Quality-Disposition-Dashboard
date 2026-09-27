@@ -95,7 +95,7 @@ class _QualityHTTPServer(ThreadingHTTPServer):
 from urllib.parse import urlparse, parse_qs
 
 from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report, _stream_csv
-from logging_setup import configure_logging, get_logger, tail_log_file
+from logging_setup import configure_logging, tail_log_file
 from session_store import (
     db_session_upsert, db_session_fetch, db_session_delete, db_sessions_delete_by_user,
     db_cleanup_expired_sessions, db_login_check, db_login_record_failure, db_login_clear,
@@ -165,33 +165,22 @@ ADMIN_BUILD_VERSION = APP_VERSION
 
 try:
     from openpyxl import Workbook
-    from openpyxl.drawing.image import Image as XLImage
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 except ImportError:
     Workbook = None
 try:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from matplotlib.patches import FancyBboxPatch
 except Exception:
     plt = None
 
 try:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image as RLImage
+    from reportlab.platypus import SimpleDocTemplate
 except ImportError:
     SimpleDocTemplate = None
 
 try:
     from pptx import Presentation
-    from pptx.util import Inches, Pt
-    from pptx.dml.color import RGBColor
-    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-    from pptx.enum.shapes import MSO_SHAPE
 except ImportError:
     Presentation = None
 
@@ -583,7 +572,7 @@ def _kpi_target_status(label,value):
     cfg=get_kpi_targets().get(label)
     if not cfg or cfg.get("target") is None: return None
     try:
-        v=float(value); t=float(cfg.get("target")); w=float(cfg.get("warning")); c=float(cfg.get("critical"))
+        v=float(value); t=float(cfg.get("target")); w=float(cfg.get("warning")); float(cfg.get("critical"))  # critical must be a parseable number too, even though it's not read below
     except Exception: return None
     d=(cfg.get("direction") or "higher").lower()
     if d=="lower":
@@ -862,7 +851,6 @@ def compute_kpis(filters, _skip_prev=False):
     rework_qty = decision_qty["RE-WORK"]
 
     first_pass_yield = (prime_qty / output_qty) if output_qty else 0.0
-    ppm_defective = (defect_coils / total_coils * 1_000_000) if total_coils else 0.0
     defect_rate = (defect_coils / total_coils) if total_coils else 0.0
     reject_pct_qty = (reject_qty / output_qty) if output_qty else 0.0
     salvage_divert_qty = salvage_qty + divert_qty
@@ -1156,12 +1144,12 @@ def compute_work_center_grade(filters):
     cur = conn.cursor()
 
     wc_where, wc_params = build_where(filters, exclude={"work_center"})
-    cur.execute(f"SELECT DISTINCT work_center FROM disposition WHERE work_center <> '' ORDER BY 1")
+    cur.execute("SELECT DISTINCT work_center FROM disposition WHERE work_center <> '' ORDER BY 1")
     work_centers = [r[0] for r in cur.fetchall()]
     wc_rows = [_group_metrics(cur, wc_where, wc_params, "work_center", wc) for wc in work_centers]
 
     gr_where, gr_params = build_where(filters, exclude={"grade"})
-    cur.execute(f"SELECT DISTINCT grade FROM disposition WHERE grade <> '' ORDER BY 1")
+    cur.execute("SELECT DISTINCT grade FROM disposition WHERE grade <> '' ORDER BY 1")
     grades = [r[0] for r in cur.fetchall()]
     gr_rows = [_group_metrics(cur, gr_where, gr_params, "grade", g) for g in grades]
 
@@ -3804,7 +3792,7 @@ def _compute_qcr_intelligence(conn, filters, monthly, defects, wcg, kpis=None):
             hist={n:[] for n in names}
             for r in c.fetchall():
                 q=num(r[3]);rq=num(r[4]);hist.setdefault(r[0],[]).append({"month":r[1],"coils":int(r[2] or 0),"qty":q,"reject":rq/q if q else 0})
-            total_qty=sum(num(r[2]) for r in base); total_coils=sum(int(r[1] or 0) for r in base)
+            total_qty=sum(num(r[2]) for r in base)
             out=[]
             for r in base:
                 name=r[0] or "—";coils=int(r[1] or 0);qty=num(r[2]);rej=num(r[3]);rp=rej/qty if qty else 0
@@ -4730,7 +4718,7 @@ class Handler(BaseHTTPRequestHandler):
                     "latency_ms": latency_ms,
                     "checked_at": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
                 })
-            except Exception as e:
+            except Exception:
                 # This endpoint is intentionally public (the Admin login shell
                 # uses it before authentication). Never send raw database/driver
                 # exception text to an unauthenticated browser; _send_json also
