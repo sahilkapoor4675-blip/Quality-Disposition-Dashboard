@@ -606,7 +606,7 @@ function renderKpis(kpis){
       let deltaInner=''; let deltaKind=null, deltaRaw=null; const absUnit=k.fmt==='int'?'coils':(k.fmt==='num2'?'MT':'');
       if(k.change_value_pp!==null && k.change_value_pp!==undefined){
         deltaKind='pp'; deltaRaw=Number(k.change_value_pp); const ppVal=deltaRaw*100;
-        deltaInner=` (<span class="kpi-delta-val">${ppVal>=0?'+':''}${ppVal.toFixed(2)} pp</span>)`;
+        deltaInner=` (<span class="kpi-delta-val">${ppVal>=0?'+':''}${ppVal.toFixed(3)} pp</span>)`;
       } else if(k.change_value_abs!==null && k.change_value_abs!==undefined){
         deltaKind='abs'; deltaRaw=Number(k.change_value_abs);
         deltaInner=` (<span class="kpi-delta-val">${deltaRaw>=0?'+':''}${fmtValue(deltaRaw,k.fmt)}${absUnit?' '+absUnit:''}</span>)`;
@@ -653,7 +653,7 @@ function renderKpis(kpis){
           const sameKind=oldTrend&&oldTrend.deltaKind===trendMeta.deltaKind;
           const fromDelta=sameKind?oldTrend.deltaRaw:(isFirstPaint?0:trendMeta.deltaRaw);
           if(fromDelta!==trendMeta.deltaRaw){
-            if(trendMeta.deltaKind==='pp') animateNumericSpan(deltaEl,fromDelta,trendMeta.deltaRaw,v=>`${(v*100)>=0?'+':''}${(v*100).toFixed(2)} pp`,token);
+            if(trendMeta.deltaKind==='pp') animateNumericSpan(deltaEl,fromDelta,trendMeta.deltaRaw,v=>`${(v*100)>=0?'+':''}${(v*100).toFixed(3)} pp`,token);
             else animateNumericSpan(deltaEl,fromDelta,trendMeta.deltaRaw,v=>`${v>=0?'+':''}${fmtValue(v,trendMeta.fmt)}${trendMeta.absUnit?' '+trendMeta.absUnit:''}`,token);
           }
         }
@@ -2246,7 +2246,7 @@ function qcrStatus(label, value){
   if(d==='lower') return v<=t?'good':v<=w?'amber':'bad';
   return v>=t?'good':v>=w?'amber':'bad';
 }
-function qcrFmtKpi(k){ return k.fmt==='pct' ? (Number(k.value||0)*100).toFixed(2)+'%' : k.fmt==='int' ? Math.round(Number(k.value||0)).toLocaleString() : Number(k.value||0).toFixed(2); }
+function qcrFmtKpi(k){ return k.fmt==='pct' ? (Number(k.value||0)*100).toFixed(3)+'%' : k.fmt==='int' ? Math.round(Number(k.value||0)).toLocaleString() : Number(k.value||0).toFixed(3); }
 function qcrTargetText(label){ const c=KPI_TARGETS[label]; if(!c)return 'Target not set'; return `${c.direction==='lower'?'≤':'≥'} ${fmtTarget(c.target,'pct')}`; }
 // Top Contributors: Defects / Work Centers / Grades in one tabbed card.
 // Replaces the old separate Top 5 Defects, Worst Work Centers, Worst Grades,
@@ -2884,7 +2884,7 @@ async function loadControlRoom(signal){
       const changed=Number.isFinite(old)&&Math.abs(old-cur)>1e-12;
       const card=document.createElement('div'); card.className='qcr-kpi';
       const cfg=KPI_TARGETS[x.label];
-      const targetLine=(cfg&&cfg.target!=null)?`<div class="qcr-kpi-target">Target ${qcrTargetText(x.label)} • Gap ${((cur-Number(cfg.target))*100)>=0?'+':''}${((cur-Number(cfg.target))*100).toFixed(2)} pp</div>`:'';
+      const targetLine=(cfg&&cfg.target!=null)?`<div class="qcr-kpi-target">Target ${qcrTargetText(x.label)} • Gap ${((cur-Number(cfg.target))*100)>=0?'+':''}${((cur-Number(cfg.target))*100).toFixed(3)} pp</div>`:'';
       card.innerHTML=`<div class="qcr-kpi-name">${KPI_ICONS[x.label]||'📊'} ${escQcr(x.label)}</div><div class="qcr-kpi-value ${st}">${qcrFmtKpi(x)}</div>${targetLine}<span class="qcr-status ${st}">${st==='good'?'ON TARGET':st==='amber'?'WATCH':st==='bad'?'CRITICAL':'REFERENCE'}</span>`;
       qcrGrid.appendChild(card); nextQcrValues.set(x.label,cur);
       if(changed&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){

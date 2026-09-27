@@ -1,3 +1,19 @@
+## V65.0 — Follow-up: 3-decimal precision for KPI pp-change and QCR Critical KPIs (no version bump — same version)
+
+### Changed
+- **KPI card percentage-point (pp) change now shows 3 decimals instead of 2** — e.g. `+0.087 pp` instead of `+0.09 pp` — in both the static render and the count-up animation (`renderKpis()`'s delta markup and its `animateNumericSpan` formatter in `app.js`).
+- **Quality Control Room → Critical KPIs grid values now show 3 decimals** (`qcrFmtKpi()`), matching the 3-decimal precision the main Dashboard's KPI headline values already use (`fmtValue()`). Applies to all six Critical KPI cards (First Pass Yield %, Defect Rate, Reject % Qty, Hold for Decision % Qty, Salvage % Qty, Rework % Qty).
+- **The "Gap … pp" line inside each Critical KPI card** (distance from its configured target) now also shows 3 decimals, for consistency with the pp precision change above.
+
+### Unchanged
+- No application-version bump: this remains **V65.0**.
+- Other pp/percentage displays elsewhere in the Quality Control Room — the "Why Changed" FPY/Reject pp figures, the Target History table's Gap column, and Compare Mode's period-over-period delta — were **not** touched in this pass and still show 2 decimals; only the KPI cards' pp change and the Critical KPIs grid (value + its own Gap line) were requested.
+- No data, API, schema, or layout changes — display formatting only.
+
+### Verified
+- `node --check app.js` and `eslint --no-unused-vars` — clean.
+- Full regression pass: all 6 `regression.py` suites, `smoke_test.py`, `http_smoke.py` (47 endpoints), `admin_ux_audit.py`, `code_health.py` — all pass.
+
 ## V65.0 — Follow-up: dead-code cleanup in server.py, reports.py, app.js (no version bump — same version)
 
 ### Removed
