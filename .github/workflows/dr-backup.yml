@@ -19,10 +19,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install PostgreSQL client tools
+      - name: Install PostgreSQL client tools (v17, matches Supabase)
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
 
       - name: Install Python dependencies
         run: pip install boto3
@@ -36,6 +42,7 @@ jobs:
           DR_S3_REGION: ${{ secrets.DR_S3_REGION }}
           DR_S3_ENDPOINT_URL: ${{ secrets.DR_S3_ENDPOINT_URL }}
         run: |
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
           TS=$(date -u +%Y%m%d_%H%M%S)
           python3 dr_pg_backup.py dump \
             --output "postgres-${TS}.dump" \
