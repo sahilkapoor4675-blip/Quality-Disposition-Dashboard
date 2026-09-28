@@ -47,11 +47,15 @@
   // pre-baked audio file, so every cue is scheduled against the exact
   // millisecond its matching letter/element appears, instead of hoping a
   // separate audio track happens to line up with the animation. ----
+  // Sound preference is shared with the dashboard's sound toggle (sfx.js). If the user
+  // switched sound off, the intro must stay silent and never create an AudioContext.
+  var soundPref=true; try{ var _sp=localStorage.getItem('jsl_qi_sfx_enabled'); soundPref=(_sp===null||_sp==='1'); }catch(e){}
   var AC=window.AudioContext||window.webkitAudioContext;
-  var ctx=AC?new AC():null;
-  function resumeAudio(){ if(ctx&&ctx.state==='suspended'){ ctx.resume().then(startPad)['catch'](function(){}); } else if(ctx&&ctx.state==='running'){ startPad(); } }
-  ['pointerdown','keydown','touchstart'].forEach(function(ev){ window.addEventListener(ev,resumeAudio,{once:true,passive:true}); });
-  resumeAudio();
+  var ctx=(AC&&soundPref&&!reduceMotion)?new AC():null;
+  // Timeline queue: every at(ms,fn) below is held until startTimeline() runs, so the
+  // visuals and the sound always begin together (see the sound-gate section at the end).
+  var started=false, queue=[];
+  function startTimeline(){ if(started) return; started=true; queue.forEach(function(q){ setTimeout(q[1],q[0]); }); queue=[]; }
   function tone(time,freq,dur,type,peak,glideTo){
     // Only actually schedule a sound while the context is genuinely
     // running. If it's still "suspended" (no user gesture yet — the normal
@@ -159,7 +163,7 @@
   // out of step with each other.
   function now(){ return ctx? ctx.currentTime : 0; }
   function show(el){ if(el) el.classList.add('show'); }
-  function at(ms,fn){ setTimeout(fn, reduceMotion? Math.min(ms,50) : ms); }
+  function at(ms,fn){ var d=reduceMotion? Math.min(ms,50) : ms; if(started) setTimeout(fn,d); else queue.push([d,fn]); }
 
   var STEP = reduceMotion? 3 : 42;   // ms per letter, NON-FERROUS
   var TSTEP = reduceMotion? 3 : 36;  // ms per letter, QUALITY INTELLIGENCE
@@ -216,6 +220,41 @@
     chime(now(),[659,880],.5);
     try{ btn.focus({preventScroll:true}); }catch(e){}
   });
+
+  // ---- Sound gate. Browsers keep an AudioContext "suspended" until the user clicks or
+  // presses a key, and Chrome only sometimes waives that (site-engagement based). The old
+  // code played the visuals regardless and silently skipped every cue while suspended, so
+  // sound was randomly missing, or started midway and lagged behind the animation. Now
+  // the sequence begins only once audio can really play: immediately if the browser
+  // allows it, otherwise on the first click / key press (a small prompt says so). If
+  // nobody interacts, it starts silently after GATE_FALLBACK_MS so the dashboard can
+  // never get stuck behind the intro. ----
+  var GATE_FALLBACK_MS=8000;
+  if(!ctx){ startTimeline(); }
+  else if(ctx.state==='running'){ startTimeline(); }
+  else{
+    var gate=document.createElement('button');
+    gate.type='button'; gate.className='intro-sound-gate';
+    gate.textContent='\uD83D\uDD0A Click anywhere or press any key to start with sound';
+    screen.appendChild(gate);
+    var evs=['pointerdown','keydown','touchend','click'], fallbackTimer=null;
+    function hideGate(){ gate.classList.add('gone'); setTimeout(function(){ if(gate.parentNode) gate.parentNode.removeChild(gate); },350); }
+    function detach(){ evs.forEach(function(ev){ window.removeEventListener(ev,unlock,true); }); }
+    function unlock(){
+      // resume() rejects for non-activating keys (Shift, Esc...) — then we just keep waiting.
+      var p; try{ p=ctx.resume(); }catch(e){ return; }
+      if(!p||!p.then) return;
+      p.then(function(){
+        if(ctx.state!=='running') return;
+        detach(); if(fallbackTimer) clearTimeout(fallbackTimer);
+        hideGate(); startTimeline();
+      },function(){});
+    }
+    evs.forEach(function(ev){ window.addEventListener(ev,unlock,{capture:true,passive:true}); });
+    // Also covers Chrome auto-resuming the context by itself (e.g. autoplay permission granted).
+    ctx.onstatechange=function(){ if(ctx.state==='running'&&!started){ detach(); if(fallbackTimer) clearTimeout(fallbackTimer); hideGate(); startTimeline(); } };
+    fallbackTimer=setTimeout(function(){ hideGate(); startTimeline(); },GATE_FALLBACK_MS);
+  }
 
   function leave(){
     if(screen.getAttribute('data-leaving')) return;
