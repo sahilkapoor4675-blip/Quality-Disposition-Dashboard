@@ -1,4 +1,16 @@
 
+
+## V66.1 — Repository restructure, no runtime change (2026-09-28)
+
+**Changed (layout only — `server.py`, `app.js`, `app.css`, `admin.html`, `index.html` untouched, version stays V66.1)**
+- Repo root now holds only runtime files. The 9 test/audit scripts became 5 files in `tests/` (`test_units.py` = alerts + disaster-recovery, `test_smoke.py` = server + HTTP smoke, `test_exports.py` = acceptance + `--stress`, `static_checks.py` = code health + admin UX audit, `regression.py`), plus `tests/run_gate.py`, which runs the whole release gate with one command and prints a PASS/FAIL table.
+- 6 Markdown files merged into 3 under `docs/`: `DEPLOY.md` (Supabase/Render setup + platform continuity), `DISASTER_RECOVERY.md` (runbook + recovery-point notes + architecture), `SECURITY.md`. `RELEASE_GATE.md` folded into the README; `CHANGELOG_ARCHIVE.md` moved to `docs/`.
+- README rewritten for the current build only (old "What changed in V65/V66" sections already live in `CHANGELOG.md`).
+- `dependency-audit.yml` moved back to `.github/workflows/` (at the repo root GitHub never ran it).
+- Removed `.dockerignore` (there is no Dockerfile in the repo); docs no longer claim a Dockerfile exists — `Procfile` is the portable start command.
+
+**Verified**: full gate before and after the move — same checks, same results (14 unit tests = 9 + 5, 47 HTTP routes, 6 regression suites, export acceptance + stress).
+
 ## V66.1 — Header time, admin toasts + progress, palette categories (2026-09-28)
 
 - Header "Last Updated" now shows hours and minutes ("2 hr 15 min ago").

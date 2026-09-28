@@ -1,197 +1,12 @@
-## What changed in V66.1 (follow-up: header time, admin toasts + progress, palette categories)
-- **Header "Last Updated"** now includes minutes once it passes an hour ("2 hr 15 min ago"); exact hours still read "2 hr ago". The exact date/time stays in the hover tooltip.
-- **Admin toast notifications**: the admin console now uses the same toasts as the dashboard (top-right, success / error / info, light and dark theme). Result messages and the old browser `alert()` pop-ups all show as toasts; errors also stay inline next to the form, and the temporary-password message stays visible longer.
-- **Admin progress bars** (live % and "~Ns left"): import validate and confirm, 6M Fishbone import, backup create / restore / verify / download, Export CSV, audit export, bulk delete and "Refresh Loaded Admin Data". File uploads use real upload progress; downloads use real bytes received.
-- **Presentation-mode button** sits at the far right end of each analytics panel title instead of overlapping the title text.
-- **Command palette (header "Commands", Ctrl/⌘+K)** groups commands into Navigation, Filters & Compare, Appearance, Preferences and Admin, with a count per category. Hovering an entry shows the cursor field-name tag (command name, category and a short description).
-- **Service worker**: shell cache name bumped to `qdash-shell-v2` so installed copies pick up the new `app.js` / `app.css`.
-
-## What changed in V66.1 (full audit pass)
-- **Faster first load**: `index.html` shrank from 1.4 MB to ~90 KB by moving two inline base64 intro photos into cacheable `intro-photo-*.webp` files; logo/favicon PNGs were also re-encoded (~300 KB saved in total).
-- **Service worker**: no longer caches report downloads; API cache is bounded.
-- **Security/CI**: `cryptography` pin updated to a patched release; the dependency vulnerability scan now lives in `.github/workflows/` where GitHub actually runs it.
-- **Tests/docs**: unified regression suite passes again; `RELEASE_GATE.md` now lists only scripts that exist.
-
-## What changed in V66.1 (follow-up: offline support, CSS cleanup, off-site backup encryption)
-- **Offline support for the public dashboard**: a service worker (`sw.js`) caches the app shell and last-loaded dashboard data, so the page keeps working (showing an "offline" banner) if the network drops. Scoped to `index.html` only — `admin.html` never registers it, so no admin/audit data is cached on disk.
-- **Orphaned CSS cleanup**: removed all 24 classes `code_health.py` flagged as unreferenced (previously deferred). The lint check now reports 0.
-- **Off-site backup encryption (optional)**: setting `DR_ENCRYPTION_KEY` makes `dr_pg_backup.py` encrypt the PostgreSQL dump before it leaves the runner, so the off-site bucket only ever stores ciphertext. Not required — with no key set, uploads work exactly as before. See `PLATFORM_CONTINUITY_SETUP.md` Step 2B for setup and `dr_pg_backup.py decrypt` for restores.
-
-## V66.1 Disaster Recovery / Future-Safe Deployment
-
-The production database is PostgreSQL and is the single source of truth for live data. The bundled `quality.db` is bootstrap/seed data only. V66.1 adds a provider-independent recovery architecture: application recovery points for every persistent revision, PostgreSQL-native dumps from an independent runner, off-site private storage, integrity verification, restore validation, and a tested provider-switch procedure.
-
-Read **`DISASTER_RECOVERY_ARCHITECTURE.md`** before production deployment and use **`DR_RUNBOOK.md`** for restores. For sensitive data, do not enable remote DR until the private storage bucket, credentials, retention, encryption and recovery drill have been tested.
-
-V66.1 also fixes PostgreSQL ID sequence resynchronisation after application-level restores, preventing a subsequent insert from reusing a restored `BIGSERIAL`/identity value.
-
-## What changed in V65.0 (follow-up: performance-linked UX — rAF-throttled chart resize redraws, fixed KPI-tilt jitter)
-- **Chart redraws on resize are now throttled through `requestAnimationFrame`**, with every chart's width measured before any of them redraw (instead of measure-redraw-measure-redraw per chart), which is what was causing multiple charts to visibly flicker together on a window resize or sidebar toggle. Each redrawn chart now fades out/in smoothly instead of popping instantly. **Fixed a genuine jitter bug**: the KPI card hover-tilt effect was forcing a layout read on every single mousemove — now it measures once per hover and throttles updates to one per animation frame. Frontend-only (`app.js`); no API, schema, or data change.
-
-## V66.0 Disaster Recovery / Future-Safe Deployment
-
-V66 treats **PostgreSQL as the live source of truth**. `quality.db` remains a first-run seed for local/initial bootstrap; its original 4,936 rows are not the production backup. Every subsequent live revision is tracked with a durable `data_revision` and captured in V5 recovery points.
-
-### What a V5 recovery point contains
-- All persistent application tables currently present in the database, discovered from the live schema.
-- Full current rows for disposition data, users, audit/activity/import history, KPI targets/history, Fishbone/RCA/style/alias configuration and `app_state` business state.
-- Schema/column manifest and schema fingerprint to prevent restoring into an incompatible database shape.
-- Application version, Git/deployment commit when provided, Python version, dependency-file hash and hashes of critical application/deployment files.
-- SHA-256 integrity checksum over the entire recovery payload.
-
-Runtime session tokens and login-throttle state are intentionally excluded and are recreated after restore. Passwords are never stored in plaintext; password hashes are part of the persistent user state.
-
-### Recovery-point lifecycle
-1. High-risk mutations take a **pre-change safety snapshot**.
-2. Successful persistent mutations create a **post-change current-state recovery point**.
-3. A background scheduler checks for any `data_revision` newer than the latest recovery point and creates a recovery point within `BACKUP_CHECK_SECONDS` (default 60s). It also creates an hourly periodic point by default.
-4. If an S3-compatible bucket is configured, each local point is uploaded and HEAD-verified for both byte length and the stored SHA-256 metadata before a mutation is considered safely replicated.
-
-This means an import that grows the dataset from 4,936 to 5,500 to 10,000 rows is backed up at those current live states; the backup process never reverts to the bundled seed database.
-
-### Off-site backup configuration
-Set these as platform secrets/environment variables: `DR_REMOTE_ENABLED=true`, `DR_S3_BUCKET`, `DR_S3_ACCESS_KEY_ID`, `DR_S3_SECRET_ACCESS_KEY`, and optionally `DR_S3_ENDPOINT_URL`/`DR_S3_REGION` for S3-compatible providers. Keep the bucket private. Enable versioning/immutability and a lifecycle policy at the storage provider. Do not put recovery files or credentials in Git.
-
-`DR_REMOTE_REQUIRED_FOR_MUTATIONS=true` is intentionally conservative: once remote DR is enabled, an admin mutation is blocked if the pre-change safety snapshot cannot be verified remotely. Set it to `false` only if the operational policy explicitly accepts local-only safety.
-
-### Restore procedure
-**UI:** Admin → Backups → Restore from a verified `.json.gz` recovery point. The app first creates a pre-restore safety point, validates checksum/schema, restores transactionally, clears active sessions, and creates a post-restore recovery point.
-
-**CLI:**
-```bash
-python3 dr_recovery.py verify backups/backup_YYYYMMDD_HHMMSS_reason_UUID.json.gz
-DATABASE_URL='...' python3 dr_recovery.py restore --yes backups/backup_YYYYMMDD_HHMMSS_reason_UUID.json.gz
-```
-Run CLI restore with application writes frozen/offline. A restore is destructive by design; the pre-restore safety backup is the rollback point if the operation itself fails.
-
-### Provider migration
-The app is intentionally portable: deploy the same source/dependency release (or the included `Dockerfile`) to a new host, point `DATABASE_URL` to a new PostgreSQL instance, restore the latest verified recovery point, configure the environment variables, then switch the independent DNS record. Recovery manifests record the exact Python version and versions of packages declared by `requirements.txt`; use that manifest when rebuilding the runtime. Keep the application source in a secondary Git mirror as well as the primary Git provider.
-
-### Backup policy recommendation
-Keep multiple independent recovery horizons: recent hourly points, daily points, weekly archives, and an immutable/off-site monthly archive. The exact retention is controlled locally by `BACKUP_KEEP`; remote retention should be enforced by the storage provider lifecycle/versioning policy.
-
-> **Important:** a local backup file beside the application is not a disaster-recovery copy. True DR requires an independent storage location that remains accessible after the application host is unavailable.
-
-
-## What changed in V65.0 (follow-up: professionalism pass — spacing scale, typography hierarchy, top-of-page loading bar)
-- **Consistent 4px spacing scale** — cards, panels, the filter bar, and the export dialog now snap to shared `--sp-*` tokens instead of one-off values like 13px/17px/18px. **Typography hierarchy strengthened** — fixed KPI cards where the small label was actually heavier than the value above it; labels now recede (lighter, wider-tracked), values lead (heavier, tighter-tracked). **New thin top-of-page loading bar** (YouTube-style) fills in during any filter change, tab switch, or initial load, and auto-covers every data loader via a `fetch()` wrapper — no per-call wiring needed. **Toast notifications were reviewed against the ask** (top-right, slide-in, auto-dismiss) — they already worked this way; only padding was retouched. Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
-
-## What changed in V65.0 (follow-up: visual polish — shadow elevation, shimmering text-only loaders, friendlier empty/error/success states, dark-mode copper contrast audit)
-- **Consistent shadow elevation** — toast, popovers, and the whole QCR card family now share the same `card < card-hover < sticky < overlay < menu < modal` token scale instead of a dozen near-duplicate one-off shadows. **Text-only "Loading…" spots now shimmer** like the rest of the app's skeletons. **Empty/error/success states** now share one icon+colour layout instead of plain text, so a failure, a neutral "nothing here," and a genuinely good "no problem found" all look distinct. **Dark-mode accent contrast was checked against WCAG AA** (accent 6.53:1, amber 10.28:1 — both pass); the real "washed out" spot was the decorative header copper-coil art, now brighter/richer in dark mode. Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
-
-## What changed in V65.0 (follow-up: micro-interactions — spring KPI count-up, tab fade-in, button ripple, staggered chart grow-in)
-- **KPI numbers now count up with a spring/overshoot easing** instead of a flat deceleration. **Switching tabs fades + slides the new panel in.** **Every button ripples on click and lifts on hover.** **Chart bars and donut slices grow in with a per-item stagger** instead of all at once. All respects reduced-motion. Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
-
-## What changed in V65.0 (follow-up: export progress bar polish — fast counting %, live ETA, rounder toast)
-- **Percentage now counts up quickly one step at a time**, plus a real-time "~Ns left" estimate next to it that keeps re-estimating itself as the download progresses. **Toast corners are rounder** (10px → 16px) with a circular close button, and the progress bar is a full pill with a subtle moving shimmer (off under reduced-motion). Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
-
-## What changed in V65.0 (follow-up: live progress bar on the export toast)
-- **The export toast now shows a live progress bar and percentage** instead of a static "please wait" message. It eases forward while the server assembles the report, then tracks real download bytes once the file starts arriving, reaching 100% right as the download starts. Frontend-only (`app.js` + `app.css`); no API, schema, or data change.
-
-## What changed in V65.0 (follow-up: 3-decimal precision for KPI pp-change and QCR Critical KPIs)
-- **KPI card pp-change and the QCR Critical KPIs grid (value + target-gap) now show 3 decimal places** instead of 2, matching the precision the main Dashboard KPI headline values already use. Display-only; no data or API change.
-
-## What changed in V65.0 (follow-up: dead-code cleanup)
-- **Removed unused imports and dead local variables** from `server.py`, `reports.py`, and `app.js` — no behavior, API, or visual change. See `CHANGELOG.md` for the full itemized list.
-- **Verified with the full release-gate suite** (all 6 `regression.py` suites, `smoke_test.py`, `http_smoke.py`, `export_acceptance.py`, `export_stress.py`, `code_health.py`, `admin_ux_audit.py`) plus fresh `pyflakes`/`eslint`/`py_compile`/`node --check` passes — all clean, identical results to before the cleanup.
-
-## What changed in V65.0 (follow-up: export chart reliability)
-- **Decision Distribution export supports all seven disposition categories.** The pie chart now cycles the available palette to the exact number of nonzero slices, so exports remain valid when all seven decision types have quantity.
-- **Per-chart export isolation.** Individual chart rendering failures are logged and skipped instead of aborting the complete Excel/PDF/PowerPoint export.
-
-## What changed in V65.0 (follow-up: backend consistency and cleanup)
-- **"WITHOUT INTENSITY" now treats both blank values and legacy `NONE` values as missing intensity** in the KPI aggregation and drilldown path, matching the existing filter behavior.
-- **Expired admin sessions release `SESSION_LOCK` before the shared-database delete**, preventing a slow database call from blocking other session-authenticated requests.
-- **Fishbone style refresh cleanup** removes an unreachable update branch after the style table has already been reset for a full import.
-- **PostgreSQL seed import cursor is closed explicitly** after the batch insert.
-
-# Quality Disposition Control Dashboard — V66.0
+# Quality Disposition Control Dashboard
 
 Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division. Pure Python
 (`http.server`) backend, PostgreSQL in production, SQLite for local/offline use. No Flask and no
 frontend CDN or build step.
 
-The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
-header). `CHANGELOG.md` is the version history (V65 onward; older entries are in `CHANGELOG_ARCHIVE.md`); this README always describes the current build only.
-
-## What changed in V65.0 (follow-up: animated header accent lines)
-- **Animated header accent lines.** The top and bottom header strips now slide continuously using 200%-width gradient layers and `transform: translate3d()`, with opposite directions and 8s / 12s cycles.
-- **Dark-theme tuning.** Dark mode uses brighter blue/cyan/copper/steel tones so the moving accents remain visible against the graphite header.
-- **Reduced-motion and print safety.** Both accent animations stop under `prefers-reduced-motion: reduce` and print.
-- No data, API, schema, or layout logic changes are introduced by this frontend-only update.
-
-
-## What changed in V65.0 (follow-up: frontend sorting, QCR KPI animation, drilldown safety, filter refresh feedback)
-- **Table sorting handles signed numeric and unit-suffixed values correctly.** Sorting now normalises signed numbers, percentages, and common `pp` / `pts` / `MT` / `coils` suffixes before comparison, so trend/change columns sort by their numeric value instead of their displayed string.
-- **Quality Control Room KPI count-up animation fixed.** The shared KPI animation helper now accepts both the Dashboard and QCR animation cancellation tokens, restoring QCR numeric count-up on refreshes.
-- **Drilldown rendering hardened against missing optional elements.** Title, subtitle, count, scope, and export element access is guarded so partial markup or future UI refactors do not crash the entire drilldown render.
-- **Filter refresh feedback fixed.** The filter bar's `filter-pulse` animation is explicitly retriggered on every filter change by removing the class, forcing a reflow, and re-adding it.
-- **Reduced-motion support preserved.** The new filter pulse is disabled under `prefers-reduced-motion: reduce`; no database, API, schema, or data changes were made.
-
-## What changed in V65.0 (follow-up: SQLite WAL mode for concurrency/lag, sticky-filter scroll-jank fix)
-- **Enabled SQLite WAL mode** so readers no longer block behind a writer (and vice versa) the way the old default journal mode did. Benchmarked under a workload shaped like this app's real traffic (concurrent readers + a batch writer): writer stall time dropped from 4.67s to 0.45s — about 10x. Pure concurrency/perf change; no schema or data change, fully reversible, and confirmed not to affect the existing backup/restore mechanism.
-- **Fixed the sticky filter bar's scroll jank.** Its glass-blur effect (`backdrop-filter`) has to be recomputed every scroll frame while it stays pinned at the top — added a standard `will-change` compositing hint (no visual change) and now drop the blur entirely for anyone with OS-level reduced-motion enabled. Checked the rest of the UI for likely jank sources too: animations already respect `prefers-reduced-motion`, scroll/resize handlers were already debounced/`requestAnimationFrame`-throttled, and network responses are already gzip-compressed with long-lived immutable caching on static assets.
-- Full regression pass — all suites pass; see `CHANGELOG.md` for the complete write-up.
-
-## What changed in V65.0 (follow-up: structured logging, multi-instance session/login sync, streaming CSV export, dead-CSS cleanup, dependency-vulnerability CI)
-- **Structured, rotating logging.** Every `print()` in `server.py` now goes through `logging` (see `logging_setup.py`): unchanged console output, plus a JSON-lines rotating file (`<persistent dir>/logs/app.log`) so operational history survives a redeploy. New admin endpoint `GET /api/admin/system_log` tails it in-app.
-- **Admin visibility into rate limiting.** New `GET /api/admin/rate_limit_status` (and a matching panel in Admin → Security) shows who's tracked/throttled by the general per-IP request limiter and the login brute-force lockout, including currently locked-out IPs.
-- **Sessions and login-attempt tracking now sync across instances when running on Postgres** (`session_store.py`). SQLite deployments (single process by construction) are completely unaffected; on Postgres, a login on one instance is now recognized by another, and brute-force lockout counts attempts across every instance rather than just the one that saw them.
-- **`/api/export/csv` streams instead of loading the whole export into memory.** Rows are pulled and sent in batches instead of one `fetchall()` + one big in-memory CSV string + one more encoded copy — the shape of the file is unchanged, but an export of the largest imports this app is designed to hold no longer risks a large memory spike.
-- **Removed 110 confirmed-dead CSS rules (~11 KB)** — an entire legacy "Quality Intelligence" styling section the current UI no longer uses — after teaching `code_health.py`'s orphan detector to stop flagging classes that `app.js` builds dynamically at runtime (which would otherwise have been false positives for anyone acting on its report).
-- **Added CI dependency-vulnerability scanning** (`.github/workflows/dependency-audit.yml`, `pip-audit` on every change/PR/weekly). Ran it locally against the current pins: no known vulnerabilities found.
-- **Fixed a locking bug the streaming CSV change would otherwise have introduced** (and a related pre-existing robustness gap): an open export cursor briefly overlapped with an unrelated activity-log write on SQLite, and that write's error handler leaked its connection on failure instead of closing it — caught by the full regression suite before shipping, fixed on both sides.
-- Full regression pass (all `regression.py` suites, smoke test, export acceptance/stress, HTTP smoke across 47 endpoints, admin UX audit, code health) plus a fresh Python compile check — all pass. See `CHANGELOG.md` for the complete write-up.
-
-## What changed in V65.0 (follow-up audit: session-lock race fixed, no version bump)
-- **Fixed:** the admin `/api/logout` endpoint removed a session from the shared, in-memory session store without taking the `SESSION_LOCK` that every other session read/write in `server.py` uses (login, viewer logout, revoke-session, change-password, user-toggle, and the periodic session-cleanup sweep all take it, since the server runs one thread per request). Under concurrent admin traffic this could occasionally race with one of those locked operations and surface as an unrelated request failing with a dictionary-mutation error. The pop is now taken under the same lock as everywhere else; the logout response and cookies are unchanged.
-- **Verified:** every release-gate script (smoke test, all regression suites including security/session hardening, HTTP smoke across 47 endpoints, admin UX audit) plus a Python compile check and a JavaScript syntax check of `app.js` all pass. This was the only defect found in this pass.
-
-## What changed in V65.0 (full audit pass, one bug fixed)
-- **Fixed:** `admin.html` had two elements sharing `id="admin-field-hints"` (a `<style>` tag and a `<script>` tag), which is invalid HTML and was failing the project's own `admin_ux_audit.py` check. Renamed to `admin-field-hints-style` / `admin-field-hints-script`; nothing else referenced the old id, so this is a pure fix with no behavior change.
-- **Verified:** every release-gate script (smoke test, all regression suites, HTTP smoke across 47 endpoints, code-health, admin UX audit, Excel/PDF/PPTX export acceptance and stress tests) passes, plus a full Python compile check and a JavaScript syntax check of every inline script in `index.html` and `admin.html`. This was the only defect found.
-
-## What changed since V65.0 (intro screen side imagery)
-- **Intro screen — clean side imagery, no baked-in text:** the splash screen now shows real plant photography faded in along the left and right edges (industrial plant on the left, copper-coil warehouse on the right) instead of the old illustrated coil background. The images sit behind the text and fade toward the centre, so they never overlap the headline, cards or "Enter Dashboard" button; they also narrow and dim on phone-width screens. All text stays live DOM/CSS, not baked into any image.
-
-## What changed in V65.0 (presentation mode fits screen, field-name hover tag, icons; header/intro are the plain Classic look with a gradient accent + progress fill)
-- **Presentation mode fits at 100% zoom:** legend, chart and table share the screen; nothing overlaps and nothing needs zooming out. Chart is reshaped to the free space, the table scrolls inside itself (max 38% height).
-- **Field-name hover tag:** a small tag near the cursor names the field (KPI parts, table column + row, filters, legends, icon-only buttons). Ctrl+K → "Field Name Hints" toggles it.
-- **Intro screen bug fixed:** the "QUALITY INTELLIGENCE" headline could break mid-word ("INTEL" / "LIGENCE") on narrow screens; each word is now one unbreakable unit.
-- **Icons:** one SVG sprite (top of `index.html`) + `qdIc('name')` in `app.js`; added to filters, selection, presets, export, search, drill-down, compare, Control Room headings, presentation mode.
-- **Admin icons:** the Admin console has the same icon set; every button label (including dynamically built ones) gets a matching icon, plus login fields, section kickers and the theme toggle.
-- **Chart tooltip** now has styling (it had none) and names the measure on single-series charts.
-- **"Copper Mill" theme shipped and then removed within this same release:** an animated factory-bay header and a redesigned intro (copper coils, "Cu 29" mark, scan-line + "QC SCAN PASSED" panel) were added and later reverted per feedback. The dashboard always shows the plain **Classic** header and intro now; there's nothing to switch, so no theme command remains in Ctrl+K.
-- **Intro screen — logo scale-in + progress fill:** the logo entrance pairs a subtle scale-up with its fade, and a thin blue→orange progress bar fills under it across the whole reveal sequence, fading out as "Enter Dashboard" unlocks. Skipped under reduced-motion.
-- **Header — gradient accent strip:** a thin brand-gradient line across the header's top edge (separate light/dark tones) plus a subtle glass-style top highlight, standing in for the old illustrated header scene without any decorative artwork.
-- **Header — clock stacked above Commands again, no gap under the logo:** reverted a brief "one row" layout so the clock sits above the Live Data / Export / Commands row as it did a couple of releases back, and bottom-aligned the logo/title block against that row so no gap opens up underneath it.
-- **Intro screen — "Enter Dashboard" delay removed:** the button no longer waits behind a leftover, invisible Copper Mill scan-badge animation; it now appears right after the intro cards finish, roughly 2 seconds sooner.
-
-### V65.0 checkpoints
-- Browser at 100%: open the expand button on every chart. Chart, legend and table are fully visible with no overlap.
-- Hover a KPI value, a table header and a table cell: the tag shows KPI name / column name / column + "Row: …".
-- Filters, Selection, Save/Manage Presets, Export, Commands, Search show icons.
-- Fresh browser, no prior `localStorage`: dashboard loads with the plain Classic header and intro — no coil artwork, no scan-line/badge sequence, no swinging 3D logo. Ctrl+K has no "Theme" entry.
-- Intro: logo scales up while fading in; a thin gradient progress bar fills and then fades out right as "Enter Dashboard" unlocks. With reduced-motion set, the bar never appears.
-- Header shows a thin blue→orange gradient line across its top edge in both light and dark theme.
-- Header: clock sits directly above the Live Data / Export / Commands row, with the logo/title block bottom-aligned to that row (no gap underneath), at desktop, tablet and phone widths.
-- Loading the dashboard: "Enter Dashboard" unlocks shortly after the intro cards finish, with no extra silent pause.
-
-The bundled `quality.db` is unchanged (4,936 disposition rows).
-
-## Admin console navigation
-- Sidebar navigation is grouped into a canonical 21-section sequence; sidebar and content use the same order.
-- While scrolling, the active sidebar tab follows the section in view; clicking a tab jumps to the top of that section.
-- Overview production-health content and KPI target history live inside their logical parent sections; Import History is in the navigation.
-- There is no global search bar in Admin; use **Latest Records** (search + date filters + export/delete).
-
-## V65.0 follow-up fixes
-
-- QCR target breach counts now include only KPIs in `amber` or `bad` status; KPIs with no configured target remain `neutral` and are excluded.
-- The QCR core response cache is bounded to 15 entries and removes entries older than 60 seconds during overflow cleanup.
-- `num3` QCR targets now display three decimal places.
-- Removed an unused QCR executive variable.
-- The header accent animation uses the v2 transform-based implementation with separate top/bottom motion, reduced-motion handling, and print handling.
+The current version is the single line in `VERSION.txt` (also sent in the `X-App-Version` response
+header). `CHANGELOG.md` is the version history (V65 onward; older entries are in
+`docs/CHANGELOG_ARCHIVE.md`); this README always describes the current build only.
 
 ## What it does
 - **Dashboard** – live filters (Month, Week, Quarter, Financial Year, Work Center, Grade, Quality
@@ -216,7 +31,7 @@ the location). The bundled `quality.db` seeds it on the first run only; later re
 never reseed it.
 
 ## Production (Render + PostgreSQL)
-`render.yaml` and `SUPABASE_RENDER_FREE_SETUP.md` describe the free Render + Supabase setup. On Render the app
+`render.yaml` and [docs/DEPLOY.md](docs/DEPLOY.md) describe the free Render + Supabase setup. On Render the app
 fails closed if `DATABASE_URL` is missing; it never silently falls back to SQLite.
 
 | Variable | Purpose |
@@ -248,38 +63,63 @@ JSON-GZIP snapshots with integrity checksums, created after every import, on dem
 a schedule. Restore verifies the checksum first and rolls back on failure. The built-in backup is a recovery
 aid, not a substitute for provider-level backups: copy backups off the server periodically.
 
+Disaster recovery (recovery points, off-site copies, restore, provider switch): [docs/DISASTER_RECOVERY.md](docs/DISASTER_RECOVERY.md). Off-site bucket / encryption / alert setup: [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Security
 - Admin APIs require an authenticated session plus CSRF validation; sensitive Users, Security, Backup and audit-export endpoints are Super Admin (`admin` role) only; login attempts are rate-limited.
 - Public activity endpoints are rate-limited separately; request bodies, sessions and import previews are
   size-bounded.
 - Server errors (HTTP 5xx) return only a reference id to the browser; the real message is in the server log.
-- See `SECURITY.md` for the full baseline.
+- See [docs/SECURITY.md](docs/SECURITY.md) for the full baseline.
+
+## Admin console navigation
+- Sidebar navigation is grouped into a canonical 21-section sequence; sidebar and content use the same order.
+- While scrolling, the active sidebar tab follows the section in view; clicking a tab jumps to the top of that section.
+- Overview production-health content and KPI target history live inside their logical parent sections; Import History is in the navigation.
+- There is no global search bar in Admin; use **Latest Records** (search + date filters + export/delete).
 
 ## Repository layout
+
+The repository root holds **only what the running app needs** (the server serves these files by name
+from the root, so they must stay there). Tests and documentation live in their own folders.
+
 | Path | Role |
 |---|---|
 | `server.py` | HTTP server, API, database layer, imports, backups, admin |
-| `reports.py` | Excel / PDF / PowerPoint report builders |
+| `reports.py` | Excel / PDF / PowerPoint / CSV report builders |
+| `alerts.py`, `logging_setup.py`, `session_store.py` | Backup-failure alerts, rotating logs, session/login store |
+| `dr_storage.py`, `dr_recovery.py`, `dr_pg_backup.py` | Off-site storage, snapshot verify/restore CLI, PostgreSQL dump runner (used by the GitHub Action) |
 | `index.html`, `app.js`, `app.css`, `sfx.js` | Dashboard UI |
 | `admin.html` | Admin console (single file) |
-| `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
-| `code_health.py` | Maintenance helpers |
-| `regression.py`, `http_smoke.py`, `smoke_test.py`, `export_acceptance.py`, `export_stress.py`, `admin_ux_audit.py` | Release-gate tests |
+| `sw.js`, `site.webmanifest`, `favicon*`, `jsl-*.png`, `intro-photo-*.webp` | PWA shell and images |
 | `quality.db` | First-run SQLite seed (4,936 disposition records) |
+| `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
+| `requirements.txt`, `runtime.txt`, `render.yaml`, `Procfile`, `.env.example`, `VERSION.txt` | Deployment config |
+| `.github/workflows/` | `dr-backup.yml` (12-hourly PostgreSQL dump), `dependency-audit.yml` (weekly `pip-audit`) |
+| `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_exports.py` |
+| `docs/` | `DEPLOY.md`, `DISASTER_RECOVERY.md`, `SECURITY.md`, `CHANGELOG_ARCHIVE.md` |
 
 ## Release gate
-Before deploying, run every command in `RELEASE_GATE.md` (all must pass, on an isolated database).
-The regression suite is consolidated into a single `regression.py`; deleted legacy `regression_*.py` files are not required at runtime.
+Before deploying, run one command from the repository root (isolated temporary databases only — never
+point it at production):
+
+```bash
+python tests/run_gate.py          # everything, ~1 min (py_compile, node --check, static checks, 6 regression suites, unit tests, smoke, exports + stress)
+python tests/run_gate.py --fast   # same, minus the slow export stress test
+```
+
+Every check must pass. Export rules: Excel/PDF/PPTX tables keep all source rows (no silent top-N truncation)
+and every PPTX chart section keeps its chart image and table. After deploying, check that
+`/api/admin/service_health` reports `latest_data_date` and `freshness_age_days`, then hard-refresh the
+browser (Ctrl+Shift+R) once so the new CSS/JS loads.
 
 ## Troubleshooting
 - **Old look / dark mode wrong after a deploy** – hard-refresh once (Ctrl+Shift+R); CSS and JS are cached
   by version.
 - **Uptime monitor shows the service down** – point it at `/healthz` (GET or HEAD).
 - **Admin says login required after a restore** – expected: restore replaces the user/session tables; log in again.
-- **Quality Control Room tab felt slow the first time it was opened, but instant after that** – fixed: `app.js`
-  now warms the QCR data cache (`prefetchQcrCore()`) in the background right after the landing tab (usually
-  Dashboard) finishes loading, instead of only warming it after a later filter change. See `CHANGELOG.md`.
 
+## UI notes
 ### Header Design
 The dashboard uses the approved **Design 4 — Industrial Copper** header: static copper-base coil/plant artwork on a steel-inspired surface, JSL orange/graphite diagonal accents, and the existing Quality Intelligence typography preserved as-is. The compact right-side toolbar remains bottom-aligned with the date/time card above it. The same composition adapts for the dark theme.
 
@@ -289,11 +129,7 @@ The cursor-following Field Name Hover Tag is intentionally disabled on the intro
 ### Cursor-following Field Name Hover Tag
 The field-name hover tag is enabled across the main dashboard and Admin UI, including dynamically rendered controls. The Intro/Splash screen is intentionally excluded.
 
-
 ### Header live-status behavior
 - The **LIVE DATA** indicator includes a subtle pulsing status dot in the main dashboard header.
 - The pulse is CSS-based and remains unobtrusive while indicating the live state.
 - Existing Dashboard/Admin cursor-following field hints remain enabled; the Intro/Splash screen is excluded.
-
-### Hardened remote retention
-Set `DR_S3_OBJECT_LOCK_DAYS` and `DR_S3_OBJECT_LOCK_MODE` only after provisioning a versioned Object-Lock-enabled bucket and testing retention semantics.

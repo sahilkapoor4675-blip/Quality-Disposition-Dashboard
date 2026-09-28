@@ -45,7 +45,7 @@ services:
       - key: DR_S3_SSE
         value: ""
       # Optional client-side encryption key for off-site dumps (Fernet key).
-      # Leave unset to upload unencrypted; see PLATFORM_CONTINUITY_SETUP.md Step 2B.
+      # Leave unset to upload unencrypted; see docs/DEPLOY.md Part 2, Step 2B.
       - key: DR_ENCRYPTION_KEY
         sync: false
       # Optional hardened S3 Object Lock; requires an Object-Lock-enabled,

@@ -17,7 +17,7 @@ _Last reviewed: 2026-09-13_
   *entire* filesystem/container on every deploy (e.g. Render's free plan with
   no persistent disk attached). In that case only an external database
   (`DATABASE_URL` — free via Supabase/Neon Postgres) is fully redeploy-proof.
-  See `SUPABASE_RENDER_FREE_SETUP.md`.
+  See [DEPLOY.md](DEPLOY.md).
 - Regularly download a backup from Admin → Backups to your own machine — a
   local file on the server, however durable, is not a substitute for an
   off-server copy.
