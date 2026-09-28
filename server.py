@@ -4843,12 +4843,15 @@ class Handler(BaseHTTPRequestHandler):
         # for /favicon.ico and /favicon-*.png would fall through to a 404.
         if path in {"/favicon.ico", "/favicon-32.png", "/favicon-180.png",
                     "/favicon-192.png", "/favicon-512.png",
-                    "/site.webmanifest", "/jsl-header-logo.png", "/jsl-watermark.png"}:
+                    "/site.webmanifest", "/jsl-header-logo.png", "/jsl-watermark.png",
+                    "/intro-photo-left.webp", "/intro-photo-right.webp"}:
             asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
             if os.path.isfile(asset):
                 mime = "application/octet-stream"
                 if path.endswith(".png"):
                     mime = "image/png"
+                elif path.endswith(".webp"):
+                    mime = "image/webp"
                 elif path.endswith(".ico"):
                     mime = "image/x-icon"
                 elif path.endswith(".webmanifest"):
@@ -4857,7 +4860,9 @@ class Handler(BaseHTTPRequestHandler):
                     body = f.read()
                 self.send_response(200)
                 self.send_header("Content-Type", mime)
-                cache_value = "public, max-age=31536000, immutable" if path.endswith((".png", ".ico")) else "public, max-age=3600"
+                cache_value = ("public, max-age=31536000, immutable" if path.endswith((".png", ".ico"))
+                               else "public, max-age=604800" if path.endswith(".webp")
+                               else "public, max-age=3600")
                 self.send_header("Cache-Control", cache_value)
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self._write_body(body)

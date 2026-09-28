@@ -12,7 +12,6 @@ import argparse
 import gzip
 import json
 import os
-import sys
 
 
 def load_backup(path):

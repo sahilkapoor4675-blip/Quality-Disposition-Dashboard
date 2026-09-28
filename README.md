@@ -1,3 +1,9 @@
+## What changed in V66.1 (full audit pass)
+- **Faster first load**: `index.html` shrank from 1.4 MB to ~90 KB by moving two inline base64 intro photos into cacheable `intro-photo-*.webp` files; logo/favicon PNGs were also re-encoded (~300 KB saved in total).
+- **Service worker**: no longer caches report downloads; API cache is bounded.
+- **Security/CI**: `cryptography` pin updated to a patched release; the dependency vulnerability scan now lives in `.github/workflows/` where GitHub actually runs it.
+- **Tests/docs**: unified regression suite passes again; `RELEASE_GATE.md` now lists only scripts that exist.
+
 ## What changed in V66.1 (follow-up: offline support, CSS cleanup, off-site backup encryption)
 - **Offline support for the public dashboard**: a service worker (`sw.js`) caches the app shell and last-loaded dashboard data, so the page keeps working (showing an "offline" banner) if the network drops. Scoped to `index.html` only — `admin.html` never registers it, so no admin/audit data is cached on disk.
 - **Orphaned CSS cleanup**: removed all 24 classes `code_health.py` flagged as unreferenced (previously deferred). The lint check now reports 0.

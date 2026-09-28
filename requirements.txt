@@ -19,4 +19,4 @@ boto3==1.43.102
 # Used only for the optional off-site backup encryption in dr_pg_backup.py
 # (Fernet symmetric encryption). Backward compatible: if DR_ENCRYPTION_KEY is
 # never set, this package is imported lazily and never touched.
-cryptography~=43.0.0
+cryptography~=50.0.0

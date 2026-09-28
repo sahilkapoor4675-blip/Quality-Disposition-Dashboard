@@ -1,4 +1,21 @@
 
+## V66.1 — Full audit pass (2026-09-28)
+
+**Fixed**
+- `index.html` was 1.4 MB because the two intro-screen photos were embedded as base64 inside the CSS, so every page load re-downloaded them. Extracted to `intro-photo-left.webp` / `intro-photo-right.webp` (~35 KB + ~25 KB, transparency preserved), served with a 7-day cache and precached by the service worker. `index.html` is now ~90 KB (-94%).
+- Service worker (`sw.js`): no longer caches `/api/export/*` report downloads (multi-MB files that would fill browser storage); only JSON responses under 2 MB are cached and the API cache is capped at 80 entries.
+- `cryptography` pin raised from `~=43.0.0` (10 known CVEs, would fail the repo's own `pip-audit --strict` gate) to `~=50.0.0`; `pip-audit` now reports no known vulnerabilities.
+- `dependency-audit.yml` was sitting in the repo root, so GitHub never ran it. Moved to `.github/workflows/dependency-audit.yml`.
+- `regression.py` (V64.6 UI suite) asserted a CSS selector (`.dashboard-table td:not(:first-child)`) that was removed as dead code earlier; it now checks the live `.drill-table` rule. Full unified regression passes (6 suites).
+- `RELEASE_GATE.md` listed scripts that no longer exist (`regression_smoke.py`, `regression_test.py`, `regression_v64_3.py`, `regression_v64_5.py`); replaced with the real command list.
+- Removed an unused `import sys` from `dr_recovery.py`.
+- Added `DR_ENCRYPTION_KEY` to `.env.example` and `render.yaml`.
+
+**Size**
+- Logo/favicon PNGs re-encoded (256-colour palette, visually identical side-by-side): `jsl-watermark.png` 123→16 KB, `jsl-header-logo.png` 122→16 KB, `favicon-512.png` 161→91 KB, `favicon-192/180.png` ~halved.
+
+**Verified**: `py_compile`, `node --check`, `code_health.py`, `regression.py` (6 suites), `test_disaster_recovery.py`, `http_smoke.py` (47 routes), `smoke_test.py`, `admin_ux_audit.py`, `export_acceptance.py`, `export_stress.py`, ESLint (no real undefined-variable/duplicate-key/unreachable-code findings), `pip-audit` — all pass.
+
 ## V66.1 — Scroll & animation smoothness pass (2026-09-27)
 
 - Export progress bar (Excel/PDF/PPT/CSV downloads) now runs off `requestAnimationFrame` instead of two independent `setInterval` timers (80ms/200ms). Same pacing/math, but every update now lands right before a repaint instead of on its own clock, removing the occasional visible micro-stutter under load.

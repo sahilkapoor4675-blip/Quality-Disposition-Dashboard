@@ -33,6 +33,8 @@ const SHELL_FILES = [
   '/favicon-180.png',
   '/favicon-192.png',
   '/favicon-512.png',
+  '/intro-photo-left.webp',
+  '/intro-photo-right.webp',
 ];
 
 self.addEventListener('install', (event) => {
@@ -62,10 +64,27 @@ function isShellRequest(url) {
     url.pathname === '/index.html';
 }
 
+// Keep the API cache bounded: every distinct filter combination is its own
+// cache entry, so without a cap it would grow for as long as the app is used.
+const API_CACHE_MAX_ENTRIES = 80;
+const API_CACHE_MAX_BYTES = 2 * 1024 * 1024; // don't cache any single response > 2 MB
+
 function isCacheableApiGet(request, url) {
   return request.method === 'GET' &&
     url.pathname.startsWith('/api/') &&
-    !url.pathname.startsWith('/api/admin/');
+    !url.pathname.startsWith('/api/admin/') &&
+    // Report downloads (Excel/PDF/PPT/CSV) are large one-off files, never
+    // useful offline, and would fill browser storage quickly.
+    !url.pathname.startsWith('/api/export/');
+}
+
+function trimApiCache(cache) {
+  return cache.keys().then((keys) => {
+    const extra = keys.length - API_CACHE_MAX_ENTRIES;
+    if (extra <= 0) return;
+    // cache.keys() returns oldest-inserted first
+    return Promise.all(keys.slice(0, extra).map((k) => cache.delete(k)));
+  });
 }
 
 self.addEventListener('fetch', (event) => {
@@ -79,9 +98,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response && response.ok) {
+          const len = parseInt(response.headers.get('Content-Length') || '0', 10);
+          const isJson = (response.headers.get('Content-Type') || '').includes('json');
+          if (response && response.ok && isJson && len <= API_CACHE_MAX_BYTES) {
             const copy = response.clone();
-            caches.open(API_CACHE).then((cache) => cache.put(request, copy));
+            caches.open(API_CACHE).then((cache) =>
+              cache.put(request, copy).then(() => trimApiCache(cache))
+            ).catch(() => {});
           }
           return response;
         })
