@@ -62,3 +62,20 @@ services:
         value: "60"
       - key: BACKUP_KEEP
         value: "30"
+      # Backup-failure alerts (see alerts.py). Leave unset to disable a channel.
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      - key: ALERT_EMAIL_TO
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: ALERT_COOLDOWN_MINUTES
+        value: "360"

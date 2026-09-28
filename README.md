@@ -104,7 +104,7 @@ Plant quality-intelligence dashboard for the Cupronickel (Non-Ferrous) division.
 frontend CDN or build step.
 
 The current version is the single line in `VERSION.txt` (also shown in the `X-App-Version` response
-header). `CHANGELOG.md` is the version history; this README always describes the current build only.
+header). `CHANGELOG.md` is the version history (V65 onward; older entries are in `CHANGELOG_ARCHIVE.md`); this README always describes the current build only.
 
 ## What changed in V65.0 (follow-up: animated header accent lines)
 - **Animated header accent lines.** The top and bottom header strips now slide continuously using 200%-width gradient layers and `transform: translate3d()`, with opposite directions and 8s / 12s cycles.

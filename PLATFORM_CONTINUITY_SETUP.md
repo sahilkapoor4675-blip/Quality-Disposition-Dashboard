@@ -119,6 +119,23 @@ python3 dr_pg_backup.py decrypt path/to/file.dump.enc --output path/to/file.dump
 (with `DR_ENCRYPTION_KEY` set in that shell), then `verify`/`restore` the
 resulting plaintext dump exactly as documented in `DR_RUNBOOK.md`.
 
+### Step 2C — Get told when a backup fails (optional, recommended)
+
+Without this, a failed backup is only visible if you open `/admin`. Add either
+or both of these in Render (Environment tab):
+
+```
+ALERT_WEBHOOK_URL   https://hooks.slack.com/services/...   (Slack / Teams / Discord / any JSON endpoint)
+ALERT_EMAIL_TO      you@example.com
+SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM  (only for email)
+```
+You get one message when a backup (local or off-site) starts failing, a reminder
+every `ALERT_COOLDOWN_MINUTES` (default 6 h) while it keeps failing, and one
+"RECOVERED" message when it works again. To also cover the GitHub Actions dump
+job, add the same webhook URL as a repository secret named `ALERT_WEBHOOK_URL`.
+Send a test with `python3 alerts.py --test` (run it where the env vars are set).
+Some free hosts block outbound SMTP; if email never arrives, use the webhook.
+
 ### Step 3 — Add a second copy of your source code
 
 GitHub can also go down or your account could get blocked/deleted — never let

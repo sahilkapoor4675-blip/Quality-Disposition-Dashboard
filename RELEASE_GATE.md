@@ -6,12 +6,13 @@ Never run these scripts against production.
 ## Required checks (run from the repository root)
 
 ```bash
-python -m py_compile server.py reports.py dr_pg_backup.py
+python -m py_compile server.py reports.py dr_pg_backup.py alerts.py
 node --check app.js
 node --check sw.js
 python code_health.py
 python regression.py            # runs all 6 embedded suites (deep/smoke, HTTP contract, V64.3, V64.5, V64.6 UI, period comparison)
 python test_disaster_recovery.py
+python test_alerts.py           # backup-failure alert delivery, dedupe and recovery notice
 python http_smoke.py            # health/readiness + every public, export and admin-read route
 python smoke_test.py            # bundled dataset unchanged, core tabs/API respond
 python admin_ux_audit.py        # admin navigation contract

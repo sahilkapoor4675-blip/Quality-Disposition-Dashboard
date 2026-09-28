@@ -1,0 +1,49 @@
+# Keep the image small and free of dev-only / sensitive files.
+# NOTE: quality.db is the bundled seed database and MUST stay in the image.
+
+# Version control & CI
+.git
+.gitignore
+.gitattributes
+.github
+
+# Secrets and local env (real credentials must come from the host's env vars)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Tests, audits and dev-only scripts (not imported by server.py at runtime)
+test_*.py
+smoke_test.py
+http_smoke.py
+regression.py
+export_acceptance.py
+export_stress.py
+admin_ux_audit.py
+code_health.py
+dependency-audit.yml
+
+# Docs and release notes (not read by the app at runtime; VERSION.txt IS read, so it stays)
+*.md
+!README.md
+CHANGELOG*.md
+RELEASE_GATE.md
+
+# Local/persistent data that must never be baked into an image
+/data/
+/backups/
+qcr_app_persistent_data/
+*.sqlite
+*.sqlite3
+
+# Python / editor noise
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

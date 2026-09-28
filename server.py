@@ -97,6 +97,7 @@ from urllib.parse import urlparse, parse_qs
 from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report, _stream_csv
 from logging_setup import configure_logging, tail_log_file
 from dr_storage import is_remote_configured, upload_file as dr_upload_file, verify_uploaded_file as dr_verify_uploaded_file
+import alerts  # webhook/email alerts for backup failures (see alerts.py)
 from session_store import (
     db_session_upsert, db_session_fetch, db_session_delete, db_sessions_delete_by_user,
     db_cleanup_expired_sessions, db_login_check, db_login_record_failure, db_login_clear,
@@ -2080,6 +2081,34 @@ def _app_state_set(conn, key, value):
         conn.execute("INSERT OR REPLACE INTO app_state (key,value) VALUES (?,?)", (key, str(value)))
 
 
+def _alert_state_get(key, default=""):
+    conn = get_conn()
+    try:
+        return _app_state_get(conn, key, default)
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+def _alert_state_set(key, value):
+    conn = get_conn()
+    try:
+        _app_state_set(conn, key, value)
+        conn.commit()
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+        raise
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+# Persist alert de-duplication state so a restart neither re-sends an alert that
+# is still open nor forgets to send the "recovered" message.
+alerts.configure(state_get=_alert_state_get, state_set=_alert_state_set)
+
+
 def _data_state(conn=None):
     own_conn = conn is None
     if own_conn:
@@ -2812,6 +2841,21 @@ def _set_backup_state(revision, created_at, filename, remote_status="disabled", 
         except Exception: pass
 
 
+def _backup_alert_update(reason, fname, revision, remote_status, remote_error):
+    """Push backup health to alerts (webhook/email). Never raises."""
+    try:
+        extra = {"reason": reason, "file": fname, "data_revision": revision,
+                 "backend": "postgres" if USE_POSTGRES else "sqlite"}
+        alerts.resolve_alert("backup_local", "Local backups are working again", extra=extra)
+        if remote_status == "failed":
+            alerts.raise_alert("backup_offsite", "Off-site backup copy FAILED (local copy is OK)",
+                               detail=remote_error, extra=extra)
+        elif remote_status == "verified":
+            alerts.resolve_alert("backup_offsite", "Off-site backup copy verified again", extra=extra)
+    except Exception as exc:
+        log.warning(f"Backup alert dispatch failed: {exc}")
+
+
 def _write_backup_file(reason="manual"):
     """Create an atomic V5 snapshot and optionally replicate it off-site."""
     try:
@@ -2855,6 +2899,7 @@ def _write_backup_file(reason="manual"):
                     remote_error = str(exc)
                     log.error(f"Off-site backup replication failed ({reason}): {exc}")
             _set_backup_state(data["data_revision"], data["created_at"], fname, remote_status, remote_key, remote_error)
+            _backup_alert_update(reason, fname, data["data_revision"], remote_status, remote_error)
             return {
                 "filename": fname, "counts": data["counts"], "created_at": data["created_at"],
                 "app_version": APP_VERSION, "backup_version": 5, "data_revision": data["data_revision"],
@@ -2866,6 +2911,11 @@ def _write_backup_file(reason="manual"):
             if 'tmp_path' in locals() and os.path.exists(tmp_path): os.remove(tmp_path)
         except Exception: pass
         log.warning(f"Backup failed ({reason}): {e}")
+        try:
+            alerts.raise_alert("backup_local", "Backup could NOT be created", detail=str(e)[:500],
+                               extra={"reason": reason, "backend": "postgres" if USE_POSTGRES else "sqlite"})
+        except Exception:
+            pass
         return None
 
 
@@ -2909,6 +2959,7 @@ def _backup_status():
             "remote_status": remote_status if configured_remote else "disabled",
             "remote_key": remote_key, "remote_error": remote_error,
             "remote_required_for_mutations": DR_REMOTE_REQUIRED_FOR_MUTATIONS,
+            "alerting": alerts.describe(),
         }
     finally:
         try:
@@ -2988,8 +3039,14 @@ def _scheduled_backup_loop():
                             raise RuntimeError("Remote backup verification failed on retry")
                         _set_backup_state(status["last_backup_revision"], status.get("last_backup_at", ""), os.path.basename(path), "verified", remote_key, "")
                         log.info(f"Retried off-site backup replication successfully: {path}")
+                        alerts.resolve_alert("backup_offsite", "Off-site backup copy verified again (retry succeeded)",
+                                             extra={"file": os.path.basename(path)})
                     except Exception as exc:
                         log.warning(f"Off-site backup retry failed: {exc}")
+                        # Same key as the original failure: the cooldown means this
+                        # only re-alerts every ALERT_COOLDOWN_MINUTES, not every retry.
+                        alerts.raise_alert("backup_offsite", "Off-site backup copy still FAILING",
+                                           detail=str(exc)[:500], extra={"file": os.path.basename(path)})
         except Exception as e:
             log.warning(f"Scheduled backup loop error: {e}")
         time.sleep(BACKUP_CHECK_SECONDS)
