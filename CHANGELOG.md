@@ -1,4 +1,12 @@
 
+## V66.1 — Header time, admin toasts + progress, palette categories (2026-09-28)
+
+- Header "Last Updated" now shows hours and minutes ("2 hr 15 min ago").
+- Admin panel: dashboard-style toast notifications for every result message (replaces `alert()`), plus progress toasts (% + ETA) for import validate/confirm, 6M Fishbone import, backup create/restore/verify/download, CSV and audit exports, bulk delete and "Refresh Loaded Admin Data". File uploads report real upload progress.
+- Presentation-mode button pinned to the far right of each analytics panel title (was overlapping the title text).
+- Command palette (header "Commands"): commands grouped into categories; hovering shows the field-name hint tag.
+- Service worker shell cache bumped to v2 so installed PWAs pick up the new app.js/app.css.
+
 ## V66.1 — Backup failure alerts, asset extraction, changelog split (2026-09-28)
 
 **Added**

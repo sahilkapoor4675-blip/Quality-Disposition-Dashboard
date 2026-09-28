@@ -623,10 +623,37 @@ html[data-theme="dark"] .global-search-input{background:#0F1626!important;color:
 <style>
 .db-meter{height:10px;background:#e8eef6;border-radius:999px;overflow:hidden;margin:14px 0 8px}.db-meter-fill{height:100%;width:0;background:#2563eb;transition:width .35s ease}.db-status{font-size:14.5px;font-weight:700;margin-bottom:12px}.db-status.warning{color:#b45309}.db-status.action{color:#c2410c}.db-status.critical{color:#dc2626}.db-status.healthy{color:#15803d}
 </style>
+<style id="admin-toast-style">
+/* Toast notifications — same look, motion and behaviour as the main dashboard's toasts
+   (top-right slide-in, success / error / info, live progress bar with % and ETA). */
+.toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;width:340px;max-width:calc(100vw - 24px);max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;pointer-events:none;-webkit-overflow-scrolling:touch}
+.toast-host::-webkit-scrollbar{width:6px}.toast-host::-webkit-scrollbar-thumb{background:rgba(120,140,160,.35);border-radius:6px}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--muted);border-radius:16px;padding:12px 14px;box-shadow:0 10px 28px rgba(15,42,74,.16);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);overflow:hidden}
+.toast.show{opacity:1;transform:translateX(0) scale(1)}
+.toast.hide{opacity:0;transform:translateX(12px) scale(.97)}
+.toast-success{border-left-color:var(--green)}.toast-error{border-left-color:var(--red)}.toast-info{border-left-color:var(--blue)}
+.toast-icon{font-size:17px;line-height:1;margin-top:1px}
+.toast-body{flex:1;min-width:0}
+.toast-title{font:800 13.5px Manrope,sans-serif;color:var(--admin-heading,var(--navy))}
+.toast-msg{font:600 12.5px Manrope,sans-serif;color:var(--muted);margin-top:2px;line-height:1.4;word-break:break-word}
+.toast-close{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:4px;line-height:1;flex:none;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,color .15s ease}
+.toast-close:hover{color:var(--admin-heading,var(--navy));background:rgba(120,140,160,.16)}
+.toast-progress-row{margin-top:9px}
+.toast-progress-track{height:7px;border-radius:999px;background:rgba(120,140,160,.22);overflow:hidden}
+.toast-progress-fill{position:relative;height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,var(--blue),#4FC3F7);transition:width .18s linear;overflow:hidden}
+.toast-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 0%,rgba(255,255,255,.55) 45%,transparent 62%);background-size:250% 100%;animation:adminToastShimmer 1.15s linear infinite}
+@keyframes adminToastShimmer{0%{background-position:200% 0}100%{background-position:-100% 0}}
+.toast-progress-meta{display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px}
+.toast-progress-pct{font:800 12px Manrope,sans-serif;color:var(--blue);flex:none;font-variant-numeric:tabular-nums}
+.toast-progress-eta{font:600 11px Manrope,sans-serif;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+@media(max-width:600px){.toast-host{left:12px;right:12px;top:12px;width:auto}}
+@media(prefers-reduced-motion:reduce){.toast{transition:opacity .15s ease}.toast-progress-fill::after{animation:none}}
+@media print{.toast-host{display:none!important}}
+</style>
 <script>
 const $=id=>document.getElementById(id);
 function csrfToken(){const m=document.cookie.match(/(?:^|; )qdash_csrf=([^;]+)/);return m?decodeURIComponent(m[1]):''}
-async function api(url,opts={}){opts=opts||{};if((opts.method||'GET').toUpperCase()!=='GET' && url.startsWith('/api/admin/')){opts.headers=Object.assign({},opts.headers||{}, {'X-CSRF-Token':csrfToken()});}const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{};if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
+async function api(url,opts={}){opts=opts||{};if((opts.method||'GET').toUpperCase()!=='GET' && url.startsWith('/api/admin/')){opts.headers=Object.assign({},opts.headers||{}, {'X-CSRF-Token':csrfToken()});}if(typeof opts.onUploadProgress==='function'&&typeof FormData!=='undefined'&&opts.body instanceof FormData)return xhrApi(url,opts);const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{};if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
 // Shared by loadActivity() and the faster independent "Live Now" poll below — only plays the
 // pulse animation when the number actually changed, not on every poll tick.
 let _lastLiveNowVal=null;
@@ -636,17 +663,136 @@ function setLiveNowValue(n){
   if(_lastLiveNowVal!==null && _lastLiveNowVal!==val){ el.classList.remove('live-pulse'); void el.offsetWidth; el.classList.add('live-pulse'); }
   el.textContent=text; _lastLiveNowVal=val;
 }
+
+// ---- Real upload progress: fetch() cannot report bytes sent, so file uploads (import, restore)
+// go through XHR when a caller passes opts.onUploadProgress(fraction 0..1). Same CSRF header,
+// same JSON parsing and the same error messages as api() above.
+function xhrApi(url,opts){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open((opts.method||'POST').toUpperCase(),url);const h=opts.headers||{};Object.keys(h).forEach(k=>x.setRequestHeader(k,h[k]));x.upload.onprogress=e=>{if(e.lengthComputable)opts.onUploadProgress(e.loaded/e.total)};x.onload=()=>{let d={};try{d=JSON.parse(x.responseText)}catch{};if(x.status>=200&&x.status<300)resolve(d);else reject(new Error(d.error||`Request failed (${x.status})`))};x.onerror=()=>reject(new Error('Network error — please check your connection and try again.'));x.send(opts.body)})}
+
+// ---- Toast notifications (mirrors showToast() in the main dashboard's app.js) ----
+function ensureToastHost(){
+  let host=document.getElementById('toastHost');
+  if(!host){host=document.createElement('div');host.id='toastHost';host.className='toast-host';host.setAttribute('aria-live','polite');host.setAttribute('role','status');document.body.appendChild(host)}
+  return host;
+}
+function showToast(kind,title,message,opts={}){
+  const host=ensureToastHost();
+  const el=document.createElement('div');
+  el.className='toast toast-'+(kind||'info')+(opts.progress?' toast-has-progress':'');
+  const icon=kind==='success'?'✅':kind==='error'?'⚠️':'ℹ️';
+  const progressMarkup=opts.progress?'<div class="toast-progress-row"><div class="toast-progress-track"><div class="toast-progress-fill"></div></div><div class="toast-progress-meta"><span class="toast-progress-pct">0%</span><span class="toast-progress-eta">Calculating…</span></div></div>':'';
+  el.innerHTML=`<span class="toast-icon" aria-hidden="true">${icon}</span><div class="toast-body"><div class="toast-title"></div><div class="toast-msg"></div>${progressMarkup}</div><button class="toast-close" type="button" aria-label="Dismiss notification">✕</button>`;
+  el.querySelector('.toast-title').textContent=title||'';
+  const msgEl=el.querySelector('.toast-msg');
+  if(message)msgEl.textContent=message;else msgEl.remove();
+  host.appendChild(el);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('show')));
+  // Longer messages (import summaries, error details) stay up long enough to actually be read.
+  const len=String(message||'').length;
+  const dur=opts.duration||Math.min(20000,Math.max(kind==='error'?6500:4200,2500+len*55));
+  let dismissed=false;
+  const dismiss=()=>{if(dismissed)return;dismissed=true;el.classList.remove('show');el.classList.add('hide');setTimeout(()=>el.remove(),260)};
+  el._dismiss=dismiss;
+  const MAX_VISIBLE_TOASTS=4;
+  const active=[...host.children].filter(c=>c!==el&&!c.classList.contains('hide')&&!c.classList.contains('toast-has-progress'));
+  if(active.length>=MAX_VISIBLE_TOASTS){active.slice(0,active.length-MAX_VISIBLE_TOASTS+1).forEach(old=>{if(old._dismiss)old._dismiss()})}
+  const timer=setTimeout(dismiss,dur);
+  el.querySelector('.toast-close').addEventListener('click',()=>{clearTimeout(timer);dismiss()});
+  const endFn=()=>{clearTimeout(timer);dismiss()};
+  if(opts.progress){
+    const fill=el.querySelector('.toast-progress-fill'),pctEl=el.querySelector('.toast-progress-pct'),etaEl=el.querySelector('.toast-progress-eta'),titleEl=el.querySelector('.toast-title');
+    endFn.setTitle=t=>{titleEl.textContent=t};
+    endFn.setProgress=(pct,etaSeconds)=>{
+      const p=Math.max(0,Math.min(100,Math.round(pct)));
+      if(fill)fill.style.width=p+'%';
+      if(pctEl)pctEl.textContent=p+'%';
+      if(etaEl){
+        if(p>=100)etaEl.textContent='Done';
+        else if(etaSeconds==null)etaEl.textContent='Calculating…';
+        else if(etaSeconds<1)etaEl.textContent='Almost done…';
+        else if(etaSeconds<60)etaEl.textContent='~'+Math.ceil(etaSeconds)+'s left';
+        else etaEl.textContent='~'+Math.floor(etaSeconds/60)+'m '+Math.round(etaSeconds%60)+'s left';
+      }
+    };
+  }
+  return endFn;
+}
+// ---- Progress toast controller. Long admin jobs (import, restore, backup, big downloads) get a
+// live % + ETA bar, paced exactly like the dashboard's export bar: the shown number always counts
+// up toward a moving target. The target eases toward 90% while the server works (there is no real
+// signal for that part), and real signals (upload bytes, download bytes, panels finished) can push
+// it further with prog.set(pct) — the bar only ever moves forward.
+function startProgress(title,message){
+  const end=showToast('info',title,message||'',{duration:600000,progress:true});
+  const t0=performance.now();let target=0,shown=0,sim=0,lastSim=t0,lastTick=t0,raf=null,over=false;
+  const render=()=>{const el=performance.now()-t0;let eta=null;if(shown>=3&&shown<100){eta=Math.max(0,(el/(shown/100)-el)/1000)}end.setProgress(shown,shown>=100?0:eta)};
+  const frame=now=>{
+    if(over)return;
+    if(now-lastSim>=200){lastSim=now;sim+=(90-sim)*0.05;target=Math.max(target,sim)}
+    if(now-lastTick>=80){lastTick=now;if(shown<target)shown=Math.min(target,shown+Math.max(1,Math.round((target-shown)/4)));render()}
+    raf=requestAnimationFrame(frame);
+  };
+  raf=requestAnimationFrame(frame);
+  const stop=()=>{over=true;if(raf!=null){cancelAnimationFrame(raf);raf=null}};
+  return{
+    set(p){target=Math.max(target,Math.min(99,p))},
+    setTitle(t){end.setTitle&&end.setTitle(t)},
+    // Success/failure toasts are raised by the caller (usually via setMsg) right after this.
+    done(){stop();end.setProgress(100,0);setTimeout(end,350)},
+    fail(){stop();end()}
+  };
+}
+// Run an async job under a progress toast. `job` receives the controller so it can report real
+// progress. The returned promise resolves/rejects exactly like `job` does.
+async function withProgress(title,message,job){
+  const prog=startProgress(title,message);
+  try{const r=await job(prog);prog.done();return r}catch(e){prog.fail();throw e}
+}
+// File download with a real byte-based bar (falls back to the eased bar when the server sends no
+// Content-Length), replacing plain `location.href=` navigations that gave no feedback at all.
+async function downloadWithProgress(url,fallbackName,title){
+  const prog=startProgress(title||'Preparing download…','The download starts automatically once it\'s ready.');
+  try{
+    const res=await fetch(url,{cache:'no-store',credentials:'same-origin'});
+    if(!res.ok){let j=null;try{j=await res.json()}catch{};throw new Error((j&&j.error)||`Download failed (HTTP ${res.status}).`)}
+    const cd=res.headers.get('Content-Disposition')||'',m=/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    let filename=fallbackName;if(m){try{filename=decodeURIComponent(m[1])}catch{filename=m[1]}}
+    const total=parseInt(res.headers.get('Content-Length')||'0',10),ct=res.headers.get('Content-Type')||'';
+    let blob;
+    if(!total||!res.body||!res.body.getReader){prog.set(96);blob=await res.blob()}
+    else{const rd=res.body.getReader(),chunks=[];let got=0;for(;;){const {done,value}=await rd.read();if(done)break;chunks.push(value);got+=value.length;prog.set(90+Math.min(9,got/total*9))}blob=new Blob(chunks,{type:ct})}
+    prog.done();
+    const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);
+    showToast('success','Download ready',filename+' has finished downloading.');
+    if(window.SFX)SFX.play('success');
+  }catch(e){prog.fail();showToast('error','Download failed',String(e.message||e));if(window.SFX)SFX.play('error')}
+}
 async function status(){try{return await api('/api/auth/status')}catch{return {authenticated:false}}}
-function setMsg(id,text,kind=''){const e=$(id);e.textContent=text;e.className='msg '+kind;if(window.SFX){if(kind==='err')SFX.play('error');else if(kind==='ok')SFX.play('success');}}
+// Every result message is now also a toast, like on the main dashboard: success clears the inline
+// line (the toast is the confirmation), errors stay inline next to the form as well so the detail
+// isn't lost when the toast fades. Progress/"working…" lines (no kind) stay inline only — the
+// flows that take a while show a progress toast instead. perfMsg is written by a background poll,
+// and loginMsg belongs to the sign-in form (toasted only once signed in), so neither spams toasts.
+const MSG_TOAST_TITLES={importMsg:'Import',fbImportMsg:'6M Fishbone Master',backupMsg:'Backup',recoveryMsg:'Recovery',userMsg:'Users',addMsg:'Add record',kpiTargetMsg:'KPI targets',securityMsg:'Security',frMsg:'Fishbone RCA',perfMsg:'DB performance',loginMsg:'Admin'};
+function setMsg(id,text,kind='',opts={}){
+  const e=$(id);e.textContent=text;e.className='msg '+kind;
+  if(window.SFX){if(kind==='err')SFX.play('error');else if(kind==='ok')SFX.play('success');}
+  if(!text||(kind!=='ok'&&kind!=='err'))return;
+  if(id==='perfMsg'&&!opts.toast)return;
+  if(id==='loginMsg'){const app=$('adminApp');if(!app||app.classList.contains('hidden'))return}
+  const title=MSG_TOAST_TITLES[id]||'Admin';
+  if(kind==='ok'){if(!opts.keep){e.textContent='';e.className='msg'}showToast('success',title,String(text).replace(/^[✅✓]\s*/,''),opts.duration?{duration:opts.duration}:{})}
+  else showToast('error',title,text);
+}
 async function connectionStatus(){const dot=document.querySelector('#loginConnection .connection-dot');const txt=$('loginConnectionText');dot.className='connection-dot checking';txt.textContent='Checking connection…';try{const d=await api('/api/connection_status');dot.className='connection-dot connected';txt.textContent=`${d.provider} • Connected • ${d.latency_ms} ms • ${formatDateTime12(d.checked_at,true)}`;return true}catch(e){let msg='Database unavailable';try{const r=await fetch('/api/connection_status');const d=await r.json();if(d.error)msg=d.error}catch{}dot.className='connection-dot failed';txt.textContent=msg;return false}}
 async function loadUsers(){try{const d=await api('/api/admin/users');$('usersBody').innerHTML=d.rows.map(r=>`<tr><td>${esc(r.username)}</td><td>${esc(r.display_name)}</td><td>${esc(r.role)}</td><td>${r.active?'Active':'Disabled'}${r.must_reset_password?' <small style="color:#B45309;font-weight:800">• reset pending</small>':''}</td><td>${formatDateTime12(r.created_at,true)}</td><td style="white-space:nowrap">${r.username==='admin'?'':`<button class="btn" style="margin-right:6px" onclick="resetUserPassword(${r.id},'${escAttrJs(r.username)}')">🔑 Reset Password</button>`}${r.username==='admin'?'—':`<button class="delete" onclick="toggleUser(${r.id},${!r.active})">${r.active?'Disable':'Enable'}</button>`}</td></tr>`).join('')}catch(e){setMsg('userMsg',e.message,'err')}}
-async function toggleUser(id,active){try{await api('/api/admin/user_toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,active})});loadUsers()}catch(e){alert(e.message)}}
+async function toggleUser(id,active){try{await api('/api/admin/user_toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,active})});loadUsers()}catch(e){showToast('error','Something went wrong',e.message)}}
 async function resetUserPassword(id,username){
   if(!confirm(`Generate a new temporary password for "${username}"? Their current password will stop working immediately and all their active sessions will be signed out.`))return;
   try{
     const d=await api('/api/admin/reset_user_password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
     let copied='';try{await navigator.clipboard.writeText(d.temp_password);copied=' (copied to clipboard)'}catch(_e){}
-    setMsg('userMsg',`Temporary password for ${esc(username)}: ${esc(d.temp_password)}${copied}. Share it securely — it will not be shown again. They must set their own password on next login.`,'ok');
+    setMsg('userMsg',`Temporary password for ${esc(username)}: ${esc(d.temp_password)}${copied}. Share it securely — it will not be shown again. They must set their own password on next login.`,'ok',{keep:true,duration:45000});
     loadUsers();
   }catch(e){setMsg('userMsg',e.message,'err')}
 }
@@ -671,12 +817,12 @@ async function loadFishboneMaster(){try{const d=await api('/api/admin/fishbone_m
 async function loadFishboneHistory(){try{const d=await api('/api/admin/fishbone_history');$('fbHistoryBody').innerHTML=(d.rows||[]).map(r=>`<tr><td>${formatDateTime12(r.created_at,true)}</td><td>${esc(r.filename||'')}</td><td>${Number(r.detected||0).toLocaleString()}</td><td>${Number(r.imported||0).toLocaleString()}</td><td>${esc(r.imported_by||'')}</td></tr>`).join('')}catch(e){console.error(e)}}
 async function loadFishboneAlias(){try{const d=await api('/api/admin/fishbone_alias');$('fbAliasBody').innerHTML=(d.rows||[]).map(r=>`<tr><td>${esc(r.disposition_defect)}</td><td>${esc(r.master_defect)}</td><td>${esc(r.created_by||'')}</td><td><button class="delete" onclick="fbDeleteAlias(${r.id})">Remove</button></td></tr>`).join('')||'<tr><td colspan="4">No manual mappings yet.</td></tr>'}catch(e){console.error(e)}}
 async function loadFishboneUnmapped(){try{const d=await api('/api/admin/fishbone_unmapped');const opts=(d.master_defects||FB_MASTER_DEFECTS).map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');$('fbUnmappedBody').innerHTML=(d.rows||[]).map(r=>`<tr><td>${esc(r.defect)}</td><td>${Number(r.qty||0).toFixed(2)}</td><td>${r.match_type==='fuzzy'?'Approx: '+esc(r.suggested||''):'No match'}</td><td><select id="fbmap_${esc(r.defect).replace(/[^a-zA-Z0-9]/g,'_')}"><option value="">Select 6M defect…</option>${opts}</select></td><td><button class="btn" onclick="fbSaveAlias('${escAttrJs(r.defect)}')">Save</button></td></tr>`).join('')||'<tr><td colspan="5">No unmapped top defects — all current top defects have a confident 6M match.</td></tr>'}catch(e){console.error(e)}}
-async function fbSaveAlias(defect){const sel=$('fbmap_'+defect.replace(/[^a-zA-Z0-9]/g,'_'));const masterDefect=sel?sel.value:'';if(!masterDefect){alert('Select a 6M master defect first.');return}try{await api('/api/admin/fishbone_alias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({disposition_defect:defect,master_defect:masterDefect})});loadFishboneUnmapped();loadFishboneAlias()}catch(e){alert(e.message)}}
-async function fbDeleteAlias(id){if(!confirm('Remove this mapping?'))return;try{await api('/api/admin/fishbone_alias_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});loadFishboneAlias();loadFishboneUnmapped()}catch(e){alert(e.message)}}
-$('fbImportBtn').onclick=async()=>{const file=$('fbFileInput').files[0];if(!file){setMsg('fbImportMsg','Please select the 6M Defect Master file (.xlsx/.xlsm).','err');return}setMsg('fbImportMsg','Importing 6M Fishbone Master…');try{const fd=new FormData();fd.append('file',file);const d=await api('/api/admin/fishbone_import',{method:'POST',body:fd});const rcaMsg=d.rca_imported?` RCA (Why-Why/CAPA): ${d.rca_imported} of ${d.rca_detected} rows.`:'';const styleMsg=d.style_imported?` Icon/color coding updated for ${d.style_imported} of 6 categories.`:'';setMsg('fbImportMsg',`Imported: ${d.imported} of ${d.detected} defect rows loaded from ${d.filename}.${rcaMsg}${styleMsg} QCR fishbone tab is now updated.`,'ok');$('fbFileInput').value='';loadFishboneMaster();loadFishboneHistory();loadFishboneUnmapped()}catch(e){setMsg('fbImportMsg',e.message,'err')}};
+async function fbSaveAlias(defect){const sel=$('fbmap_'+defect.replace(/[^a-zA-Z0-9]/g,'_'));const masterDefect=sel?sel.value:'';if(!masterDefect){showToast('info','Select a defect','Select a 6M master defect first.');return}try{await api('/api/admin/fishbone_alias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({disposition_defect:defect,master_defect:masterDefect})});loadFishboneUnmapped();loadFishboneAlias()}catch(e){showToast('error','Something went wrong',e.message)}}
+async function fbDeleteAlias(id){if(!confirm('Remove this mapping?'))return;try{await api('/api/admin/fishbone_alias_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});loadFishboneAlias();loadFishboneUnmapped()}catch(e){showToast('error','Something went wrong',e.message)}}
+$('fbImportBtn').onclick=async()=>{const file=$('fbFileInput').files[0];if(!file){setMsg('fbImportMsg','Please select the 6M Defect Master file (.xlsx/.xlsm).','err');return}setMsg('fbImportMsg','Importing 6M Fishbone Master…');try{const fd=new FormData();fd.append('file',file);const d=await withProgress('Importing 6M Fishbone Master',file.name,prog=>api('/api/admin/fishbone_import',{method:'POST',body:fd,onUploadProgress:f=>prog.set(f*55)}));const rcaMsg=d.rca_imported?` RCA (Why-Why/CAPA): ${d.rca_imported} of ${d.rca_detected} rows.`:'';const styleMsg=d.style_imported?` Icon/color coding updated for ${d.style_imported} of 6 categories.`:'';setMsg('fbImportMsg',`Imported: ${d.imported} of ${d.detected} defect rows loaded from ${d.filename}.${rcaMsg}${styleMsg} QCR fishbone tab is now updated.`,'ok');$('fbFileInput').value='';loadFishboneMaster();loadFishboneHistory();loadFishboneUnmapped()}catch(e){setMsg('fbImportMsg',e.message,'err')}};
 async function loadAuditTrail(){try{const d=await api('/api/admin/audit_trail');const h=document.getElementById('auditTrailBody');if(h)h.innerHTML=d.rows.map(r=>`<tr><td>${esc(r.username||'')}</td><td>${esc(r.role||'')}</td><td>${esc(r.action||'')}</td><td>${r.record_id??'—'}</td><td>${formatDateTime12(r.created_at,true)}</td><td>${esc(r.ip_address||'')}</td><td>${esc(r.details||'')}</td></tr>`).join('')}catch(e){console.error(e)}}
 async function loadKpiHistory(){try{const d=await api('/api/admin/kpi_target_history');const host=document.getElementById('kpiHistoryBody');if(host)host.innerHTML=d.rows.map(r=>`<tr><td>${esc(r.label)}</td><td>${r.old_target??'—'}</td><td>${r.new_target??'—'}</td><td>${esc(r.changed_by||'')}</td><td>${esc(r.effective_date||'—')}</td><td>${formatDateTime12(r.changed_at,true)}</td></tr>`).join('')}catch(e){console.error(e)}}
-$('exportAuditBtn').onclick=()=>{window.location.href='/api/admin/export_audit'};
+$('exportAuditBtn').onclick=()=>downloadWithProgress('/api/admin/export_audit','audit_trail.csv','Exporting audit trail…');
 function applyRoleUI(role){const hide=id=>{const e=$(id);if(e)e.classList.add('hidden')}; if(role==='admin')return; if(role==='qa_manager'){hide('addRecordPanel');hide('importPanel');hide('usersPanel');hide('fishbonePanel');hide('fishboneMapPanel');hide('backupsPanel');} else if(role==='qa_engineer'){hide('kpiPanel');hide('usersPanel');hide('importPanel');hide('backupsPanel');} else if(role==='importer'){hide('kpiPanel');hide('usersPanel');hide('addRecordPanel');hide('securityPanel');hide('auditTrailPanel');hide('backupsPanel');} else if(role==='auditor'){hide('kpiPanel');hide('usersPanel');hide('addRecordPanel');hide('importPanel');hide('securityPanel');hide('fishbonePanel');hide('fishboneMapPanel');hide('backupsPanel');} else {hide('usersPanel');hide('kpiPanel');hide('addRecordPanel');hide('importPanel');hide('securityPanel');hide('auditTrailPanel');hide('fishbonePanel');hide('fishboneMapPanel');hide('backupsPanel');}}
 function syncSidebarRole(){document.querySelectorAll('.sidebar-link').forEach(b=>{const t=$(b.dataset.target);b.classList.toggle('hidden',!!t&&t.classList.contains('hidden'))})}
 async function boot(){const s=await status();if(s.authenticated){if(s.must_reset_password)showForceReset();else showAdmin(s.role)}else {showLogin();connectionStatus()}}
@@ -720,7 +866,7 @@ $('fileInput').addEventListener('change',()=>{const file=$('fileInput').files[0]
 $('editColumnMapBtn').onclick=()=>{renderColumnMapPanel();$('columnMapPanel').classList.remove('hidden')};
 $('cancelColumnMapBtn').onclick=()=>{$('columnMapPanel').classList.add('hidden')};
 $('applyColumnMapBtn').onclick=()=>{const missing=[];document.querySelectorAll('#columnMapBody .colmap-select').forEach(sel=>{const key=sel.dataset.field;if(sel.value)columnMap[key]=sel.value;else delete columnMap[key]});importFieldDefs.filter(f=>f.required).forEach(f=>{if(!columnMap[f.key])missing.push(f.label)});if(missing.length){setMsg('importMsg','Please map required column(s): '+missing.join(', '),'err');return}renderColumnMapBar(false,importFieldDefs.filter(f=>columnMap[f.key]).length,importFieldDefs.length);$('columnMapPanel').classList.add('hidden');setMsg('importMsg','Column mapping applied.','ok')};
-$('previewBtn').onclick=async()=>{const file=$('fileInput').files[0];if(!file){setMsg('importMsg','Please select a file.','err');return}if(importFieldDefs.length){const missing=importFieldDefs.filter(f=>f.required&&!columnMap[f.key]);if(missing.length){$('columnMapPanel').classList.remove('hidden');setMsg('importMsg','Please map required column(s) before validating: '+missing.map(f=>f.label).join(', '),'err');return}}setMsg('importMsg','Step 2–5: detecting, validating and checking duplicates…');$('previewArea').classList.add('hidden');$('confirmImportBtn').classList.add('hidden');$('cancelPreviewBtn').classList.add('hidden');wizardStep(2);try{const fd=new FormData();fd.append('file',file);if(Object.keys(columnMap).length)fd.append('column_map',JSON.stringify(columnMap));const d=await api('/api/admin/import_preview',{method:'POST',body:fd});importPreviewId=d.preview_id;$('pDetected').textContent=d.detected.toLocaleString();$('pValid').textContent=d.valid.toLocaleString();$('pDuplicates').textContent=d.duplicates.toLocaleString();$('pUpdated').textContent=Number(d.updated||0).toLocaleString();$('pErrors').textContent=d.errors.toLocaleString();$('pIntensity').textContent=d.missing_intensity.toLocaleString();$('pDates').textContent=d.invalid_dates.toLocaleString();$('pWC').textContent=d.unknown_work_centers.toLocaleString();$('pGrade').textContent=d.unknown_grades.toLocaleString();$('previewBody').innerHTML=(d.sample||[]).map(r=>`<tr><td>${esc(r.insp_lot_date)}</td><td>${esc(r.heat_no)}</td><td>${esc(r.batch_no)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${Number(r.output_weight||0).toFixed(3)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity)||'—'}</td><td>${esc(r.quality_decision)}</td></tr>`).join('');renderImportDiff(d.updated_details||[]);$('previewArea').classList.remove('hidden');$('confirmImportBtn').classList.remove('hidden');$('cancelPreviewBtn').classList.remove('hidden');wizardStep(5);setMsg('importMsg',`${d.filename}: preview ready. Review new, updated, duplicate and validation checks before confirming.`,'ok')}catch(e){wizardStep(1);setMsg('importMsg',e.message,'err')}};
+$('previewBtn').onclick=async()=>{const file=$('fileInput').files[0];if(!file){setMsg('importMsg','Please select a file.','err');return}if(importFieldDefs.length){const missing=importFieldDefs.filter(f=>f.required&&!columnMap[f.key]);if(missing.length){$('columnMapPanel').classList.remove('hidden');setMsg('importMsg','Please map required column(s) before validating: '+missing.map(f=>f.label).join(', '),'err');return}}setMsg('importMsg','Step 2–5: detecting, validating and checking duplicates…');$('previewArea').classList.add('hidden');$('confirmImportBtn').classList.add('hidden');$('cancelPreviewBtn').classList.add('hidden');wizardStep(2);try{const fd=new FormData();fd.append('file',file);if(Object.keys(columnMap).length)fd.append('column_map',JSON.stringify(columnMap));const d=await withProgress('Validating import file',file.name,prog=>api('/api/admin/import_preview',{method:'POST',body:fd,onUploadProgress:f=>prog.set(f*55)}));importPreviewId=d.preview_id;$('pDetected').textContent=d.detected.toLocaleString();$('pValid').textContent=d.valid.toLocaleString();$('pDuplicates').textContent=d.duplicates.toLocaleString();$('pUpdated').textContent=Number(d.updated||0).toLocaleString();$('pErrors').textContent=d.errors.toLocaleString();$('pIntensity').textContent=d.missing_intensity.toLocaleString();$('pDates').textContent=d.invalid_dates.toLocaleString();$('pWC').textContent=d.unknown_work_centers.toLocaleString();$('pGrade').textContent=d.unknown_grades.toLocaleString();$('previewBody').innerHTML=(d.sample||[]).map(r=>`<tr><td>${esc(r.insp_lot_date)}</td><td>${esc(r.heat_no)}</td><td>${esc(r.batch_no)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${Number(r.output_weight||0).toFixed(3)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity)||'—'}</td><td>${esc(r.quality_decision)}</td></tr>`).join('');renderImportDiff(d.updated_details||[]);$('previewArea').classList.remove('hidden');$('confirmImportBtn').classList.remove('hidden');$('cancelPreviewBtn').classList.remove('hidden');wizardStep(5);setMsg('importMsg',`${d.filename}: preview ready. Review new, updated, duplicate and validation checks before confirming.`,'ok')}catch(e){wizardStep(1);setMsg('importMsg',e.message,'err')}};
 // Desktop convenience: drag a file from File Explorer/Finder straight onto
 // the upload box instead of always going through the native file picker.
 // Just fills the same <input type="file">, so every existing handler above
@@ -736,7 +882,7 @@ function wireDropzone(boxId, inputId){
 }
 wireDropzone('importFilebox','fileInput');
 wireDropzone('fbFilebox','fbFileInput');
-$('confirmImportBtn').onclick=async()=>{if(!importPreviewId)return;setMsg('importMsg','Step 6: confirming import…');wizardStep(6);try{const d=await api('/api/admin/import_confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preview_id:importPreviewId})});setMsg('importMsg',`Import completed: ${d.inserted.toLocaleString()} new records added and ${Number(d.updated||0).toLocaleString()} records updated.`,'ok');$('importResult').innerHTML=`<div class="result"><strong>Import Summary:</strong> ${d.detected.toLocaleString()} detected | ${d.inserted.toLocaleString()} new | ${Number(d.updated||0).toLocaleString()} updated | ${d.duplicates.toLocaleString()} duplicates | ${d.errors.toLocaleString()} errors</div>`;importPreviewId='';$('previewArea').classList.add('hidden');$('confirmImportBtn').classList.add('hidden');$('cancelPreviewBtn').classList.add('hidden');$('fileInput').value='';$('columnMapBar').classList.add('hidden');$('columnMapPanel').classList.add('hidden');importHeaders=[];importFieldDefs=[];columnMap={};wizardStep(7);loadRecords();loadImportHistory();loadHome();loadDataQuality()}catch(e){setMsg('importMsg',e.message,'err')}};
+$('confirmImportBtn').onclick=async()=>{if(!importPreviewId)return;setMsg('importMsg','Step 6: confirming import…');wizardStep(6);try{const d=await withProgress('Importing records','Writing the validated rows to the database…',()=>api('/api/admin/import_confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preview_id:importPreviewId})}));setMsg('importMsg',`Import completed: ${d.inserted.toLocaleString()} new records added and ${Number(d.updated||0).toLocaleString()} records updated.`,'ok');$('importResult').innerHTML=`<div class="result"><strong>Import Summary:</strong> ${d.detected.toLocaleString()} detected | ${d.inserted.toLocaleString()} new | ${Number(d.updated||0).toLocaleString()} updated | ${d.duplicates.toLocaleString()} duplicates | ${d.errors.toLocaleString()} errors</div>`;importPreviewId='';$('previewArea').classList.add('hidden');$('confirmImportBtn').classList.add('hidden');$('cancelPreviewBtn').classList.add('hidden');$('fileInput').value='';$('columnMapBar').classList.add('hidden');$('columnMapPanel').classList.add('hidden');importHeaders=[];importFieldDefs=[];columnMap={};wizardStep(7);loadRecords();loadImportHistory();loadHome();loadDataQuality()}catch(e){setMsg('importMsg',e.message,'err')}};
 $('cancelPreviewBtn').onclick=()=>{importPreviewId='';$('previewArea').classList.add('hidden');$('importDiffPanel')?.classList.add('hidden');$('confirmImportBtn').classList.add('hidden');$('cancelPreviewBtn').classList.add('hidden');$('fileInput').value='';$('columnMapBar').classList.add('hidden');$('columnMapPanel').classList.add('hidden');importHeaders=[];importFieldDefs=[];columnMap={};$('importResult').innerHTML='';setMsg('importMsg','Preview cancelled.');wizardStep(1)};
 
 async function loadDbStatus(){try{const d=await api('/api/admin/database_status');$('dbProvider').textContent=d.provider+ (d.persistent?' • persistent (survives app updates)':' • ⚠ NOT persistent — will reset on next app update');$('dbProvider').style.color=d.persistent?'':'#DC2626';$('dbUsage').textContent=`${d.used_mb.toFixed(2)} MB (${d.usage_pct.toFixed(1)}%)`;$('dbLimit').textContent=`${d.limit_mb.toFixed(0)} MB`;$('dbMeter').style.width=Math.min(d.usage_pct,100)+'%';const labels={healthy:'● Healthy',warning:'● Warning',action:'● Action required',critical:'● Critical'};$('dbStatus').textContent=(labels[d.status]||d.status)+` — ${d.records.toLocaleString()} records`;$('dbStatus').className='db-status '+d.status}catch(e){$('dbStatus').textContent='Database status unavailable'}}
@@ -803,15 +949,18 @@ function refreshRelativeTimes(){
   document.querySelectorAll('[data-ts]').forEach(el=>{ const raw=el.getAttribute('data-ts'); el.textContent=timeAgo(raw); el.title=formatDateTime12(raw,true); });
 }
 setInterval(refreshRelativeTimes, 30000);
-async function del(id){if(!confirm('Delete record ID '+id+' permanently?'))return;try{await api('/api/admin/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});loadRecords(recState.query,{dateFrom:recState.dateFrom,dateTo:recState.dateTo,recordId:recState.recordId,offset:recState.offset})}catch(e){alert(e.message)}}
+async function del(id){if(!confirm('Delete record ID '+id+' permanently?'))return;try{await api('/api/admin/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});loadRecords(recState.query,{dateFrom:recState.dateFrom,dateTo:recState.dateTo,recordId:recState.recordId,offset:recState.offset})}catch(e){showToast('error','Something went wrong',e.message)}}
 async function loadBackups(){try{const d=await api('/api/admin/backup/list');const backups=d.backups||[],dr=d.recovery||{};$('backupsBody').innerHTML=backups.map(b=>`<tr><td>${esc(b.filename)}</td><td>${esc(b.reason)}</td><td>${b.size_kb} KB</td><td>${formatDateTime12(b.modified_at,true)}</td><td><span title="Revision ${esc(String(b.data_revision??'—'))}">${b.valid?'✅':'❌'} R${esc(String(b.data_revision??'—'))}</span> <a class="btn" style="padding:4px 10px;font-size:12px" href="/api/admin/backup/download?name=${encodeURIComponent(b.filename)}">⬇ Download</a> <button class="btn" style="padding:4px 10px;font-size:12px" onclick="restoreBackup('${esc(b.filename)}')">↺ Restore</button></td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;color:#8a97a8">No recovery points yet — create one before production use.</td></tr>';const dot=$('backupHealthDot'),txt=$('backupHealthText'),meta=$('backupHealthMeta');if(dot&&txt){const stale=!!dr.stale,remote=dr.remote_configured;dot.className='health-dot '+(!backups.length||stale||(remote&&dr.remote_status!=='verified')?'warn':'good');txt.textContent=!backups.length?'Backup health: no snapshot yet':stale?'Backup health: current data not yet snapshotted':(remote&&dr.remote_status!=='verified')?'Backup health: local only — off-site copy needs attention':remote?'Backup health: protected':'Backup health: current locally — off-site backup not configured';meta.textContent=backups.length?`Live revision ${dr.data_revision??'—'} · backed-up ${dr.last_backup_revision??'—'} · ${remote?(dr.remote_status||'remote configured'):'off-site backup not configured'} · ${backups.length} local snapshot(s)`:'Create and verify a recovery point before high-risk maintenance.'}$('drDataRevision').textContent=Number(dr.data_revision??0).toLocaleString();$('drBackupRevision').textContent=Number(dr.last_backup_revision??-1)<0?'—':Number(dr.last_backup_revision).toLocaleString();$('drRemoteStatus').textContent=dr.remote_configured?(dr.remote_status==='verified'?'✅ VERIFIED':dr.remote_status==='failed'?'⚠️ FAILED':'⏳ PENDING'):'⚪ NOT CONFIGURED';$('drRecoveryAge').textContent=dr.local_backup_age_seconds==null?'—':dr.local_backup_age_seconds<60?'<1 min ago':Math.round(dr.local_backup_age_seconds/60)+' min ago';}catch(e){const dot=$('backupHealthDot');if(dot)dot.className='health-dot bad';if($('backupHealthText'))$('backupHealthText').textContent='Backup health: unavailable';if($('backupHealthMeta'))$('backupHealthMeta').textContent=e.message;setMsg('backupMsg',e.message,'err')}}
-async function restoreBackup(name){if(!confirm(`Restore data from "${name}"? This replaces the current disposition data, 6M Fishbone Master, aliases and KPI targets with what's in this backup. A safety snapshot of the current data is taken first.`))return;setMsg('backupMsg','Restoring…');try{const d=await api('/api/admin/backup/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});setMsg('backupMsg',`Restored: ${d.restored.disposition.toLocaleString()} disposition rows, ${d.restored.fishbone_master} 6M Fishbone Master rows.`,'ok');loadBackups();loadRecords();loadFishboneMaster()}catch(e){setMsg('backupMsg',e.message,'err')}}
-$('createBackupBtn').onclick=async()=>{setMsg('backupMsg','Creating backup…');try{const d=await api('/api/admin/backup/create',{method:'POST'});setMsg('backupMsg',`Backup created: ${d.filename} (${d.counts.disposition.toLocaleString()} disposition rows, ${d.counts.fishbone_master} 6M Fishbone Master rows).`,'ok');loadBackups()}catch(e){setMsg('backupMsg',e.message,'err')}};
-$('restoreFileInput').addEventListener('change',async()=>{const file=$('restoreFileInput').files[0];if(!file)return;if(!confirm(`Restore data from "${file.name}"? This replaces the current disposition data, 6M Fishbone Master, aliases and KPI targets. A safety snapshot of the current data is taken first.`)){$('restoreFileInput').value='';return}setMsg('backupMsg','Restoring…');try{const fd=new FormData();fd.append('file',file);const d=await api('/api/admin/backup/restore',{method:'POST',body:fd});setMsg('backupMsg',`Restored: ${d.restored.disposition.toLocaleString()} disposition rows, ${d.restored.fishbone_master} 6M Fishbone Master rows.`,'ok');$('restoreFileInput').value='';loadBackups();loadRecords();loadFishboneMaster()}catch(e){setMsg('backupMsg',e.message,'err');$('restoreFileInput').value=''}});
+async function restoreBackup(name){if(!confirm(`Restore data from "${name}"? This replaces the current disposition data, 6M Fishbone Master, aliases and KPI targets with what's in this backup. A safety snapshot of the current data is taken first.`))return;setMsg('backupMsg','Restoring…');try{const d=await withProgress('Restoring backup',name,()=>api('/api/admin/backup/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}));setMsg('backupMsg',`Restored: ${d.restored.disposition.toLocaleString()} disposition rows, ${d.restored.fishbone_master} 6M Fishbone Master rows.`,'ok');loadBackups();loadRecords();loadFishboneMaster()}catch(e){setMsg('backupMsg',e.message,'err')}}
+$('createBackupBtn').onclick=async()=>{setMsg('backupMsg','Creating backup…');try{const d=await withProgress('Creating backup','Saving disposition data, 6M Fishbone Master and KPI targets…',()=>api('/api/admin/backup/create',{method:'POST'}));setMsg('backupMsg',`Backup created: ${d.filename} (${d.counts.disposition.toLocaleString()} disposition rows, ${d.counts.fishbone_master} 6M Fishbone Master rows).`,'ok');loadBackups()}catch(e){setMsg('backupMsg',e.message,'err')}};
+$('restoreFileInput').addEventListener('change',async()=>{const file=$('restoreFileInput').files[0];if(!file)return;if(!confirm(`Restore data from "${file.name}"? This replaces the current disposition data, 6M Fishbone Master, aliases and KPI targets. A safety snapshot of the current data is taken first.`)){$('restoreFileInput').value='';return}setMsg('backupMsg','Restoring…');try{const fd=new FormData();fd.append('file',file);const d=await withProgress('Restoring from file',file.name,prog=>api('/api/admin/backup/restore',{method:'POST',body:fd,onUploadProgress:f=>prog.set(f*55)}));setMsg('backupMsg',`Restored: ${d.restored.disposition.toLocaleString()} disposition rows, ${d.restored.fishbone_master} 6M Fishbone Master rows.`,'ok');$('restoreFileInput').value='';loadBackups();loadRecords();loadFishboneMaster()}catch(e){setMsg('backupMsg',e.message,'err');$('restoreFileInput').value=''}});
 // Manual refresh is wired once by the canonical lazy-loader below. Do not rebind it here,
 // otherwise the old all-panels request storm would override the optimized refresh path.
 $('commandRefreshBtn').onclick=()=>window.__adminRefreshLoaded?.();
-$('backupBtn').onclick=()=>{window.location.href='/api/admin/export_csv'};boot();
+$('backupBtn').onclick=()=>downloadWithProgress('/api/admin/export_csv','disposition_export.csv','Exporting disposition CSV…');
+// Backup ⬇ Download links (rows are rebuilt on every list refresh, so this is delegated).
+document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[href^="/api/admin/backup/download"]');if(!a)return;e.preventDefault();let nm='backup';try{nm=new URL(a.href,location.href).searchParams.get('name')||nm}catch{}downloadWithProgress(a.getAttribute('href'),nm,'Downloading backup…')});
+boot();
 
 // Admin theme toggle — shares the qdash_theme preference with the main dashboard.
 (function initAdminThemeToggle(){
@@ -903,17 +1052,17 @@ html[data-theme="dark"] .admin-health-score-card,html[data-theme="dark"] .admin-
   });
   document.addEventListener('change',e=>{if(e.target.matches('.record-select')){const id=String(e.target.value);e.target.checked?selected.add(id):selected.delete(id);syncSelected()}if(e.target.id==='selectAllRecords'){document.querySelectorAll('.record-select').forEach(x=>{x.checked=e.target.checked;const id=String(x.value);e.target.checked?selected.add(id):selected.delete(id)});syncSelected()}});
   $('clearSelectedRecords')?.addEventListener('click',()=>{selected.clear();if($('selectAllRecords'))$('selectAllRecords').checked=false;syncSelected()});
-  $('exportSelectedRecords')?.addEventListener('click',async()=>{if(!selected.size){alert('Select at least one record first.');return}try{const ids=[...selected].slice(0,500);const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,limit:500})});const rows=d.rows||[];if(!rows.length){alert('None of the selected records could be found.');return}const cols=['id','insp_lot_date','heat_no','batch_no','work_center','grade','output_weight','main_defect','defect_intensity','quality_decision','month','week','quarter','financial_year'];const csv=[cols.join(','),...rows.map(r=>cols.map(k=>`"${String(r[k]??'').replace(/"/g,'""')}"`).join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='selected_records.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(e){alert(e.message)}});
+  $('exportSelectedRecords')?.addEventListener('click',async()=>{if(!selected.size){showToast('info','No records selected','Select at least one record first.');return}try{const ids=[...selected].slice(0,500);const d=await api('/api/admin/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,limit:500})});const rows=d.rows||[];if(!rows.length){showToast('error','Nothing to export','None of the selected records could be found.');return}const cols=['id','insp_lot_date','heat_no','batch_no','work_center','grade','output_weight','main_defect','defect_intensity','quality_decision','month','week','quarter','financial_year'];const csv=[cols.join(','),...rows.map(r=>cols.map(k=>`"${String(r[k]??'').replace(/"/g,'""')}"`).join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='selected_records.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(e){showToast('error','Something went wrong',e.message)}});
   $('deleteSelectedRecords')?.addEventListener('click',async()=>{
-    if(!selected.size){alert('Select at least one record first.');return}
+    if(!selected.size){showToast('info','No records selected','Select at least one record first.');return}
     const ids=[...selected].map(Number);
     if(!confirm(`Permanently delete ${ids.length} selected record${ids.length===1?'':'s'}? This cannot be undone.`))return;
     try{
-      const d=await api('/api/admin/bulk_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
+      const d=await withProgress('Deleting records',`${ids.length} selected record${ids.length===1?'':'s'}`,()=>api('/api/admin/bulk_delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})}));
       selected.clear(); if($('selectAllRecords'))$('selectAllRecords').checked=false; syncSelected();
-      alert(`Deleted ${d.deleted} record${d.deleted===1?'':'s'}.`);
+      showToast('success','Records deleted',`Deleted ${d.deleted} record${d.deleted===1?'':'s'}.`);
       loadRecords($('recSearchText')?.value.trim()||'',{dateFrom:$('recSearchFrom')?.value||'',dateTo:$('recSearchTo')?.value||''}); loadHome(); loadDataQuality();
-    }catch(e){alert(e.message)}
+    }catch(e){showToast('error','Something went wrong',e.message)}
   });
   window.__adminV29Refresh=refreshV29;
 })();
@@ -928,7 +1077,7 @@ html[data-theme="dark"] .import-diff{background:#0F1626;border-color:#2A3B54}htm
 <script>
 async function loadValidationRules(){try{const d=await api('/api/admin/validation_rules');const h=$('validationRulesBody');if(h)h.innerHTML=(d.rules||[]).map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.field)}</td><td><span class="badge ${r.severity==='High'?'bad':'warn'}">${esc(r.severity)}</span></td><td>${esc(r.description)}</td><td><span class="badge ok">Active</span></td></tr>`).join('')}catch(e){console.error(e)}}
 async function loadAuditAnalytics(){try{const d=await api('/api/admin/audit_analytics');$('aaTotal').textContent=Number(d.total||0).toLocaleString();$('aa24h').textContent=Number(d.last_24h||0).toLocaleString();$('aaActionsBody').innerHTML=(d.actions||[]).map(r=>`<tr><td>${esc(r.action||'')}</td><td>${Number(r.c||0).toLocaleString()}</td></tr>`).join('');$('aaUsersBody').innerHTML=(d.users||[]).map(r=>`<tr><td>${esc(r.username||'Unknown')}</td><td>${Number(r.c||0).toLocaleString()}</td></tr>`).join('')}catch(e){console.error(e)}}
-async function revokeAdminSession(username){if(!confirm('Revoke all other sessions for '+username+'?'))return;try{await api('/api/admin/revoke_session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});loadSecurityStatus()}catch(e){alert(e.message)}}
+async function revokeAdminSession(username){if(!confirm('Revoke all other sessions for '+username+'?'))return;try{await api('/api/admin/revoke_session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});loadSecurityStatus()}catch(e){showToast('error','Something went wrong',e.message)}}
 </script>
 <script>
 async function loadProductionSafety(){
@@ -975,13 +1124,13 @@ html[data-theme="dark"] .command-card,html[data-theme="dark"] .recovery-card{box
   const $id=id=>document.getElementById(id); const go=target=>$id(target)?.scrollIntoView({behavior:'smooth',block:'start'});
   $id('openBackupsBtn')?.addEventListener('click',()=>go('backupsPanel'));
   async function perf(){try{const d=await api('/api/admin/db_performance');$id('perfProvider').textContent=d.provider||'—';$id('perfLatency').textContent=Number(d.latency_ms).toFixed(1)+' ms';$id('perfLatency2').textContent=Number(d.second_latency_ms).toFixed(1)+' ms';$id('perfStatus').textContent=d.status==='healthy'?'Healthy':d.status==='warning'?'Watch':'Slow';$id('perfBar').style.width=Math.min(100,Math.max(4,Number(d.latency_ms)/10))+'%';setMsg('perfMsg',`Read-only check completed at ${d.checked_at?formatDateTime12(d.checked_at,true):'now'}.`,'ok');return d}catch(e){setMsg('perfMsg',e.message,'err');return null}}
-  $id('refreshPerformanceBtn')?.addEventListener('click',perf);
+  $id('refreshPerformanceBtn')?.addEventListener('click',async()=>{const d=await perf();if(d)showToast('success','DB performance','Read-only check completed — '+Number(d.latency_ms).toFixed(1)+' ms.')});
   async function audit(){try{const d=await api('/api/admin/audit_trail');const rows=d.rows||[];window.__auditRows=rows;const actions=[...new Set(rows.map(r=>r.action).filter(Boolean))].sort();const sel=$id('auditActionFilter');if(sel)sel.innerHTML='<option value="">⚙️ All actions</option>'+actions.map(a=>`<option>${esc(a)}</option>`).join('');renderAudit() }catch(e){console.error(e)}}
   function renderAudit(){const rows=window.__auditRows||[];const q=($id('auditSearch')?.value||'').toLowerCase().trim(), act=$id('auditActionFilter')?.value||'', user=($id('auditUserFilter')?.value||'').toLowerCase().trim(), date=$id('auditDateFilter')?.value||'';const out=rows.filter(r=>{const hay=[r.username,r.action,r.record_id,r.ip,r.details,r.role,r.created_at].map(x=>String(x||'').toLowerCase()).join(' ');return (!q||hay.includes(q))&&(!act||String(r.action||'')===act)&&(!user||String(r.username||'').toLowerCase().includes(user))&&(!date||String(r.created_at||'').slice(0,10)===date)});$id('auditMatchCount').textContent=out.length.toLocaleString();$id('auditSensitiveCount').textContent=out.filter(r=>/delete|restore|password|user|import|backup/i.test(String(r.action||''))).length.toLocaleString();$id('auditExplorerBody').innerHTML=out.slice(0,500).map(r=>`<tr><td>${esc(r.username||'')}</td><td>${esc(r.role||'')}</td><td>⚙️ ${esc(r.action||'')}</td><td>${esc(r.record_id||'—')}</td><td>🕒 ${formatDateTime12(r.created_at,true)}</td><td>🌐 ${esc(r.ip||'')}</td><td>${esc(r.details||'')}</td></tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted)">🔎 No matching audit events.</td></tr>'}
   ['auditFilterBtn','auditSearch','auditActionFilter','auditUserFilter','auditDateFilter'].forEach(id=>$id(id)?.addEventListener(id==='auditFilterBtn'?'click':id==='auditActionFilter'||id==='auditDateFilter'?'change':'input',renderAudit));
   $id('auditClearBtn')?.addEventListener('click',()=>{['auditSearch','auditUserFilter','auditDateFilter'].forEach(id=>{$id(id).value=''});$id('auditActionFilter').value='';renderAudit()});
   async function recovery(){try{const d=await api('/api/admin/disaster_recovery/status');const bs=(await api('/api/admin/backup/list')).backups||[];const r=d||{};$id('recoveryBackupStatus').textContent=bs.length?(r.stale?'⚠️ Live data is ahead of latest recovery point':`✅ ${bs.length} snapshot(s) available`):'No snapshot available';$id('recoveryCoverage').textContent=bs.length?`Latest revision: ${r.last_backup_revision??'—'} · Live: ${r.data_revision??'—'}`:'Create a backup from Backups';$id('recoveryRemoteStatus').textContent=r.remote_configured?(r.remote_status==='verified'?'✅ Off-site copy verified':`⚠️ Off-site ${r.remote_status}`):'⚪ Off-site bucket not configured';$id('recoveryDataRevision').textContent=`Live revision ${r.data_revision??0} · changed ${r.data_changed_at?formatDateTime12(r.data_changed_at,true):'—'}`;$id('ccBackups').textContent=bs.length?(r.stale?`🟠 ${bs.length} snapshot(s) • stale`:`🟢 ${bs.length} snapshot(s)`):'🟠 No snapshot'}catch(e){$id('recoveryBackupStatus').textContent='Unavailable';$id('recoveryRemoteStatus').textContent='Unavailable';$id('ccBackups').textContent='🔴 Unavailable'}}
-  $id('verifyLatestBackupBtn')?.addEventListener('click',async()=>{try{const d=await api('/api/admin/backup/list');const b=(d.backups||[])[0];if(!b){setMsg('recoveryMsg','No backup available to verify.','err');return}const v=await api('/api/admin/backup/verify?name='+encodeURIComponent(b.filename));setMsg('recoveryMsg',v.valid?`✅ Verified ${b.filename} • ${Object.entries(v.counts||{}).map(([k,n])=>k+': '+n).join(' • ')}`:`⚠️ Verification failed for ${b.filename}` ,v.valid?'ok':'err')}catch(e){setMsg('recoveryMsg',e.message,'err')}});
+  $id('verifyLatestBackupBtn')?.addEventListener('click',async()=>{try{const d=await api('/api/admin/backup/list');const b=(d.backups||[])[0];if(!b){setMsg('recoveryMsg','No backup available to verify.','err');return}const v=await withProgress('Verifying backup',b.filename,()=>api('/api/admin/backup/verify?name='+encodeURIComponent(b.filename)));setMsg('recoveryMsg',v.valid?`✅ Verified ${b.filename} • ${Object.entries(v.counts||{}).map(([k,n])=>k+': '+n).join(' • ')}`:`⚠️ Verification failed for ${b.filename}` ,v.valid?'ok':'err')}catch(e){setMsg('recoveryMsg',e.message,'err')}});
   // command() used to re-fetch db_performance itself even though perf() (called
   // right alongside it on every load and every 60s poll) had just fetched the
   // exact same thing — every admin page load/refresh was paying for that read
@@ -1056,13 +1205,21 @@ async function loadV38Safety(){try{const d=await api('/api/admin/service_health'
   window.__adminRefreshLoaded=async()=>{
     const role=window.__adminRole||'admin';
     const active=[...touched];
-    await Promise.allSettled(active.map(id=>{
-      if(id==='recordsPanel'){
-        const st=window.__adminRecordState||null;
-        if(st) return loadRecords(st.query||'',{dateFrom:st.dateFrom||'',dateTo:st.dateTo||'',recordId:st.recordId,offset:st.offset||0});
-      }
-      return runPanel(id,role,true);
-    }));
+    if(window.__adminRefreshBusy){showToast('info','Already refreshing','Please wait for the current refresh to finish.');return}
+    window.__adminRefreshBusy=true;
+    // Real progress: one step per open section, so the bar reflects how many have actually reloaded.
+    const prog=startProgress('Refreshing admin data',`${active.length} open section${active.length===1?'':'s'}`);
+    let finished=0;const tick=()=>{finished++;prog.set(finished/Math.max(1,active.length)*99)};
+    try{
+      await Promise.allSettled(active.map(id=>{
+        let p;
+        if(id==='recordsPanel'&&window.__adminRecordState){const st=window.__adminRecordState;p=loadRecords(st.query||'',{dateFrom:st.dateFrom||'',dateTo:st.dateTo||'',recordId:st.recordId,offset:st.offset||0})}
+        else p=runPanel(id,role,true);
+        return Promise.resolve(p).finally(tick);
+      }));
+      prog.done();
+    }catch(e){prog.fail()}
+    finally{window.__adminRefreshBusy=false}
     setMsg('loginMsg','Loaded Admin data refreshed.','ok');
   };
   const oldRefresh=$('refreshBtn');

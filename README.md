@@ -1,3 +1,11 @@
+## What changed in V66.1 (follow-up: header time, admin toasts + progress, palette categories)
+- **Header "Last Updated"** now includes minutes once it passes an hour ("2 hr 15 min ago"); exact hours still read "2 hr ago". The exact date/time stays in the hover tooltip.
+- **Admin toast notifications**: the admin console now uses the same toasts as the dashboard (top-right, success / error / info, light and dark theme). Result messages and the old browser `alert()` pop-ups all show as toasts; errors also stay inline next to the form, and the temporary-password message stays visible longer.
+- **Admin progress bars** (live % and "~Ns left"): import validate and confirm, 6M Fishbone import, backup create / restore / verify / download, Export CSV, audit export, bulk delete and "Refresh Loaded Admin Data". File uploads use real upload progress; downloads use real bytes received.
+- **Presentation-mode button** sits at the far right end of each analytics panel title instead of overlapping the title text.
+- **Command palette (header "Commands", Ctrl/⌘+K)** groups commands into Navigation, Filters & Compare, Appearance, Preferences and Admin, with a count per category. Hovering an entry shows the cursor field-name tag (command name, category and a short description).
+- **Service worker**: shell cache name bumped to `qdash-shell-v2` so installed copies pick up the new `app.js` / `app.css`.
+
 ## What changed in V66.1 (full audit pass)
 - **Faster first load**: `index.html` shrank from 1.4 MB to ~90 KB by moving two inline base64 intro photos into cacheable `intro-photo-*.webp` files; logo/favicon PNGs were also re-encoded (~300 KB saved in total).
 - **Service worker**: no longer caches report downloads; API cache is bounded.
@@ -190,11 +198,11 @@ The bundled `quality.db` is unchanged (4,936 disposition rows).
   Decision, Defect Intensity), KPI cards with period-over-period change, drill-down to underlying coils.
 - **Quality Control Room (QCR)** – health score, early warnings, problem finder, why-changed analysis.
 - **Work Center & Grade**, **Defects List** (with 6M Fishbone / RCA reference) and **Period Trend** tabs.
-- **Compare Periods** – two dashboards side by side; saved views; global search; command palette (Ctrl/⌘+K);
+- **Compare Periods** – two dashboards side by side; saved views; global search; command palette (Ctrl/⌘+K) with categorised commands and field-name hints;
   light/dark theme; works on phones and tablets.
 - **Exports** – Excel, PDF, PowerPoint (chart + table on every slide) and raw CSV.
 - **Admin console** (`/admin`) – grouped, scroll-synced control center for monitoring, data operations,
-  latest records, 6M Fishbone, backups/recovery, security and audit; sidebar order always matches section order.
+  latest records, 6M Fishbone, backups/recovery, security and audit; sidebar order always matches section order. Results appear as toasts, and long jobs (import, backup/restore, downloads) show a progress bar.
 - **Presentation Mode** – drill-downs stay above the presentation overlay and return cleanly to the dashboard when closed (`Esc` closes the drill-down first, preserving Presentation Mode); toolbar titles exclude the fullscreen control glyph.
 - **Header clock** – a compact calendar-style clock at the top-right of the header, above Commands: local date plus a live seconds clock in 12-hour AM/PM format, in both light and dark themes.
 

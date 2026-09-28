@@ -1640,6 +1640,13 @@ html[data-theme="dark"] .cmdk-kbd{background:#0F1626;border-color:#2A3B54;color:
 .cmdk-item .cmdk-hint{font-size:11.5px;color:var(--muted);font-weight:700;}
 .cmdk-item.active{background:var(--accent);color:#fff;}
 .cmdk-item.active .cmdk-hint{color:rgba(255,255,255,.8);}
+.cmdk-cat{display:flex;align-items:center;gap:8px;padding:12px 12px 5px;font:800 10.5px Manrope,sans-serif;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);cursor:default;user-select:none;}
+.cmdk-list>.cmdk-cat:first-child{padding-top:5px;}
+.cmdk-cat-icon{font-size:13px;line-height:1;}
+.cmdk-cat-name{flex:none;}
+.cmdk-cat-count{margin-left:auto;font:800 10px Manrope,sans-serif;letter-spacing:.3px;padding:2px 7px;border-radius:999px;background:rgba(120,140,160,.16);color:var(--muted);}
+.cmdk-cat::after{content:'';order:1;flex:1 1 auto;height:1px;background:var(--border);opacity:.7;}
+.cmdk-cat-count{order:2;margin-left:0;}
 .cmdk-empty{padding:22px;text-align:center;color:var(--muted);font:600 13.5px Manrope,sans-serif;}
 .cmdk-foot{display:flex;gap:14px;padding:9px 16px;border-top:1px solid var(--border);font:700 11px Manrope,sans-serif;color:var(--muted);}
 /* The palette opens on phones too (via the ⌘K header button): dark mode / sound / compact rows are only reachable from here now. */
@@ -1737,9 +1744,15 @@ body.analytics-presentation-open{overflow:hidden!important;}
 .analytics-presentation-panel>.qcr-fishbone-diagram{flex:1 1 0;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;}
 .analytics-presentation-panel #dashFishboneDiagram .fishbone-svg{flex:1 1 0;min-height:0;min-width:0!important;width:100%;height:100%;max-width:none;}
 .analytics-presentation-panel>#decisionPie{max-width:none !important;margin:0!important;}
-.analytics-panel-title{position:relative;padding-right:62px!important;}
+.analytics-panel-title{display:flex;align-items:center;gap:12px;position:relative;padding-right:14px!important;}
+/* Presentation-mode button: pinned to the far right end of the panel title. It used to be
+   position:absolute, but the shared `button:not(.tab-btn){position:relative}` rule (ripple
+   support, further down) out-ranks a single class, so the offsets were applied relatively
+   and the button landed on top of the title text. Flex + margin-left:auto keeps it on the
+   right no matter which rule wins, and the ripple's position:relative keeps working. */
+.analytics-panel-title>.analytics-expand-btn{position:relative;right:auto;top:auto;transform:none;margin-left:auto;flex:0 0 auto;}
 .analytics-expand-btn{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:34px;height:34px;display:grid;place-items:center;border:1px solid #bfd0df;border-radius:9px;background:rgba(255,255,255,.72);color:#245b80;font:700 17px/1 Arial,sans-serif;cursor:pointer;box-shadow:0 2px 6px rgba(15,42,74,.08);transition:transform .15s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease;}
-.analytics-expand-btn:hover{transform:translateY(-50%) scale(1.035);background:#fff;border-color:#8fb0c7;box-shadow:0 4px 10px rgba(15,42,74,.12);}
+.analytics-expand-btn:hover{transform:scale(1.035);background:#fff;border-color:#8fb0c7;box-shadow:0 4px 10px rgba(15,42,74,.12);}
 .analytics-expand-btn:focus-visible{outline:3px solid rgba(17,141,255,.25);outline-offset:2px;}
 html[data-theme="dark"] .analytics-presentation-backdrop{background:rgba(2,8,18,.78);}
 html[data-theme="dark"] .analytics-presentation-shell{background:#101827;border-color:#2A3B54;box-shadow:0 28px 80px rgba(0,0,0,.55);}
@@ -1752,7 +1765,7 @@ html[data-theme="dark"] .analytics-expand-btn:hover{background:#18263d;border-co
   .analytics-presentation-toolbar h2{font-size:16px;}
   .analytics-presentation-stage{padding:8px;}
   .analytics-expand-btn{right:10px;width:31px;height:31px;font-size:16px;}
-  .analytics-panel-title{padding-right:52px!important;}
+  .analytics-panel-title{padding-right:10px!important;}
 }
 @media (prefers-reduced-motion:reduce){.analytics-presentation,.analytics-expand-btn,.analytics-presentation-close{transition:none!important;}}
 

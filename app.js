@@ -443,44 +443,65 @@ function initCommandPalette(){
   const TAB_LABELS={dashboard:'📊 Dashboard',controlroom:'🩺 Quality Control Room',wcgrade:'🏭 Work Center & Grade',defects:'⚠️ Defect Register',weekly:'📈 Monthly / Weekly Trend'};
   function buildCommands(){
     const cmds=[];
-    Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),run:()=>activateTab(key)}));
+    Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({cat:'nav',icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),desc:'Jump to this dashboard section',run:()=>activateTab(key)}));
     // Exports (Excel / PDF / PPT / CSV) live only in the header's "⬇ Export" button now
     // Exports open through the dedicated dialog (#exportDialogModal) instead of the Command Palette.
     // Compare mode is desktop-only (its button is hidden on narrow screens), so only offer it when the button is actually shown.
-    if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({icon:'⊞',label:'Compare Periods (side-by-side)',run:()=>document.getElementById('compareModeBtn')?.click()});
-    cmds.push({icon:'↺',label:'Reset All Filters',run:()=>document.getElementById('resetAllBtn')?.click()});
-    cmds.push({icon:'🔎',label:'Focus Search',hint:'/',run:()=>document.getElementById('globalSearchInput')?.focus()});
+    if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({cat:'filters',icon:'⊞',label:'Compare Periods (side-by-side)',desc:'Two periods next to each other',run:()=>document.getElementById('compareModeBtn')?.click()});
+    cmds.push({cat:'filters',icon:'↺',label:'Reset All Filters',desc:'Clear every dashboard filter',run:()=>document.getElementById('resetAllBtn')?.click()});
+    cmds.push({cat:'nav',icon:'🔎',label:'Focus Search',hint:'/',desc:'Search any defect, grade or work center',run:()=>document.getElementById('globalSearchInput')?.focus()});
     const isDark=currentTheme()==='dark';
-    cmds.push({icon:isDark?'☀️':'🌙',label:isDark?'Switch to Light Mode':'Switch to Dark Mode',kw:'theme night day appearance',run:()=>toggleTheme()});
+    cmds.push({cat:'appearance',icon:isDark?'☀️':'🌙',label:isDark?'Switch to Light Mode':'Switch to Dark Mode',kw:'theme night day appearance',desc:'Change the theme',run:()=>toggleTheme()});
     const isCompact=isCompactDensity();
-    cmds.push({icon:'☰',label:isCompact?'Switch to Comfortable Table Rows':'Switch to Compact Table Rows',kw:'compact density rows spacing tight',run:()=>{
+    cmds.push({cat:'appearance',icon:'☰',label:isCompact?'Switch to Comfortable Table Rows':'Switch to Compact Table Rows',kw:'compact density rows spacing tight',desc:'Table row spacing',run:()=>{
       const d=toggleDensity();
       showToast('success',d==='compact'?'Compact table rows on':'Comfortable table rows on', d==='compact'?'More rows fit on screen. Change it any time from Ctrl+K.':'Tables use the roomier row spacing again.');
     }});
     const soundOn=!window.SFX||SFX.isEnabled();
-    cmds.push({icon:soundOn?'🔈':'🔊',label:soundOn?'Mute Sound Effects':'Unmute Sound Effects',kw:'sound volume audio speaker sfx mute unmute',run:()=>{
+    cmds.push({cat:'prefs',icon:soundOn?'🔈':'🔊',label:soundOn?'Mute Sound Effects':'Unmute Sound Effects',kw:'sound volume audio speaker sfx mute unmute',desc:'Click and confirmation sounds',run:()=>{
       const on=toggleSound();
       if(on!==null) showToast('success',on?'Sound effects on':'Sound effects muted', on?'Click and confirmation sounds are back.':'The dashboard is silent now. Unmute any time from Ctrl+K.');
     }});
     const hintsOn=fieldHintsOn();
-    cmds.push({icon:'🏷️',label:hintsOn?'Turn Off Field Name Hints (hover tag)':'Turn On Field Name Hints (hover tag)',kw:'field name hover tooltip tag hint cursor',run:()=>{
+    cmds.push({cat:'prefs',icon:'🏷️',label:hintsOn?'Turn Off Field Name Hints (hover tag)':'Turn On Field Name Hints (hover tag)',kw:'field name hover tooltip tag hint cursor',desc:'Name tag that follows the cursor',run:()=>{
       const on=toggleFieldHints();
       showToast('success',on?'Field name hints on':'Field name hints off', on?'A small tag now names the field under your cursor.':'The hover tag is hidden. Turn it back on from Ctrl+K.');
     }});
-    cmds.push({icon:'🔐',label:'Open Admin Panel',kw:'admin settings users login manage',run:()=>window.location.href='/admin'});
+    cmds.push({cat:'admin',icon:'🔐',label:'Open Admin Panel',kw:'admin settings users login manage',desc:'Import, backups, users and settings',run:()=>window.location.href='/admin'});
     const curTab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
-    cmds.push({icon:'📌',label:`Set "${TAB_LABELS[curTab]||curTab}" as my Default Landing Tab`,run:()=>setDefaultLandingTab(curTab)});
-    ACCENT_PRESETS.forEach(a=>cmds.push({icon:'🎨',label:`Accent Color — ${a.name}`,run:()=>{applyAccent(a.value);showToast('success','Accent color updated',a.name+' applied.');}}));
+    cmds.push({cat:'prefs',icon:'📌',label:`Set "${TAB_LABELS[curTab]||curTab}" as my Default Landing Tab`,desc:'The tab the dashboard opens on',run:()=>setDefaultLandingTab(curTab)});
+    ACCENT_PRESETS.forEach(a=>cmds.push({cat:'appearance',icon:'🎨',label:`Accent Color — ${a.name}`,desc:'Highlight color',run:()=>{applyAccent(a.value);showToast('success','Accent color updated',a.name+' applied.');}}));
     return cmds;
   }
+  // Categories, in the order they appear in the palette. Commands are grouped under these
+  // headings (headings only show when at least one command in them matches the search).
+  const CATS=[
+    {key:'nav',label:'Navigation',icon:'🧭'},
+    {key:'filters',label:'Filters & Compare',icon:'🎛️'},
+    {key:'appearance',label:'Appearance',icon:'🎨'},
+    {key:'prefs',label:'Preferences',icon:'⚙️'},
+    {key:'admin',label:'Admin',icon:'🔐'},
+  ];
   let active=0, filtered=[];
   function render(query){
     const all=buildCommands();
     const q=query.trim().toLowerCase();
-    filtered = q ? all.filter(c=>(c.label+' '+(c.kw||'')).toLowerCase().includes(q)) : all;
+    const matches = q ? all.filter(c=>(c.label+' '+(c.kw||'')+' '+((CATS.find(k=>k.key===c.cat)||{}).label||'')).toLowerCase().includes(q)) : all;
+    // Flat, category-ordered list — `filtered` indexes stay in sync with data-idx, so
+    // arrow-key navigation, Enter and mouse selection work exactly as before.
+    filtered=[]; let html='';
+    CATS.forEach(cat=>{
+      const items=matches.filter(c=>c.cat===cat.key); if(!items.length) return;
+      const n=items.length;
+      html+=`<div class="cmdk-cat" data-field="${escQcr(cat.label)}" data-field-meta="Category · ${n} command${n===1?'':'s'}"><span class="cmdk-cat-icon" aria-hidden="true">${cat.icon}</span><span class="cmdk-cat-name">${escQcr(cat.label)}</span><span class="cmdk-cat-count">${n}</span></div>`;
+      items.forEach(c=>{
+        const i=filtered.push(c)-1;
+        html+=`<div class="cmdk-item${i===0?' active':''}" data-idx="${i}" data-field="${escQcr(c.label)}" data-field-meta="${escQcr(cat.label+(c.desc?' · '+c.desc:''))}"><span class="cmdk-icon">${c.icon}</span><span class="cmdk-label">${escQcr(c.label)}</span>${c.hint?`<span class="cmdk-hint">${c.hint}</span>`:''}</div>`;
+      });
+    });
     active=0;
     if(!filtered.length){ list.innerHTML='<div class="cmdk-empty">No matching command.</div>'; return; }
-    list.innerHTML=filtered.map((c,i)=>`<div class="cmdk-item${i===0?' active':''}" data-idx="${i}"><span class="cmdk-icon">${c.icon}</span><span class="cmdk-label">${escQcr(c.label)}</span>${c.hint?`<span class="cmdk-hint">${c.hint}</span>`:''}</div>`).join('');
+    list.innerHTML=html;
   }
   function setActive(i){
     const items=[...list.querySelectorAll('.cmdk-item')]; if(!items.length) return;
@@ -3642,7 +3663,9 @@ function timeAgoShort(date){
   if(m<1) return 'Just now';
   if(m<60) return `${m} min ago`;
   const h=Math.floor(m/60);
-  if(h<24) return `${h} hr ago`;
+  // Hours now carry the leftover minutes too ("2 hr 15 min ago"), so it no longer sits
+  // unchanged for a whole hour. An exact-hour age just reads "2 hr ago".
+  if(h<24){ const mm=m%60; return mm?`${h} hr ${mm} min ago`:`${h} hr ago`; }
   return formatDateTime12(d,false);
 }
 function renderLastUpdatedLabel(){
