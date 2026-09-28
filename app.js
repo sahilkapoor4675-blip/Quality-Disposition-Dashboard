@@ -440,7 +440,7 @@ function setDefaultLandingTab(tabName){
 function initCommandPalette(){
   const modal=document.getElementById('cmdkModal'), input=document.getElementById('cmdkInput'), list=document.getElementById('cmdkList');
   if(!modal||!input||!list) return;
-  const TAB_LABELS={dashboard:'📊 Dashboard',controlroom:'🩺 Quality Control Room',wcgrade:'🏭 Work Center & Grade',defects:'⚠️ Defect Register',weekly:'📈 Monthly / Weekly Trend'};
+  const TAB_LABELS={dashboard:'📊 Dashboard',controlroom:'🚨 Quality Control Room',wcgrade:'🏭 Work Center & Grade',defects:'🎯 Defects List',weekly:'📅 Period Trend'};
   function buildCommands(){
     const cmds=[];
     Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({cat:'nav',icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),desc:'Jump to this dashboard section',run:()=>activateTab(key)}));
@@ -1564,6 +1564,22 @@ document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.
   renderSavedViews();
   wireDrillDialogDragResize();
 }
+// When the selected filters match no coils (e.g. Month=Jun with Quarter=Q2), every KPI
+// would otherwise show 0.000% in green/red status colours and a misleading "-100%" trend
+// against the previous period. Say so plainly and neutralise the cards instead.
+function applyEmptySelectionState(isEmpty){
+  const banner=document.getElementById('periodBanner'), grid=document.getElementById('kpiGrid');
+  if(!banner||!grid) return;
+  grid.classList.toggle('kpi-grid-empty', !!isEmpty);
+  if(!isEmpty) return;
+  banner.innerHTML='⚠️ <b>No records match the selected filters.</b> &nbsp;These filters don\u2019t overlap (for example a Month outside the chosen Quarter). Change a filter or use <b>Reset All</b>.';
+  grid.querySelectorAll('.kpi-card').forEach(card=>{
+    card.className=card.className.replace(/\bstatus-\w+\b/g,'').trim()+' status-neutral';
+    const st=card.querySelector('.kpi-status'); if(st){ st.className='kpi-status neutral'; st.textContent='NO DATA'; }
+    const tl=card.querySelector('.kpi-trendline'); if(tl) tl.innerHTML='';
+    const v=card.querySelector('.value'); if(v) v.style.color='#7B8A9A';
+  });
+}
 async function loadKpis(signal){
   const params = new URLSearchParams(currentFilters).toString();
   // Dashboard KPI and monthly trend are independent; fetch them together.
@@ -1575,6 +1591,7 @@ async function loadKpis(signal){
   renderKpis(data.kpis);
   const totalKpi = (data.kpis||[]).find(x=>x.label==='Total Coils'); refreshFilterSummary(totalKpi ? totalKpi.value : 0);
   renderPeriodBanner(data.period);
+  applyEmptySelectionState(!totalKpi || Number(totalKpi.value)===0);
   renderDecisionTable(data.decision_table, data.decision_total);
   renderDefectTable(data.top_defects, data.top_defects_total);
   renderIntensityTable(data.intensity_table, data.intensity_total);

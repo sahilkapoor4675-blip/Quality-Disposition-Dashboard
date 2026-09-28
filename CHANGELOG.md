@@ -1,5 +1,14 @@
 
 
+## V66.1 — Bug-fix pass: blocking fonts, admin nav highlight, empty selection (2026-09-28)
+
+**Fixed**
+- **Page blank/laggy when Google Fonts is slow or blocked.** `index.html` loaded the Google Fonts stylesheet as a render-blocking `<link>`; on a restricted plant network the dashboard stayed blank (measured: no first paint after 12 s). It now loads non-blocking (`media="print"` + `onload`, with `<noscript>` fallback). First paint with fonts hanging: never -> ~0.7 s. Fonts still apply once they arrive.
+- **Admin sidebar highlighted the wrong section.** Clicking "Import History" highlighted "Latest Records" and "Audit Trail" highlighted "Audit Analytics" (139 px panels are shorter than the scroll-spy anchor). The clicked section is now pinned until the user scrolls by hand (wheel/touch/keys).
+- **Empty selection looked like real data.** Filters that match no coils (e.g. Month=Jun + Quarter=Q2) showed green/red 0.000% KPIs and a "-100%" trend. The dashboard now shows a "No records match the selected filters" banner, neutral "NO DATA" cards and no trend line.
+- **Command palette tab names** now match the real tabs (Defects List, Period Trend, Quality Control Room).
+- Service worker shell cache bumped to v3 so installed PWAs pick up the new HTML/JS.
+
 ## V66.1 — Repository restructure, no runtime change (2026-09-28)
 
 **Changed (layout only — `server.py`, `app.js`, `app.css`, `admin.html`, `index.html` untouched, version stays V66.1)**

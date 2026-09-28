@@ -1335,7 +1335,7 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
   const sections=Array.from(content.querySelectorAll('.admin-section[data-admin-section-order]'))
     .sort((a,b)=>Number(a.dataset.adminSectionOrder)-Number(b.dataset.adminSectionOrder));
   const linkById=new Map(links.map(b=>[b.dataset.target,b]));
-  let activeId='homePanel', navLock=null, raf=0;
+  let activeId='homePanel', navLock=null, raf=0, pinnedId=null;
 
   function visibleSections(){return sections.filter(s=>!s.classList.contains('hidden') && linkById.get(s.id) && !linkById.get(s.id).classList.contains('hidden'));}
   function setCurrent(id,force=false){
@@ -1357,7 +1357,7 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
   }
 
   function chooseByViewport(){
-    if(navLock)return;
+    if(navLock||pinnedId)return;
     const list=visibleSections(); if(!list.length)return;
     const anchor=Math.min(Math.max(110,window.innerHeight*0.24),220);
     let best=list[0], bestScore=Infinity;
@@ -1375,6 +1375,7 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
     const el=document.getElementById(id);
     if(!el||el.classList.contains('hidden'))return;
     navLock=id;
+    pinnedId=id;
     setCurrent(id,true);
     // Always start the selected section at the top of the viewport instead of
     // inheriting the previous section's scroll position. On mobile the sticky
@@ -1392,6 +1393,12 @@ html[data-theme="dark"] .sidebar-group-label{color:#7688A0}
       chooseByViewport();
     },reduce?50:1200);
   }
+  // The pin stays until the user scrolls by hand. Without it, clicking a short
+  // panel (e.g. Import History, Audit Trail) or one near the page bottom made the
+  // spy hand the highlight to the next section as soon as the click lock expired.
+  function releasePin(){ if(pinnedId&&!navLock){pinnedId=null;scheduleSpy();} }
+  ['wheel','touchmove'].forEach(ev=>window.addEventListener(ev,releasePin,{passive:true}));
+  window.addEventListener('keydown',e=>{ if(['ArrowDown','ArrowUp','PageDown','PageUp','Home','End',' '].includes(e.key)) releasePin(); });
   links.forEach(b=>b.addEventListener('click',()=>go(b.dataset.target)));
   document.querySelectorAll('.command-card[data-go], [data-go]').forEach(b=>{
     const id=b.dataset.go;
