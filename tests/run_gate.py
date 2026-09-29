@@ -28,8 +28,39 @@ checks += [
     ("regression (6 suites)", [PY, str(T / "regression.py")]),
     ("unit tests (alerts + disaster recovery)", [PY, str(T / "test_units.py")]),
     ("smoke (server + 47 routes)", [PY, str(T / "test_smoke.py")]),
+    ("data lifecycle (import confirm + backup/restore)", [PY, str(T / "test_data_lifecycle.py")]),
     ("exports" + ("" if FAST else " + stress"), [PY, str(T / "test_exports.py")] + ([] if FAST else ["--stress"])),
 ]
+
+# Real-browser checks (tests/test_browser.py): a real headless Chromium against a
+# real server process, catching DOM/runtime regressions (wrong element highlighted,
+# a filter dropdown that doesn't actually narrow, a CSP change that silently breaks
+# an inline handler) that no other check here can see, since every check above only
+# reads source files or talks to the HTTP API directly. This is a dev/CI-only
+# dependency (`pip install playwright && playwright install chromium`) -- server.py
+# never imports it -- so it's skipped, visibly, when unavailable rather than either
+# hard-failing every environment or silently never running.
+try:
+    import playwright  # noqa: F401
+    _playwright_importable = True
+except ImportError:
+    _playwright_importable = False
+
+_chromium_installed = False
+if _playwright_importable:
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            _chromium_installed = Path(p.chromium.executable_path).exists()
+    except Exception:
+        _chromium_installed = False
+
+if _playwright_importable and _chromium_installed:
+    checks.append(("browser (Chromium UI regression)", [PY, str(T / "test_browser.py")]))
+else:
+    print("[SKIP] browser (Chromium UI regression)  -- playwright/chromium not installed; "
+          "run `pip install playwright && playwright install chromium` to include this check.")
+
 
 results = []
 for name, cmd in checks:
