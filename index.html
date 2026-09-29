@@ -14,8 +14,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Non-blocking: fonts load in the background (display=swap); if Google is slow or blocked on the plant network, the page renders immediately with fallback fonts instead of waiting. -->
-<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap">
+<link id="gfontsLink" rel="stylesheet" media="print" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&amp;family=Sora:wght@500;600;700;800&amp;family=Outfit:wght@500;600;700;800&amp;family=Allura&amp;display=swap"></noscript>
+<!-- SELF-HOSTED FONTS: after running tools/self_host_fonts.sh (that script needs
+     to run somewhere with internet access, which this deploy may not have),
+     the dashboard can stop depending on Google Fonts entirely:
+       1. Delete (or comment out) the 3 Google-Fonts <link>/<noscript> lines above
+          and the two <link rel="preconnect"> lines above those.
+       2. Uncomment the single line below.
+     Local fonts load same-origin, so no non-blocking trick is needed, just a
+     normal blocking <link>, the same as app.css just below it. -->
+<!-- <link rel="stylesheet" href="/fonts-local.css"> -->
 <link rel="stylesheet" href="/app.css?v=65.0">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
@@ -29,6 +38,13 @@
     var saved=localStorage.getItem('qdash_theme');
     if(saved==='dark')document.documentElement.setAttribute('data-theme','dark');
   }catch(e){}
+  // Non-blocking Google Fonts (see the <link id="gfontsLink"> above): it loads as
+  // media="print" so it never blocks first paint, then this swaps it to media="all"
+  // once the stylesheet actually finishes downloading. This must stay a JS
+  // addEventListener call and never move back to an inline HTML event-handler
+  // attribute on the <link> tag, since script-src has no 'unsafe-inline'.
+  var gf=document.getElementById('gfontsLink');
+  if(gf) gf.addEventListener('load', function(){ gf.media='all'; });
   // Keep the intro screen in its existing classic state; the main dashboard header now
   // uses the static Design 4 industrial copper-coil presentation below.
   document.documentElement.setAttribute('data-skin','classic');

@@ -784,7 +784,7 @@ async function loadFilters(){
         const opt=document.createElement("div"); opt.dataset.value=x.value; opt.className="filter-option"+(x.value==="All"?" all-option":"")+(currentFilters[f.key]===x.value?" selected":"");
         opt.textContent=x.label;
         opt.addEventListener("click",()=>{
-          currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); field.classList.toggle("filter-active", x.value!=="All"); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();
+          currentFilters[f.key]=x.value; valueSpan.textContent=x.label; control.classList.remove("open"); search.value=""; renderOptions(); field.classList.toggle("filter-active", x.value!=="All"); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh(); refreshCascadeFilters();
         }); list.appendChild(opt);
       });
       if(!filtered.length) list.innerHTML='<div class="filter-empty">No matching options</div>';
@@ -795,7 +795,7 @@ async function loadFilters(){
     renderOptions();
     field.classList.toggle("filter-active", currentFilters[f.key]!=="All");
   });
-  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh();});
+  document.getElementById("resetAllBtn").addEventListener("click",()=>{FILTER_DEFS.forEach(f=>currentFilters[f.key]="All"); document.querySelectorAll('.filter-control').forEach(c=>{c.classList.remove('open'); const s=c.querySelector('.filter-trigger span'); if(s)s.textContent='All';}); document.querySelectorAll('.filter-field').forEach(f=>f.classList.remove('filter-active')); updateActiveFilterBadge(); writeUrlState(false); triggerFilterRefresh(); refreshCascadeFilters();});
   document.addEventListener("click", e=>{if(!e.target.closest('.filter-control')) document.querySelectorAll('.filter-control.open').forEach(c=>c.classList.remove('open'));});
   updateActiveFilterBadge();
 }
@@ -824,8 +824,20 @@ function _normaliseFilterItems(raw){
   return items;
 }
 
-async function refreshFilterOptionsAfterDataChange(){
-  const res=await fetch('/api/filters',{cache:'no-store'});
+// Fire-and-forget cascade refresh after any filter change. Errors are swallowed:
+// this only narrows dropdown lists, so a transient failure should never block the
+// actual data refresh (triggerFilterRefresh), which already has its own error handling.
+function refreshCascadeFilters(){
+  refreshFilterOptionsAfterDataChange(true).catch(()=>{});
+}
+
+async function refreshFilterOptionsAfterDataChange(cascade=false){
+  // cascade=true (called after the user changes a filter) scopes every OTHER
+  // dropdown's options to what actually co-occurs with the current selection,
+  // so picking Month=Jun then Quarter can't offer a Q2 that has zero overlap
+  // with June -- the combination that used to silently show "0 coils".
+  const qs = cascade ? ('?'+new URLSearchParams(currentFilters).toString()) : '';
+  const res=await fetch('/api/filters'+qs,{cache:'no-store'});
   if(!res.ok) throw new Error(`Filter refresh failed (HTTP ${res.status}).`);
   const options=await res.json();
   window._filterOptionsCache=options;
@@ -1382,7 +1394,7 @@ function syncFilterUiFromState(){
   });
   updateActiveFilterBadge();
 }
-function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); syncFilterUiFromState(); writeUrlState(false); triggerFilterRefresh();}
+function applySavedView(name){const views=savedViews(); if(!name||!views[name])return; Object.assign(currentFilters,views[name]); syncFilterUiFromState(); writeUrlState(false); triggerFilterRefresh(); refreshCascadeFilters();}
 function drilldownFiltersQuery(extra={}){const p=new URLSearchParams(currentFilters); Object.keys(extra).forEach(k=>p.set(k,extra[k])); return p.toString();}
 let drillStack=[];
 let _presentationDrillState=null;
@@ -3631,6 +3643,7 @@ window.addEventListener('popstate', (e)=>{
   const filters = restored.filters || {};
   FILTER_DEFS.forEach(f=>{ currentFilters[f.key] = filters[f.key] || "All"; });
   syncFilterUiFromState();
+  refreshCascadeFilters();
   activateTab(restored.tab || 'dashboard', true);
 });
 
@@ -3756,6 +3769,10 @@ async function init(){
   Object.assign(currentFilters, restored.filters);
   await loadFilters();
   syncFilterUiFromState();
+  // A shared/bookmarked link can encode a combination that no longer overlaps
+  // (e.g. the data has moved on). Cascade once on load so an impossible combo
+  // is narrowed immediately instead of surfacing as a silent 0-record view.
+  if(FILTER_DEFS.some(f=>currentFilters[f.key]&&currentFilters[f.key]!=='All')) refreshCascadeFilters();
   startDataRevisionPolling();
   initSortableTables();
   wireAnalyticsPresentation();

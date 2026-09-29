@@ -69,6 +69,9 @@ Disaster recovery (recovery points, off-site copies, restore, provider switch): 
 - Admin APIs require an authenticated session plus CSRF validation; sensitive Users, Security, Backup and audit-export endpoints are Super Admin (`admin` role) only; login attempts are rate-limited.
 - Public activity endpoints are rate-limited separately; request bodies, sessions and import previews are
   size-bounded.
+- `script-src` has no `'unsafe-inline'`: every inline `<script>` is stamped with a random per-request
+  nonce, and interactive admin rows use `data-action` attributes + `addEventListener` delegation rather
+  than `onclick="..."`, so an injected `<script>` tag can't execute even if it reaches the page.
 - Server errors (HTTP 5xx) return only a reference id to the browser; the real message is in the server log.
 - See [docs/SECURITY.md](docs/SECURITY.md) for the full baseline.
 
@@ -96,22 +99,32 @@ from the root, so they must stay there). Tests and documentation live in their o
 | `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
 | `requirements.txt`, `runtime.txt`, `render.yaml`, `Procfile`, `.env.example`, `VERSION.txt` | Deployment config |
 | `.github/workflows/` | `dr-backup.yml` (12-hourly PostgreSQL dump), `dependency-audit.yml` (weekly `pip-audit`) |
-| `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_exports.py` |
+| `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_data_lifecycle.py`, `test_exports.py`, `test_browser.py` |
+| `tools/self_host_fonts.sh` | One-time script to self-host Google Fonts locally (see "Fonts" below) — not needed for the app to run |
 | `docs/` | `DEPLOY.md`, `DISASTER_RECOVERY.md`, `SECURITY.md`, `CHANGELOG_ARCHIVE.md` |
+
+## Fonts
+By default the dashboard loads Google Fonts (DM Sans, Sora, Outfit, Allura) non-blocking from
+`fonts.googleapis.com` — if that's slow or blocked on your network, the page still renders immediately
+with fallback fonts. To remove that dependency entirely, run `bash tools/self_host_fonts.sh` on any
+machine with internet access, then follow the printed instructions to switch `index.html` over to the
+local copy it downloads into `fonts/`.
 
 ## Release gate
 Before deploying, run one command from the repository root (isolated temporary databases only — never
 point it at production):
 
 ```bash
-python tests/run_gate.py          # everything, ~1 min (py_compile, node --check, static checks, 6 regression suites, unit tests, smoke, exports + stress)
+python tests/run_gate.py          # everything, ~2 min (py_compile, node --check, static checks, 6 regression suites, unit tests, smoke, data lifecycle, exports + stress, browser)
 python tests/run_gate.py --fast   # same, minus the slow export stress test
 ```
 
-Every check must pass. Export rules: Excel/PDF/PPTX tables keep all source rows (no silent top-N truncation)
-and every PPTX chart section keeps its chart image and table. After deploying, check that
-`/api/admin/service_health` reports `latest_data_date` and `freshness_age_days`, then hard-refresh the
-browser (Ctrl+Shift+R) once so the new CSS/JS loads.
+Every check must pass. The browser check (`test_browser.py`) drives a real headless Chromium and needs
+`pip install playwright && playwright install chromium`; it's optional — without it, the gate prints
+`[SKIP] browser (Chromium UI regression)` and still runs everything else. Export rules: Excel/PDF/PPTX
+tables keep all source rows (no silent top-N truncation) and every PPTX chart section keeps its chart
+image and table. After deploying, check that `/api/admin/service_health` reports `latest_data_date` and
+`freshness_age_days`, then hard-refresh the browser (Ctrl+Shift+R) once so the new CSS/JS loads.
 
 ## Troubleshooting
 - **Old look / dark mode wrong after a deploy** – hard-refresh once (Ctrl+Shift+R); CSS and JS are cached

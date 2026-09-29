@@ -163,7 +163,21 @@ def _inject_asset_versions(html):
     longer depends on anyone remembering to bump it."""
     html = _ASSET_HREF_RE.sub(lambda m: f'{m.group(1)}?v={_asset_version(m.group(2))}"', html)
     return _APP_VERSION_META_RE.sub(lambda m: f'{m.group(1)}{APP_VERSION}{m.group(2)}', html)
+_INLINE_SCRIPT_RE = re.compile(r'<script(\s[^>]*)?>')
+def _inject_csp_nonce(html, nonce):
+    """Stamp nonce="..." onto every INLINE <script> tag (no src= attribute) so it's
+    allowed to run under a `script-src 'self' 'nonce-...'` CSP with no 'unsafe-inline'.
+    Scripts loaded from a src= (app.js, sfx.js, sw.js registration, etc.) already match
+    'self' and don't need a nonce -- and must be left alone here."""
+    def _sub(m):
+        attrs = m.group(1) or ""
+        if re.search(r'\bsrc\s*=', attrs):
+            return m.group(0)
+        return f'<script nonce="{nonce}"{attrs}>'
+    return _INLINE_SCRIPT_RE.sub(_sub, html)
+
 ADMIN_BUILD_VERSION = APP_VERSION
+
 
 try:
     from openpyxl import Workbook
@@ -1050,12 +1064,29 @@ def compute_kpis(filters, _skip_prev=False):
     return result
 
 
-def get_filter_options():
+def get_filter_options(active_filters=None):
+    """Build the dropdown option lists for /api/filters.
+
+    When `active_filters` is given (the user's current selection), each key's
+    options are scoped to what actually co-occurs with the OTHER active
+    filters -- e.g. once Quarter=Q2 is picked, Month only lists Apr/May/Jun.
+    A key is never scoped by its own current value (`exclude={key}`), so
+    picking a value never removes itself from its own list. With no
+    `active_filters` (unfiltered dashboards, first load) this returns the
+    full option set exactly as before.
+    """
     conn = get_conn()
     cur = conn.cursor()
     options = {}
     for key in FILTER_KEYS:
-        cur.execute(f"SELECT DISTINCT {key} FROM disposition WHERE {key} <> ''")
+        if active_filters:
+            where_sql, params = build_where(active_filters, exclude={key})
+        else:
+            where_sql, params = "", []
+        if where_sql:
+            cur.execute(f"SELECT DISTINCT {key} FROM disposition {where_sql} AND {key} <> ''", params)
+        else:
+            cur.execute(f"SELECT DISTINCT {key} FROM disposition WHERE {key} <> ''", params)
         vals = [r[0] for r in cur.fetchall()]
         vals = list(dict.fromkeys(vals))
         if key == "month":
@@ -4739,6 +4770,17 @@ class Handler(BaseHTTPRequestHandler):
             # the server log.
             pass
 
+    def _get_csp_nonce(self):
+        """One random nonce per request/response, generated on first use and cached
+        on the handler instance so the SAME value is used both in the CSP header
+        (below) and when stamping inline <script> tags in the HTML body -- they
+        must match exactly or the browser blocks the inline scripts outright."""
+        n = getattr(self, "_csp_nonce", None)
+        if not n:
+            n = secrets.token_urlsafe(16)
+            self._csp_nonce = n
+        return n
+
     def _security_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
         # SAMEORIGIN (not DENY): the side-by-side "Compare Periods" feature
@@ -4754,12 +4796,21 @@ class Handler(BaseHTTPRequestHandler):
         # Fonts CDN it uses; blocks third-party base URIs and framing by any
         # OTHER origin ('self' here matches the X-Frame-Options relaxation
         # above — same-origin framing only, for the Compare Periods feature).
-        # 'unsafe-inline' is required because the app's UI relies on inline
-        # <script>/<style> — this is not a full XSS mitigation on its own, but
-        # it still blocks an injected payload from loading an external
-        # attacker script or exfiltrating data to a third-party endpoint.
+        # script-src has NO 'unsafe-inline': every inline <script> block in
+        # index.html/admin.html is stamped with the same per-request nonce
+        # (see _inject_csp_nonce) instead, so an attacker who manages to
+        # inject a raw <script>...</script> via a data/XSS bug still can't
+        # get the browser to run it (no way to guess the nonce in advance).
+        # Interactive rows (users/backups/fishbone/records tables etc.) use
+        # data-action attributes + addEventListener, not onclick="...", for
+        # the same reason. style-src keeps 'unsafe-inline': the UI sets many
+        # inline style="..." attributes for one-off layout values, and unlike
+        # script, an inline style value cannot execute code in a modern
+        # browser (no CSS expression()), so this is a low-risk, intentional
+        # trade-off rather than an oversight.
+        nonce = self._get_csp_nonce()
         self.send_header("Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            f"default-src 'self'; script-src 'self' 'nonce-{nonce}'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
             "connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; object-src 'none'")
@@ -4895,6 +4946,28 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404)
                 return
+        # Self-hosted fonts (see tools/self_host_fonts.sh): only served once the
+        # user has run that script and the fonts/ folder actually exists -- until
+        # then this correctly 404s and index.html keeps using the Google Fonts
+        # CDN link. basename() + a fixed directory + extension allow-list means
+        # this endpoint can never be used to read an arbitrary file off disk.
+        if path == "/fonts-local.css" or path.startswith("/fonts/"):
+            fname = "fonts-local.css" if path == "/fonts-local.css" else os.path.basename(path)
+            asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", fname)
+            if fname.endswith((".css", ".woff2", ".woff")) and os.path.isfile(asset):
+                mime = ("text/css; charset=utf-8" if fname.endswith(".css")
+                         else "font/woff2" if fname.endswith(".woff2") else "font/woff")
+                with open(asset, "rb") as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self._write_body(body)
+                return
+            else:
+                self.send_error(404)
+                return
         # Static browser identity assets (favicon / PWA manifest).
         # These must be served by the Python server; otherwise browser requests
         # for /favicon.ico and /favicon-*.png would fall through to a 404.
@@ -4931,12 +5004,15 @@ class Handler(BaseHTTPRequestHandler):
             _activity_event(self, "dashboard_open", tab="dashboard")
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"),
                        "r", encoding="utf-8") as f:
-                self._send_html(_inject_asset_versions(f.read()))
+                html = _inject_asset_versions(f.read())
+            html = _inject_csp_nonce(html, self._get_csp_nonce())
+            self._send_html(html)
         elif path in {"/admin", "/admin.html"}:
             # Admin shell is intentionally always served; authentication gates the API/data actions.
             # No-store prevents a stale authenticated/unauthenticated shell from being reused.
             with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html"), "r", encoding="utf-8") as f:
                 body = _inject_asset_versions(f.read())
+            body = _inject_csp_nonce(body, self._get_csp_nonce())
             self.send_response(200)
             self.send_header("X-Request-ID", secrets.token_hex(8))
             self.send_header("X-App-Version", APP_VERSION)
@@ -4955,7 +5031,11 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send_json({"authenticated": False, "username":"", "display_name":"", "role":""})
         elif path == "/api/filters":
-            self._send_json(get_filter_options())
+            # Any FILTER_KEYS present in the query string cascade the option lists
+            # (see get_filter_options); with none given this is the full, unfiltered
+            # set used on first load.
+            active = _filters_from_qs(qs) if any(k in qs for k in FILTER_KEYS) else None
+            self._send_json(get_filter_options(active))
         elif path == "/api/data_revision":
             # Lightweight public revision probe used by the dashboard to detect
             # Admin imports/edits without rebuilding the full filter payload on
