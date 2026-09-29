@@ -93,7 +93,8 @@ APP_FILES = (
     "server.py", "reports.py", "session_store.py", "logging_setup.py",
     "dr_storage.py", "dr_recovery.py", "dr_pg_backup.py",
     # Frontend runtime (must match server.py exactly for "same webapp" restores)
-    "app.js", "app.css", "sfx.js", "admin.html", "index.html",
+    # (app.js / app.css are built from src/js/*.js and src/css/*.css - see _app_manifest)
+    "sfx.js", "sw.js", "admin.html", "index.html",
     "site.webmanifest",
     # Deployment/runtime configuration
     "requirements.txt", "runtime.txt", "Procfile", "render.yaml",
@@ -138,7 +139,9 @@ def _db_env(database_url: str) -> dict[str, str]:
 
 def _app_manifest(root: Path) -> dict:
     files = {}
-    for name in APP_FILES:
+    src_pieces = sorted(p.relative_to(root).as_posix()
+                        for pattern in ("src/js/*.js", "src/css/*.css") for p in root.glob(pattern))
+    for name in (*APP_FILES, *src_pieces):
         path = root / name
         if path.is_file():
             files[name] = _sha256(path)

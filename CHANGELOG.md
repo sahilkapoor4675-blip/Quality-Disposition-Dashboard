@@ -1,5 +1,17 @@
 
 
+## V66.1 — app.js / app.css split into src/js, src/css (2026-09-29)
+
+**Changed (layout only — every page still loads exactly one `/app.js` and one `/app.css`; runtime, version and behaviour untouched)**
+- `app.js` (3,821 lines) and `app.css` (2,497 lines) — the two files you kept having to re-upload in full for a one-line fix — are now cut into 22 files under `src/js/` and 15 under `src/css/`. Each cut sits on a top-level statement boundary in the JS and a top-level rule/comment boundary in the CSS, so every piece is independently valid and the concatenation is byte-for-byte identical to the old single files (verified with a script that rebuilds the original and diffs it — zero difference).
+- `server.py` now builds `/app.js` and `/app.css` on the fly by concatenating `src/js/*.js` / `src/css/*.css` in filename order (numbered prefixes fix that order), cached in memory and rebuilt automatically if a piece's timestamp changes. `X-App-Version` / `?v=` cache-busting is unaffected: it now uses the newest piece's mtime.
+- From here on, when a fix only touches one part of the dashboard, you upload just that one `src/js/NN-*.js` or `src/css/NN-*.css` file on GitHub — never the whole bundle.
+- `dr_pg_backup.py`'s off-site backup manifest and the `/api/admin/disaster_recovery/status` file-hash list now hash every `src/js/*.js` / `src/css/*.css` piece individually (in addition to the files they already covered), so a disaster-recovery restore still verifies the exact frontend byte-for-byte.
+- Test suite updated for the split: `tests/run_gate.py`'s `node --check` step now checks all 22 JS pieces plus the rebuilt bundle; `tests/regression.py`'s embedded suites, `tests/static_checks.py` (code-health / orphaned-class scan) and `tests/test_smoke.py` now read the bundle by joining `src/*/*.*` instead of a single file, and the smoke test additionally asserts the served `/app.js` and `/app.css` are complete (not truncated by a bad concatenation).
+- Service worker shell cache bumped to v4 (installed PWAs re-fetch the new-but-identical `app.js`/`app.css`).
+
+**Verified**: full gate before and after the split — same checks, same results (`node --check` now on 22+1 files instead of 1, 6 regression suites, 47 HTTP routes, data-lifecycle + browser + export checks all pass unchanged).
+
 ## V66.1 — Bug-fix pass: blocking fonts, admin nav highlight, empty selection (2026-09-28)
 
 **Fixed**

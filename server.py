@@ -142,12 +142,70 @@ APP_VERSION = os.environ.get("APP_VERSION") or _read_version_file() or "V66.0"
 # reused for the life of the serving process. A normal redeploy/restart
 # rebuilds these values after any asset change.
 _ASSET_VERSION_CACHE = {}
+_ASSET_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# ---- /app.js and /app.css are BUNDLES of small source files ------------------
+# The frontend source lives in src/js/*.js and src/css/*.css (numbered, so
+# filename order == load/cascade order). The browser still requests exactly
+# one /app.js and one /app.css: this server concatenates the pieces in
+# filename order (cached in memory, rebuilt automatically if a piece changes)
+# so page-load cost and script/cascade semantics are identical to the old
+# single files. If src/ is missing, a plain app.js / app.css next to
+# server.py is served as before.
+_BUNDLED_ASSETS = {"app.js": ("src/js", ".js"), "app.css": ("src/css", ".css")}
+_BUNDLE_CACHE = {}
+
+def _bundle_parts(name):
+    spec = _BUNDLED_ASSETS.get(name)
+    if not spec:
+        return []
+    folder = os.path.join(_ASSET_ROOT, *spec[0].split("/"))
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.endswith(spec[1]) and not n.startswith("."))
+    except OSError:
+        return []
+    return [os.path.join(folder, n) for n in names]
+
+def _bundle_bytes(name):
+    """Return the concatenated bundle for app.js / app.css, or None when the
+    src/ pieces are absent (caller falls back to the plain file)."""
+    parts = _bundle_parts(name)
+    if not parts:
+        return None
+    try:
+        sig = tuple((p, os.stat(p).st_mtime_ns, os.stat(p).st_size) for p in parts)
+    except OSError:
+        return None
+    hit = _BUNDLE_CACHE.get(name)
+    if hit and hit[0] == sig:
+        return hit[1]
+    chunks = []
+    for p in parts:
+        with open(p, "rb") as f:
+            b = f.read()
+        chunks.append(b if b.endswith(b"\n") else b + b"\n")
+    body = b"".join(chunks)
+    _BUNDLE_CACHE[name] = (sig, body)
+    return body
+
+def _frontend_source_files():
+    """Relative posix paths of every src/ piece (used by the recovery manifest)."""
+    out = []
+    for name in _BUNDLED_ASSETS:
+        for p in _bundle_parts(name):
+            out.append(os.path.relpath(p, _ASSET_ROOT).replace(os.sep, "/"))
+    return out
+
 def _asset_version(filename):
     v = _ASSET_VERSION_CACHE.get(filename)
     if v is not None:
         return v
     try:
-        v = str(int(os.path.getmtime(os.path.join(os.path.dirname(os.path.abspath(__file__)), filename))))
+        parts = _bundle_parts(filename)
+        if parts:
+            v = str(int(max(os.path.getmtime(p) for p in parts)))
+        else:
+            v = str(int(os.path.getmtime(os.path.join(_ASSET_ROOT, filename))))
     except OSError:
         v = APP_VERSION
     _ASSET_VERSION_CACHE[filename] = v
@@ -2625,8 +2683,8 @@ def _file_sha256(path):
 
 
 _RECOVERY_MANIFEST_FILES = (
-    "server.py", "reports.py", "session_store.py", "logging_setup.py", "app.js",
-    "app.css", "admin.html", "index.html", "requirements.txt", "Procfile",
+    "server.py", "reports.py", "session_store.py", "logging_setup.py",
+    "sfx.js", "sw.js", "admin.html", "index.html", "requirements.txt", "Procfile",
     "render.yaml", "VERSION.txt", ".env.example", ".gitignore"
 )
 
@@ -2643,7 +2701,7 @@ def _application_manifest():
             git_commit = ""
     manifest = {"app_version": APP_VERSION, "git_commit": git_commit}
     files = {}
-    for filename in _RECOVERY_MANIFEST_FILES:
+    for filename in (*_RECOVERY_MANIFEST_FILES, *_frontend_source_files()):
         path = os.path.join(APP_DIR, filename)
         if os.path.isfile(path):
             try:
@@ -4932,10 +4990,12 @@ class Handler(BaseHTTPRequestHandler):
         # Versioned static CSS/JS: aggressively cached by browsers.
         if path in {"/app.css", "/app.js", "/sfx.js"}:
             asset = os.path.join(os.path.dirname(os.path.abspath(__file__)), path.lstrip("/"))
-            if os.path.isfile(asset):
-                mime = "text/css; charset=utf-8" if path.endswith(".css") else "application/javascript; charset=utf-8"
+            body = _bundle_bytes(path.lstrip("/"))   # app.js / app.css: built from src/ pieces
+            if body is None and os.path.isfile(asset):
                 with open(asset, "rb") as f:
                     body = f.read()
+            if body is not None:
+                mime = "text/css; charset=utf-8" if path.endswith(".css") else "application/javascript; charset=utf-8"
                 self.send_response(200)
                 self.send_header("Content-Type", mime)
                 self.send_header("Cache-Control", "public, max-age=31536000, immutable")

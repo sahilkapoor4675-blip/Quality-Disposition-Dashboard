@@ -92,7 +92,8 @@ from the root, so they must stay there). Tests and documentation live in their o
 | `reports.py` | Excel / PDF / PowerPoint / CSV report builders |
 | `alerts.py`, `logging_setup.py`, `session_store.py` | Backup-failure alerts, rotating logs, session/login store |
 | `dr_storage.py`, `dr_recovery.py`, `dr_pg_backup.py` | Off-site storage, snapshot verify/restore CLI, PostgreSQL dump runner (used by the GitHub Action) |
-| `index.html`, `app.js`, `app.css`, `sfx.js` | Dashboard UI |
+| `index.html`, `sfx.js` | Dashboard UI |
+| `src/js/`, `src/css/` | `app.js` / `app.css` source, split into small numbered files — see "Frontend source layout" below |
 | `admin.html` | Admin console (single file) |
 | `sw.js`, `site.webmanifest`, `favicon*`, `jsl-*.png`, `intro-photo-*.webp` | PWA shell and images |
 | `quality.db` | First-run SQLite seed (4,936 disposition records) |
@@ -102,6 +103,17 @@ from the root, so they must stay there). Tests and documentation live in their o
 | `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_data_lifecycle.py`, `test_exports.py`, `test_browser.py` |
 | `tools/self_host_fonts.sh` | One-time script to self-host Google Fonts locally (see "Fonts" below) — not needed for the app to run |
 | `docs/` | `DEPLOY.md`, `DISASTER_RECOVERY.md`, `SECURITY.md`, `CHANGELOG_ARCHIVE.md` |
+
+## Frontend source layout
+
+`app.js` and `app.css` are not files in the repo — they're built by `server.py` at request time by concatenating:
+
+- `src/js/01-…` through `src/js/22-…` (filename order = script load order), and
+- `src/css/01-…` through `src/css/15-…` (filename order = cascade order — later files can override earlier ones, same as before the split).
+
+Every piece is cut on a safe boundary (a top-level JS statement, or a top-level CSS rule/comment), so each file is independently valid and the join is byte-for-byte identical to the old single `app.js`/`app.css`. The browser still only ever requests one `/app.js` and one `/app.css`; nothing about page load or the CSS cascade changed.
+
+**When you fix a bug, upload only the one `src/js/NN-*.js` or `src/css/NN-*.css` file that changed** — not the whole bundle. The filename tells you what's inside (e.g. `15-chart-builders.js`, `06-qcr.css`). If you ever need the full single-file `app.js`/`app.css` (e.g. to hand to a tool that expects one file), request it against a running instance — `GET /app.js` / `GET /app.css` returns the built bundle.
 
 ## Fonts
 By default the dashboard loads Google Fonts (DM Sans, Sora, Outfit, Allura) non-blocking from
