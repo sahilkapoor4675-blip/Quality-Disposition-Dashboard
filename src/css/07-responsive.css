@@ -1,0 +1,32 @@
+/* 07-responsive.css — Responsive: tablet and mobile. Bundled into /app.css in filename order (cascade order matters); see README. */
+/* ================================================================
+   RESPONSIVE — tablet
+   ================================================================ */
+@media(max-width:900px){
+  .qcr-executive-strip{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .qcr-exec-item.qcr-exec-problem{grid-column:1 / -1;}
+  .qcr-grid{grid-template-columns:1fr;}
+  .qcr-card.qcr-wide,.qcr-card.qcr-root-card{grid-column:1;}
+  .qcr-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .qcr-card>h3{font-size:16px;}
+}
+
+/* ================================================================
+   RESPONSIVE — mobile
+   ================================================================ */
+@media(max-width:600px){
+  .qcr-executive-strip{grid-template-columns:1fr 1fr;gap:8px;}
+  .qcr-exec-item{padding:10px 11px;}
+  .qcr-exec-item b{font-size:17px;}
+  .qcr-hero{padding:14px 16px;}
+  .qcr-hero-row{flex-direction:column;align-items:flex-start;gap:10px;}
+  .qcr-hero h2{font-size:21px;}
+  .qcr-quality-status{width:100%;min-width:0;}
+  .qcr-kpi-grid{grid-template-columns:1fr;}
+  .qcr-problem-row{grid-template-columns:24px minmax(0,1fr);}
+  .qcr-problem-action{grid-column:2;flex-direction:row;align-items:center;justify-content:space-between;}
+  .qcr-ranked-row{grid-template-columns:22px minmax(0,1fr);}
+  .qcr-ranked-row>.qcr-mini-investigate{grid-column:2;justify-self:start;margin-top:4px;}
+  .qcr-why-grid{grid-template-columns:1fr;}
+}
+

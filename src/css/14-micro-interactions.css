@@ -1,0 +1,59 @@
+/* 14-micro-interactions.css — Tab fade-in, button hover/ripple, bar stagger, offline banner. Bundled into /app.css in filename order (cascade order matters); see README. */
+/* ================================================================
+   MICRO-INTERACTIONS — tab-switch fade+slide, button hover-lift +
+   click ripple, and staggered chart bar/slice grow-in. The KPI
+   count-up's spring easing lives in app.js (animateKpiValue /
+   animateNumericSpan) — no CSS involved there. All of this respects
+   prefers-reduced-motion via the guard at the bottom of this block.
+   ================================================================ */
+
+/* Tab switch: the newly-shown panel eases in with a short fade+slide instead
+   of just appearing. Relies on CSS animations not running while
+   display:none — toggling the .hidden class off restarts it every time,
+   so no JS timing code is needed for this one. */
+@keyframes tabPanelIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.tab-panel:not(.hidden){animation:tabPanelIn .13s ease-out both;}
+
+/* Buttons: a shared hover lift + click ripple for every real <button> in the
+   app (Export, Reset All, filter trigger, dialog Cancel/Save, Compare mode,
+   the command-palette trigger, etc.) plus the drill-modal's anchor-styled
+   export link, so every clickable control feels the same tactile way. The
+   ripple <span> itself is spawned by JS (see spawnRipple in app.js) — this
+   just supplies the positioning context, look, and grow/fade animation.
+   .tab-btn keeps its own more specific hover rule above (translateY+scale);
+   this generic one covers everything else that didn't already have a lift. */
+button:not(.tab-btn),.drill-export{position:relative;overflow:hidden;}
+button,.drill-export{transition:transform .15s ease,box-shadow .15s ease;}
+button:not(.tab-btn):hover,.drill-export:hover{transform:scale(1.02);box-shadow:0 6px 16px rgba(15,42,74,.14);}
+button:active,.drill-export:active{transform:scale(.97);}
+.ripple-effect{position:absolute;border-radius:50%;background:rgba(255,255,255,.55);transform:scale(0);opacity:.55;pointer-events:none;animation:rippleGrow .55s ease-out forwards;}
+.tab-btn:not(.active) .ripple-effect,.filter-trigger .ripple-effect,.reset-all .ripple-effect,.btn:not(.primary) .ripple-effect{background:rgba(24,58,88,.18);}
+@keyframes rippleGrow{to{transform:scale(1);opacity:0;}}
+
+/* Chart bars/donut slices: each one grows in with a small per-item stagger
+   instead of every bar/slice animating in lockstep. Each <rect class="chart-bar">
+   / <path class="chart-slice"> carries a --i custom property (its index,
+   set in app.js when the SVG string is built) that feeds the delay below;
+   elements with no --i (older/unrelated shapes) just fall back to delay 0. */
+.chart-ready .chart-bar{transform-origin:bottom;animation:barGrow .48s cubic-bezier(.22,.85,.32,1) calc(.06s + var(--i,0) * 35ms) both;}
+.chart-ready .chart-slice{animation:sliceGrow .5s cubic-bezier(.22,.85,.32,1) calc(.05s + var(--i,0) * 40ms) both;}
+@keyframes sliceGrow{0%{opacity:0;transform:scale(.55);}70%{opacity:1;}100%{opacity:1;transform:scale(1);}}
+
+@media (prefers-reduced-motion:reduce){
+  .tab-panel:not(.hidden){animation:none;}
+  button,.drill-export{transition:none;}
+  button:not(.tab-btn):hover,.drill-export:hover{transform:none;}
+  .ripple-effect{display:none;}
+  .chart-ready .chart-slice{animation:none;}
+}
+/* Offline/PWA banner (sw.js) — shown when the browser goes offline so the
+   person knows the dashboard is displaying the last data it loaded, not
+   live numbers. */
+.offline-banner{position:sticky;top:0;z-index:60;background:#fef3c7;color:#92400e;border-bottom:1px solid #f2d495;font:700 13px 'Manrope',sans-serif;text-align:center;padding:7px 12px;letter-spacing:.15px;}
+html[data-theme="dark"] .offline-banner{background:#3a2f14;color:#f4d58d;border-bottom-color:#5a4a1e;}
+
+/* Respect reduced-motion for the site-wide smooth scroll added above —
+   programmatic scrolls jump instantly instead of easing for anyone who has
+   asked their OS/browser to minimize motion. */
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+

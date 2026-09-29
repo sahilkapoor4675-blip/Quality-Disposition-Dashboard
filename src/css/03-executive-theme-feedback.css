@@ -1,0 +1,138 @@
+/* 03-executive-theme-feedback.css — White executive theme, loading bar, toasts, export progress. Bundled into /app.css in filename order (cascade order matters); see README. */
+/* White Executive Aesthetic Theme */
+:root{
+  --navy:#16324F;--navy2:#244E70;--accent:#2388C9;--green:#1B9A63;--red:#D94A4A;--amber:#D9901A;--purple:#7566D8;--slate:#64748B;
+  --bg:#F6F9FC;--card:#FFFFFF;--text:#24364B;--muted:#718096;--border:#DDE6EF;--heading:#16324F;
+  /* Elevation scale: every card/panel surface pulls from these tokens instead of
+     ad-hoc per-rule values, so radius and shadow stay consistent across the app.
+     Ordered lowest → highest: card < card-hover < sticky < overlay < menu < modal.
+     (--shadow-overlay covers floating, self-dismissing surfaces like toasts —
+     above a sticky header, below a dropdown menu or popover.) */
+  --radius-card:12px;--radius-menu:10px;--radius-modal:16px;
+  --shadow-card:0 2px 8px rgba(15,42,74,.045),0 10px 22px rgba(15,42,74,.05);
+  --shadow-card-hover:0 4px 10px rgba(15,42,74,.07),0 16px 32px rgba(15,42,74,.10);
+  --shadow-sticky:0 8px 24px rgba(15,42,74,.12);
+  --shadow-overlay:0 10px 28px rgba(15,42,74,.16);
+  --shadow-menu:0 14px 34px rgba(15,42,74,.16);
+  --shadow-modal:0 24px 70px rgba(12,34,55,.28);
+  /* Glass elevation tokens: a small, shared "control layer" glass system —
+     deliberately used only on floating/overlay chrome (sticky filters, dropdown
+     menus, small popovers, a modal's own title strip) and never on dense data
+     surfaces (tables, chart panels, modal bodies), where translucency would
+     just hurt legibility. tier 1 = light popovers/menus, tier 2 = sticky bars
+     and modal head-strips. */
+  --glass-blur-1:9px; --glass-blur-2:13px;
+  --glass-bg-1:rgba(255,255,255,.90); --glass-bg-2:rgba(255,255,255,.94);
+  --glass-border:rgba(203,216,228,.85);
+}
+body{background:linear-gradient(180deg,#F8FAFC 0%,#F3F7FB 100%);color:var(--text);}
+header{background:linear-gradient(135deg,#FFFFFF 0%,#F4F8FC 100%);color:var(--heading);border-bottom:1px solid #DCE7F0;box-shadow:0 6px 22px rgba(31,61,90,.08);}
+header h1{color:var(--heading);letter-spacing:1.4px;}
+header .sub{color:var(--muted);opacity:1;}
+.executive-kicker{color:#2388C9;}
+header .sub{font-weight:800!important;letter-spacing:.2px;}
+
+.updated-label{color:#718096;opacity:1;}
+.updated-time{color:var(--muted);}
+.live-status{color:#1B7F58;border-color:#CFE8DB;background:#F2FBF6;}
+.live-dot{background:#1B9A63;box-shadow:0 0 0 3px rgba(27,154,99,.12),0 0 10px rgba(27,154,99,.35);}
+.container{max-width:1480px;padding:22px 24px;}
+.filters{border-color:#DCE6EF;background:rgba(255,255,255,.94);box-shadow:var(--shadow-sticky);}
+.filter-toolbar-title{color:var(--heading);}
+.filter-trigger{background:#FBFDFF;border-color:#D5E0EA;color:#29445C;}
+.filter-trigger:hover,.filter-control.open .filter-trigger{border-color:#7FB7DE;box-shadow:0 10px 24px rgba(35,136,201,.14);}
+.filter-menu{box-shadow:var(--shadow-menu);}
+.filter-option:hover{background:#F2F7FB;}
+.filter-option.selected{background:#EAF5FC;color:#176A9D;}
+.active-filter-badge{background:#E9F5FC;color:#176A9D;}.reset-all{border-color:#D3DEE8;background:#fff;color:var(--muted);}
+@keyframes exportSpin{to{transform:rotate(360deg);}}
+
+/* ---- Global top-of-page loading bar (YouTube-style) ----
+   A thin, fixed strip that fills in from the left while any dashboard data
+   request is in flight (filter change, tab switch, initial load) and
+   sweeps to 100% + fades out when the last one finishes. Driven from
+   app.js (see the fetch wrapper right above the toast code) — this file
+   only owns its look. Sits above everything, including modals, since a
+   refresh can legitimately happen while a dialog is open. */
+.page-progress-bar{position:fixed;top:0;left:0;width:100%;height:3px;z-index:220000;background:transparent;pointer-events:none;opacity:0;transition:opacity .2s ease;}
+.page-progress-bar.visible{opacity:1;}
+.page-progress-bar.done{opacity:1;}
+.page-progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#5eb2ff 0%,var(--accent) 55%,#0a6fd6 100%);box-shadow:0 0 8px rgba(17,141,255,.65),0 0 3px rgba(17,141,255,.8);border-radius:0 2px 2px 0;}
+@media(prefers-reduced-motion:reduce){.page-progress-fill{transition:none!important;}}
+
+/* ---- Toast notifications: top-right, stacked, auto-dismissing. ----
+   max-height + overflow-y keeps a long stack from spilling past the viewport
+   edge (JS also caps how many can be visible at once — see showToast). */
+.toast-host{position:fixed;top:18px;right:18px;z-index:5000;display:flex;flex-direction:column;gap:10px;max-width:340px;max-height:calc(100vh - 36px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;pointer-events:none;-webkit-overflow-scrolling:touch;}
+.toast-host::-webkit-scrollbar{width:6px;}
+.toast-host::-webkit-scrollbar-thumb{background:rgba(120,140,160,.35);border-radius:6px;}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-left:4px solid var(--slate);border-radius:16px;padding:var(--sp-3) var(--sp-4);box-shadow:var(--shadow-overlay);opacity:0;transform:translateX(24px) scale(.97);transition:opacity .25s ease,transform .25s cubic-bezier(.34,1.4,.64,1);overflow:hidden;}
+.toast.show{opacity:1;transform:translateX(0) scale(1);}
+.toast.hide{opacity:0;transform:translateX(12px) scale(.97);}
+.toast-success{border-left-color:var(--green);}
+.toast-error{border-left-color:var(--red);}
+.toast-info{border-left-color:var(--accent);}
+.toast-icon{font-size:17px;line-height:1;margin-top:1px;}
+.toast-body{flex:1;min-width:0;}
+.toast-title{font:800 13.5px Manrope,sans-serif;color:var(--heading);}
+.toast-msg{font:600 12.5px Manrope,sans-serif;color:var(--muted);margin-top:2px;line-height:1.4;word-break:break-word;}
+.toast-close{background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:4px;line-height:1;flex:none;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;transition:background .15s ease,color .15s ease;}
+.toast-close:hover{color:var(--heading);background:rgba(120,140,160,.16);}
+@media(max-width:600px){.toast-host{left:12px;right:12px;top:12px;max-width:none;}}
+
+/* Export progress bar inside a toast (see showToast's opts.progress / setProgress in app.js).
+   Rounded, pill-shaped track+fill with a soft moving shimmer so a busy wait still reads as
+   "alive", plus a meta row (percent · ETA) so people can see both how far and how long. */
+.toast-progress-row{margin-top:9px;}
+.toast-progress-track{height:7px;border-radius:999px;background:rgba(120,140,160,.22);overflow:hidden;}
+.toast-progress-fill{position:relative;height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#4FC3F7);transition:width .18s linear;overflow:hidden;}
+.toast-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 0%,rgba(255,255,255,.55) 45%,transparent 62%);background-size:250% 100%;animation:toastShimmer 1.15s linear infinite;}
+.toast-error .toast-progress-fill{background:linear-gradient(90deg,var(--red),#F87171);}
+@keyframes toastShimmer{from{background-position:180% 0;}to{background-position:-70% 0;}}
+.toast-progress-meta{display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px;}
+.toast-progress-pct{font:800 12px Manrope,sans-serif;color:var(--accent);flex:none;font-variant-numeric:tabular-nums;}
+.toast-error .toast-progress-pct{color:var(--red);}
+.toast-progress-eta{font:600 11px Manrope,sans-serif;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;}
+@media (prefers-reduced-motion: reduce){.toast-progress-fill::after{animation:none;}}
+
+.kpi-grid{gap:14px;}
+.kpi-card{background:linear-gradient(180deg,#FFFFFF 0%,#FBFDFF 100%);border-color:#DCE6EF;border-radius:var(--radius-card);box-shadow:var(--shadow-card);}
+.kpi-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-card-hover);}
+.kpi-card .label{color:#53697D;}
+.kpi-card .kpi-icon{background:#F0F6FA;box-shadow:inset 0 0 0 1px #E1EBF2;}
+.kpi-card .value{color:#18354F;}
+ .kpi-target{color:#718096;}
+.kpi-targets{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:8px;padding-top:7px;border-top:1px solid #edf2f7;}
+.kpi-target-item{font-size:14.5px;line-height:1.15;color:var(--muted);text-align:center;border-radius:6px;padding:4px 3px;background:#f8fafc;}
+.kpi-target-item b{display:block;font-size:13px;color:#334155;margin-top:2px;font-family:'Space Grotesk',sans-serif;}
+.kpi-target-item.target-good{box-shadow:inset 0 2px 0 #16a34a;background:#f3fcf6;color:#166534}.kpi-target-item.target-amber{box-shadow:inset 0 2px 0 #d97706;background:#fffbeb;color:#92400e}.kpi-target-item.target-bad{box-shadow:inset 0 2px 0 #dc2626;background:#fff7f7;color:#991b1b}.kpi-target-item.target-good b{color:#15803d}.kpi-target-item.target-amber b{color:#b45309}.kpi-target-item.target-bad b{color:#b91c1c}
+.kpi-target-none{margin-top:8px;padding-top:7px;border-top:1px solid #edf2f7;font-size:15px;font-weight:800;color:#94a3b8;letter-spacing:.25px;text-transform:uppercase;}
+.kpi-card .value{font-size:34px!important;letter-spacing:-1.2px!important;margin-top:11px!important;text-shadow:0 1px 0 rgba(255,255,255,.8);}.kpi-card.status-good{border-color:#cfe9d8}.kpi-card.status-amber{border-color:#f1dfb6}.kpi-card.status-bad{border-color:#f1cccc}.kpi-card.status-neutral{border-color:#d7e5f0}.kpi-card.status-good .kpi-icon{background:#ecfdf3}.kpi-card.status-amber .kpi-icon{background:#fffbeb}.kpi-card.status-bad .kpi-icon{background:#fef2f2}.kpi-card.status-neutral .kpi-icon{background:#eff6ff}.kpi-targets:after{content:'';grid-column:1/-1}.kpi-target-item.low span,.kpi-target-item.mid span,.kpi-target-item.high span{font-size:12px;font-weight:800;letter-spacing:.45px}
+@media(max-width:700px){.kpi-targets{gap:3px}.kpi-target-item{font-size:12px}.kpi-target-item b{font-size:12px}}
+.period-banner{background:#F0F7FC;border-color:#D6E7F3;color:#31546D;}
+.panel{border-color:#DDE6EF;box-shadow:var(--shadow-card);}
+.panel h3{color:#1C3A55;}
+.tabs{gap:7px;}
+.tab-btn{background:#fff;border-color:#DCE6EF;color:var(--muted);box-shadow:0 2px 6px rgba(30,65,95,.035);}
+.tab-btn.active{background:#183A58;border-color:#183A58;box-shadow:0 5px 14px rgba(24,58,88,.16);}
+th{background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%);border-color:#2B78A8;}
+.sortable-th{cursor:pointer;user-select:none;position:relative;padding-right:20px!important;}
+.sortable-th:hover{background:#256a94!important;}
+.sortable-th::after{content:"↕";position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;opacity:.55;}
+.sortable-th.sort-asc::after{content:"↑";opacity:1;}
+.sortable-th.sort-desc::after{content:"↓";opacity:1;}
+.sortable-th:focus-visible{outline:2px solid #fff;outline-offset:-2px;}
+tbody tr:nth-child(even){background:#F7FAFC;}
+tbody tr:hover{background:#EEF7FC;}
+tfoot td,tr.grand-total-row td{background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%);border-color:#2B78A8;}
+.chart-scroll{background:#fff;}
+.legend{color:#53697D;}
+.footer-note{color:#7A8B9B;}
+.header-actions{display:flex;align-items:center;gap:9px;}
+.header-logo{height:46px;width:auto;max-width:220px;object-fit:contain;display:block;margin-right:16px;filter:drop-shadow(0 3px 7px rgba(15,42,74,.10));}
+.executive-header-inner{display:flex;align-items:center;min-width:0;gap:4px;}
+@media(max-width:900px){.header-logo{height:38px;max-width:170px;margin-right:10px;}.executive-header-inner{gap:0;}}
+@media(max-width:600px){.header-logo{height:32px;max-width:125px;margin-right:8px;}.executive-header-inner .plant-name,.executive-header-inner .sub{display:none;}}
+@media(max-width:700px){.executive-brand{min-width:0;}.header-actions{flex-wrap:wrap;row-gap:8px;}}
+@media(max-width:600px){.header-actions{gap:5px}.live-status{font-size:12px!important;}}
+

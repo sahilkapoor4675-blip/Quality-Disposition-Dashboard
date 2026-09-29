@@ -1,0 +1,260 @@
+/* 08-dark-mode.css — Dark mode. Bundled into /app.css in filename order (cascade order matters); see README. */
+/* ================================================================
+   DARK MODE
+   Toggled via `data-theme="dark"` on <html> (see app.js dmToggle logic).
+   Design rule followed throughout: every background/text pair below is
+   picked and overridden TOGETHER, never just one half of a pair — so text
+   can never end up invisible against its own background. Chart and diagram
+   SVGs (Pareto/bar/pie/fishbone) draw their axis text, gridlines and marker
+   halos from the --chart-* and --fb-* variables set on this same root (see
+   :root above for the light values), so their card can go dark here too
+   without any text going invisible.
+   ================================================================ */
+html[data-theme="dark"]{
+  --navy:#070B14; --navy2:#141F33; --accent:#4DA3FF; --green:#34D399;
+  --red:#F87171; --amber:#FBBF24; --purple:#B197FC; --slate:#94A3B8;
+  --bg:#070B14; --card:#141B2C; --text:#E8EDF6; --muted:#A9B8CE; --border:#2A3B54; --heading:#F0F4FA;
+  /* Dark-mode elevation scale (same tokens, shadow color/opacity tuned for a dark canvas) */
+  --shadow-card:0 2px 8px rgba(0,0,0,.3),0 10px 26px rgba(0,0,0,.4);
+  --shadow-card-hover:0 4px 10px rgba(0,0,0,.35),0 16px 38px rgba(0,0,0,.5);
+  --shadow-sticky:0 8px 24px rgba(0,0,0,.45);
+  --shadow-overlay:0 10px 28px rgba(0,0,0,.5);
+  --shadow-menu:0 14px 34px rgba(0,0,0,.55);
+  --shadow-modal:0 26px 70px rgba(0,0,0,.62);
+  --chart-strong:#EAF1FB; --chart-muted:#93A5BE; --chart-label:#C7D2E3; --chart-axis-title:#AEBBD1;
+  --chart-grid:#26364C; --chart-axis:#3A4C68; --chart-leader:#7E90A8; --chart-halo:#141B2C;
+  --fb-spine:#6FA3DD; --fb-head:#1E3A5C; --fb-cause-text:#DCE6F5; --fb-cause-muted:#7E90A8; --fb-cause-muted-line:#3A4C68;
+  --glass-bg-1:rgba(20,27,44,.82); --glass-bg-2:rgba(20,27,44,.88); --glass-border:rgba(255,255,255,.08);
+  color-scheme: dark;
+}
+html[data-theme="dark"] body{background:#070B14 !important;color:var(--text);}
+html[data-theme="dark"]{background:#070B14;}
+html[data-theme="dark"] body::before{opacity:.05;filter:invert(1) brightness(1.6);}
+html[data-theme="dark"] .container{background:transparent;}
+
+/* Dark-mode text-contrast fixes: these elements only had a dark navy/slate
+   text color tuned for a white card. Now that the page background is
+   correctly dark everywhere (see body fix above), these need their own
+   light-on-dark color or they render as near-invisible text. */
+html[data-theme="dark"] .qcr-zone-heading h3{color:#E8EDF6;}
+html[data-theme="dark"] .qcr-zone-heading p{color:#9AABC2;}
+html[data-theme="dark"] .qcr-ranked-main>b{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-problem-rank{color:#8EC8FF;}
+html[data-theme="dark"] .qcr-story-label{color:#8EC8FF;}
+html[data-theme="dark"] .qcr-story-text{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-improving-line{color:#9AABC2;}
+html[data-theme="dark"] .qcr-improving-line b{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-root-path{background:#1B2740;border-color:#2A3B54;}
+html[data-theme="dark"] .qcr-root-path b{color:#DCE6F5;}
+
+/* Header */
+/* Telemetry-grid header (dark mode only): a faint grid line texture behind the
+   navy gradient — a nod to plant control-room monitors rather than a generic
+   SaaS header. Kept very low-opacity so it reads as texture, not decoration. */
+html[data-theme="dark"] header{background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0px,rgba(255,255,255,.035) 1px,transparent 1px,transparent 28px),repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0px,rgba(255,255,255,.035) 1px,transparent 1px,transparent 28px),linear-gradient(135deg,#070B14 0%,#141F33 100%);border-bottom-color:rgba(255,255,255,.08);box-shadow:0 6px 22px rgba(0,0,0,.4);}
+html[data-theme="dark"] header h1,
+html[data-theme="dark"] header .sub,
+html[data-theme="dark"] .executive-kicker,
+html[data-theme="dark"] .updated-label,
+html[data-theme="dark"] .updated-time,
+html[data-theme="dark"] .digital-clock{color:#E8EDF6;}
+html[data-theme="dark"] .digital-clock-block{border-color:#2A3B54;background:linear-gradient(180deg,#18243A 0%,#111827 100%);box-shadow:0 5px 16px rgba(0,0,0,.28);}
+html[data-theme="dark"] .digital-clock-date{color:#9AABC2;}
+html[data-theme="dark"] .live-status{color:#6EE7B7;border-color:#1F4A3A;background:#0F2A21;}
+html[data-theme="dark"] .period-banner{background:#141B2C;border-color:#2A3B54;color:var(--text);}
+html[data-theme="dark"] .filters,
+html[data-theme="dark"] .filter-summary-bar{background:var(--glass-bg-2);backdrop-filter:blur(var(--glass-blur-2));-webkit-backdrop-filter:blur(var(--glass-blur-2));border-color:var(--glass-border);color:var(--text);}
+html[data-theme="dark"] .filter-toolbar-title,
+html[data-theme="dark"] .filter-summary-bar .summary-label{color:#E8EDF6;}
+html[data-theme="dark"] .filter-trigger{background:#0F1626;border-color:#2A3B54;color:#DCE6F5;}
+html[data-theme="dark"] .filter-trigger:hover,
+html[data-theme="dark"] .filter-control.open .filter-trigger{background:#182238;border-color:#3E5A80;}
+html[data-theme="dark"] .filter-menu{background:var(--glass-bg-1);backdrop-filter:blur(var(--glass-blur-1));-webkit-backdrop-filter:blur(var(--glass-blur-1));border-color:var(--glass-border);}
+html[data-theme="dark"] .filter-option{color:#DCE6F5;}
+html[data-theme="dark"] .filter-option:hover{background:#1B2740;}
+html[data-theme="dark"] .filter-option.selected{background:#153050;color:#8EC8FF;}
+html[data-theme="dark"] .active-filter-badge{background:#153050;color:#8EC8FF;}
+html[data-theme="dark"] .filter-field.filter-active .filter-trigger{background:#153050;border-color:var(--accent);}
+html[data-theme="dark"] .filter-summary-bar .summary-sep{color:#5B6E88;}
+html[data-theme="dark"] .view-popover{background:var(--glass-bg-2);backdrop-filter:blur(var(--glass-blur-2));-webkit-backdrop-filter:blur(var(--glass-blur-2));border-color:var(--glass-border);color:#DCE6F5;box-shadow:var(--shadow-menu);}
+html[data-theme="dark"] .view-popover .view-pop-title{color:#E8EDF6;}
+html[data-theme="dark"] .view-popover input[type="text"]{background:#0F1626;border-color:#2A3B54;color:#DCE6F5;}
+html[data-theme="dark"] .view-popover .view-pop-actions .btn{background:#0F1626;border-color:#2A3B54;color:#DCE6F5;}
+html[data-theme="dark"] .view-popover .view-pop-row:hover{background:#182238;}
+html[data-theme="dark"] .view-popover .view-pop-name{color:#E8EDF6;}
+html[data-theme="dark"] .view-popover .view-pop-load,html[data-theme="dark"] .view-popover .view-pop-del{background:#0F1626;border-color:#2A3B54;color:#DCE6F5;}
+html[data-theme="dark"] .filter-summary-bar button,
+html[data-theme="dark"] .reset-all{background:#0F1626;border-color:#2A3B54;color:#DCE6F5;}
+html[data-theme="dark"] .filter-summary-bar button:hover{background:#182238;}
+html[data-theme="dark"] .filters select,
+html[data-theme="dark"] select,
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="search"]{background:#0F1626;border-color:#2A3B54;color:#DCE6F5;}
+
+/* KPI cards */
+html[data-theme="dark"] .kpi-card{background:linear-gradient(180deg,#141B2C 0%,#111827 100%);border-color:#2A3B54;box-shadow:var(--shadow-card);}
+html[data-theme="dark"] .kpi-card .value{text-shadow:none;}
+html[data-theme="dark"] .kpi-card.status-good{border-color:#1F4A3A}
+html[data-theme="dark"] .kpi-card.status-amber{border-color:#4A3C1F}
+html[data-theme="dark"] .kpi-card.status-bad{border-color:#4A2323}
+html[data-theme="dark"] .kpi-card.status-neutral{border-color:#2A3B54}
+html[data-theme="dark"] .kpi-card.status-good .kpi-icon{background:#0F2A21}
+html[data-theme="dark"] .kpi-card.status-amber .kpi-icon{background:#2A2210}
+html[data-theme="dark"] .kpi-card.status-bad .kpi-icon{background:#2A1414}
+html[data-theme="dark"] .kpi-card.status-neutral .kpi-icon{background:#101E33}
+/* Neon-glow hover on dark canvas — a colored glow reads brighter/more premium
+   against near-black than it does on white, which is exactly the "control
+   room monitor" feel this theme is going for. */
+html[data-theme="dark"] .kpi-card:hover{box-shadow:0 4px 10px rgba(0,0,0,.35),0 18px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06) !important;}
+html[data-theme="dark"] .kpi-card.status-good:hover{box-shadow:0 4px 10px rgba(0,0,0,.35),0 0 36px rgba(52,211,153,.30),0 0 0 1px rgba(52,211,153,.28),inset 0 1px 0 rgba(255,255,255,.06) !important;}
+html[data-theme="dark"] .kpi-card.status-amber:hover{box-shadow:0 4px 10px rgba(0,0,0,.35),0 0 36px rgba(251,191,36,.28),0 0 0 1px rgba(251,191,36,.26),inset 0 1px 0 rgba(255,255,255,.06) !important;}
+html[data-theme="dark"] .kpi-card.status-bad:hover{box-shadow:0 4px 10px rgba(0,0,0,.35),0 0 36px rgba(248,113,113,.30),0 0 0 1px rgba(248,113,113,.28),inset 0 1px 0 rgba(255,255,255,.06) !important;}
+html[data-theme="dark"] .kpi-card.status-neutral:hover{box-shadow:0 4px 10px rgba(0,0,0,.35),0 0 36px rgba(77,163,255,.30),0 0 0 1px rgba(77,163,255,.28),inset 0 1px 0 rgba(255,255,255,.06) !important;}
+html[data-theme="dark"] .kpi-card:hover::after{background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.16) 50%,transparent 58%);background-size:250% 100%;}
+html[data-theme="dark"] .kpi-target-item.target-good{background:#0F2A21;color:#8FE3B5}
+html[data-theme="dark"] .kpi-target-item.target-amber{background:#2A2210;color:#F3D188}
+html[data-theme="dark"] .kpi-target-item.target-bad{background:#2A1414;color:#F5A3A3}
+
+/* Tabs */
+html[data-theme="dark"] .tab-btn{background:linear-gradient(180deg,#141B2C 0%,#111827 100%)!important;border-color:#2A3B54!important;color:#9AABC2!important;box-shadow:none!important;}
+html[data-theme="dark"] .tab-btn:hover{border-color:#3E5A80!important;}
+html[data-theme="dark"] .tab-btn.active{background:var(--accent)!important;border-color:var(--accent)!important;color:#08111F!important;box-shadow:0 0 22px rgba(77,163,255,.35),0 6px 16px rgba(0,0,0,.4)!important;}
+
+/* Panels / cards (dashboard + QCR share these) */
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .qcr-card,
+html[data-theme="dark"] .qcr-exec-item,
+html[data-theme="dark"] .qcr-kpi,
+html[data-theme="dark"] .qcr-quality-status,
+html[data-theme="dark"] .qcr-health-reasons,
+html[data-theme="dark"] .qcr-problem-row,
+html[data-theme="dark"] .drill-dialog,
+html[data-theme="dark"] .qcr-fb-branch,
+html[data-theme="dark"] .qcr-fb-note{background:#141B2C;border-color:#2A3B54;color:var(--text);}
+html[data-theme="dark"] .qcr-fb-branch{border-top-color:var(--fb-color,#94A3B8);}
+html[data-theme="dark"] .qcr-fb-note{color:#FCD9B8;border-color:#5A4326;}
+/* The container above resolves to a neutral light color (var(--text)) in
+   dark mode, which was also silently winning over the red/green row colors
+   below it (same bug class as the Quality Health readability fix above —
+   a shared rule reaching into a place it shouldn't). Restated explicitly
+   here with dark-mode-appropriate tints so the pts breakdown keeps its
+   negative/positive color-coding instead of going flat white/gray. */
+html[data-theme="dark"] .qcr-health-reasons .negative{color:#F5A3A3;}
+html[data-theme="dark"] .qcr-health-reasons .positive{color:#8FE3B5;}
+html[data-theme="dark"] .qcr-fb-ul li{color:#DCE6F5;}
+html[data-theme="dark"] .qcr-fb-empty{color:#8CA0B8;}
+html[data-theme="dark"] .qcr-fb-spine{color:#9AABC2;border-top-color:#2A3B54;}
+html[data-theme="dark"] .qcr-fb-spine span{background:#1E3A5C;}
+html[data-theme="dark"] .qcr-fishbone-chip{background:#141B2C;color:var(--text);}
+html[data-theme="dark"] .qcr-rca-chain{color:#9AABC2;}
+html[data-theme="dark"] .qcr-rca-arrow{color:#7E90A8;}
+html[data-theme="dark"] .qcr-hero{background:linear-gradient(135deg,#101B2E 0%,#0E1B2C 100%);border-color:#2A3B54;}
+html[data-theme="dark"] .panel h3,
+html[data-theme="dark"] .qcr-card>h3,
+html[data-theme="dark"] .qcr-hero h2,
+html[data-theme="dark"] .qcr-exec-item b,
+html[data-theme="dark"] .qcr-kpi .qcr-kpi-value,
+html[data-theme="dark"] .qcr-kpi-value.neutral{color:#E8EDF6;}
+html[data-theme="dark"] .qcr-card>h3{border-bottom-color:#2A3B54;}
+html[data-theme="dark"] .drill-breadcrumb{background:#101827;border-color:#2A3B54;}
+html[data-theme="dark"] .drill-breadcrumb-crumb{color:#9AABC2;}
+html[data-theme="dark"] .drill-breadcrumb-crumb:hover{background:#1B2740;color:var(--accent);}
+html[data-theme="dark"] .drill-breadcrumb-crumb.current{color:#E8EDF6;}
+html[data-theme="dark"] .drill-breadcrumb-sep{color:#3A4C68;}
+html[data-theme="dark"] .empty-state-title{color:#C7D2E3;}
+html[data-theme="dark"] .empty-state-icon{color:#7E90A8;}
+html[data-theme="dark"] .panel h3,
+html[data-theme="dark"] .drill-head,
+html[data-theme="dark"] .qcr-problem-head{background:linear-gradient(180deg,#141B2C 0%,#111827 100%);border-color:#2A3B54;}
+html[data-theme="dark"] .qcr-problem-head p,
+html[data-theme="dark"] .drill-sub,
+html[data-theme="dark"] .drill-count{color:#9AABC2;}
+html[data-theme="dark"] .qcr-exec-item small,
+html[data-theme="dark"] .qcr-exec-item span,
+html[data-theme="dark"] .qcr-kpi .qcr-kpi-name,
+html[data-theme="dark"] .updated-label{color:#9AABC2;}
+html[data-theme="dark"] .qcr-investigate-btn,
+html[data-theme="dark"] .qcr-mini-investigate,
+html[data-theme="dark"] .drill-head button,
+html[data-theme="dark"] .drill-export,
+html[data-theme="dark"] .drill-pagination button{background:#0F1626;border-color:#2A3B54;color:#8EC8FF;}
+
+/* 6M Fishbone chips (Top 5 Defects row) */
+html[data-theme="dark"] .qcr-compare th{background:linear-gradient(180deg,#2f93cf 0%,#194e6e 100%);color:#F0F7FF;border-color:#1c5878;}
+html[data-theme="dark"] .qcr-rca-table thead th{background:linear-gradient(180deg,#2f93cf 0%,#194e6e 100%);color:#F0F7FF;border-color:#1c5878;}
+html[data-theme="dark"] .qcr-compare td{border-color:#2A3B54;color:var(--text);}
+html[data-theme="dark"] .footer-note{color:#7A8B9B;}
+html[data-theme="dark"] .qcr-fishbone-chip{background:#141B2C;color:#DCE6F5;}
+html[data-theme="dark"] .qcr-fishbone-chip.active{color:#fff;}
+
+/* Every "nested light card" pattern used throughout QCR (root-cause paths,
+   grade/opportunity/alert/repeat/contributor items, KPI mini-cards, filter
+   inputs, drill-table striping) shares the same handful of near-white
+   backgrounds — remapped here to a shade lighter than the main dark card so
+   the nesting is still visually clear, with their (already-fixed) text
+   variables now resolving to light colors on top of it. */
+html[data-theme="dark"] .qcr-root-path,
+html[data-theme="dark"] .qcr-root-link,
+html[data-theme="dark"] .qcr-root-link:hover,
+html[data-theme="dark"] .qcr-kpi,
+html[data-theme="dark"] .qcr-why-grid>div,
+html[data-theme="dark"] .kpi-target-item,
+html[data-theme="dark"] .drill-table tr:nth-child(even),
+html[data-theme="dark"] .drill-pagination,
+html[data-theme="dark"] .filters select{background:#1B2740;border-color:#2A3B54;color:var(--text);}
+
+/* Tables */
+html[data-theme="dark"] table{color:var(--text);}
+html[data-theme="dark"] th,
+html[data-theme="dark"] td{border-color:#2A3B54;}
+/* Header/footer/grand-total use the same blue gradient as the light theme's
+   table header instead of flattening to dark navy — previously thead th went
+   dark here while tfoot/grand-total-row (no dark override) stayed the light
+   theme's flat blue, so the header and totals row visibly didn't match. */
+html[data-theme="dark"] thead th,
+html[data-theme="dark"] tfoot td,
+html[data-theme="dark"] tr.grand-total-row td{background:linear-gradient(180deg,#2f93cf 0%,#194e6e 100%);color:#F0F7FF;border-color:#1c5878;}
+html[data-theme="dark"] .sortable-th:hover{background:#256a94!important;}
+html[data-theme="dark"] tbody tr:nth-child(even){background:#101827;}
+/* Same invisible-text bug as above: tbody tr:hover had no dark override,
+   so hovering a row fell back to the light theme's #EEF7FC background
+   while the text stayed light-colored — white-on-white. */
+html[data-theme="dark"] tbody tr:hover{background:#1B2740;}
+
+/* The drill-down table's sticky header (and its grand-total row) hard-code a
+   light background with !important for the light theme's sticky-header
+   shadow trick. Those two rules out-rank the generic "thead th" dark
+   override above, so without this the header text (light-colored in dark
+   mode) was landing on a light background — i.e. invisible/"grey" fields.
+   Matching selector specificity + !important here restores contrast. */
+html[data-theme="dark"] .drill-table th,
+html[data-theme="dark"] .drill-body #drillContent .drill-table thead th{background:#101827!important;color:#E8EDF6!important;box-shadow:0 1px 0 #2A3B54,0 3px 8px rgba(0,0,0,.35)!important;}
+html[data-theme="dark"] .drill-table .grand-total-row td{background:#1B2740!important;color:#E8EDF6!important;border-top-color:#2A3B54!important;}
+
+/* Charts/diagrams: previously kept on a forced-white card in dark mode
+   because their SVG text/line colors were baked in for a white background
+   (see git history). That's no longer true — every chart-building function
+   in app.js now draws its axis text, gridlines, baselines and marker halos
+   using the --chart-* / --fb-* variables defined above, which this dark
+   root already redefines. So the card can go properly dark like every other
+   surface, and the SVG content stays legible because it's reading the same
+   dark-aware variables. Bar/slice/line data colors are untouched — chosen to
+   read fine on both themes. */
+html[data-theme="dark"] .chart-scroll,
+html[data-theme="dark"] #dashFishboneDiagram,
+html[data-theme="dark"] #qcrFishboneDiagram{background:var(--card)!important;border-color:var(--border);}
+html[data-theme="dark"] .legend{color:#AEBBD1;}
+
+/* Command palette button (header).
+   The dark-mode / sound / compact-rows buttons were removed from the header
+   (they live in this palette now). This button used to inherit the old
+   "white icon on translucent white" toggle style, which was designed for a
+   dark header and vanished on the light header — it now has real light and
+   dark styles that match the Admin button next to it. */
+.cmdk-open-btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:auto;min-height:34px;padding:7px 12px;border:1px solid #D5E0EA;border-radius:8px;background:#fff;color:var(--heading);font:800 13.5px/1.2 'Manrope','DM Sans',sans-serif;letter-spacing:.3px;cursor:pointer;box-shadow:0 2px 6px rgba(30,65,95,.05);transition:background .15s ease,border-color .15s ease;}
+.cmdk-open-btn:hover{background:#F2F7FB;border-color:#AFC9DC;}
+.cmdk-open-btn:focus-visible{outline:3px solid rgba(37,99,235,.35);outline-offset:2px;}
+html[data-theme="dark"] .cmdk-open-btn{background:#141B2C;border-color:#2A3B54;color:#DCE6F5;box-shadow:none;}
+html[data-theme="dark"] .cmdk-open-btn:hover{background:#1B2A40;border-color:#4A6380;}
+@media(max-width:600px){.cmdk-open-btn{padding:6px 8px;font-size:13px;}}
+

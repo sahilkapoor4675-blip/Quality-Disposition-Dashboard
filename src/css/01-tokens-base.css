@@ -1,0 +1,101 @@
+/* 01-tokens-base.css — Design tokens (:root), base elements, header basics. Bundled into /app.css in filename order (cascade order matters); see README. */
+:root{
+    --navy:#0f2a4a; --navy2:#16395f; --accent:#118DFF; --green:#16A34A;
+    --red:#DC2626; --amber:#D97706; --purple:#7C3AED; --slate:#64748B;
+    --bg:#f4f6fa; --card:#ffffff; --text:#1c2b3a; --muted:#5b6c82; --border:#e3e8f0; --heading:#183A58;
+    /* Chart SVG "chrome" (axis text, gridlines, baselines, marker halos) —
+       every chart-building function in app.js uses these instead of a baked-in
+       hex so charts can go dark along with the rest of the page. Data colors
+       (bar/slice/line colors from CHART_COLORS / DECISION_COLORS) are NOT
+       themed — they're chosen to read fine on both a white and a dark card. */
+    --chart-strong:#1c2b3a; --chart-muted:#5b6c82; --chart-label:#334155; --chart-axis-title:#475569;
+    --chart-grid:#eef1f6; --chart-axis:#c7ceda; --chart-leader:#94a3b8; --chart-halo:#fff;
+    /* True Ishikawa fishbone SVG (Dashboard tab) chrome. */
+    --fb-spine:#243B53; --fb-head:#16324F; --fb-cause-text:#243B53; --fb-cause-muted:#9aa7b4; --fb-cause-muted-line:#c3cdd8;
+    /* ---- Spacing scale (4px base unit) ----
+       Layout paddings/gaps/margins should snap to one of these instead of
+       inventing one-off values (13px, 17px, 18px, 21px...) — that drift is
+       what made spacing feel ad-hoc in places. Small form-control paddings
+       (buttons, inputs) that are tuned to a specific line-height are left
+       as-is; this scale targets card/panel/section-level spacing. */
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-7:28px; --sp-8:32px;
+    /* ---- Typography hierarchy ----
+       Three explicit weight/tracking tiers so heading > value > label reads
+       unambiguously at a glance: headings are the heaviest and most
+       "designed", values are heavy and dense (built for scanning numbers),
+       labels are lighter but wider-tracked so they recede as captions
+       rather than competing with the number below them. */
+    --fw-heading:800; --fw-value:800; --fw-label:650; --fw-meta:600;
+    --ls-heading:.1px; --ls-value:-.6px; --ls-label:.6px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Manrope','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;}
+  header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:20px 28px;
+         display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:18px;
+         box-shadow:0 4px 18px rgba(15,42,74,.18);border-bottom:1px solid rgba(255,255,255,.10);}
+  .executive-brand{min-width:300px;}
+  header h1{margin:0 0 9px;font-size:25px;line-height:1.1;letter-spacing:1.3px;font-weight:800;}
+  /* Allura is a flowing script font whose capital swashes and descenders
+     (the tail on "Q", the loop under "y") sit well below the baseline —
+     at line-height:1.08 they were dipping down into the kicker line
+     underneath. The taller line-height plus the h1's own bottom margin
+     above give that flourish room to breathe without touching the text
+     below it. */
+  .quality-intelligence-title{font-family:'Allura','Brush Script MT',Georgia,'Times New Roman',serif!important;font-size:42px!important;font-weight:700!important;letter-spacing:.9px!important;line-height:1.42!important;padding-bottom:4px;display:flex;align-items:center;flex-wrap:wrap;gap:0;white-space:nowrap;}
+  .qi-quality,.qi-intelligence{display:inline-block;}
+  .qi-quality{color:#c62828;text-shadow:1px 1px 0 rgba(139,0,0,.38),2px 2px 0 rgba(255,255,255,.72),0 4px 8px rgba(198,40,40,.14);}
+  .qi-intelligence{color:#1565c0;text-shadow:1px 1px 0 rgba(10,55,110,.38),2px 2px 0 rgba(255,255,255,.78),0 4px 8px rgba(21,101,192,.14);}
+  .qi-space{width:8px;}
+  header .sub{font-size:14px;opacity:.86;}
+  .executive-kicker{font-size:13.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#b9d9ff;margin-top:11px;}
+  .executive-meta{display:flex;align-items:flex-end;gap:14px;margin-left:auto;}
+  .header-right-stack{display:flex;flex-direction:column;align-items:flex-end;gap:8px;margin-left:auto;min-width:0;}
+  .updated-block{text-align:right;min-width:150px;}
+  .updated-label{font-size:13px;text-transform:uppercase;letter-spacing:1px;font-weight:800;opacity:.68;margin-bottom:3px;}
+  .updated-time{font-size:14px;font-weight:600;letter-spacing:.2px;white-space:nowrap;}
+  .digital-clock-block{display:flex;align-items:center;gap:10px;min-width:205px;padding:8px 11px 8px 9px;border:1px solid #DCE7F0;border-radius:12px;background:linear-gradient(180deg,#ffffff 0%,#f4f8fc 100%);box-shadow:0 4px 12px rgba(24,58,88,.08);}
+  .digital-clock-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:9px;background:linear-gradient(145deg,#2388C9 0%,#16324F 100%);color:#fff;line-height:1;box-shadow:0 5px 12px rgba(22,50,79,.22);}
+  .digital-clock-copy{min-width:0;text-align:right;line-height:1;}
+    .digital-clock-date{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.15px;white-space:nowrap;margin-bottom:4px;}
+  .digital-clock{font-family:'Space Grotesk','Manrope',sans-serif;font-size:19px;font-weight:800;letter-spacing:.55px;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap;color:#183A58;}
+  .live-status{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);font-size:13px;font-weight:800;letter-spacing:.7px;white-space:nowrap;}
+  @media(max-width:600px){}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.16),0 0 10px rgba(34,197,94,.65);animation:livePulse 1.8s ease-in-out infinite;}
+  @keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.86)}}
+  @media(max-width:700px){header{padding:16px 18px}.executive-meta{width:100%;margin-left:0;justify-content:space-between;gap:10px}.updated-block{text-align:left}.header-right-stack{width:100%;align-items:stretch;margin-left:0}.digital-clock-block{align-self:flex-end;min-width:0;max-width:100%;}.digital-clock-copy{text-align:right}.digital-clock{font-size:16px}.live-status{margin-left:auto}header h1{font-size:21px}.quality-intelligence-title{font-size:28px!important;letter-spacing:.2px!important}.qi-space{width:5px}}
+  .container{padding:20px;max-width:1400px;margin:0 auto;}
+  .filters{background:var(--card);border:1px solid var(--border);border-radius:10px;
+           padding:16px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+  .filters .field label{display:block;font-size:13.5px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;}
+  .filters select{width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);font-size:14.5px;background:#fbfcfe;}
+  .filters .field label{display:flex;align-items:center;gap:6px;}
+  #registerTable th:first-child,#registerTable td:first-child{text-align:center;}
+  #registerTable th:nth-child(2),#registerTable td:nth-child(2){text-align:left;}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+  @media (max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:560px){.kpi-grid{grid-template-columns:1fr;}}
+  .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;
+            box-shadow:0 1px 2px rgba(0,0,0,.03);}
+  .kpi-card .label{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+  .kpi-card .kpi-icon{font-size:16px;line-height:1;}
+  .kpi-card .value{font-size:26px;font-weight:700;transition:color .15s ease;}
+
+  .kpi-card{position:relative;overflow:hidden;transition:transform .18s ease,box-shadow .25s ease,border-color .25s ease;}
+  .kpi-card::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;border-radius:inherit;}
+  .kpi-card.kpi-up{animation:kpiUp .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-down{animation:kpiDown .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-pulse{animation:kpiPulse .45s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card .value{font-variant-numeric:tabular-nums;transition:color .2s ease,transform .25s ease,text-shadow .25s ease;}
+  .kpi-card.kpi-up .value{animation:valueUp .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-down .value{animation:valueDown .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-up::after{animation:flashUp .65s ease-out var(--kpi-stagger,0s) both;}
+  .kpi-card.kpi-down::after{animation:flashDown .65s ease-out var(--kpi-stagger,0s) both;}
+  .dashboard-refreshing{opacity:.72;transition:opacity .18s ease;}
+  @keyframes kpiUp{0%{transform:translateY(2px);box-shadow:0 1px 2px rgba(0,0,0,.03)}35%{transform:translateY(-2px);box-shadow:0 8px 22px rgba(22,163,74,.16)}100%{transform:translateY(0);box-shadow:0 1px 2px rgba(0,0,0,.03)}}
+  @keyframes kpiDown{0%{transform:translateY(2px);box-shadow:0 1px 2px rgba(0,0,0,.03)}35%{transform:translateY(-2px);box-shadow:0 8px 22px rgba(220,38,38,.14)}100%{transform:translateY(0);box-shadow:0 1px 2px rgba(0,0,0,.03)}}
+  @keyframes kpiPulse{0%{transform:scale(1)}45%{transform:scale(1.012)}100%{transform:scale(1)}}
+  @keyframes valueUp{0%{transform:translateY(5px);opacity:.45;text-shadow:0 0 0 transparent}55%{transform:translateY(-1px);opacity:1;text-shadow:0 2px 14px rgba(22,163,74,.35)}100%{transform:translateY(0);text-shadow:0 0 0 transparent}}
+  @keyframes valueDown{0%{transform:translateY(5px);opacity:.45;text-shadow:0 0 0 transparent}55%{transform:translateY(-1px);opacity:1;text-shadow:0 2px 14px rgba(220,38,38,.32)}100%{transform:translateY(0);text-shadow:0 0 0 transparent}}
+  @keyframes flashUp{0%{opacity:0;background:rgba(22,163,74,.00)}35%{opacity:.12;background:rgba(22,163,74,.18)}100%{opacity:0;background:rgba(22,163,74,0)}}
+  @keyframes flashDown{0%{opacity:0;background:rgba(220,38,38,.00)}35%{opacity:.10;background:rgba(220,38,38,.16)}100%{opacity:0;background:rgba(220,38,38,0)}}

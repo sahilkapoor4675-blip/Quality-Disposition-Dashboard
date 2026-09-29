@@ -1,0 +1,251 @@
+/* 06-qcr.css — Quality Control Room. Bundled into /app.css in filename order (cascade order matters); see README. */
+/* ================================================================
+   QUALITY CONTROL ROOM (QCR) — single, clean layout system
+   Normal page flow: the tab is NOT its own scroll container, so the
+   whole page scrolls vertically like every other tab. Cards size to
+   their content — no fixed/max heights, no clipped data.
+   ================================================================ */
+#tab-controlroom:not(.hidden){display:block;width:100%;height:auto;min-height:0;max-height:none;overflow:visible;}
+
+/* ---- Hero header ---- */
+.qcr-hero{background:linear-gradient(135deg,#f7fbff 0%,#eef6fb 52%,#f8fbfd 100%);border:1px solid #d9e6ef;border-left:5px solid #118DFF;border-radius:var(--radius-card);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-4);box-shadow:var(--shadow-card);}
+.qcr-hero-row{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);flex-wrap:wrap;}
+.qcr-hero h2{margin:0;color:var(--heading);font-size:24px;font-weight:var(--fw-heading);letter-spacing:var(--ls-heading);}
+.qcr-freshness{margin-top:7px;color:var(--muted);font:700 15.5px Manrope,sans-serif;}
+.qcr-quality-status{display:flex;align-items:center;gap:9px;padding:11px 14px;border:1px solid #dfe7ee;border-radius:10px;background:#fff;min-width:210px;box-shadow:var(--shadow-card);}
+.qcr-quality-status>span:last-child{display:flex;flex-direction:column;gap:2px;}
+.qcr-quality-status b{font:800 15px Manrope,sans-serif;letter-spacing:.7px;color:#6a7e8f;}
+.qcr-quality-status strong{font:900 16px Manrope,sans-serif;}
+.qcr-quality-status .qcr-status-dot{font-size:16px;}
+.qcr-quality-status.good strong,.qcr-quality-status.good .qcr-status-dot{color:#15803d;}
+.qcr-quality-status.amber strong,.qcr-quality-status.amber .qcr-status-dot{color:#a16207;}
+.qcr-quality-status.bad strong,.qcr-quality-status.bad .qcr-status-dot{color:#b91c1c;}
+
+/* ---- Executive strip: Quality Health | Critical Issues | Target Breaches | Biggest Problem | Trend ---- */
+.qcr-executive-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:0 0 20px;}
+.qcr-exec-item{background:#fff;border:1px solid #dce6ef;border-radius:10px;padding:12px 14px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;gap:4px;min-width:0;}
+.qcr-exec-item small{font:800 14.5px Manrope,sans-serif;letter-spacing:.7px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qcr-exec-item b{font:900 20px 'Space Grotesk',sans-serif;color:var(--heading);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qcr-exec-item span{font:600 15px Manrope,sans-serif;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qcr-exec-problem{background:linear-gradient(135deg,#fff7ed,#fff);border-color:#fed7aa;}
+.qcr-exec-problem b{font-size:16px;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25;}
+.qcr-trend-symbol.good{color:#15803d;}
+.qcr-trend-symbol.bad{color:#b91c1c;}
+.qcr-trend-symbol.neutral{color:var(--muted);}
+
+/* Generic show/hide toggle used by JS (deliberately more specific than the
+   browser's default [hidden] rule so it can't be silently overridden). */
+.qcr-hidden{display:none!important;}
+
+/* ---- Quality Health "Why?" (folds the old standalone Health Score card
+   into the executive strip) ---- */
+.qcr-exec-health{position:relative;}
+.qcr-exec-why{align-self:flex-start;margin-top:2px;border:none;background:none;padding:0;font:800 12px Manrope,sans-serif;color:#118DFF;cursor:pointer;}
+.qcr-health-reasons{position:absolute;top:100%;left:0;z-index:5;margin-top:6px;background:#fff;border:1px solid #dce6ef;border-radius:10px;box-shadow:0 8px 22px rgba(15,42,74,.12);padding:10px 12px;display:flex;flex-direction:column;gap:6px;width:max-content;max-width:min(240px,80vw);}
+/* Reset font/color/wrap explicitly (with higher specificity than
+   .qcr-exec-item span/b, which this popup sits inside of) so the row text
+   doesn't inherit that rule's big 20px heading size + ellipsis-truncation
+   meant for the "51/100" style KPI numbers elsewhere in the exec strip. */
+.qcr-health-reasons span{display:block;font:700 13px Manrope,sans-serif;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35;}
+.qcr-health-reasons span b{font:inherit;font-weight:800;color:inherit;white-space:normal;overflow:visible;text-overflow:clip;}
+.qcr-health-reasons .negative{color:#b91c1c;}
+.qcr-health-reasons .positive{color:#15803d;}
+
+/* ---- Top Contributors tabs (merges Top Defects / Worst Work Centers /
+   Worst Grades / Grade Concentration / Risk / Recurring into one card) ---- */
+.qcr-contrib-card>.qcr-tabs{display:flex;gap:6px;padding:0 16px;border-bottom:1px solid #e5edf3;}
+.qcr-tab-btn{border:none;background:none;padding:10px 12px 9px;font:800 13.5px Manrope,sans-serif;color:var(--muted);cursor:pointer;border-bottom:2.5px solid transparent;}
+.qcr-tab-btn:hover{color:var(--heading);}
+.qcr-tab-btn.active{color:#118DFF;border-bottom-color:#118DFF;}
+.qcr-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px;}
+.qcr-badge{display:inline-block;font:800 11px Manrope,sans-serif;letter-spacing:.2px;padding:2px 7px;border-radius:999px;}
+.qcr-badge-recurring{color:#9a3412;background:#ffedd5;}
+.qcr-badge-risk-high{color:#b91c1c;background:#fee2e2;}
+.qcr-badge-risk-medium{color:#b45309;background:#fef3c7;}
+.qcr-hot-combo{margin-top:12px;padding-top:10px;border-top:1px solid #e8eef3;font:700 13.5px Manrope,sans-serif;color:#7a3b12;}
+
+/* ---- Quality Story: compact "Improving" line replaces the old full
+   What's Improved list card ---- */
+.qcr-improving-line{margin-top:8px;font:600 14px Manrope,sans-serif;color:#3f5163;}
+.qcr-improving-label{font-weight:800;color:#15803d;}
+
+/* ---- Zones: Action Required (A) / Performance (B) / Intelligence (C) ---- */
+.qcr-zone{margin:24px 0 0;width:100%;}
+.qcr-zone-heading{margin:0 0 16px;padding:2px 0 14px 15px;border-bottom:1px solid #dbe5ed;border-left:4px solid #118DFF;}
+.qcr-zone-heading h3{margin:0;font:800 21px 'DM Sans',sans-serif;color:#12283f;letter-spacing:.15px;}
+.qcr-zone-heading p{margin:5px 0 0;font:600 15.5px Manrope,sans-serif;color:#7a8c9b;letter-spacing:.1px;}
+
+/* ---- Card grid: content-driven height, real vertical rhythm ---- */
+.qcr-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch;}
+.qcr-card{background:#fff;border:1px solid #dfe6ef;border-radius:12px;box-shadow:var(--shadow-card);display:flex;flex-direction:column;overflow:visible;height:auto;min-width:0;transition:transform .18s ease,box-shadow .2s ease;}
+.qcr-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-card-hover);}
+.qcr-card>h3{margin:0;padding:14px 16px;border-bottom:1px solid #e5edf3;color:var(--heading);font:800 16px 'DM Sans',sans-serif;flex:0 0 auto;}
+.qcr-card>.qcr-body{padding:15px 16px;flex:1 1 auto;overflow:visible;height:auto;}
+.qcr-card.qcr-wide,.qcr-card.qcr-root-card{grid-column:1 / -1;}
+
+/* ---- Problem card (What Needs Attention) ---- */
+.qcr-problem-card{grid-column:1 / -1;border:1px solid #d7e0ea;box-shadow:var(--shadow-card-hover);margin-bottom:18px;}
+.qcr-problem-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:16px 18px;border-bottom:1px solid #e5ebf2;background:linear-gradient(180deg,#fff,#f8fbfe);}
+.qcr-problem-head h3{margin:0;padding:0;border:0;font-size:18px;}
+.qcr-problem-head p{margin:4px 0 0;color:var(--muted);font-size:15.5px;line-height:1.45;}
+.qcr-problem-count{font-weight:800;font-size:14px;padding:7px 11px;border-radius:999px;background:#fff1f2;border:1px solid #fecdd3;color:#be123c;white-space:nowrap;}
+.qcr-problem-list{display:grid;gap:10px;}
+.qcr-problem-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:12px;align-items:start;padding:13px 14px;border:1px solid #e4eaf1;border-radius:10px;background:#fff;}
+.qcr-problem-row.critical{border-left:4px solid #dc2626;}
+.qcr-problem-row.attention{border-left:4px solid #d97706;}
+.qcr-problem-row.warning{border-left:4px solid #64748b;}
+.qcr-problem-row.normal{border-left:4px solid #15803d;}
+.qcr-problem-rank{font-weight:900;font-size:15px;text-align:center;color:#334155;padding-top:2px;}
+.qcr-problem-main{min-width:0;}
+.qcr-problem-main>b{display:block;font-size:15px;color:var(--heading);}
+.qcr-problem-main>span{display:block;color:var(--muted);font-size:15.5px;line-height:1.45;margin-top:4px;}
+.qcr-problem-fields{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.qcr-problem-fields span{display:flex;flex-direction:column;gap:1px;font-size:13px;color:#334155;background:#f1f5f9;border-radius:8px;padding:5px 8px;}
+.qcr-problem-fields small{font:800 14.5px Manrope,sans-serif;letter-spacing:.4px;color:#8291a3;}
+.qcr-problem-action{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:120px;}
+
+/* ---- Severity pill: shared by problem rows + ranked lists ---- */
+.qcr-severity-pill{display:inline-block;font:800 12px Manrope,sans-serif;letter-spacing:.3px;padding:3px 7px;border-radius:999px;text-transform:uppercase;}
+.qcr-severity-pill.critical,.qcr-severity-pill.high{color:#b91c1c;background:#fee2e2;}
+.qcr-severity-pill.attention{color:#b45309;background:#fef3c7;}
+.qcr-severity-pill.warning{color:#475569;background:#f1f5f9;}
+.qcr-severity-pill.normal,.qcr-severity-pill.low,.qcr-severity-pill.good{color:#15803d;background:#dcfce7;}
+
+.qcr-investigate-btn,.qcr-mini-investigate{border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:7px 11px;font:800 13.5px Manrope,sans-serif;color:#0f4c81;cursor:pointer;white-space:nowrap;}
+.qcr-investigate-btn:hover,.qcr-mini-investigate:hover{background:#f1f7fc;border-color:#93c5fd;}
+
+/* ---- Quality Story (narrative summary) ---- */
+.qcr-story-card{grid-column:1 / -1;background:linear-gradient(135deg,#f8fbff,#fff);margin-bottom:18px;}
+.qcr-quality-story{padding:4px 2px;}
+.qcr-story-label{font-size:14.5px;font-weight:900;color:#0f4c81;margin-bottom:7px;}
+.qcr-story-text{font-size:15px;line-height:1.6;color:#334155;}
+
+/* ---- KPI grid ---- */
+.qcr-kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;}
+.qcr-kpi{border:1px solid #e3eaf0;border-radius:9px;padding:12px 13px;background:#fbfdff;}
+.qcr-kpi .qcr-kpi-name{font:700 15.5px Manrope,sans-serif;color:var(--muted);line-height:1.25;}
+.qcr-kpi .qcr-kpi-value{font:800 22px 'Space Grotesk',sans-serif;color:var(--heading);margin-top:5px;}
+.qcr-kpi-value.good{color:#15803d;}
+.qcr-kpi-value.amber{color:#b45309;}
+.qcr-kpi-value.bad{color:#b91c1c;}
+.qcr-kpi-value.neutral{color:var(--heading);}
+.qcr-kpi .qcr-status{display:inline-block;margin-top:6px;border-radius:999px;padding:4px 8px;font:800 12.5px Manrope,sans-serif;}
+.qcr-status.good{background:#dcfce7;color:#15803d;}
+.qcr-status.amber{background:#fef3c7;color:#a16207;}
+.qcr-status.bad{background:#fee2e2;color:#b91c1c;}
+.qcr-status.neutral{background:#e0f2fe;color:#0369a1;}
+.qcr-kpi-value.value-change-up{animation:qcrValueUp .65s ease-out;}
+.qcr-kpi-value.value-change-down{animation:qcrValueDown .65s ease-out;}
+@keyframes qcrValueUp{0%{transform:scale(1);opacity:.72}45%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes qcrValueDown{0%{transform:scale(1);opacity:.72}45%{transform:scale(.92);opacity:1}100%{transform:scale(1);opacity:1}}
+
+/* ---- Ranked lists: Top 5 Defects / Worst Work Centers / Worst Grades ---- */
+.qcr-list{display:flex;flex-direction:column;gap:8px;}
+.qcr-empty{padding:16px;text-align:center;color:#7b8d9d;font:600 14.5px Manrope,sans-serif;}
+.qcr-ranked-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #edf2f6;}
+.qcr-ranked-row:last-child{border-bottom:0;}
+.qcr-fishbone-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;justify-content:center;}
+.qcr-fishbone-chip{border:1.5px solid var(--red);background:#fff;color:var(--heading);font:800 13px Manrope,sans-serif;padding:7px 12px;border-radius:999px;cursor:pointer;transition:border-color .15s ease,color .15s ease,background .15s ease;}
+.qcr-fishbone-chip:hover{border-color:var(--red);color:var(--red);}
+.qcr-fishbone-chip.active{background:var(--red);border-color:var(--red);color:#fff;}
+.qcr-fb-title{font:800 15px Sora,Manrope,sans-serif;color:var(--heading);margin-bottom:8px;}
+.qcr-fb-note{font:600 12.5px Manrope,sans-serif;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.5;}
+.qcr-fb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.qcr-fb-branch{border:1px solid #E2E8F0;border-top:3px solid var(--fb-color,#94A3B8);border-radius:12px;padding:0 0 10px;background:#fff;overflow:hidden;box-shadow:var(--shadow-card);transition:box-shadow .15s ease,transform .15s ease;}
+.qcr-fb-branch:hover{box-shadow:var(--shadow-card-hover);transform:translateY(-1px);}
+.qcr-fb-head{display:flex;align-items:center;gap:8px;font:800 14.5px Manrope,sans-serif;text-transform:uppercase;letter-spacing:.4px;padding:12px 13px;margin-bottom:6px;color:#fff;background:var(--fb-color,#334155);}
+.qcr-fb-icon{font-size:18px;line-height:1;}
+.qcr-fb-count{margin-left:auto;background:rgba(255,255,255,.28);color:#fff;font:800 11px Manrope,sans-serif;padding:1px 7px;border-radius:999px;}
+.qcr-fb-ul{list-style:none;margin:0;padding:0 12px;display:flex;flex-direction:column;gap:7px;}
+.qcr-fb-ul li{position:relative;padding-left:16px;font:600 13.5px Manrope,sans-serif;color:#324156;line-height:1.4;}
+.qcr-fb-ul li::before{content:'';position:absolute;left:0;top:7px;width:6px;height:6px;border-radius:50%;background:var(--fb-color,#334155);}
+.qcr-fb-empty{padding:0 12px;font:600 13px Manrope,sans-serif;color:#a3b1bf;font-style:italic;}
+.qcr-fb-spine{margin-top:14px;text-align:center;font:800 12.5px Manrope,sans-serif;color:#7b8d9d;padding-top:10px;border-top:2px dashed #DCE6EF;}
+.qcr-fb-spine span{background:#16324F;color:#fff;padding:4px 12px;border-radius:999px;}
+@media(max-width:900px){.qcr-fb-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:600px){.qcr-fb-grid{grid-template-columns:1fr;}}
+.qcr-rca-panel{margin-top:18px;}
+.qcr-rca-head-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:8px;}
+.qcr-rca-head-row .qcr-fb-title{margin-bottom:0;}
+.qcr-rca-filter-label{font:700 12.5px Manrope,sans-serif;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.qcr-rca-cause-filter{font:700 12.5px Manrope,sans-serif;color:var(--heading);border:1px solid #E2E8F0;border-radius:8px;padding:5px 9px;background:#fff;cursor:pointer;}
+.qcr-rca-count{font:700 10.5px Manrope,sans-serif;color:var(--muted);margin-top:4px;text-align:center;}
+html[data-theme="dark"] .qcr-rca-cause-filter{background:#141B2C;border-color:#2A3B54;color:var(--text);}
+.qcr-rca-table-wrap{overflow-x:auto;border:1px solid #E2E8F0;border-radius:12px;-webkit-overflow-scrolling:touch;}
+.qcr-rca-table{width:100%;border-collapse:collapse;font:600 12.5px Manrope,sans-serif;min-width:760px;}
+.qcr-rca-table thead th{background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%);color:#fff;font:800 11.5px Manrope,sans-serif;text-transform:uppercase;letter-spacing:.3px;padding:9px 10px;text-align:center;white-space:nowrap;border:1px solid #2B78A8;}
+.qcr-rca-table tbody td{padding:9px 10px;border-top:1px solid #EEF2F7;color:#324156;vertical-align:middle;text-align:center;line-height:1.4;}
+.qcr-rca-table tbody tr:nth-child(even){background:#F8FAFC;}
+.qcr-rca-chip{display:inline-flex;align-items:center;gap:5px;color:#fff;font:800 11.5px Manrope,sans-serif;padding:3px 9px;border-radius:999px;white-space:nowrap;}
+.qcr-rca-chain{color:#5b6b7c;font-style:italic;text-align:left;}
+.qcr-rca-arrow{color:#94A3B8;font-style:normal;}
+html[data-theme="dark"] .qcr-rca-table-wrap{border-color:#2A3B54;}
+html[data-theme="dark"] .qcr-rca-table tbody td{border-color:#2A3B54;color:var(--text);}
+html[data-theme="dark"] .qcr-rca-table tbody tr:nth-child(even){background:#141B2C;}
+#dashFishboneDiagram{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:14px 10px 6px;}
+#dashFishboneDiagram{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+/* Natural size (--fb-natural-w, set per diagram) is both the cap on wide screens and the floor on
+   narrow ones, so fishbone text stays a fixed CSS size and follows browser zoom; the card scrolls
+   sideways instead of shrinking the text. Phones keep the old shrink-to-fit behaviour. */
+#dashFishboneDiagram .fishbone-svg{display:block;width:100%;height:auto;max-width:var(--fb-natural-w,none);margin:0 auto;}
+@media(min-width:701px){#dashFishboneDiagram .fishbone-svg{min-width:var(--fb-natural-w,0);}}
+.qcr-ranked-main{min-width:0;display:flex;flex-direction:column;gap:3px;align-items:flex-start;}
+.qcr-ranked-main>b{font:750 14px Manrope,sans-serif;color:#263f54;overflow-wrap:anywhere;}
+.qcr-ranked-main>span{font:700 15.5px Manrope,sans-serif;color:var(--muted);}
+.qcr-rank{font:800 15.5px Manrope,sans-serif;color:var(--muted);text-align:center;}
+
+/* ---- Pareto / Root Cause ---- */
+.qcr-root-cause{min-height:0;}
+.qcr-root-title{font:900 16px 'Space Grotesk',sans-serif;color:var(--heading);margin-bottom:10px;}
+.qcr-root-path{display:flex;flex-wrap:wrap;align-items:center;gap:9px;padding:11px;border:1px solid #dfe8ef;background:#fbfdff;border-radius:9px;}
+.qcr-root-path span{font:600 14.5px Manrope,sans-serif;color:var(--muted);}
+.qcr-root-path b{display:block;font:800 13.5px Manrope,sans-serif;color:#263f54;margin-top:2px;}
+.qcr-root-path i{font-style:normal;font-weight:900;font-size:16px;color:#118DFF;margin:0 2px;}
+.qcr-root-meta{margin:14px 0 7px;font:800 15px Manrope,sans-serif;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+.qcr-root-list{display:flex;flex-direction:column;gap:6px;}
+.qcr-root-link{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;padding:8px 10px;border:1px solid #e1e9ef;border-radius:7px;background:#fbfdff;cursor:pointer;}
+.qcr-root-link:hover{background:#f3f8fc;}
+.qcr-root-link b{font:800 13.5px Manrope,sans-serif;color:var(--heading);}
+.qcr-root-link span{font:600 15px Manrope,sans-serif;color:var(--muted);}
+
+/* ---- What Changed? comparison + why-changed ---- */
+.qcr-compare{width:100%;border-collapse:collapse;table-layout:fixed;}
+.qcr-compare th{background:linear-gradient(180deg,#2f93cf 0%,#1f6690 100%);color:#fff;font:800 13.5px Manrope,sans-serif;text-transform:uppercase;padding:9px;border:1px solid #2B78A8;}
+.qcr-compare td{padding:9px;border:1px solid #e5edf3;font:700 14px Manrope,sans-serif;color:#334e63;}
+.qcr-compare td:not(:first-child){text-align:center;}
+.qcr-delta{font-weight:800;}
+.qcr-delta.good{color:#15803d;}
+.qcr-delta.amber{color:#b45309;}
+.qcr-delta.bad{color:#b91c1c;}
+.qcr-delta.equal{color:var(--muted);}
+.qcr-accordion{margin-top:12px;}
+.qcr-accordion>summary{cursor:pointer;font:800 13.5px Manrope,sans-serif;color:#118DFF;padding:6px 0;list-style:none;}
+.qcr-accordion>summary::-webkit-details-marker{display:none;}
+.qcr-why-changed{margin-top:10px;padding-top:10px;border-top:1px solid #e8eef3;}
+.qcr-why-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.qcr-why-grid>div{padding:8px 9px;border:1px solid #e1e9ef;border-radius:8px;background:#fbfdff;}
+.qcr-why-grid b{display:block;font:800 14px 'Space Grotesk',sans-serif;color:var(--heading);}
+.qcr-why-grid span{display:block;margin-top:3px;font:600 15px Manrope,sans-serif;color:#6c8090;line-height:1.35;}
+
+/* Work Center & Grade tab tables: Rank column stays centered (matches the
+   sheet-wide default), but the Work Center / Grade name column reads better
+   left-aligned since it's text, not a number. */
+#wcTable th:nth-child(1),#wcTable td:nth-child(1),
+#gradeTable th:nth-child(1),#gradeTable td:nth-child(1){text-align:center;}
+#wcTable th:nth-child(2),#wcTable td:nth-child(2),
+#gradeTable th:nth-child(2),#gradeTable td:nth-child(2){text-align:left;}
+
+/* ---- Target vs actual history ---- */
+.qcr-target-summary{font-size:15.5px;color:#526b80;margin-bottom:9px;}
+.qcr-target-table{width:100%;overflow:visible;}
+.qcr-target-table table{width:100%;table-layout:fixed;}
+
+/* ---- Trend intelligence + KPI target intelligence ---- */
+.qcr-intel-status{display:inline-block;padding:6px 11px;border-radius:999px;font:800 13px Manrope,sans-serif;}
+.qcr-intel-status.good{background:#dcfce7;color:#15803d;}
+.qcr-intel-status.amber{background:#fef3c7;color:#a16207;}
+.qcr-intel-status.bad{background:#fee2e2;color:#b91c1c;}
+.qcr-intel-main{margin-top:12px;font:900 26px 'Space Grotesk',sans-serif;color:var(--heading);}
+.qcr-intel-main span{font:700 14px Manrope,sans-serif;color:#647789;}
+.qcr-intel-meta{margin-top:8px;font:600 15.5px/1.4 Manrope,sans-serif;color:var(--muted);}
+

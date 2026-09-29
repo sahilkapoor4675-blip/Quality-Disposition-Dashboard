@@ -1,0 +1,112 @@
+/* 12-icons-header-ribbons.css — Icon system, header ribbons, tooltips, Copper Mill theme. Bundled into /app.css in filename order (cascade order matters); see README. */
+/* ================================================================
+   V65.0 — icons, rolling-mill header, field-name hint tag, chart tooltip
+   ================================================================ */
+/* ---- icon system (sprite in index.html) ---- */
+.ic{width:1.15em;height:1.15em;flex:none;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.2em;margin-right:.42em;pointer-events:none;}
+.cmdk-ico .ic,.export-dialog-close .ic,.analytics-expand-btn .ic,.analytics-presentation-close .ic,.chevron .ic,.global-search-icon{margin-right:0;}
+.cmdk-ico{display:inline-flex;align-items:center;font-size:16px;}
+.filter-toolbar-title .ic{color:var(--accent);}
+.reset-all{display:inline-flex;align-items:center;}
+.filter-trigger .chevron{display:inline-flex;align-items:center;}
+.filter-trigger .chevron .ic{width:16px;height:16px;stroke-width:2.2;}
+.summary-label .ic,.updated-label .ic{color:var(--accent);}
+.updated-label .ic{width:1em;height:1em;margin-right:.35em;}
+.filter-summary-bar .summary-actions button{display:inline-flex;align-items:center;}
+.filter-summary-bar .summary-actions button .ic{color:var(--accent);}
+.saved-view-wrap{display:inline-flex;align-items:center;gap:6px;color:var(--accent);}
+.saved-view-wrap .ic{margin-right:0;}
+.global-search-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);width:19px;height:19px;color:var(--muted);z-index:1;}
+.global-search-wrap .global-search-input{padding-left:46px;}
+.global-search-wrap:focus-within .global-search-icon{color:var(--accent);}
+.drill-head h3{display:flex;align-items:center;}
+.drill-head h3 .ic{color:var(--accent);}
+.drill-head button,.drill-export{display:inline-flex;align-items:center;}
+.compare-setup h3,.compare-view-head button{display:inline-flex;align-items:center;}
+.export-dialog-eyebrow{display:flex;align-items:center;}
+.export-dialog-eyebrow .ic{width:1.05em;height:1.05em;}
+.export-dialog-close .ic{width:18px;height:18px;}
+.export-dialog-option-icon .ic{width:21px;height:21px;margin:0;}
+.export-dialog-option-icon.eo-xl{color:#16a34a;background:rgba(22,163,74,.10);}
+.export-dialog-option-icon.eo-pdf{color:#dc2626;background:rgba(220,38,38,.09);}
+.export-dialog-option-icon.eo-ppt{color:#dc7d34;background:rgba(220,125,52,.12);}
+.export-dialog-option-icon.eo-csv{color:#2388c9;background:rgba(35,136,201,.11);}
+.qcr-exec-item small{display:flex;align-items:center;}
+.qcr-exec-item small .ic{width:1.05em;height:1.05em;color:var(--accent);}
+.qcr-zone-heading h3{display:flex;align-items:center;}
+.qcr-zone-heading h3 .ic{color:#118DFF;margin-right:.5em;}
+.view-pop-title{display:flex;align-items:center;}
+.view-pop-title .ic{color:var(--accent);}
+.analytics-expand-btn .ic,.analytics-presentation-close .ic{width:18px;height:18px;}
+.analytics-presentation-close .ic{width:20px;height:20px;stroke-width:2.2;}
+.analytics-presentation-kicker{display:flex;align-items:center;}
+.analytics-presentation-kicker .ic{width:1.05em;height:1.05em;margin-right:.45em;}
+
+/* ---- header background: flowing ribbon waves + copper coils (V65.0, redesigned from a reference video) ---- */
+header.app-header .header-top-row{position:relative;z-index:2;}
+.header-fx{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;z-index:0;}
+.header-fx>*{position:absolute;display:block;pointer-events:none;}
+.hfx-wash{inset:0;background:radial-gradient(60% 140% at 100% 100%,rgba(240,146,66,.20),transparent 62%),radial-gradient(55% 140% at 0% 100%,rgba(56,150,236,.15),transparent 66%),linear-gradient(100deg,rgba(255,255,255,.96) 0%,rgba(244,249,255,.9) 48%,rgba(246,250,255,.85) 66%,rgba(253,243,232,.9) 100%);}
+.hfx-scene{right:0;top:0;height:100%;width:56%;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 40%);mask-image:linear-gradient(90deg,transparent 0,#000 40%);opacity:.96;}
+.hfx-layer{left:0;right:0;bottom:0;height:92%;transform-origin:50% 100%;animation:hfxBreath 9s ease-in-out infinite alternate;will-change:transform;}
+.hfx-layer svg{position:absolute;left:0;top:0;height:100%;width:200%;animation:hfxRoll 34s linear infinite;will-change:transform;}
+.hfx-copper{animation-duration:11s;animation-direction:alternate-reverse;}
+.hfx-copper svg{animation-duration:26s;animation-direction:reverse;}
+.hfx-blue{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 42%,transparent 84%);mask-image:linear-gradient(90deg,#000 0,#000 42%,transparent 84%);}
+.hfx-copper{-webkit-mask-image:linear-gradient(90deg,transparent 24%,#000 66%);mask-image:linear-gradient(90deg,transparent 24%,#000 66%);}
+.hfx-veil{inset:0;background:linear-gradient(90deg,rgba(255,255,255,.82) 0%,rgba(255,255,255,.68) 36%,rgba(255,255,255,0) 64%);-webkit-mask-image:linear-gradient(180deg,#000 0,#000 45%,transparent 82%);mask-image:linear-gradient(180deg,#000 0,#000 45%,transparent 82%);}
+@keyframes hfxRoll{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
+@keyframes hfxBreath{from{transform:translate3d(0,0,0) scaleY(1)}to{transform:translate3d(0,-5px,0) scaleY(1.16)}}
+/* dark theme: deep navy, ribbons glow (screen blend), coils dimmed */
+html[data-theme="dark"] .hfx-wash{background:radial-gradient(60% 140% at 100% 100%,rgba(240,130,50,.22),transparent 62%),radial-gradient(55% 140% at 0% 100%,rgba(40,130,230,.24),transparent 66%),linear-gradient(100deg,rgba(6,11,22,.55) 0%,rgba(10,24,44,.35) 55%,rgba(26,18,12,.5) 100%);}
+html[data-theme="dark"] .hfx-layer{mix-blend-mode:screen;}
+html[data-theme="dark"] .hfx-blue svg{filter:brightness(1.05) saturate(1.15);}
+html[data-theme="dark"] .hfx-copper svg{filter:brightness(1.0) saturate(1.1);}
+html[data-theme="dark"] .hfx-scene{filter:brightness(.42) saturate(1.25) contrast(1.15);opacity:.95;}
+html[data-theme="dark"] .hfx-veil{background:linear-gradient(90deg,rgba(6,12,24,.62) 0%,rgba(6,12,24,.45) 36%,rgba(6,12,24,0) 64%);}
+@media(max-width:1100px){.hfx-scene{display:none;}}
+@media(max-width:600px){.hfx-copper{display:none;}}
+@media(prefers-reduced-motion:reduce){.hfx-layer,.hfx-layer svg{animation:none!important;}}
+@media print{.header-fx{display:none!important;}}
+
+/* "Last updated" is a real chip now: solid glass background so the waves can never sit on top of / behind its text */
+header.app-header .updated-block{display:inline-flex;align-items:center;align-self:flex-end;gap:0;height:38px;padding:0 14px 0 12px;text-align:left;background:rgba(255,255,255,.92);border:1px solid #D3E3F1;border-radius:12px;box-shadow:0 4px 14px rgba(24,58,88,.10);position:relative;z-index:3;}
+header.app-header .updated-label{display:inline-flex;align-items:center;margin:0;padding-right:10px;border-right:1px solid #D3E3F1;font-size:12px;letter-spacing:.9px;color:#1D78C8;opacity:1;white-space:nowrap;}
+header.app-header .updated-label .ic{color:#1D78C8;}
+header.app-header .updated-time{padding-left:10px;font-size:13px;font-weight:800;color:#16324F;white-space:nowrap;}
+html[data-theme="dark"] header.app-header .updated-block{background:rgba(17,30,50,.92);border-color:#2A4666;box-shadow:0 5px 16px rgba(0,0,0,.35);}
+html[data-theme="dark"] header.app-header .updated-label{color:#8FD0FF;border-right-color:#2A4666;}
+html[data-theme="dark"] header.app-header .updated-label .ic{color:#8FD0FF;}
+html[data-theme="dark"] header.app-header .updated-time{color:#F4F8FF;}
+@media(max-width:600px){header.app-header .updated-label{display:none;}header.app-header .updated-time{padding-left:0;}}
+
+
+/* ---- chart tooltip (was unstyled) ---- */
+.chart-tooltip{position:fixed;left:0;top:0;z-index:2147483000;max-width:320px;padding:7px 10px;border-radius:9px;background:rgba(15,42,74,.96);color:#fff;font:700 12.5px/1.35 Manrope,sans-serif;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;display:flex;flex-direction:column;gap:2px;}
+.chart-tooltip.show{opacity:1;visibility:visible;}
+.chart-tooltip .ct-field{display:flex;align-items:center;font:600 10.5px/1.2 Manrope,sans-serif;color:#9fd0f2;}
+.chart-tooltip .ct-field .ic{width:11px;height:11px;margin-right:4px;}
+
+/* ---- field-name hint tag ---- */
+.qd-field-tag{position:fixed;left:0;top:0;z-index:2147483001;display:flex;align-items:center;gap:8px;max-width:300px;padding:6px 10px 6px 8px;border-radius:9px;background:rgba(15,42,74,.95);border:1px solid rgba(143,208,255,.28);color:#fff;box-shadow:0 8px 22px rgba(8,20,36,.28);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .1s ease;will-change:transform;}
+.qd-field-tag.show{opacity:1;visibility:visible;}
+.qd-field-tag .ic{width:15px;height:15px;margin:0;color:#8fd0ff;}
+.qft-copy{display:flex;flex-direction:column;min-width:0;}
+.qft-name{font:800 12.5px/1.25 Manrope,sans-serif;white-space:normal;}
+.qft-meta{font:600 10.5px/1.25 Manrope,sans-serif;color:#9fb8d0;}
+html[data-theme="dark"] .qd-field-tag,html[data-theme="dark"] .chart-tooltip{background:rgba(232,240,252,.96);color:#0f2a4a;border-color:rgba(15,42,74,.2);}
+html[data-theme="dark"] .qd-field-tag .ic,html[data-theme="dark"] .chart-tooltip .ct-field{color:#1d5fa8;}
+html[data-theme="dark"] .qft-meta{color:#476079;}
+@media print{.qd-field-tag,.chart-tooltip{display:none!important;}}
+
+/* ---- V65.0 "Copper Mill" theme: 3D header logo, skin switch ---- */
+.logo-3d{margin:0 22px 0 0;}
+.logo-3d .header-logo{margin:0!important;filter:drop-shadow(0 1px 0 rgba(255,255,255,.95)) drop-shadow(1px 2px 0 rgba(112,132,154,.55)) drop-shadow(2px 4px 2px rgba(24,48,78,.22)) drop-shadow(0 10px 14px rgba(24,58,88,.22));}
+html[data-theme="dark"] .logo-3d .header-logo{filter:drop-shadow(0 1px 0 rgba(255,255,255,.35)) drop-shadow(1px 2px 0 rgba(0,0,0,.6)) drop-shadow(0 10px 16px rgba(0,0,0,.6)) drop-shadow(0 0 12px rgba(220,125,52,.25));}
+@media(max-width:1500px){.logo-3d{margin-right:18px;}}
+@media(max-width:900px){.logo-3d{margin-right:16px;}}
+@media(max-width:600px){.logo-3d{margin-right:12px;}}
+@media(max-width:480px){.logo-3d{margin-right:10px;}}
+html[data-skin="classic"] .header-fx{display:none!important;}
+html[data-skin="classic"] .logo-3d .header-logo{filter:drop-shadow(0 3px 7px rgba(15,42,74,.10));}
+
