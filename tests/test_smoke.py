@@ -58,8 +58,10 @@ def smoke_server():
 
             status, ct, html = get("/")
             assert status == 200 and b"app-version" in html, "index/version marker missing"
-            get("/app.css")
-            get("/app.js")
+            st, ct, css = get("/app.css")
+            assert st == 200 and b":root" in css and b"intro" in css, "app.css bundle incomplete"
+            st, ct, js = get("/app.js")
+            assert st == 200 and b"async function init(" in js and js.rstrip().endswith(b"}"), "app.js bundle incomplete"
             assert_json("/api/filters", "month")
             kpis = assert_json("/api/kpis", "kpis")
             assert len(kpis["kpis"]) >= 12, f"unexpected KPI payload size: {len(kpis['kpis'])}"

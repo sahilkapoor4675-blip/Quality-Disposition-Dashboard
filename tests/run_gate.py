@@ -6,7 +6,7 @@
 
 Runs only on isolated temporary databases - never point it at production.
 """
-import shutil, subprocess, sys, time
+import shutil, subprocess, sys, tempfile, time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,7 +20,14 @@ checks = [
         "dr_storage.py", "dr_recovery.py", "dr_pg_backup.py")]]),
 ]
 if shutil.which("node"):
-    checks += [("node --check app.js", ["node", "--check", str(ROOT / "app.js")]),
+    # app.js is a bundle of src/js/*.js (filename order). Check every piece on its
+    # own (each is cut at a top-level statement boundary) AND the joined bundle.
+    _js_parts = sorted((ROOT / "src" / "js").glob("*.js"))
+    _bundle = Path(tempfile.gettempdir()) / "qdash_gate_app_bundle.js"
+    _bundle.write_text("".join(p.read_text(encoding="utf-8").rstrip("\n") + "\n" for p in _js_parts), encoding="utf-8")
+    checks += [(f"node --check src/js ({len(_js_parts)} files + bundle)",
+                [PY, "-c", "import subprocess,sys; sys.exit(max(subprocess.call(['node','--check',f]) for f in sys.argv[1:]))",
+                 *[str(p) for p in _js_parts], str(_bundle)]),
                ("node --check sw.js", ["node", "--check", str(ROOT / "sw.js")]),
                ("node --check sfx.js", ["node", "--check", str(ROOT / "sfx.js")])]
 checks += [

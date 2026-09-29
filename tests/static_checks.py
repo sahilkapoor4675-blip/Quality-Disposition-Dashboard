@@ -54,12 +54,19 @@ class ContractParser(HTMLParser):
                 break
 
 
+def read_bundle(kind):
+    """app.js / app.css are built from src/<kind>/*.<kind> in filename order."""
+    return "".join(p.read_text(encoding="utf-8") for p in sorted((ROOT/"src"/kind).glob("*."+kind)))
+
+
 def code_health():
     errors=[]; warnings=[]
 
-    for rel in ["server.py","app.js","app.css","index.html","admin.html"]:
+    for rel in ["server.py","index.html","admin.html"]:
         p=ROOT/rel
         if not p.exists(): errors.append(f"Missing {rel}")
+    for rel,ext in (("src/js",".js"),("src/css",".css")):
+        if not list((ROOT/rel).glob("*"+ext)): errors.append(f"Missing frontend source pieces in {rel}/")
 
     # Python syntax
     try:
@@ -74,7 +81,7 @@ def code_health():
 
     # Basic JS/CSS sanity checks and a duplicate-selector report. We do not fail on
     # duplicates because the current cascade is intentionally preserved.
-    css=(ROOT/"app.css").read_text(encoding="utf-8")
+    css=read_bundle("css")
     selectors=[]
     for m in re.finditer(r'([^{}]+)\{', css):
         raw=m.group(1).strip()
@@ -92,7 +99,7 @@ def code_health():
     # can legitimately be unused right after a deliberate removal, or be reserved
     # for a state that's only toggled at runtime, so this warns rather than fails.
     html_all = (ROOT/"index.html").read_text(encoding="utf-8") + (ROOT/"admin.html").read_text(encoding="utf-8")
-    js_all = (ROOT/"app.js").read_text(encoding="utf-8")
+    js_all = read_bundle("js")
     haystack = html_all + js_all
     css_classes = sorted({m.group(1) for sel in selectors for m in re.finditer(r'\.([a-zA-Z][\w-]*)', sel)})
 
@@ -116,8 +123,8 @@ def code_health():
 
     print("CODE HEALTH")
     print(f"  server.py: {len(server.splitlines())} lines")
-    print(f"  app.js: {(ROOT/'app.js').read_text(encoding='utf-8').count(chr(10))+1} lines")
-    print(f"  app.css: {len(css.splitlines())} lines")
+    print(f"  app.js (bundle of {len(list((ROOT/'src'/'js').glob('*.js')))} files): {js_all.count(chr(10))+1} lines")
+    print(f"  app.css (bundle of {len(list((ROOT/'src'/'css').glob('*.css')))} files): {len(css.splitlines())} lines")
     print(f"  duplicate CSS selector groups: {len(dups)}")
     print(f"  orphaned CSS classes: {len(orphans)}")
     if warnings:

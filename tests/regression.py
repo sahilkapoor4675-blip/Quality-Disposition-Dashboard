@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -44,9 +45,23 @@ SUITES = {
 }
 
 
+# app.js / app.css no longer exist as files: they are bundles of src/js/*.js and
+# src/css/*.css. The embedded suites were written against the single files, so
+# rewrite their `(ROOT / "app.js").read_text(...)` reads to join the pieces.
+_ASSET_READ = re.compile(r"""\(ROOT\s*/\s*(['"])app\.(js|css)\1\)\.read_text\(encoding=(['"])utf-8\3\)""")
+
+
+def _use_src_bundles(source: str) -> str:
+    return _ASSET_READ.sub(
+        lambda m: '"".join(p.read_text(encoding="utf-8") for p in sorted((ROOT / "src" / "%s").glob("*.%s")))'
+        % (m.group(2), m.group(2)),
+        source)
+
+
 def _run_suite(name: str, source: str) -> int:
     """Run one embedded suite from a temporary script in the repo root."""
-    # The temp script intentionally lives beside server.py/app.js/etc. so every
+    source = _use_src_bundles(source)
+    # The temp script intentionally lives beside server.py/src/etc. so every
     # suite's original ``Path(__file__).resolve().parent`` still points at repo root.
     fd, temp_name = tempfile.mkstemp(prefix=f'.{name}_', suffix='.py', dir=ROOT)
     os.close(fd)
