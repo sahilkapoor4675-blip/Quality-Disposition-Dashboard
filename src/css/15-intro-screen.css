@@ -34,19 +34,16 @@ html[data-skin="classic"] #introScreen .intro-copper{display:none;}
   #introScreen .intro-scan{display:flex;align-items:center;gap:16px;margin-top:22px;background:rgba(255,255,255,.88);backdrop-filter:blur(6px);border:1.5px solid #e7c9a8;border-radius:16px;padding:12px 20px;box-shadow:0 10px 26px rgba(150,73,26,.14);}
   #introScreen .scan-coil{width:112px;height:auto;flex:none;border-radius:10px;}
   #introScreen #scanLine{filter:drop-shadow(0 0 5px #37e0ff) drop-shadow(0 0 10px rgba(55,224,255,.7));}
-  #introScreen.intro-scan-run #scanLine{animation:scanSweep 1.85s cubic-bezier(.4,0,.2,1) 1 both;}
-  #introScreen.intro-scan-run #scanVeil{animation:scanVeilWipe 1.85s cubic-bezier(.4,0,.2,1) 1 both;}
   @keyframes scanSweep{0%{transform:translateX(0)}100%{transform:translateX(120px)}}
   @keyframes scanVeilWipe{0%{opacity:.55;transform:translateX(0)}92%{opacity:.45}100%{opacity:0;transform:translateX(118px)}}
   #introScreen .scan-readout{display:flex;flex-direction:column;gap:5px;min-width:0;}
   #introScreen .scan-badge{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;font:800 12px/1 'DM Sans',sans-serif;letter-spacing:.4px;color:#1FA97C;background:rgba(31,169,124,.10);border:1px solid rgba(31,169,124,.35);border-radius:999px;padding:5px 11px 5px 9px;opacity:0;transform:translateY(3px) scale(.94);}
   #introScreen .scan-badge svg{width:13px;height:13px;}
-  #introScreen.intro-scan-stamped .scan-badge{animation:scanStamp .5s cubic-bezier(.2,1.4,.4,1) forwards;}
   @keyframes scanStamp{0%{opacity:0;transform:translateY(3px) scale(.7) rotate(-6deg)}60%{opacity:1;transform:translateY(0) scale(1.12) rotate(1deg)}100%{opacity:1;transform:translateY(0) scale(1) rotate(0)}}
   #introScreen .scan-caption{font:600 11px/1.35 'DM Sans',sans-serif;color:#6b7684;}
   @media(max-width:700px){#introScreen .intro-scan{margin-top:13px;padding:9px 14px;gap:11px;}#introScreen .scan-coil{width:78px;}#introScreen .scan-caption{display:none;}}
   html[data-skin="classic"] #introScreen .intro-scan{display:none!important;}
-  @media(prefers-reduced-motion:reduce){#introScreen.intro-scan-run #scanLine,#introScreen.intro-scan-run #scanVeil,#introScreen.intro-scan-stamped .scan-badge{animation:none!important;}#introScreen .scan-badge{opacity:1;transform:none;}}
+  @media(prefers-reduced-motion:reduce){#introScreen .scan-badge{opacity:1;transform:none;}}
 
   /* ---- V65.0: quality watermark icons + a second coil stack in the intro background ---- */
   #introScreen .ic-stack{position:absolute;left:-4vw;bottom:-6vh;width:min(52vmin,440px);color:inherit;opacity:.16;animation:icStackDrift 13s ease-in-out infinite alternate;}
