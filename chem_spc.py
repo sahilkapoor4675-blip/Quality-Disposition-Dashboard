@@ -34,7 +34,15 @@ PARAM_LABEL = {
 }
 MAX_ROWS = 20000
 
-_DATE_HEADERS = {"date", "castdate", "castingdate", "heatdate", "dateofcast", "dateofcasting"}
+_DATE_HEADERS = {"date", "castdate", "castingdate", "heatdate", "dateofcast", "dateofcasting", "dt", "castdt", "heatdt", "datetime", "timestamp"}
+
+
+def _is_date_header(h):
+    """h = normalised header (see _hnorm). Any header that says 'date' (Cast Date, Date of Analysis, Analysis Date, Sample Date,
+    Reporting Date, Date/Time ...) is the cast date; 'update(d)' / 'validate' style words are not."""
+    if h in _DATE_HEADERS:
+        return True
+    return "date" in h and not re.search(r"(update|validat|candidate|mandate)", h)
 _ID_HEADERS = {"heatno", "heat", "coilno", "coil", "castno", "heatnumber", "heatnum"}
 _ALLOY_HEADERS = {"alloy", "alloycode"}
 _DENOM_HEADERS = {"denomination", "denom"}
@@ -156,7 +164,9 @@ def order_key(rec):
 # ----------------------------------------------------------------------------- cast date -> Month / Week / Quarter / FY
 import datetime as _dt
 
-_DATE_FMTS = ("%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%y", "%d/%m/%y", "%d-%m-%y", "%Y-%m-%d", "%Y/%m/%d", "%d-%b-%Y", "%d-%b-%y", "%d %b %Y", "%d %B %Y")
+_DATE_FMTS = ("%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%y", "%d/%m/%y", "%d-%m-%y", "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d-%b-%Y", "%d-%b-%y",
+              "%d %b %Y", "%d %B %Y", "%d-%B-%Y", "%d %b %y", "%d/%b/%Y", "%d/%b/%y", "%d.%b.%Y", "%d.%b.%y", "%d %b, %Y", "%b %d, %Y", "%B %d, %Y")
+_TIME_TAIL = re.compile(r"(?:[T\s]+\d{1,2}[:.]\d{2}(?:[:.]\d{2}(?:\.\d+)?)?\s*(?:[AaPp][Mm])?\s*(?:Z|[+-]\d{2}:?\d{2})?)$")
 _DATE_MIN_YEAR, _DATE_MAX_YEAR = 2000, 2100
 
 
@@ -188,12 +198,21 @@ def parse_cast_date(v):
                     d = None
     else:
         t = re.sub(r"\s+", " ", str(v).strip())
+        t = _TIME_TAIL.sub("", t).strip()            # '02.04.2026 10:30:00' / '2026-04-02T10:30:00' -> the date part
         for fmt in _DATE_FMTS:
             try:
                 d = _dt.datetime.strptime(t, fmt).date()
                 break
             except ValueError:
                 continue
+        if d is None:
+            m = re.match(r"^(\d{2})(\d{2})\.(\d{4})$", t)          # '2505.2025' typed as text: 25.05.2025 (same guess as for a numeric cell)
+            if m:
+                try:
+                    d = _dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                    note = "guessed"
+                except ValueError:
+                    d = None
         if d is None:
             m = re.match(r"^(\d{4})(\d{2})(\d{2})$", t)          # 20260402
             if m:
@@ -255,6 +274,20 @@ def period_options(recs):
             "undated": sum(1 for r in recs if not period_fields(r.get("cast_date"))[0])}
 
 
+def period_options_cascade(recs, flt):
+    """Options for each of the four period dropdowns, scoped to the OTHER three selections (same idea as the main dashboard's
+    cascading filters): picking Month = Jun-2026 leaves only the weeks / quarter / FY that really occur in June, so a combination
+    that would show 'no heats' can no longer be picked. A dropdown's own selection never narrows its own list."""
+    flt = {k: str((flt or {}).get(k) or "").strip() for k in PERIOD_KEYS}
+    flt = {k: ("" if v.lower() == "all" else v) for k, v in flt.items()}
+    lists = {"month": "months", "week": "weeks", "quarter": "quarters", "fy": "fys"}
+    out = {}
+    for k, name in lists.items():
+        others = {kk: vv for kk, vv in flt.items() if kk != k}
+        out[name] = period_options(filter_by_period(recs, others))[name]
+    return out
+
+
 # ----------------------------------------------------------------------------- reading files
 def _map_header(cells):
     """header row -> {index: field}. Fields: heat_no, cast_date, alloy, denomination, analyst,
@@ -266,7 +299,7 @@ def _map_header(cells):
         if not h:
             continue
         field = None
-        if h in _DATE_HEADERS:
+        if _is_date_header(h):
             field = "cast_date"
         elif h in _ID_HEADERS:
             field = "heat_no"

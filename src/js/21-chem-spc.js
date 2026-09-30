@@ -1,12 +1,13 @@
 /* 21-chem-spc.js — "Chemistry SPC" tab: one heat = one point, big element cards (symbol + picture, Cp/Cpk/Pp/Ppk and their Std. Dev.),
-   Month/Week/Quarter/Fin.Year/Grade/Parameter/Heat-Qty filters + Insert switches (shown in the TOP filter bar while this tab is open,
-   replacing the disposition filters), I-MR control charts and histogram with Standard AND Aim limits + mean,
+   Month/Parameter/Grade/Heat-Qty/Week/Quarter/Fin.Year/Heat-No filters (same look and size as the dashboard filters, shown in the TOP filter bar
+   while this tab is open, replacing the disposition filters), I-MR control charts and histogram with Standard AND Aim limits + mean,
    out-of-spec heat list joined to disposition defects/rejects by heat_no.
    Bundled into /app.js in filename order; see README ("Frontend source layout"). All maths is server-side (chem_spc.py). */
 const CHEM_SEL_KEY = 'qdash_chem_sel_v1';
 let chemMeta = null, chemData = null;
 let chemSel = { spec: '', param: 'cu', last_n: 0, month: '', week: '', quarter: '', fy: '', ins_icon: true, ins_cl: true, ins_aim: true };
 try { Object.assign(chemSel, JSON.parse(localStorage.getItem(CHEM_SEL_KEY) || '{}')); } catch (e) {}
+chemSel.ins_icon = chemSel.ins_cl = chemSel.ins_aim = true;   // the Insert box was removed: element pictures, centre line and Aim lines are always drawn
 delete chemSel.date_from; delete chemSel.date_to;   // older saved selections used a from/to date range; it was replaced by Month/Week/Quarter/Fin.Year
 
 function chemNum(v, d){
@@ -78,12 +79,12 @@ function chemGroupLabel(g){
   const s = chemMeta.specs.find(x => x.description === g);
   return s ? s.description + ' — ' + s.heats + ' heats' : g;
 }
-// The filters live in the TOP filter bar (inside #stickyControls, where the disposition filters normally are) and are only visible
+// The filters live in the TOP filter bar (inside #stickyControls, where the disposition filters normally are, and with the same .filters look) and are only visible
 // while the Chemistry SPC tab is open; every other tab keeps the normal dashboard filters. Nothing is drawn inside the tab itself.
 function chemTopBarEl(){
   let bar = document.getElementById('chemTopBar');
   if(!bar){
-    bar = document.createElement('div'); bar.id = 'chemTopBar'; bar.className = 'chem-topbar hidden';
+    bar = document.createElement('div'); bar.id = 'chemTopBar'; bar.className = 'filters chem-topbar hidden';
     const anchor = document.getElementById('filters'), host = document.getElementById('stickyControls');
     if(anchor && anchor.parentNode) anchor.parentNode.insertBefore(bar, anchor.nextSibling);
     else if(host) host.insertBefore(bar, host.firstChild);
@@ -97,41 +98,104 @@ function chemSyncMode(){
   document.documentElement.classList.toggle('chem-mode', on);
   chemTopBarEl().classList.toggle('hidden', !on);
 }
+const CHEM_QTY = [['0', 'All'], ['10', '10'], ['20', '20'], ['30', '30'], ['50', '50'], ['100', '100'], ['200', '200']];
+const CHEM_PERIOD_FIELDS = [['month', 'months'], ['week', 'weeks'], ['quarter', 'quarters'], ['fy', 'fys']];
+let chemLastPeriod = '', chemFindVal = '';
+function chemPeriodItems(list){ return [{value: '', label: 'All'}].concat((list || []).map(x => ({value: x, label: x}))); }
+// One dropdown, built with the SAME markup/classes as the dashboard filters (.filter-field > .filter-control > .filter-trigger + .filter-menu),
+// so size, font, icons, hover, open menu, dark mode and the "active" highlight all come from the dashboard's own CSS.
+function chemFieldHtml(key, icon, label, items, cur, active){
+  const shown = (items.find(x => x.value === cur) || items[0] || {label: 'All'}).label;
+  const opts = items.map(x => `<div class="filter-option${x.value === '' ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('');
+  return `<div class="filter-field${active ? ' filter-active' : ''}" data-chem-key="${key}"><label>${icon} ${label}</label><div class="filter-control"><button type="button" class="filter-trigger" aria-haspopup="listbox"><span>${escQcr(shown)}</span><span class="chevron">${qdIc('chevron-down')}</span></button><div class="filter-menu"><input class="filter-search" type="text" placeholder="Search options…" autocomplete="off"><div class="filter-options">${opts}</div></div></div></div>`;
+}
+function chemCurVal(key){ return key === 'last_n' ? String(Number(chemSel.last_n) || 0) : String(chemSel[key] == null ? '' : chemSel[key]); }
+function chemIsActive(key){ const v = chemCurVal(key); return (key === 'last_n' ? v !== '0' : v !== '') && ['month', 'week', 'quarter', 'fy', 'last_n'].includes(key); }
+// Re-sync trigger text / selected option / active highlight / "N Active" badge from chemSel without rebuilding the dropdowns.
+function chemSyncFields(){
+  const bar = chemTopBarEl();
+  bar.querySelectorAll('.filter-field[data-chem-key]').forEach(f => {
+    const key = f.dataset.chemKey, v = chemCurVal(key);
+    let label = null;
+    f.querySelectorAll('.filter-option').forEach(o => { const on = o.dataset.value === v; o.classList.toggle('selected', on); if(on) label = o.textContent; });
+    const span = f.querySelector('.filter-trigger span');
+    if(span && label != null) span.textContent = label;
+    f.classList.toggle('filter-active', chemIsActive(key));
+  });
+  const n = ['month', 'week', 'quarter', 'fy', 'last_n'].filter(chemIsActive).length, badge = document.getElementById('chemActiveBadge');
+  if(badge){ badge.textContent = n + ' Active'; badge.classList.toggle('show', n > 0); }
+}
+// Month / Week / Quarter / Fin. Year option lists follow the other three selections (like the dashboard's cascading filters).
+function chemFillPeriods(lists){
+  CHEM_PERIOD_FIELDS.forEach(([k, l]) => {
+    const f = chemTopBarEl().querySelector(`.filter-field[data-chem-key="${k}"] .filter-options`); if(!f) return;
+    const cur = chemCurVal(k);
+    f.innerHTML = chemPeriodItems(lists[l]).map(x => `<div class="filter-option${x.value === '' ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('');
+  });
+  chemSyncFields();
+}
+function chemFilterOptions(ctl, term){
+  const q = String(term || '').trim().toLowerCase();
+  let shown = 0;
+  ctl.querySelectorAll('.filter-option').forEach(o => { const ok = !q || o.textContent.toLowerCase().includes(q); o.style.display = ok ? '' : 'none'; if(ok) shown++; });
+  const box = ctl.querySelector('.filter-options'); let em = box.querySelector('.filter-empty');
+  if(!shown && !em){ em = document.createElement('div'); em.className = 'filter-empty'; em.textContent = 'No matching options'; box.appendChild(em); }
+  else if(shown && em) em.remove();
+}
+function chemPick(key, value){
+  if(key === 'spec'){ chemSel.spec = value; chemLastPeriod = ''; chemSanitiseSel(); chemSaveSel(); renderChemControls(); chemRefresh(); return; }
+  if(key === 'last_n') chemSel.last_n = Number(value) || 0;
+  else { chemSel[key] = value; if(CHEM_PERIOD_FIELDS.some(([k]) => k === key)) chemLastPeriod = key; }
+  chemSaveSel(); chemSyncFields(); chemRefresh();
+}
+function chemResetAll(){
+  chemSel.month = chemSel.week = chemSel.quarter = chemSel.fy = ''; chemSel.last_n = 0; chemLastPeriod = ''; chemFindVal = '';
+  const inp = document.getElementById('chemFindHeat'); if(inp) inp.value = '';
+  chemSaveSel(); chemFillPeriods(chemPeriods()); chemRefresh();
+}
+function chemBindBar(bar){
+  if(bar._chemBound) return; bar._chemBound = true;
+  bar.addEventListener('click', e => {
+    const trig = e.target.closest('button.filter-trigger');
+    if(trig){
+      const ctl = trig.closest('.filter-control');
+      document.querySelectorAll('.filter-control.open').forEach(c => { if(c !== ctl) c.classList.remove('open'); });
+      ctl.classList.toggle('open');
+      if(ctl.classList.contains('open')){ const sx = ctl.querySelector('.filter-search'); if(sx){ sx.value = ''; chemFilterOptions(ctl, ''); sx.focus(); } }
+      return;
+    }
+    const opt = e.target.closest('.filter-option');
+    if(opt){ const f = opt.closest('.filter-field'); f.querySelector('.filter-control').classList.remove('open'); chemPick(f.dataset.chemKey, opt.dataset.value); return; }
+    if(e.target.closest('#chemResetAll')) chemResetAll();
+  });
+  bar.addEventListener('input', e => {
+    if(e.target.classList.contains('filter-search')) chemFilterOptions(e.target.closest('.filter-control'), e.target.value);
+    if(e.target.id === 'chemFindHeat') chemFindVal = e.target.value;
+  });
+  bar.addEventListener('keydown', e => {
+    if(e.target.id === 'chemFindHeat' && e.key === 'Enter'){ const v = e.target.value.trim(); if(v) openChemHeat(v); }
+    if(e.key === 'Escape') bar.querySelectorAll('.filter-control.open').forEach(c => c.classList.remove('open'));
+  });
+}
 function renderChemControls(){
   const groups = chemMeta.specs.filter(s => s.heats > 0).map(s => s.description).concat(chemMeta.unassigned ? ['__none__'] : []);
-  const params = chemMeta.params;
   const per = chemPeriods();
-  const opt = (v, t, cur) => `<option value="${escQcr(v)}"${v === cur ? ' selected' : ''}>${escQcr(t)}</option>`;
-  const allOpt = (list, cur) => opt('', 'All', cur) + list.map(x => opt(x, x, cur)).join('');
-  const chk = (id, label, on) => `<label class="chem-ins"><input type="checkbox" id="${id}"${on ? ' checked' : ''}><span>${label}</span></label>`;
   const tip = 'Month / Week / Quarter / Fin. Year come from the Date column of the chemistry file (financial year April–March, same labels as the main dashboard). Charts always run in heat-number order; “Heat Qty” = the N highest heat numbers of the selection. Cp / Cpk / Pp / Ppk are measured against the Standard limits.';
+  const F = (key, icon, label, items, active) => chemFieldHtml(key, icon, label, items, chemCurVal(key), active);
+  // same 4-column layout and order as the dashboard filters: Month | Work Center→Parameter | Grade | Quality Decision→Heat Qty  /  Week | Quarter | Fin. Year | Defect Intensity→Heat No.
   chemTopBarEl().innerHTML = `
-    <div class="chem-tb-row">
-      <div class="chem-tb-title" title="${escQcr(tip)}">🧪 Chemistry Filters <span class="chem-tb-i">ⓘ</span></div>
-      <div class="chem-tb-grid">
-        <label class="chem-ctl"><span>Month</span><select id="chemMonthSel">${allOpt(per.months, chemSel.month)}</select></label>
-        <label class="chem-ctl"><span>Week</span><select id="chemWeekSel">${allOpt(per.weeks, chemSel.week)}</select></label>
-        <label class="chem-ctl"><span>Quarter</span><select id="chemQuarterSel">${allOpt(per.quarters, chemSel.quarter)}</select></label>
-        <label class="chem-ctl"><span>Fin. Year</span><select id="chemFySel">${allOpt(per.fys, chemSel.fy)}</select></label>
-        <label class="chem-ctl chem-ctl-grade"><span>Grade</span><select id="chemSpecSel">${groups.map(g => opt(g, chemGroupLabel(g), chemSel.spec)).join('')}</select></label>
-        <label class="chem-ctl"><span>Parameter</span><select id="chemParamSel">${params.map(p => opt(p.key, p.label, chemSel.param)).join('')}</select></label>
-        <label class="chem-ctl"><span>Heat Qty (last N)</span><select id="chemLastN">${[[0,'All'],[10,'10'],[20,'20'],[30,'30'],[50,'50'],[100,'100'],[200,'200']].map(([v,t]) => opt(String(v), t, String(chemSel.last_n))).join('')}</select></label>
-        <label class="chem-ctl chem-find"><span>Heat No.</span><input type="search" id="chemFindHeat" placeholder="e.g. NBS6348 ↵" autocomplete="off"></label>
-      </div>
-      <div class="chem-tb-insert" role="group" aria-label="Insert on charts">
-        <div class="chem-tb-h">Insert</div>
-        ${chk('chemInsIcon', 'Icon', chemSel.ins_icon)}${chk('chemInsCL', 'Centre Line', chemSel.ins_cl)}${chk('chemInsAim', 'Aim Chemistry', chemSel.ins_aim)}
-      </div>
-    </div>`;
+    <div class="filter-toolbar"><div class="filter-toolbar-title" title="${escQcr(tip)}">${qdIc('filter')}Chemistry Filters <span class="chem-tb-i">ⓘ</span></div><div class="filter-actions"><span id="chemActiveBadge" class="active-filter-badge">0 Active</span><button id="chemResetAll" class="reset-all" type="button">${qdIc('reset')}Reset All</button></div></div>
+    ${F('month', '📅', 'Month', chemPeriodItems(per.months), chemIsActive('month'))}
+    ${F('param', '🔬', 'Parameter', chemMeta.params.map(p => ({value: p.key, label: p.label})), false)}
+    ${F('spec', '🧪', 'Grade', groups.map(g => ({value: g, label: chemGroupLabel(g)})), false)}
+    ${F('last_n', '🔢', 'Heat Qty (Last N)', CHEM_QTY.map(([v, t]) => ({value: v, label: t})), chemIsActive('last_n'))}
+    ${F('week', '🗓️', 'Week', chemPeriodItems(per.weeks), chemIsActive('week'))}
+    ${F('quarter', '📊', 'Quarter', chemPeriodItems(per.quarters), chemIsActive('quarter'))}
+    ${F('fy', '📆', 'Financial Year', chemPeriodItems(per.fys), chemIsActive('fy'))}
+    <div class="filter-field"><label>🔥 Heat No.</label><div class="filter-control"><input type="search" id="chemFindHeat" class="filter-trigger chem-heat-input" placeholder="e.g. NBS6348 ↵" autocomplete="off" value="${escQcr(chemFindVal)}"></div></div>`;
+  chemBindBar(chemTopBarEl());
   chemSyncMode();
-  const on = (id, ev, fn) => document.getElementById(id).addEventListener(ev, fn);
-  const setPer = (k, id) => on(id, 'change', e => { chemSel[k] = e.target.value; chemSaveSel(); chemRefresh(); });
-  on('chemSpecSel', 'change', e => { chemSel.spec = e.target.value; chemSanitiseSel(); chemSaveSel(); renderChemControls(); chemRefresh(); });
-  on('chemParamSel', 'change', e => { chemSel.param = e.target.value; chemSaveSel(); chemRefresh(); });
-  on('chemLastN', 'change', e => { chemSel.last_n = Number(e.target.value) || 0; chemSaveSel(); chemRefresh(); });
-  setPer('month', 'chemMonthSel'); setPer('week', 'chemWeekSel'); setPer('quarter', 'chemQuarterSel'); setPer('fy', 'chemFySel');
-  on('chemFindHeat', 'keydown', e => { if(e.key === 'Enter'){ const v = e.target.value.trim(); if(v) openChemHeat(v); } });
-  [['chemInsIcon', 'ins_icon'], ['chemInsCL', 'ins_cl'], ['chemInsAim', 'ins_aim']].forEach(([id, k]) => on(id, 'change', e => { chemSel[k] = e.target.checked; chemSaveSel(); if(chemData) renderChemAll(); }));
+  chemSyncFields();
 }
 let chemReqSeq = 0;
 async function refreshChemView(signal){
@@ -143,9 +207,21 @@ async function refreshChemView(signal){
     const d = await chemFetch('/api/chem/spc?' + q.toString(), signal);
     if(seq !== chemReqSeq) return;
     chemData = d; chemClearError();
+    // Month / Week / Quarter / Fin. Year that no longer fit together (e.g. Month = Jan-2026 but Quarter switched to Q1) would show 'no heats':
+    // the one changed last wins, the others go back to All, then the view is fetched once more.
+    if(d.periods_cascade){
+      const bad = CHEM_PERIOD_FIELDS.filter(([k, l]) => chemSel[k] && !d.periods_cascade[l].includes(chemSel[k])).map(([k]) => k);
+      if(bad.length){
+        let drop = bad.filter(k => k !== chemLastPeriod); if(!drop.length) drop = bad;
+        drop.forEach(k => { chemSel[k] = ''; });
+        chemSaveSel(); chemSyncFields();
+        return refreshChemView(signal);
+      }
+      chemFillPeriods(d.periods_cascade);
+    }
     // if the chosen parameter has no data for this grade, fall back to the first parameter that has
     if(!d.n && d.overview && d.overview.length && !d.overview.some(o => o.param === chemSel.param)){
-      chemSel.param = d.overview[0].param; chemSaveSel(); renderChemControls(); return refreshChemView(signal);
+      chemSel.param = d.overview[0].param; chemSaveSel(); chemSyncFields(); return refreshChemView(signal);
     }
     renderChemAll();
   } finally { if(seq === chemReqSeq) box.classList.remove('chem-loading'); }
@@ -390,29 +466,37 @@ function chemElemArt(key){
   }
   return `<svg class="chem-el-svg" viewBox="0 0 96 72" role="img" aria-label="${escQcr(e.name)}">${defs}${body}</svg>`;
 }
-// Main elements of the grade (Cu + its alloying elements), largest first. Each card: symbol, picture, then
-// Cp | Pp, Cpk | Ppk, Std. Dev. | Std. Dev. (left column = within-subgroup σ from the moving range, right column = overall σ).
+// Rating -> [KPI status class, pill text] (same green / amber / red pills as the dashboard KPI cards).
+function chemStatus(v){ return v == null ? ['neutral', 'REFERENCE'] : v >= 1.67 ? ['good', 'EXCELLENT'] : v >= 1.33 ? ['good', 'CAPABLE'] : v >= 1 ? ['amber', 'MARGINAL'] : ['bad', 'NOT CAPABLE']; }
+function chemTone(v){ return v == null ? '' : v >= 1.33 ? 'target-good' : v >= 1 ? 'target-amber' : 'target-bad'; }
+// Main elements of the grade (Cu + its alloying elements), largest first. Built like the dashboard KPI cards (.kpi-card: coloured status bar on the left,
+// icon chip + label + status pill on top, big value, tinted tile row underneath). Left column = within σ (Cp / Cpk), right column = overall σ (Pp / Ppk).
 function renderChemMain(d){
   const box = document.getElementById('chemMainBox'); if(!box) return;
   const mains = (d.overview || []).filter(r => r.main);
   if(!mains.length){ box.innerHTML = ''; return; }
-  const cell = (k, v, cls) => `<div class="chem-el-cell"><span class="chem-el-k${cls === 'sd' ? ' sd' : ''}">${k}</span><span class="chem-el-v ${cls || ''}">${v}</span></div>`;
   const sd = v => v == null || !isFinite(v) ? '—' : chemNum(v, v >= 1 ? 3 : v >= 0.1 ? 4 : 5);
-  const card = r => {
+  const big = (k, sub, v) => { const c = chemIdxClass(v); return `<div class="chem-el-big"><span class="chem-el-bk">${k}</span><b class="chem-el-bv ${c ? 'is-' + c.replace('chem-', '') : ''}">${chemIdx(v)}</b><small>${sub}</small></div>`; };
+  const tile = (k, v, cls) => `<div class="kpi-target-item ${cls || ''}"><span>${k}</span><b>${v}</b></div>`;
+  const card = (r, i) => {
     const e = CHEM_ELEMENTS[r.param] || {sym: String(r.label).replace('%', ''), name: r.label, z: '', c: '#9DB5D9', d: '#5B6F8F', t: '#3F5675'};
-    // each card is tinted with its own element's logo colours (background glow + coloured symbol)
-    const vars = `--el-c:${e.c};--el-d:${e.d};--el-t:${e.t};--el-glow:${chemHexA(e.c, .55)};--el-tint1:${chemHexA(e.c, .34)};--el-tint2:${chemHexA(e.c, .12)};--el-edge:${chemHexA(e.d, .55)}`;
-    return `<button type="button" class="chem-el-card${r.param === d.param ? ' chem-cur' : ''}" data-param="${r.param}" style="${vars}" title="Click to chart ${escQcr(e.name)}">
-      <div class="chem-el-head">
-        ${chemSel.ins_icon ? `<div class="chem-el-art">${chemElemArt(r.param)}</div>` : ''}
-        <div class="chem-el-symbox"><span class="chem-el-z">${e.z}</span><span class="chem-el-sym">${escQcr(e.sym)}</span><span class="chem-el-name">${escQcr(e.name)}</span></div>
+    const [st, stTxt] = chemStatus(r.cpk);
+    // each card is tinted with its own element's logo colours (icon chip + soft glow behind the picture)
+    const vars = `--el-c:${e.c};--el-d:${e.d};--el-t:${e.t};--el-glow:${chemHexA(e.c, .5)};--el-tint1:${chemHexA(e.c, .28)};--el-tint2:${chemHexA(e.c, .10)};--el-edge:${chemHexA(e.d, .45)};--kpi-stagger:${Math.min(i, 7) * 65}ms`;
+    return `<div class="kpi-card kpi-pulse chem-el-kpi status-${st}${r.param === d.param ? ' chem-cur' : ''}" data-param="${r.param}" role="button" tabindex="0" style="${vars}" title="Click to chart ${escQcr(e.name)}" aria-label="${escQcr(e.name)} — Cpk ${chemIdx(r.cpk)}, ${stTxt.toLowerCase()}. Click to chart">
+      <div class="kpi-top">
+        <div class="label chem-el-label"><span class="kpi-icon chem-el-chip">${escQcr(e.sym)}</span><span class="chem-el-nm">${escQcr(e.name)}${e.z ? `<small>Atomic no. ${e.z}</small>` : ''}</span></div>
+        <span class="kpi-status ${st}">${stTxt}</span>
       </div>
-      <div class="chem-el-grid">
-        ${cell('Cp', chemIdx(r.cp), chemIdxClass(r.cp))}${cell('Pp', chemIdx(r.pp), chemIdxClass(r.pp))}
-        ${cell('Cpk', chemIdx(r.cpk), chemIdxClass(r.cpk))}${cell('Ppk', chemIdx(r.ppk), chemIdxClass(r.ppk))}
-        ${cell('Std. Dev.', sd(r.sigma_within), 'sd')}${cell('Std. Dev.', sd(r.sigma_overall), 'sd')}
+      <div class="chem-el-body">
+        <div class="chem-el-metrics">${big('Cpk', 'within σ', r.cpk)}${big('Ppk', 'overall σ', r.ppk)}</div>
+        <div class="chem-el-art">${chemElemArt(r.param)}</div>
       </div>
-    </button>`;
+      <div class="kpi-targets chem-el-tiles">
+        ${tile('Cp', chemIdx(r.cp), chemTone(r.cp))}${tile('Pp', chemIdx(r.pp), chemTone(r.pp))}
+        ${tile('Std. Dev.', sd(r.sigma_within))}${tile('Std. Dev.', sd(r.sigma_overall))}
+      </div>
+    </div>`;
   };
   box.innerHTML = `<div class="chem-el-grid-wrap">${mains.map(card).join('')}</div><div class="chem-foot">Left column: <b>Cp / Cpk</b> use the within (moving-range) σ; right column: <b>Pp / Ppk</b> use the overall σ; both against the <b>Standard</b> limits. Std. Dev. under each column is the σ that column uses. Green ≥ 1.33 · amber 1.00–1.33 · red &lt; 1.00. Click a card to chart that element.</div>`;
 }
@@ -540,13 +624,18 @@ async function openChemHeat(heat){
 }
 
 // ---------------------------------------------------------------- delegated clicks (charts, tables)
+document.addEventListener('keydown', e => {
+  if((e.key !== 'Enter' && e.key !== ' ') || !e.target || !e.target.closest) return;
+  const c = e.target.closest('.chem-el-kpi'); if(!c) return;
+  e.preventDefault(); c.click();
+});
 document.addEventListener('click', e => {
   const t = e.target;
   if(!t || !t.closest || !t.closest('#tab-chem')) return;
   const pt = t.closest('[data-heat]');
   if(pt){ openChemHeat(pt.getAttribute('data-heat')); return; }
   const row = t.closest('[data-param]');
-  if(row){ chemSel.param = row.getAttribute('data-param'); chemSaveSel(); const sel = document.getElementById('chemParamSel'); if(sel) sel.value = chemSel.param; chemRefresh(); window.scrollTo({top: document.getElementById('tab-chem').offsetTop, behavior: 'smooth'}); }
+  if(row){ chemSel.param = row.getAttribute('data-param'); chemSaveSel(); chemSyncFields(); chemRefresh(); window.scrollTo({top: document.getElementById('tab-chem').offsetTop, behavior: 'smooth'}); }
 });
 
 // ---------------------------------------------------------------- tab registration

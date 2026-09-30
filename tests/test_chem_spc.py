@@ -246,7 +246,8 @@ adm = (ROOT / "admin.html").read_text(encoding="utf-8")
 check('id="chemImportPanel"' in adm and 'id="chemSpecPanel"' in adm and ' onclick="' not in adm, "admin panels present, no inline handlers")
 check('id="chemMainBox"' in idx and "renderChemMain" in js and 'id="chemKpis"' not in idx and "renderChemKpis" not in js and "URLSearchParams({spec: chemSel.spec, param: chemSel.param, last_n" in js and "month: chemSel.month" in js, "element cards present; the KPI cards are gone; period filters are sent")
 check("Western" not in js and "rules" not in js.split("function drawChemI")[1].split("function chemLegend")[0] and "Western Electric" not in idx, "no Western Electric rule anywhere in the Chemistry SPC tab")
-check(all(k in js for k in ("Std. Dev.", "chemElemArt", "chemMonthSel", "chemWeekSel", "chemQuarterSel", "chemFySel", "chemInsIcon", "chemInsCL", "chemInsAim", "Aim LSL", "Std LSL")), "Filter box, Insert box, Std. Dev. cells, Standard + Aim lines present")
+check(all(k in js for k in ("Std. Dev.", "chemElemArt", "chemFieldHtml", "chemFindHeat", "chemResetAll", "kpi-card", "Aim LSL", "Std LSL")) and "chemInsIcon" not in js,
+      "Dashboard-style filter bar, KPI-style element cards, Std. Dev. cells, Standard + Aim lines present; Insert box removed")
 check("data-aim" in adm and "AIM limits" in adm and "Date span" in adm, "admin: AIM limits editor and chemistry date summary present")
 css = (ROOT / "src/css/16-chem-spc.css").read_text(encoding="utf-8")
 check("#0f2a4a" not in js and 'stroke="var(--text)"' in js, "histogram normal curve follows the theme (no fixed dark navy)")
@@ -254,6 +255,18 @@ check('html[data-theme="dark"] .chem-great' in css, "dark-theme colour for the E
 check("chemExportCpk" in js and "chemExportHeats" in js and 'id="chemCpkCsv"' in js and 'id="chemHeatsCsv"' in js, "Cpk-table and heat-data CSV exports present")
 check("TAB_LOADERS.chem = loadChemSpc" in js and "#tabs .tab-btn" in css, "tab loader registered from the chemistry piece; tab bar stays on one row")
 check("row" in js.split("function drawChemHist")[1] and "Mean" in js.split("function drawChemHist")[1], "histogram labels use separate rows for Standard, Aim and Mean")
+
+# ---------------------------------------------------------------- period filters must get data (dates with a time part, any "…Date…" header, cascading lists)
+import chem_spc as _cs
+check(all(_cs.parse_cast_date(v)[0] == "2026-04-02" for v in ("02.04.2026 10:30:00", "2026-04-02T10:30:00", "2-Apr-26", "02/04/2026", "Apr 2, 2026", "20260402")),
+      "dates typed with a time part / other common formats are read (they used to leave every heat undated -> empty Month/Week/Quarter/FY)")
+check(_cs.parse_cast_date("2505.2025") == ("2025-05-25", "guessed"), "a day.month.year typed as text 2505.2025 is read like the numeric case")
+check(all(_cs._is_date_header(_cs._hnorm(h)) for h in ("Date", "Cast Date", "Date of Analysis", "Analysis Date", "Sample Date", "Date/Time")) and not _cs._is_date_header(_cs._hnorm("Updated At")),
+      "any header that says 'date' is the cast date column")
+_recs = [{"heat_no": f"NB{i}", "cast_date": d} for i, d in enumerate(["2026-01-05", "2026-01-20", "2026-02-10", "2026-04-15", "2026-07-01"])]
+_c = _cs.period_options_cascade(_recs, {"month": "Jan-2026", "quarter": "Q4", "fy": "FY 2025-26"})
+check(_c["months"] == ["Feb-2026", "Jan-2026"] and _c["quarters"] == ["Q4"] and _c["fys"] == ["FY 2025-26"] and all(w.startswith("Wk of") for w in _c["weeks"]),
+      "period dropdown lists cascade: each list follows the OTHER three selections, never its own")
 
 if ERR:
     print("CHEM SPC FAIL"); [print(" -", e) for e in ERR]; sys.exit(1)

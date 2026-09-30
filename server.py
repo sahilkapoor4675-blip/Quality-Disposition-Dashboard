@@ -3803,6 +3803,7 @@ def compute_chem_spc(qs):
     view.update({"spec": {"description": spec["description"], "alloy": spec["alloy"], "limits": limits, "aim": aim} if spec else {"description": "No spec assigned", "alloy": "", "limits": {}, "aim": {}},
                  "overview": overview, "filters": {"last_n": last_n, **period},
                  "periods": chem_spc.period_options(group),
+                 "periods_cascade": chem_spc.period_options_cascade(group, period),
                  "cpk_bands": {"excellent": chem_spc.CPK_EXCELLENT, "capable": chem_spc.CPK_CAPABLE, "marginal": chem_spc.CPK_MARGINAL}})
     return view
 

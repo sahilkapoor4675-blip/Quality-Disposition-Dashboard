@@ -90,6 +90,7 @@ function writeUrlState(push){
 // this DOM-sync logic three times.
 function syncFilterUiFromState(){
   document.querySelectorAll('.filter-field').forEach(field=>{
+    if(!field.dataset.filterKey) return;   // Chemistry SPC dropdowns (data-chem-key) are managed by 21-chem-spc.js
     const key=field.dataset.filterKey, val=currentFilters[key]||'All';
     const span=field.querySelector('.filter-trigger span');
     if(span){ const opts=[...field.querySelectorAll('.filter-option')]; const match=opts.find(o=>o.dataset.value===val); span.textContent=match?match.textContent:val; }
