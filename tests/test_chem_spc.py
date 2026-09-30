@@ -211,7 +211,7 @@ http_flow()
 # ---------------------------------------------------------------- source contracts
 idx = (ROOT / "index.html").read_text(encoding="utf-8"); js = "".join(p.read_text(encoding="utf-8") for p in sorted((ROOT / "src/js").glob("*.js")))
 check('data-tab="chem"' in idx and 'id="tab-chem"' in idx, "dashboard tab + panel present")
-check("chem: loadChemSpc" in js and "'chem'" in js, "tab registered")
+check(("chem: loadChemSpc" in js and "'chem'" in js) or "TAB_LOADERS.chem = loadChemSpc" in js, "tab registered")
 adm = (ROOT / "admin.html").read_text(encoding="utf-8")
 check('id="chemImportPanel"' in adm and 'id="chemSpecPanel"' in adm and ' onclick="' not in adm, "admin panels present, no inline handlers")
 check('id="chemMainBox"' in idx and "renderChemMain" in js and 'id="chemFrom"' not in js and "Cast date" not in js and "chemTo" not in js and "URLSearchParams({spec: chemSel.spec, param: chemSel.param, last_n" in js, "main-element Cpk strip present; chemistry date controls gone")
@@ -220,6 +220,7 @@ css = (ROOT / "src/css/16-chem-spc.css").read_text(encoding="utf-8")
 check("#0f2a4a" not in js and 'stroke="var(--text)"' in js, "histogram normal curve follows the theme (no fixed dark navy)")
 check('html[data-theme="dark"] .chem-great' in css, "dark-theme colour for the Excellent Cpk rating")
 check("chemExportCpk" in js and "chemExportHeats" in js and 'id="chemCpkCsv"' in js and 'id="chemHeatsCsv"' in js, "Cpk-table and heat-data CSV exports present")
+check("TAB_LOADERS.chem = loadChemSpc" in js and "#tabs .tab-btn" in css, "tab loader registered from the chemistry piece; tab bar stays on one row")
 check("mSide" in js, "histogram Mean label avoids the USL/LSL labels")
 
 if ERR:

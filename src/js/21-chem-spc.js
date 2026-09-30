@@ -422,3 +422,20 @@ document.addEventListener('click', e => {
   const row = t.closest('[data-param]');
   if(row){ chemSel.param = row.getAttribute('data-param'); chemSaveSel(); const sel = document.getElementById('chemParamSel'); if(sel) sel.value = chemSel.param; chemRefresh(); window.scrollTo({top: document.getElementById('tab-chem').offsetTop, behavior: 'smooth'}); }
 });
+
+// ---------------------------------------------------------------- tab registration
+// The dashboard opens a tab through TAB_LOADERS[tabName](signal). Register the chemistry loader from here so the tab
+// works no matter which other src/js piece defines the map. If the map is defined LATER in the bundle (still in its
+// temporal dead zone now) or is not there yet, retry once the whole bundle has run.
+(function chemRegisterTab(){
+  const reg = () => {
+    try {
+      if(typeof TAB_LOADERS !== 'object' || !TAB_LOADERS) return false;
+      if(typeof TAB_LOADERS.chem !== 'function') TAB_LOADERS.chem = loadChemSpc;
+      return typeof TAB_LOADERS.chem === 'function';
+    } catch (e) { return false; }
+  };
+  if(reg()) return;
+  document.addEventListener('DOMContentLoaded', reg);
+  window.addEventListener('load', reg);
+})();

@@ -1,4 +1,10 @@
 
+## V66.1 — Chemistry SPC tab: loader registered, tab bar on one row (2026-09-30)
+
+**Fixed**
+- **Chemistry SPC showed "Couldn't load this view. TAB_LOADERS[tabName] is not a function" and no data.** The tab's loader was never registered in the tab map. `21-chem-spc.js` now registers `TAB_LOADERS.chem = loadChemSpc` itself (retrying after the bundle has run if the map is defined later), so it no longer depends on another `src/js` piece.
+- **The 6th tab wrapped onto a second row.** The tab bar is now one row: equal-width tabs on screens >= 1000 px, sideways scrolling (no wrapping) below that. Service-worker shell cache bumped to v8.
+
 ## V66.1 — Chemistry SPC polish: dark theme, label overlap, CSV exports (2026-09-30)
 
 **Fixed**

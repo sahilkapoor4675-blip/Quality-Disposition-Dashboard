@@ -87,3 +87,12 @@ html[data-theme="dark"] .chem-table th{background:#0E1626}
 html[data-theme="dark"] .chem-great{color:var(--green)}
 html[data-theme="dark"] .chem-main-card.chem-great{border-left-color:var(--green)}
 @media(max-width:700px){.chem-ctl,.chem-ctl:first-child select{min-width:100%}.chem-ctl select{max-width:none}.chem-find input{width:100%}.chem-kpi .value{font-size:24px}}
+/* Tab bar: 6 tabs must stay on ONE row. Wide screens share the row equally; narrower screens scroll sideways instead of wrapping. */
+@media(min-width:1000px){
+  #tabs{display:grid!important;grid-auto-flow:column!important;grid-auto-columns:minmax(0,1fr)!important;flex-wrap:nowrap!important;gap:8px}
+  #tabs .tab-btn{width:auto!important;min-width:0!important;max-width:none!important;flex:1 1 0!important;padding-left:8px!important;padding-right:8px!important;font-size:clamp(12px,1.05vw,14.5px)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+@media(max-width:999.98px){
+  #tabs{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto;gap:8px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+  #tabs .tab-btn{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;white-space:nowrap}
+}
