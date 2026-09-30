@@ -3630,8 +3630,8 @@ def _fishbone_match(defect_name):
 CHEM_WRITE_LOCK = threading.RLock()
 CHEM_PREVIEWS = {}
 CHEM_COLS = list(chem_spc.PARAMS)
-_CHEM_SELECT = "heat_no,sheet,alloy,denomination,analyst,hardness,conductivity,hf_no," + ",".join(CHEM_COLS)
-_CHEM_FIELDS = ["heat_no", "sheet", "alloy", "denomination", "analyst", "hardness", "conductivity", "hf_no"] + CHEM_COLS
+_CHEM_SELECT = "heat_no,sheet,cast_date,alloy,denomination,analyst,hardness,conductivity,hf_no," + ",".join(CHEM_COLS)
+_CHEM_FIELDS = ["heat_no", "sheet", "cast_date", "alloy", "denomination", "analyst", "hardness", "conductivity", "hf_no"] + CHEM_COLS
 
 
 def _ensure_chem_schema(conn):
@@ -3649,9 +3649,17 @@ def _ensure_chem_schema(conn):
         id {pk}, kind TEXT DEFAULT 'chemistry', filename TEXT, detected INTEGER DEFAULT 0, new_rows INTEGER DEFAULT 0,
         updated INTEGER DEFAULT 0, unchanged INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0,
         warnings INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at {ts})""")
-    # cast_date is kept ONLY so older databases/recovery points keep the same columns; chemistry SPC no longer reads or writes it.
+    # cast_date (ISO YYYY-MM-DD, '' when the file had none / unreadable) only feeds the Month/Week/Quarter/FY filters; charts stay in heat-number order.
+    # AIM limits live inside chem_specs.limits_json under the reserved key "_aim", so the table layout (and old recovery points) did not change.
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chem_heats_date ON chem_heats(cast_date)")
     conn.commit()
+
+
+def _chem_pack_limits(limits, aim):
+    """Standard limits + AIM limits -> the JSON stored in chem_specs.limits_json (AIM under the reserved key '_aim')."""
+    body = dict(limits or {})
+    if aim: body["_aim"] = aim
+    return json.dumps(body, separators=(",", ":"))
 
 
 def _chem_rec(row):
@@ -3669,7 +3677,10 @@ def _chem_load_specs(conn=None):
     for r in rows:
         try: lim = json.loads(r[3] or "{}")
         except (TypeError, ValueError): lim = {}
-        out.append({"id": r[0], "description": r[1], "alloy": r[2] or "", "limits": {k: v for k, v in lim.items() if k in chem_spc.PARAMS}})
+        if not isinstance(lim, dict): lim = {}
+        aim = lim.get("_aim") if isinstance(lim.get("_aim"), dict) else {}
+        out.append({"id": r[0], "description": r[1], "alloy": r[2] or "", "limits": {k: v for k, v in lim.items() if k in chem_spc.PARAMS},
+                    "aim": {k: v for k, v in aim.items() if k in chem_spc.PARAMS}})
     return out
 
 
@@ -3737,7 +3748,7 @@ def compute_chem_meta():
         by.setdefault(h["_spec"], []).append(h)
 
     def info(hs):
-        return {"heats": len(hs), "with_disposition": sum(1 for x in hs if x["heat_no"] in disp_heats)}
+        return {"heats": len(hs), "with_disposition": sum(1 for x in hs if x["heat_no"] in disp_heats), "periods": chem_spc.period_options(hs)}
     out = []
     for s in specs:
         out.append({**s, **info(by.get(s["description"], []))})
@@ -3752,6 +3763,7 @@ def compute_chem_spc(qs):
     if param not in chem_spc.PARAMS:
         raise ValueError("Unknown parameter")
     last_n = max(0, min(5000, _safe_int(qs.get("last_n"), 0)))
+    period = {k: str(qs.get(k, "") or "")[:40] for k in chem_spc.PERIOD_KEYS}      # month / week / quarter / fy ('' or 'All' = no filter)
     conn = get_conn()
     try:
         specs = _chem_load_specs(conn)
@@ -3764,28 +3776,33 @@ def compute_chem_spc(qs):
     group = [h for h in heats if h["_spec"] == (spec["description"] if spec else "")]
     disp_rows = _chem_disposition_for([h["heat_no"] for h in group])
     disp_by = {h: chem_spc.summarize_disposition(rows) for h, rows in disp_rows.items()}
-    view = chem_spc.build_spc_view([dict(h) for h in group], spec, param, disp_by, last_n)
-    # capability overview for every parameter of this spec (heat-number order, same last-N)
-    sel = sorted(group, key=chem_spc.order_key)
+    view = chem_spc.build_spc_view([dict(h) for h in group], spec, param, disp_by, last_n, period=period)
+    # capability overview for every parameter of this spec (heat-number order, same period filter and last-N)
+    sel = sorted(chem_spc.filter_by_period(group, period), key=chem_spc.order_key)
     if last_n: sel = sel[-last_n:]
     limits = (spec or {}).get("limits") or {}
+    aim = (spec or {}).get("aim") or {}
     overview = []
     for p in chem_spc.PARAMS:
         pts = [{"value": h[p]} for h in sel if h.get(p) is not None]
         if len(pts) < 2 or (p not in limits and all((h.get(p) or 0) == 0 for h in sel)): continue
         a = chem_spc.analyse_param(pts, limits, p)
         cap = a["capability"]
+        alsl, ausl = chem_spc.eff_limits(aim, p)
         overview.append({"param": p, "label": chem_spc.PARAM_LABEL[p], "n": a["n"], "mean": cap["mean"], "lsl": a["lsl"], "usl": a["usl"],
+                         "aim_lsl": alsl, "aim_usl": ausl,
                          "cp": cap["cp"], "cpk": cap["cpk"], "pp": cap["pp"], "ppk": cap["ppk"],
+                         "sigma_within": cap["sigma_within"], "sigma_overall": cap["sigma_overall"],
                          "rating": chem_spc.cpk_rating(cap["cpk"]), "note": cap["note"],
-                         "ooc": sum(1 for r in a["rules"] if r), "oos": cap["n_below"] + cap["n_above"]})
+                         "oos": cap["n_below"] + cap["n_above"]})
     # main elements (Cu + alloying elements) first, impurities after; Cpk of the main ones is what matters most
     mains = chem_spc.main_elements(limits, {o["param"]: o["mean"] for o in overview})
     rank = {p: i for i, p in enumerate(mains)}
     for o in overview: o["main"] = o["param"] in rank
     overview.sort(key=lambda o: (0, rank[o["param"]]) if o["main"] else (1, chem_spc.PARAMS.index(o["param"])))
-    view.update({"spec": {"description": spec["description"], "alloy": spec["alloy"], "limits": limits} if spec else {"description": "No spec assigned", "alloy": "", "limits": {}},
-                 "overview": overview, "filters": {"last_n": last_n},
+    view.update({"spec": {"description": spec["description"], "alloy": spec["alloy"], "limits": limits, "aim": aim} if spec else {"description": "No spec assigned", "alloy": "", "limits": {}, "aim": {}},
+                 "overview": overview, "filters": {"last_n": last_n, **period},
+                 "periods": chem_spc.period_options(group),
                  "cpk_bands": {"excellent": chem_spc.CPK_EXCELLENT, "capable": chem_spc.CPK_CAPABLE, "marginal": chem_spc.CPK_MARGINAL}})
     return view
 
@@ -3861,8 +3878,11 @@ def chem_import_preview(filename, data):
     finally:
         conn.close()
     res = chem_spc.validate_rows(raw, existing, specs)
-    sample = [{k: r.get(k) for k in ("heat_no", "sheet", "alloy", "denomination", "cu", "ni", "zn", "total", "_status", "_spec")} for r in res["records"][:30]]
+    sample = [{k: r.get(k) for k in ("heat_no", "sheet", "cast_date", "alloy", "denomination", "cu", "ni", "zn", "total", "_status", "_spec")} for r in res["records"][:30]]
+    dated = [r["cast_date"] for r in res["records"] if r.get("cast_date")]
     summary = {k: res[k] for k in ("detected", "new", "updated", "unchanged", "duplicates", "errors", "warnings", "oos_heats", "unresolved_sheets")}
+    summary["dated"] = len(dated); summary["undated"] = len(res["records"]) - len(dated)
+    summary["date_from"] = min(dated) if dated else ""; summary["date_to"] = max(dated) if dated else ""
     token = _chem_store_preview({"kind": "chem", "filename": filename, "records": res["records"], "summary": summary, "chem_revision": rev})
     return {"ok": True, "preview_id": token, "filename": filename, "sheets": notes, **summary,
             "issues": res["issues"][:300], "issue_counts": res["issue_counts"], "updated_details": res["updated_details"], "sample": sample}
@@ -3875,7 +3895,7 @@ def _chem_apply_records(records, filename, summary, username):
             if USE_POSTGRES: conn.execute("SELECT pg_advisory_xact_lock(hashtext('quality-chem-import'))")
             else: conn.execute("BEGIN IMMEDIATE")
             ins = upd = 0
-            cols = ["heat_no", "sheet", "alloy", "denomination", "analyst", "hardness", "conductivity", "hf_no"] + CHEM_COLS
+            cols = ["heat_no", "sheet", "cast_date", "alloy", "denomination", "analyst", "hardness", "conductivity", "hf_no"] + CHEM_COLS
             for r in records:
                 vals = [r.get(c) if c in CHEM_COLS or c == "conductivity" else (r.get(c) or "") for c in cols]
                 if r["_status"] == "new":
@@ -3909,12 +3929,14 @@ def chem_specs_preview(filename, data):
     rows, n_new, n_chg, n_same = [], 0, 0, 0
     for s in specs:
         old = existing.get(chem_spc.norm_key(s["description"]))
+        if old and not s.get("aim") and old.get("aim"): s["aim"] = old["aim"]     # a Standard-only file never erases stored AIM limits
         if not old: status = "new"; n_new += 1
-        elif old["limits"] != s["limits"] or (old["alloy"] or "") != (s["alloy"] or ""): status = "changed"; n_chg += 1
+        elif old["limits"] != s["limits"] or (old.get("aim") or {}) != (s.get("aim") or {}) or (old["alloy"] or "") != (s["alloy"] or ""): status = "changed"; n_chg += 1
         else: status = "unchanged"; n_same += 1
         s["_status"] = status
         rows.append({"description": s["description"], "alloy": s["alloy"], "status": status, "params": len(s["limits"]),
-                     "limits": {chem_spc.PARAM_LABEL[p]: v for p, v in s["limits"].items()}})
+                     "limits": {chem_spc.PARAM_LABEL[p]: v for p, v in s["limits"].items()},
+                     "aim": {chem_spc.PARAM_LABEL[p]: v for p, v in (s.get("aim") or {}).items()}})
     summary = {"detected": len(specs), "new": n_new, "changed": n_chg, "unchanged": n_same, "errors": sum(1 for i in issues if i["severity"] == "error")}
     token = _chem_store_preview({"kind": "specs", "filename": filename, "specs": specs, "summary": summary, "chem_revision": rev})
     return {"ok": True, "preview_id": token, "filename": filename, **summary, "issues": issues, "rows": rows}
@@ -3930,7 +3952,7 @@ def _chem_upsert_specs(specs, filename, summary, username):
             ins = upd = 0
             for s in specs:
                 if s.get("_status") == "unchanged": continue
-                lim = json.dumps(s["limits"], separators=(",", ":"))
+                lim = _chem_pack_limits(s["limits"], s.get("aim"))
                 sid = existing.get(chem_spc.norm_key(s["description"]))
                 if sid is None:
                     conn.execute("INSERT INTO chem_specs(description,alloy,limits_json,updated_by) VALUES(?,?,?,?)", (s["description"], s["alloy"], lim, username)); ins += 1
@@ -3954,6 +3976,8 @@ def _chem_upsert_specs(specs, filename, summary, username):
 def _chem_save_spec(body, username):
     limits, err = chem_spc.validate_spec_payload(body.get("alloy"), body.get("description"), body.get("limits"))
     if err: raise ValueError(err)
+    aim, err = chem_spc.validate_aim_payload(body.get("aim"))
+    if err: raise ValueError(err)
     desc = str(body.get("description")).strip(); alloy = str(body.get("alloy") or "").strip()
     sid = body.get("id")
     with CHEM_WRITE_LOCK:
@@ -3964,7 +3988,7 @@ def _chem_save_spec(body, username):
             for r in conn.execute("SELECT id,description FROM chem_specs").fetchall():
                 if chem_spc.norm_key(r[1]) == chem_spc.norm_key(desc) and (sid is None or int(r[0]) != int(sid)):
                     raise ValueError(f"A spec named '{r[1]}' already exists")
-            lim = json.dumps(limits, separators=(",", ":"))
+            lim = _chem_pack_limits(limits, aim)
             if sid is None:
                 conn.execute("INSERT INTO chem_specs(description,alloy,limits_json,updated_by) VALUES(?,?,?,?)", (desc, alloy, lim, username))
             else:

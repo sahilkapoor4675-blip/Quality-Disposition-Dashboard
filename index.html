@@ -25,7 +25,7 @@
      Local fonts load same-origin, so no non-blocking trick is needed, just a
      normal blocking <link>, the same as app.css just below it. -->
 <!-- <link rel="stylesheet" href="/fonts-local.css"> -->
-<link rel="stylesheet" href="/app.css?v=66.1">
+<link rel="stylesheet" href="/app.css?v=66.2">
 <script>
 // Apply the saved theme before first paint, so there's no flash of the
 // wrong theme. Light mode is always the default on first visit — the
@@ -609,11 +609,11 @@
 
   <div class="tab-panel hidden" id="tab-chem">
     <div class="panel chem-controls-panel"><div class="panel-body" id="chemControls"></div></div>
-    <div class="panel chem-main-panel" id="chemMainBox"></div>
-    <div class="kpi-grid chem-kpi-grid" id="chemKpis"></div>
+    <div class="chem-main-panel" id="chemMainBox"></div>
+    <div id="chemNotes"></div>
 
     <div class="panel">
-      <h3>📈 Individuals (I) Chart — <span id="chemTitleParam">Cu%</span> <small class="chem-h3-sub">one point = one heat · control limits from moving range · Western Electric rules 1-4</small></h3>
+      <h3>📈 Individuals (I) Chart — <span id="chemTitleParam">Cu%</span> <small class="chem-h3-sub">one point = one heat · Standard &amp; Aim limits · mean · control limits from moving range</small></h3>
       <div class="chart-scroll" id="chemIChart"></div>
     </div>
 
@@ -623,12 +623,12 @@
     </div>
 
     <div class="panel">
-      <h3>📊 Histogram with LSL / USL</h3>
+      <h3>📊 Histogram with Standard &amp; Aim limits</h3>
       <div class="chart-scroll" id="chemHist"></div>
     </div>
 
     <div class="panel">
-      <h3>🧮 Capability — Cp / Cpk / Pp / Ppk by Parameter</h3>
+      <h3>🧮 Capability — Cp / Cpk / Pp / Ppk and Std. Dev. by Parameter</h3>
       <div class="panel-body" id="chemOverviewBox"></div>
     </div>
 
@@ -647,6 +647,6 @@
 </div>
 
 <script src="/sfx.js?v=1.0" defer></script>
-<script src="/app.js?v=66.1" defer></script>
+<script src="/app.js?v=66.2" defer></script>
 </body>
 </html>

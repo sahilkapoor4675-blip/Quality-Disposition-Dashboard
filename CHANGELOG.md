@@ -1,4 +1,19 @@
 
+## V66.2 — Chemistry SPC: dates, Standard + AIM limits, element cards, no Western Electric (2026-09-30)
+
+**Added**
+- **Date column of the chemistry file is mapped** (`chem_heats.cast_date`, ISO). Day-first `02.04.2026` / `04.04.26`, Excel dates and serial numbers are read. A number typed as `2505.2025` is read as 25-May-2025 and flagged; an unreadable date (e.g. `27.05.206`) or a future date only gives a warning — the heat is still imported (without a date for the unreadable case). A re-import updates a corrected date and never erases a stored one with a blank. The Admin preview shows Heats with a date / Without a date / Date span and a Date column in the sample.
+- **Filter / Insert boxes** on the Chemistry SPC tab: Month, Week, Quarter, Fin. Year (labels identical to the main dashboard: `Apr-2026`, `Wk of 30-Mar-26`, `Q1` = Apr–Jun, `FY 2026-27`), Grade, Parameter, Heat Qty, Heat No.; Insert: Icon, Centre Line, Aim Chemistry. API: `/api/chem/spc` accepts `month`, `week`, `quarter`, `fy`; `/api/chem/meta` lists the periods available per grade. Charts still run in heat-number order — dates only filter.
+- **Standard.xlsx has two sheets, both are read**: the sheet named "Standard" (Standard limits) and the sheet whose name contains "AIM" (Aim limits), merged per grade description. AIM rows without a Standard row, Standard rows without an AIM row, and AIM limits wider than the Standard limits are reported in the preview. A Standard-only file never erases stored AIM limits. Admin → Spec Limits shows and edits both sets. **No table/column change**: AIM limits are stored inside `chem_specs.limits_json` under the reserved key `_aim`, so existing backups and recovery points restore unchanged.
+- **Element cards**: one big card per main element with symbol, atomic number, name, a drawn picture (inline SVG, works offline) and Cp | Pp, Cpk | Ppk, Std. Dev. | Std. Dev. (within σ / overall σ). Std. deviations are also in the capability table and CSV.
+- I chart and histogram draw **Standard LSL/USL, Aim LSL/USL and the mean** (each can be hidden through the Insert box).
+
+**Removed**
+- Western Electric rules 1-4 (calculation, point colouring, legend, table column, CSV column, out-of-control comparison card).
+- The KPI cards (Heats plotted, Mean, Cpk, Ppk, Out-of-control points, Out-of-spec heats) and the old "Main elements — Cpk" strip (replaced by the element cards).
+
+**Notes**: Cp/Cpk/Pp/Ppk are calculated against the Standard limits. `app.js`/`app.css` query strings → 66.2, service-worker shell cache → v9.
+
 ## V66.1 — Chemistry SPC tab: loader registered, tab bar on one row (2026-09-30)
 
 **Fixed**

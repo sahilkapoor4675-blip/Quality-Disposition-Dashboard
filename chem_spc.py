@@ -7,9 +7,12 @@ Concepts
 --------
 * One *heat* (the "Coil No." column of the chemistry workbook == ``heat_no`` in the
   disposition table) is one SPC data point.
-* Heats are ordered by heat number ONLY (letters prefix, then the numeric sequence). No date is read,
-  stored, validated or shown anywhere in chemistry SPC.
-* A *spec* is a grade's LSL/USL per parameter (from Standard.xlsx or edited by hand).
+* Heats are ordered by heat number ONLY (letters prefix, then the numeric sequence). The cast date of a heat
+  (the "Date" column of the chemistry workbook) is read and stored ONLY to drive the Month / Week / Quarter /
+  Financial-year filters; it never orders the charts and an unreadable date never rejects a heat (it is imported
+  without a date and reported as a warning).
+* A *spec* is a grade's Standard LSL/USL per parameter plus its AIM LSL/USL (Standard.xlsx has one sheet for each;
+  both can also be edited by hand).
 * Charts are drawn per *spec* (e.g. "NI-Brass (Ni - 05) (5rs.)"), because the 5 Rs and
   10/20 Rs Ni-Brass coils are held to different limits.
 """
@@ -31,6 +34,7 @@ PARAM_LABEL = {
 }
 MAX_ROWS = 20000
 
+_DATE_HEADERS = {"date", "castdate", "castingdate", "heatdate", "dateofcast", "dateofcasting"}
 _ID_HEADERS = {"heatno", "heat", "coilno", "coil", "castno", "heatnumber", "heatnum"}
 _ALLOY_HEADERS = {"alloy", "alloycode"}
 _DENOM_HEADERS = {"denomination", "denom"}
@@ -149,9 +153,111 @@ def order_key(rec):
     return (heat_prefix(rec.get("heat_no")), heat_seq(rec.get("heat_no")), rec.get("heat_no") or "")
 
 
+# ----------------------------------------------------------------------------- cast date -> Month / Week / Quarter / FY
+import datetime as _dt
+
+_DATE_FMTS = ("%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%y", "%d/%m/%y", "%d-%m-%y", "%Y-%m-%d", "%Y/%m/%d", "%d-%b-%Y", "%d-%b-%y", "%d %b %Y", "%d %B %Y")
+_DATE_MIN_YEAR, _DATE_MAX_YEAR = 2000, 2100
+
+
+def parse_cast_date(v):
+    """Cast date cell -> (iso 'YYYY-MM-DD' | '', note). Plant files are day-first (02.04.2026, 04.04.26).
+    note is '' when the value was read as typed, 'guessed' when a mistyped number was reconstructed (2505.2025 ->
+    25.05.2025), 'unreadable' when nothing sensible could be read, 'blank' for an empty cell."""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return "", "blank"
+    if isinstance(v, bool):
+        return "", "unreadable"
+    d = None
+    note = ""
+    if isinstance(v, _dt.datetime):
+        d = v.date()
+    elif isinstance(v, _dt.date):
+        d = v
+    elif isinstance(v, (int, float)):
+        f = float(v)
+        if 30000 <= f <= 80000:                      # Excel serial day number
+            d = (_dt.datetime(1899, 12, 30) + _dt.timedelta(days=int(f))).date()
+        else:                                        # 25.05.2025 typed into a numeric cell and stored as 2505.2025
+            m = re.match(r"^(\d{2})(\d{2})\.(\d{4})$", ("%.4f" % f))
+            if m:
+                try:
+                    d = _dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                    note = "guessed"
+                except ValueError:
+                    d = None
+    else:
+        t = re.sub(r"\s+", " ", str(v).strip())
+        for fmt in _DATE_FMTS:
+            try:
+                d = _dt.datetime.strptime(t, fmt).date()
+                break
+            except ValueError:
+                continue
+        if d is None:
+            m = re.match(r"^(\d{4})(\d{2})(\d{2})$", t)          # 20260402
+            if m:
+                try:
+                    d = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                except ValueError:
+                    d = None
+    if d is None or not (_DATE_MIN_YEAR <= d.year <= _DATE_MAX_YEAR):
+        return "", "unreadable"
+    return d.isoformat(), note
+
+
+def period_fields(iso):
+    """ISO date -> (month, week, quarter, fy) with EXACTLY the labels the main dashboard uses
+    (Apr-2026, Wk of 30-Mar-26 (Monday start), Q1 = Apr-Jun ..., FY 2026-27)."""
+    try:
+        d = _dt.date.fromisoformat(str(iso)[:10])
+    except (TypeError, ValueError):
+        return "", "", "", ""
+    monday = d - _dt.timedelta(days=d.weekday())
+    q = ((d.month - 4) % 12) // 3 + 1
+    fy0 = d.year if d.month >= 4 else d.year - 1
+    return d.strftime("%b-%Y"), "Wk of " + monday.strftime("%d-%b-%y"), f"Q{q}", f"FY {fy0}-{(fy0 + 1) % 100:02d}"
+
+
+PERIOD_KEYS = ("month", "week", "quarter", "fy")
+
+
+def filter_by_period(recs, flt):
+    """flt: {month, week, quarter, fy} ('' / 'All' = no filter). Heats without a readable date drop out
+    as soon as any period filter is on."""
+    flt = {k: str((flt or {}).get(k) or "") for k in PERIOD_KEYS}
+    flt = {k: ("" if v.strip().lower() == "all" else v.strip()) for k, v in flt.items()}
+    if not any(flt.values()):
+        return list(recs)
+    out = []
+    for r in recs:
+        pf = dict(zip(PERIOD_KEYS, period_fields(r.get("cast_date"))))
+        if all(not want or pf[k] == want for k, want in flt.items()):
+            out.append(r)
+    return out
+
+
+def period_options(recs):
+    """Distinct periods present in recs, newest first (weeks/months chronologically descending)."""
+    mo, wk, qt, fy = {}, {}, set(), set()
+    for r in recs:
+        iso = r.get("cast_date")
+        m, w, q, f = period_fields(iso)
+        if not m:
+            continue
+        mo[m] = iso[:7]
+        wk[w] = (_dt.date.fromisoformat(iso[:10]) - _dt.timedelta(days=_dt.date.fromisoformat(iso[:10]).weekday())).isoformat()
+        qt.add(q)
+        fy.add(f)
+    return {"months": [k for k, _ in sorted(mo.items(), key=lambda kv: kv[1], reverse=True)],
+            "weeks": [k for k, _ in sorted(wk.items(), key=lambda kv: kv[1], reverse=True)],
+            "quarters": sorted(qt), "fys": sorted(fy, reverse=True),
+            "undated": sum(1 for r in recs if not period_fields(r.get("cast_date"))[0])}
+
+
 # ----------------------------------------------------------------------------- reading files
 def _map_header(cells):
-    """header row -> {index: field}. Fields: heat_no, alloy, denomination, analyst,
+    """header row -> {index: field}. Fields: heat_no, cast_date, alloy, denomination, analyst,
     <param>, hardness, conductivity, hf_no."""
     mapping = {}
     used = set()
@@ -160,7 +266,9 @@ def _map_header(cells):
         if not h:
             continue
         field = None
-        if h in _ID_HEADERS:
+        if h in _DATE_HEADERS:
+            field = "cast_date"
+        elif h in _ID_HEADERS:
             field = "heat_no"
         elif h in _ALLOY_HEADERS:
             field = "alloy"
@@ -253,30 +361,27 @@ def _limit_pair(lsl, usl):
     return [lsl, usl]
 
 
-def parse_spec_file(filename, data):
-    """Standard.xlsx-style workbook -> (specs, issues).
-    Columns: Alloy, Grade Descriptions, '<Param>% (LSL)', '<Param>% (USL)'."""
-    name = (filename or "").lower()
-    if name.endswith((".xlsx", ".xlsm")):
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
-        try:
-            ws = wb.worksheets[0]
-            table = [list(r) for r in ws.iter_rows(values_only=True)]
-        finally:
-            wb.close()
-    elif name.endswith((".csv", ".tsv", ".txt")):
-        text = data.decode("utf-8-sig", errors="replace")
-        delim = "\t" if (name.endswith(".tsv") or text.count("\t") > text.count(",")) else ","
-        table = list(csv.reader(io.StringIO(text), delimiter=delim))
-    else:
-        raise ValueError("Unsupported file type. Upload .xlsx, .xlsm, .csv or .tsv")
+_AIM_SHEET_WORDS = ("aim", "target")
+
+
+def _g(v):
+    return "–" if v is None else ("%.6g" % v)
+
+
+def _is_aim_sheet(title):
+    t = norm_key(title)
+    return any(w in t for w in _AIM_SHEET_WORDS)
+
+
+def _parse_spec_table(table, label=""):
+    """One Standard/AIM sheet -> (specs, issues). Columns: Alloy, Grade Descriptions, '<Param>% (LSL)', '<Param>% (USL)'."""
     if not table:
-        raise ValueError("The spec file is empty")
+        raise ValueError(f"The {label or 'spec'} sheet is empty")
     header = table[0]
     col_alloy = col_desc = None
     limit_cols = {}          # (param, 'lsl'|'usl') -> index
     issues = []
+    tag = f"[{label}] " if label else ""
     for i, raw in enumerate(header):
         h = str(raw or "").strip()
         if not h:
@@ -298,11 +403,11 @@ def parse_spec_file(filename, data):
                     limit_cols[(p, m.group(2).lower())] = i
                 else:
                     issues.append({"row": 1, "severity": "warn", "code": "unknown_column",
-                                   "message": f"Column '{h}' is not a known parameter and was ignored"})
+                                   "message": f"{tag}Column '{h}' is not a known parameter and was ignored"})
     if col_desc is None:
-        raise ValueError("No 'Grade Descriptions' column found")
+        raise ValueError(f"No 'Grade Descriptions' column found{' on sheet ' + label if label else ''}")
     if not limit_cols:
-        raise ValueError("No '(LSL)' / '(USL)' columns found")
+        raise ValueError(f"No '(LSL)' / '(USL)' columns found{' on sheet ' + label if label else ''}")
     specs, seen = [], {}
     for rn, cells in enumerate(table[1:], start=2):
         if not cells or all(c is None or str(c).strip() == "" for c in cells):
@@ -310,7 +415,7 @@ def parse_spec_file(filename, data):
         desc = str(cells[col_desc] if col_desc < len(cells) and cells[col_desc] is not None else "").strip()
         alloy = str(cells[col_alloy] if col_alloy is not None and col_alloy < len(cells) and cells[col_alloy] is not None else "").strip()
         if not desc:
-            issues.append({"row": rn, "severity": "error", "code": "missing_description", "message": "Grade description is blank"})
+            issues.append({"row": rn, "severity": "error", "code": "missing_description", "message": f"{tag}Grade description is blank"})
             continue
         limits, bad = {}, False
         for p in PARAMS:
@@ -322,7 +427,7 @@ def parse_spec_file(filename, data):
                     vals[side] = parse_number(v)
                 except ValueError:
                     issues.append({"row": rn, "severity": "error", "code": "bad_limit",
-                                   "message": f"{desc}: {PARAM_LABEL[p]} {side.upper()} is not a number"})
+                                   "message": f"{tag}{desc}: {PARAM_LABEL[p]} {side.upper()} is not a number"})
                     bad = True
             if bad:
                 continue
@@ -330,25 +435,110 @@ def parse_spec_file(filename, data):
                 continue
             if vals["lsl"] is not None and vals["usl"] is not None and vals["lsl"] > vals["usl"]:
                 issues.append({"row": rn, "severity": "error", "code": "lsl_gt_usl",
-                               "message": f"{desc}: {PARAM_LABEL[p]} LSL ({vals['lsl']}) is greater than USL ({vals['usl']})"})
+                               "message": f"{tag}{desc}: {PARAM_LABEL[p]} LSL ({vals['lsl']}) is greater than USL ({vals['usl']})"})
                 bad = True
                 continue
             limits[p] = _limit_pair(vals["lsl"], vals["usl"])
         if bad:
             continue
         if not limits:
-            issues.append({"row": rn, "severity": "warn", "code": "no_limits", "message": f"{desc}: no limits filled in; skipped"})
+            issues.append({"row": rn, "severity": "warn", "code": "no_limits", "message": f"{tag}{desc}: no limits filled in; skipped"})
             continue
         key = norm_key(desc)
         if key in seen:
             issues.append({"row": rn, "severity": "error", "code": "dup_description",
-                           "message": f"'{desc}' is already defined at row {seen[key]}; this row was skipped"})
+                           "message": f"{tag}'{desc}' is already defined at row {seen[key]}; this row was skipped"})
             continue
         seen[key] = rn
         specs.append({"alloy": alloy, "description": desc, "limits": limits, "row": rn})
+    return specs, issues
+
+
+def _read_spec_tables(filename, data):
+    """-> [(sheet_title, table)]; csv/tsv give one unnamed table."""
+    name = (filename or "").lower()
+    if name.endswith((".xlsx", ".xlsm")):
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        try:
+            return [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
+        finally:
+            wb.close()
+    if name.endswith((".csv", ".tsv", ".txt")):
+        text = data.decode("utf-8-sig", errors="replace")
+        delim = "\t" if (name.endswith(".tsv") or text.count("\t") > text.count(",")) else ","
+        return [("", list(csv.reader(io.StringIO(text), delimiter=delim)))]
+    raise ValueError("Unsupported file type. Upload .xlsx, .xlsm, .csv or .tsv")
+
+
+def parse_spec_file(filename, data):
+    """Standard.xlsx-style workbook -> (specs, issues).
+
+    The workbook has one sheet with the STANDARD limits (customer/specification LSL/USL) and one sheet whose name
+    contains 'AIM' with the plant's tighter AIM limits, both with the same layout. Each returned spec is
+    {alloy, description, limits (Standard), aim (AIM limits, {} when the file has none for it), row}.
+    A workbook with a single sheet gives Standard limits only."""
+    tables = _read_spec_tables(filename, data)
+    if not tables or not any(t for _, t in tables):
+        raise ValueError("The spec file is empty")
+    std_tabs = [(n, t) for n, t in tables if t and not _is_aim_sheet(n)]
+    aim_tabs = [(n, t) for n, t in tables if t and _is_aim_sheet(n)]
+    if not std_tabs:
+        raise ValueError("No Standard-limits sheet found (only an AIM sheet was in the file)")
+    pref = [x for x in std_tabs if "standard" in norm_key(x[0]) or "std" in norm_key(x[0])]
+    std_name, std_table = (pref or std_tabs)[0]
+    multi = len(tables) > 1
+    specs, issues = _parse_spec_table(std_table, std_name if multi else "")
+    for s in specs:
+        s["aim"] = {}
+    if aim_tabs:
+        aim_name, aim_table = aim_tabs[0]
+        aim_specs, aim_issues = _parse_spec_table(aim_table, aim_name)
+        issues.extend(aim_issues)
+        by_key = {norm_key(s["description"]): s for s in specs}
+        for a in aim_specs:
+            s = by_key.get(norm_key(a["description"]))
+            if not s:
+                issues.append({"row": a["row"], "severity": "warn", "code": "aim_without_standard",
+                               "message": f"[{aim_name}] '{a['description']}' has no matching row on the Standard sheet; its AIM limits were ignored"})
+                continue
+            s["aim"] = a["limits"]
+            for p, (alsl, ausl) in a["limits"].items():
+                slsl, susl = eff_limits(s["limits"], p)
+                if (alsl is not None and slsl is not None and alsl < slsl - 1e-9) or (ausl is not None and susl is not None and ausl > susl + 1e-9):
+                    issues.append({"row": a["row"], "severity": "warn", "code": "aim_outside_standard",
+                                   "message": f"[{aim_name}] {a['description']}: {PARAM_LABEL[p]} AIM {_g(alsl)}–{_g(ausl)} is wider than the Standard limits {_g(slsl)}–{_g(susl)}"})
+        for s in specs:
+            if not s["aim"]:
+                issues.append({"row": s["row"], "severity": "info", "code": "no_aim",
+                               "message": f"{s['description']}: no AIM row found; only Standard limits will be used"})
     if not specs:
         raise ValueError("No usable spec rows found")
     return specs, issues
+
+
+def validate_aim_payload(aim):
+    """Clean manually edited AIM limits. Returns (clean_aim, error_or_None); empty is allowed."""
+    if aim in (None, {}, []):
+        return {}, None
+    if not isinstance(aim, dict):
+        return None, "AIM limits are malformed"
+    clean = {}
+    for p, pair in aim.items():
+        if p not in PARAMS:
+            return None, f"Unknown parameter '{p}' in the AIM limits"
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            return None, f"AIM {PARAM_LABEL[p]}: limits must be [LSL, USL]"
+        try:
+            lsl, usl = parse_number(pair[0]), parse_number(pair[1])
+        except ValueError:
+            return None, f"AIM {PARAM_LABEL[p]}: LSL/USL must be numbers"
+        if lsl is None and usl is None:
+            continue
+        if lsl is not None and usl is not None and lsl > usl:
+            return None, f"AIM {PARAM_LABEL[p]}: LSL is greater than USL"
+        clean[p] = [lsl, usl]
+    return clean, None
 
 
 def validate_spec_payload(alloy, description, limits):
@@ -456,7 +646,7 @@ def _num_changed(a, b):
 
 def _record_diff(old, new):
     changes = []
-    for f in ("sheet", "alloy", "denomination", "analyst", "hardness", "hf_no"):
+    for f in ("sheet", "cast_date", "alloy", "denomination", "analyst", "hardness", "hf_no"):
         if str(old.get(f) or "") != str(new.get(f) or ""):
             changes.append({"field": f, "old": old.get(f) or "", "new": new.get(f) or ""})
     for p in PARAMS:
@@ -467,7 +657,7 @@ def _record_diff(old, new):
     return changes
 
 
-_KEEP_IF_BLANK = ("sheet", "alloy", "denomination", "analyst", "hardness", "hf_no")
+_KEEP_IF_BLANK = ("sheet", "cast_date", "alloy", "denomination", "analyst", "hardness", "hf_no")
 
 
 def _merge_blank_from_existing(rec, old):
@@ -514,6 +704,15 @@ def validate_rows(raw_rows, existing=None, specs=None, max_issues=400):
             issue("error", "bad_heat", f"Heat No. '{heat}' has unusual characters", r, heat)
             continue
         rec["alloy"] = str(r.get("alloy") or "").strip()
+        rec["cast_date"], dnote = parse_cast_date(r.get("cast_date"))
+        if dnote == "unreadable":
+            issue("warn", "bad_date", f"Date '{r.get('cast_date')}' could not be read; the heat is imported without a date (it will not appear under Month/Week/Quarter/FY filters)", r, heat)
+        elif dnote == "guessed":
+            issue("warn", "date_guess", f"Date typed as the number {r.get('cast_date')}; read as {rec['cast_date']} (dd.mm.yyyy). Please confirm it in the source file", r, heat)
+        elif dnote == "blank":
+            issue("info", "no_date", "Date is blank; the heat is imported without a date", r, heat)
+        if rec["cast_date"] and rec["cast_date"] > _dt.date.today().isoformat():
+            issue("warn", "future_date", f"Date {rec['cast_date']} is in the future; check the day/month/year in the source (the heat is still imported with this date)", r, heat)
         rec["denomination"] = norm_denom(r.get("denomination"))
         rec["analyst"] = re.sub(r"\s+", " ", str(r.get("analyst") or "")).strip().upper()
         rec["hardness"] = "" if r.get("hardness") is None else str(r.get("hardness")).strip()
@@ -709,35 +908,6 @@ def imr(values):
     }
 
 
-def western_electric(values, cl, sigma):
-    """Points flagged by the four Western Electric rules (flag goes on the point completing the pattern).
-    Returns list (one entry per point) of rule numbers.
-      1: one point beyond 3 sigma          2: two of three beyond 2 sigma, same side
-      3: four of five beyond 1 sigma, same side     4: eight in a row on one side of the centre line"""
-    n = len(values)
-    out = [[] for _ in range(n)]
-    if n == 0 or not sigma or sigma <= 0:
-        return out
-    z = [(v - cl) / sigma for v in values]
-    for i in range(n):
-        if abs(z[i]) > 3:
-            out[i].append(1)
-        for sgn in (1, -1):
-            w3 = z[max(0, i - 2):i + 1]
-            if len(w3) == 3 and sum(1 for x in w3 if sgn * x > 2) >= 2 and sgn * z[i] > 2:
-                out[i].append(2)
-                break
-        for sgn in (1, -1):
-            w5 = z[max(0, i - 4):i + 1]
-            if len(w5) == 5 and sum(1 for x in w5 if sgn * x > 1) >= 4 and sgn * z[i] > 1:
-                out[i].append(3)
-                break
-        w8 = z[max(0, i - 7):i + 1]
-        if len(w8) == 8 and (all(x > 0 for x in w8) or all(x < 0 for x in w8)):
-            out[i].append(4)
-    return out
-
-
 def capability(values, lsl, usl, sigma_within, count_digits=None):
     """Cp/Cpk (within sigma) and Pp/Ppk (overall sigma). One-sided specs give Cpk/Ppk only."""
     n = len(values)
@@ -823,7 +993,7 @@ def analyse_param(points, limits, param):
     values = [p["value"] for p in points]
     lsl, usl = eff_limits(limits, param)
     ch = imr(values)
-    payload = {"n": len(values), "lsl": lsl, "usl": usl, "imr": None, "rules": [[] for _ in values],
+    payload = {"n": len(values), "lsl": lsl, "usl": usl, "imr": None,
                "mr_ooc": [], "capability": capability(values, lsl, usl, ch["sigma_within"] if ch else None, CHEM_DIGITS if param == "total" else None),
                "histogram": histogram(values, lsl, usl), "warnings": []}
     if ch is None:
@@ -834,7 +1004,6 @@ def analyse_param(points, limits, param):
     if ch["flat"]:
         payload["warnings"].append("All values are identical, so there are no control limits to draw")
     else:
-        payload["rules"] = western_electric(values, ch["cl"], ch["sigma_within"])
         payload["mr_ooc"] = [i + 1 for i, m in enumerate(ch["mr"]) if m > ch["mr_ucl"]]
     if param == "total":
         cap = payload["capability"]
@@ -868,16 +1037,18 @@ def summarize_disposition(rows):
     }
 
 
-def build_spc_view(records, spec, param, disp_by_heat, last_n=0, max_oos=500):
+def build_spc_view(records, spec, param, disp_by_heat, last_n=0, max_oos=500, period=None):
     """Everything the Chemistry SPC tab needs for one spec group.
 
-    records: chem records for this spec (dicts with heat_no, analyst, params...); ordered here by heat number.
+    records: chem records for this spec (dicts with heat_no, cast_date, analyst, params...); ordered here by heat number.
     disp_by_heat: {heat_no: summarize_disposition(...)} for heats that exist in disposition.
+    period: optional {month, week, quarter, fy} filter on the cast date (applied before 'last N heats').
     """
-    recs = sorted(records, key=order_key)
+    recs = sorted(filter_by_period(records, period), key=order_key)
     if last_n and last_n > 0:
         recs = recs[-last_n:]
     limits = (spec or {}).get("limits") or {}
+    aim_lsl, aim_usl = eff_limits((spec or {}).get("aim") or {}, param)
     pts = [r for r in recs if r.get(param) is not None]
     for r in pts:
         r["value"] = r[param]
@@ -887,8 +1058,7 @@ def build_spc_view(records, spec, param, disp_by_heat, last_n=0, max_oos=500):
         viol = spec_violations(r, limits) if limits else []
         prm_viol = [v for v in viol if v["param"] == param]
         series.append({
-            "i": i + 1, "heat_no": r["heat_no"], "value": r[param], "analyst": r.get("analyst", ""),
-            "rules": a["rules"][i] if i < len(a["rules"]) else [],
+            "i": i + 1, "heat_no": r["heat_no"], "cast_date": r.get("cast_date") or "", "value": r[param], "analyst": r.get("analyst", ""),
             "oos": bool(prm_viol), "heat_oos": bool(viol),
             "mr": a["mr"][i - 1] if i > 0 and a.get("mr") else None,
             "disp": disp_by_heat.get(r["heat_no"]),
@@ -902,8 +1072,7 @@ def build_spc_view(records, spec, param, disp_by_heat, last_n=0, max_oos=500):
                              "violations": [{"param": PARAM_LABEL[v["param"]], "key": v["param"], "value": v["value"],
                                              "side": v["side"], "limit": v["limit"]} for v in viol],
                              "disp": disp_by_heat.get(r["heat_no"])})
-    # in-spec vs out-of-spec vs out-of-control comparison (only heats that have disposition data)
-    ooc_heats = {s["heat_no"] for s in series if s["rules"]}
+    # in-spec vs out-of-spec comparison (only heats that have disposition data)
     oos_heats = {o["heat_no"] for o in oos_rows}
 
     def agg(names):
@@ -920,14 +1089,15 @@ def build_spc_view(records, spec, param, disp_by_heat, last_n=0, max_oos=500):
     in_spec = [h for h in all_heats if h not in oos_heats] if limits else []
     return {
         "param": param, "n": a["n"], "n_heats": len(recs),
-        "lsl": a["lsl"], "usl": a["usl"], "imr": a["imr"], "mr": a.get("mr", []), "mr_ooc": a["mr_ooc"],
+        "lsl": a["lsl"], "usl": a["usl"], "aim_lsl": aim_lsl, "aim_usl": aim_usl,
+        "imr": a["imr"], "mr": a.get("mr", []), "mr_ooc": a["mr_ooc"],
         "capability": a["capability"], "histogram": a["histogram"], "warnings": a["warnings"],
         "series": series,
         "oos_heats": oos_rows[:max_oos], "oos_total": len(oos_rows),
         "summary": {
             "heats": len(recs), "heats_with_disposition": sum(1 for h in all_heats if h in disp_by_heat),
-            "oos_heats": len(oos_rows), "ooc_points": len(ooc_heats),
+            "oos_heats": len(oos_rows),
             "has_limits": bool(limits),
-            "compare": {"in_spec": agg(in_spec), "out_of_spec": agg(sorted(oos_heats)), "out_of_control": agg(sorted(ooc_heats))},
+            "compare": {"in_spec": agg(in_spec), "out_of_spec": agg(sorted(oos_heats))},
         },
     }
