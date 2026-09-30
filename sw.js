@@ -18,7 +18,7 @@
  * shape in a way that requires forcing old caches out (rare — the
  * stale-while-revalidate refresh already keeps the shell current).
  */
-const SHELL_CACHE = 'qdash-shell-v9';
+const SHELL_CACHE = 'qdash-shell-v10';
 const API_CACHE = 'qdash-api-v1';
 
 const SHELL_FILES = [

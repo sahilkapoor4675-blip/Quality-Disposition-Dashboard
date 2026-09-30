@@ -497,7 +497,16 @@ def parse_spec_file(filename, data):
         issues.extend(aim_issues)
         by_key = {norm_key(s["description"]): s for s in specs}
         for a in aim_specs:
-            s = by_key.get(norm_key(a["description"]))
+            akey = norm_key(a["description"])
+            s = by_key.get(akey)
+            if not s:
+                # Grade names are often typed slightly differently on the two sheets ("Brass (5rs.)" vs "Brass (5rs.) AIM"):
+                # accept a match when exactly ONE Standard grade contains / is contained in the AIM name and has no AIM yet.
+                cand = [v for k, v in by_key.items() if len(min(k, akey, key=len)) >= 4 and (k in akey or akey in k) and not v["aim"]]
+                if len(cand) == 1:
+                    s = cand[0]
+                    issues.append({"row": a["row"], "severity": "info", "code": "aim_loose_match",
+                                   "message": f"[{aim_name}] '{a['description']}' was matched to the Standard grade '{s['description']}' by similar name"})
             if not s:
                 issues.append({"row": a["row"], "severity": "warn", "code": "aim_without_standard",
                                "message": f"[{aim_name}] '{a['description']}' has no matching row on the Standard sheet; its AIM limits were ignored"})

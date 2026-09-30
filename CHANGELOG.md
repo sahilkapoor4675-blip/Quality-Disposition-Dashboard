@@ -1,4 +1,18 @@
 
+## V66.2 — Chemistry SPC follow-up: top filter bar, Aim lines, element-coloured cards, app-style tables and drill-down (2026-09-30)
+
+**Changed**
+- **Chemistry filters moved to the top filter bar.** Opening the Chemistry SPC tab replaces the disposition filters (and the "Selection / Saved Views" strip) at the top with the chemistry filters — Month, Week, Quarter, Fin. Year, Grade, Parameter, Heat Qty, Heat No. — plus the Insert switches (Icon, Centre Line, Aim Chemistry). Every other tab keeps the normal dashboard filters exactly as before. Nothing is drawn as a filter/insert box inside the tab any more. (`src/js/21-chem-spc.js` follows the tab panel's own visibility, so no other JS piece had to change; CSS hides the disposition filters only while `html.chem-mode` is set.)
+- **Element cards:** the Cp / Pp / Cpk / Ppk labels and the Std. Dev. labels and values are black (they were red / teal). The values keep the rating colours (green ≥ 1.33, amber 1.00–1.33, red < 1.00). The big symbol takes the colour of the element's picture (Cu copper, Sn silver-grey, P red-orange, …) and each card gets a soft background glow in the same colours; dark theme uses the lighter logo colour and white labels.
+- **Tables** of the Chemistry tab (capability table, out-of-spec heats) now use the app's own `.table-scroll > table` markup, so the header row looks like every other table in the app; the chemistry-only header/cell overrides were removed.
+- **Heat drill-down** now uses the same markup and classes as the main "Underlying Records" drill-down (`drill-modal`, `drill-head`, breadcrumb, `drill-meta`, `drill-table`, export button). "Export Selected Records" downloads the heat's chemistry and coils as CSV.
+
+**Fixed**
+- **Aim lines were not always drawn.** The I chart dropped an Aim limit silently when it was far from the data, and the histogram's x-axis only knew the Standard limits, so an Aim line outside that range vanished. Aim limits now widen the scale like the Standard limits (or show a "far below / above / left / right of the data" note), are solid teal with a light Aim band, and the histogram range is widened for them. When no Aim limit exists at all the tab now says so ("No Aim limits are stored for this grade …") instead of just drawing nothing.
+- **Standard.xlsx AIM sheet:** an AIM grade name that differs from the Standard name only by extra text (e.g. "Brass (5rs.) AIM") is matched to the single Standard grade it contains and reported as info; unrelated names are still ignored and listed. Test added.
+
+**Notes**: no table/column change; service-worker shell cache bumped to v10 so installed apps pick up the change. Files: `src/js/21-chem-spc.js`, `src/css/16-chem-spc.css`, `index.html`, `chem_spc.py`, `sw.js`, `tests/test_chem_spc.py`.
+
 ## V66.2 — Chemistry SPC: dates, Standard + AIM limits, element cards, no Western Electric (2026-09-30)
 
 **Added**

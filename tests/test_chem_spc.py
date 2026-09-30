@@ -118,6 +118,8 @@ check(len(sp2) == 2 and sp2[0]["limits"]["cu"] == [74, 76] and sp2[0]["aim"]["cu
 check({i["code"] for i in is2} >= {"aim_without_standard", "no_aim"}, "AIM row without a Standard row / Standard row without AIM are reported")
 sp3, is3 = c.parse_spec_file("s.xlsx", xlsx2(hdr, [["NBS", "Brass (5rs.)", 74, 76, 0, .04]], [["NBS", "Brass (5rs.)", 73, 77, 0, .01]]))
 check(any(i["code"] == "aim_outside_standard" for i in is3), "AIM wider than Standard is flagged")
+sp4, is4 = c.parse_spec_file("s.xlsx", xlsx2(hdr, [["NBS", "Brass (5rs.)", 74, 76, 0, .04], ["NBS", "Cu-Ni", 86, 88, None, None]], [["NBS", "Brass (5rs.) AIM", 74.2, 75.8, 0, .01], ["X", "Ghost", 1, 2, None, None]]))
+check(sp4[0]["aim"].get("cu") == [74.2, 75.8] and any(i["code"] == "aim_loose_match" for i in is4) and any(i["code"] == "aim_without_standard" for i in is4) and sp4[1]["aim"] == {}, "an AIM grade name that only differs by a suffix is matched to its single Standard grade (reported); unrelated names are still ignored")
 check(c.parse_spec_file("s.xlsx", xlsx(hdr, [["NBS", "Brass", 74, 76, 0, .04]]))[0][0]["aim"] == {}, "a single-sheet spec file gives Standard limits only")
 check(c.validate_aim_payload({"cu": ["74.2", "75.8"]}) == ({"cu": [74.2, 75.8]}, None) and c.validate_aim_payload({"cu": [2, 1]})[1] and c.validate_aim_payload({"zz": [1, 2]})[1] and c.validate_aim_payload(None) == ({}, None), "manual AIM limits validated")
 check(c.validate_spec_payload("A", "d", {"cu": [1, 0]})[1], "manual spec LSL>USL rejected")
