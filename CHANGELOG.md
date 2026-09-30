@@ -1,4 +1,47 @@
 
+## V66.1 — Chemistry SPC polish: dark theme, label overlap, CSV exports (2026-09-30)
+
+**Fixed**
+- **Dark theme:** the histogram's normal-fit curve was a fixed dark navy (`#0f2a4a`) and nearly invisible on the dark card; it now follows the theme text colour. The "Excellent" Cpk colour (`#0B7A3B`) had too little contrast on dark; dark mode now uses the theme green (text and card edge).
+- **Histogram labels overlapping:** when the mean was close to USL (or LSL) the "Mean" label was drawn over the "USL" label. It now moves to the free side of its line, or one row lower when both limits are close. The "LSL/USL far off the scale" notes moved down a row so they cannot touch the Mean label.
+- **README** still described a chemistry date-range selector and future/unreadable-date import checks that were removed earlier; corrected.
+
+**Added**
+- **CSV downloads in the Chemistry SPC tab** (client-side, from the data already on screen; no server or database change): *Cpk table* (every parameter of the grade: main-element flag, heats, mean, limits, Cp, Cpk, Cpk rating, Pp, Ppk, out-of-control and out-of-spec counts) and *Heat data* (one row per heat of the charted parameter in heat-number order: value, out-of-spec flags, Western Electric rules, analyst, coils, reject %, top defect). Formula-looking text is neutralised as in the existing out-of-spec CSV.
+- Note: the Excel / PDF / PowerPoint / CSV reports of the main dashboard still contain disposition data only (heat number is already a column there); chemistry is not part of them.
+
+**Unchanged**: no table/column change, so off-site backups, recovery points and restores behave as before (chemistry tables are picked up automatically). Service-worker shell cache bumped to v7.
+
+## V66.1 — Chemistry SPC: heat-number order only, main-element Cpk, 3-decimal precision (2026-09-30)
+
+**Changed**
+- **No dates anywhere in chemistry SPC.** The Date column in a chemistry file is not read, so a wrong/future/blank date can no longer reject or warn about a heat. Heats are ordered by **heat number only**: letters prefix, then the *numeric* sequence (NBS999 comes before NBS1000). "Last N heats" means the N highest heat numbers. Removed: the cast-date selectors, the date on chart axes/tooltips, the Cast-date column of the out-of-spec list and its CSV, "Date range" / "Without date" in the Admin import preview, and the old `date_from` / `date_to` API parameters (ignored if sent). The `cast_date` column stays in `chem_heats` (unused) so older databases and recovery points keep an identical schema.
+- **Main elements first.** New "★ Main elements — Cpk" strip at the top of the tab: one card per main element (Cu, plus every element the grade's spec gives a real minimum, e.g. Ni in Cu-Ni, Zn in brass), showing Cpk, rating, mean, limits, Cp, Ppk, number of heats, and an "off-centre" flag when Cp is far above Cpk. Click a card to chart that element. In the parameter table the main elements come first (★), impurities follow. If a spec names no alloying element, any element averaging ≥ 1 % counts as main.
+- **Copper-base Cpk rating** (KPI cards, strip and table): ≥ 1.67 excellent, ≥ 1.33 capable, 1.00–1.33 marginal, < 1.00 not capable; shown as words as well as colour. Fewer than 30 heats is marked "indicative".
+- **3-decimal precision.** Chemistry values are kept and shown to at least 3 decimals. Total% was compared to its limits after rounding to 2 decimals; it is now compared at 3 (elements were already compared exactly).
+
+**Verified**: full release gate passes (chemistry SPC tests extended: date column ignored, heat-number ordering incl. numeric sequence, last-N by heat number, main-element detection, Cpk bands, 3-decimal storage and Total% comparison, overview order over HTTP). Service-worker shell cache bumped to v6.
+
+## V66.1 — Chemistry SPC (2026-09-30)
+
+**Added**
+- **Dashboard tab "Chemistry SPC"** (`src/js/21-chem-spc.js`, `src/css/16-chem-spc.css`): grade/parameter/date-range/last-N selectors; Individuals and Moving-Range charts (limits from MR̄/d2), histogram with LSL/USL and normal fit, Cp/Cpk/Pp/Ppk for every parameter of the grade, Western Electric rules 1-4, out-of-spec heat list (searchable, CSV export), and a click-through heat dialog. Chemistry is joined to disposition on `heat_no`: each point's tooltip shows that heat's coils, reject % and top defect, the out-of-spec list shows the defects seen on the heat's coils, and a comparison card contrasts reject/defect rates for in-spec, out-of-spec and out-of-control heats.
+- **Admin → Cast Chemistry**: file upload (.xlsx/.csv/.tsv, all sheets), preview with duplicate / typo / range / future-date / total-mismatch / alloy-prefix / denomination / analyst-name checks, per-row issue list, diff of heats that would change, then Confirm (recovery point before, import-history row inside the same transaction).
+- **Admin → Spec Limits**: import Standard.xlsx (new/changed/unchanged preview, never deletes) or add/edit/delete a grade's LSL/USL by hand.
+- New tables `chem_heats`, `chem_specs`, `chem_import_history` (created at startup; included automatically in backups/restore); new `chem_spc.py` module; endpoints `/api/chem/meta|spc|heat` (public, read-only) and `/api/admin/chem_*` (role-checked, CSRF-protected).
+- **Re-import behaviour:** the same `heat_no` is updated in place (numbers are overwritten, changes are listed in the preview); new heats are added; heats missing from the file are never touched or deleted. A blank date / analyst / sheet in the new file never erases the stored value. Moving a heat to another sheet counts as an update (it decides which spec applies). Excel serial-number dates are accepted.
+- **Older recovery points still restore:** V5 backups taken before the chemistry tables existed can be restored into this version; the chemistry tables are left untouched (any other unknown table still blocks the restore, as before).
+- Expression index `idx_disp_heat_norm` on `UPPER(TRIM(heat_no))` keeps the chemistry↔disposition join fast; service-worker shell cache bumped to v5 so installed PWAs pick up the new tab.
+- `tests/test_chem_spc.py` (SPC maths vs hand calculation, every import rule, spec matching, full HTTP flow, backup round-trip) added to the release gate.
+
+**Fixed (Chemistry SPC review pass)**
+- **Re-import lost the stored spec:** a re-import from a file without Sheet/Alloy/Denomination columns filled those blanks from the stored heat only *after* spec matching, so the preview showed a false "no matching spec" warning and did not count the heat as out-of-spec. The stored values are now merged first.
+- **False denomination warnings on long sheet names:** Excel cuts sheet names at 31 characters, so "NI-Brass (Ni - 05) (10rs. & 20rs.)" arrives as "...(10rs. & 20r" and every 20 Rs heat was flagged as being on a 10 Rs sheet. The check is skipped for names that long (real mismatches on short names are still reported).
+- **`75.2 %` typed as text** rejected the whole heat as "not a number"; a trailing % sign is now accepted.
+- **"No spec assigned" group claimed its heats were "in spec"** in the Chemistry-vs-Disposition card (and "No out-of-spec heats ✔" in the list) although no limits exist. Both now say that no limits are defined.
+- **Selector errors were silent:** a failed request after changing grade/parameter/dates/last-N left the old charts on screen with only an unhandled promise rejection in the console. A visible error banner is shown and cleared on the next successful load.
+- **Stale/edited saved selection** (browser storage) with an unknown parameter or malformed date is reset to safe values instead of sending the API a 400.
+- `tests/test_chem_spc.py` gained regression checks for each of the above.
 
 ## V66.1 — app.js / app.css split into src/js, src/css (2026-09-29)
 

@@ -374,6 +374,7 @@
       <button class="tab-btn" data-tab="wcgrade">🏭 Work Center &amp; Grade</button>
       <button class="tab-btn" data-tab="defects">🎯 Defects List</button>
       <button class="tab-btn" data-tab="weekly">📅 Period Trend</button>
+      <button class="tab-btn" data-tab="chem">🧪 Chemistry SPC</button>
     </div>
   </div>
 
@@ -603,6 +604,42 @@
           <tbody></tbody>
         </table></div>
       </div>
+    </div>
+  </div>
+
+  <div class="tab-panel hidden" id="tab-chem">
+    <div class="panel chem-controls-panel"><div class="panel-body" id="chemControls"></div></div>
+    <div class="panel chem-main-panel" id="chemMainBox"></div>
+    <div class="kpi-grid chem-kpi-grid" id="chemKpis"></div>
+
+    <div class="panel">
+      <h3>📈 Individuals (I) Chart — <span id="chemTitleParam">Cu%</span> <small class="chem-h3-sub">one point = one heat · control limits from moving range · Western Electric rules 1-4</small></h3>
+      <div class="chart-scroll" id="chemIChart"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📉 Moving Range (MR) Chart</h3>
+      <div class="chart-scroll" id="chemMRChart"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📊 Histogram with LSL / USL</h3>
+      <div class="chart-scroll" id="chemHist"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🧮 Capability — Cp / Cpk / Pp / Ppk by Parameter</h3>
+      <div class="panel-body" id="chemOverviewBox"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🔗 Chemistry vs Disposition (joined on heat_no)</h3>
+      <div class="panel-body" id="chemCompareBox"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🚩 Out-of-Spec Heats and Their Defects</h3>
+      <div class="panel-body" id="chemOosBox"></div>
     </div>
   </div>
 

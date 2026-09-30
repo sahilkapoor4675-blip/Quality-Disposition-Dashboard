@@ -1,0 +1,89 @@
+/* 16-chem-spc.css — Chemistry SPC tab. Bundled into /app.css in filename order; see README ("Frontend source layout"). */
+#tab-chem.chem-loading .panel{opacity:.72;transition:opacity .15s ease}
+.chem-ctl-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.chem-ctl{display:flex;flex-direction:column;gap:4px;min-width:130px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.chem-ctl span{letter-spacing:.3px;text-transform:uppercase;font-size:11.5px}
+.chem-ctl select,.chem-ctl input,.chem-oos-bar input{padding:8px 9px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:14px;font-weight:600}
+.chem-ctl select{min-width:150px;max-width:340px}
+.chem-ctl:first-child select{min-width:280px}
+.chem-find input{width:150px}
+.chem-ctl-note{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.45}
+.chem-empty{padding:22px;text-align:center;color:var(--muted);line-height:1.7}
+.chem-empty a{color:var(--accent);font-weight:700}
+.chem-empty-chart{padding:34px 12px;text-align:center;color:var(--muted);font-weight:600}
+.chem-kpi-grid{grid-auto-rows:auto}
+.chem-kpi{min-height:0!important}
+.chem-kpi .value{font-size:28px}
+.chem-kpi.chem-great .value,.chem-kpi.chem-good .value{color:var(--green)}
+.chem-kpi.chem-warn .value{color:var(--amber)}
+.chem-kpi.chem-bad .value{color:var(--red)}
+.chem-note-strip{grid-column:1/-1;padding:9px 13px;border-radius:9px;background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.35);color:var(--text);font-size:13px;line-height:1.5}
+.chem-great{color:#0B7A3B;font-weight:700}.chem-good{color:var(--green)}.chem-warn{color:var(--amber)}.chem-bad{color:var(--red);font-weight:700}
+.chem-muted{color:var(--muted);font-size:12.5px}
+.chem-h3-sub{font-size:12.5px;font-weight:600;color:var(--muted);margin-left:6px}
+.chem-pt{cursor:pointer}
+.chem-pt:hover{stroke:var(--chart-strong);stroke-width:2}
+.chem-legend{display:flex;flex-wrap:wrap;gap:14px;padding:6px 14px 12px;font-size:12px;color:var(--muted)}
+.chem-legend span{display:inline-flex;align-items:center;gap:6px}
+.chem-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.chem-ln{width:22px;border-top:2.5px solid;display:inline-block}.chem-ln.chem-dash{border-top-style:dashed}
+.chem-table-wrap{overflow-x:auto;max-width:100%}
+.chem-table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.chem-table th{position:sticky;top:0;text-align:left;padding:8px 10px;background:var(--bg);color:var(--muted);font-size:12px;letter-spacing:.3px;text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap}
+.chem-table td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.chem-table tr.chem-click{cursor:pointer}
+.chem-table tr.chem-click:hover td{background:rgba(17,141,255,.07)}
+.chem-table tr.chem-cur td{background:rgba(17,141,255,.12)}
+.chem-foot{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.5}
+.chem-chip{display:inline-block;margin:1px 4px 1px 0;padding:2px 8px;border-radius:999px;background:rgba(220,38,38,.10);border:1px solid rgba(220,38,38,.35);color:var(--red);font-size:12px;font-weight:700;white-space:nowrap}
+.chem-oos-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+.chem-oos-bar input{min-width:220px}
+.chem-btn{padding:7px 12px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.chem-btn:hover{border-color:var(--accent);color:var(--accent)}
+.chem-cmp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.chem-cmp{padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card);border-top:4px solid var(--slate)}
+.chem-cmp.ok{border-top-color:var(--green)}.chem-cmp.bad{border-top-color:var(--red)}.chem-cmp.warn{border-top-color:var(--amber)}
+.chem-cmp-t{font-weight:800;font-size:14px;color:var(--heading)}
+.chem-cmp-v{font-size:30px;font-weight:800;margin-top:6px;line-height:1.1}
+.chem-cmp-s{font-size:12px;color:var(--muted);margin-bottom:8px}
+.chem-cmp-v2{font-size:18px;font-weight:800}.chem-cmp-v2 span{font-size:12px;font-weight:600;color:var(--muted)}
+.chem-cmp-f{margin-top:8px;font-size:12.5px;color:var(--text)}
+.chem-cmp-h{margin-top:6px;font-size:11.5px;color:var(--muted)}
+/* main elements: Cpk headline strip */
+.chem-main-panel:empty{display:none}
+.chem-main-panel{padding:14px 16px}
+.chem-main-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin-bottom:10px}
+.chem-main-head h3{margin:0;font-size:17px;color:var(--heading)}
+.chem-main-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px}
+.chem-main-card{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:12px;border:1px solid var(--border);border-left:6px solid var(--slate);background:var(--card);color:var(--text)}
+.chem-main-card:hover{border-color:var(--accent)}
+.chem-main-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chem-main-card.chem-cur{box-shadow:0 0 0 2px rgba(17,141,255,.35)}
+.chem-main-card.chem-great{border-left-color:#0B7A3B}.chem-main-card.chem-good{border-left-color:var(--green)}
+.chem-main-card.chem-warn{border-left-color:var(--amber)}.chem-main-card.chem-bad{border-left-color:var(--red)}
+.chem-main-el{font-weight:800;font-size:14px;color:var(--heading)}
+.chem-main-cpk{font-size:34px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.chem-main-card.chem-great .chem-main-cpk,.chem-main-card.chem-good .chem-main-cpk{color:var(--green)}
+.chem-main-card.chem-warn .chem-main-cpk{color:var(--amber)}.chem-main-card.chem-bad .chem-main-cpk{color:var(--red)}
+.chem-main-tag{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+.chem-main-sub{font-size:12px;color:var(--muted);line-height:1.4}
+.chem-tier{font-size:11px;font-weight:700;opacity:.85;margin-left:4px}
+.chem-table tr.chem-sep td{background:var(--bg);color:var(--muted);font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:5px 10px}
+.chem-table tr.chem-main-row td:first-child{color:var(--heading)}
+/* heat dialog */
+.chem-modal{position:fixed;inset:0;z-index:2147482000;display:none;align-items:center;justify-content:center;background:rgba(9,20,38,.55);padding:16px}
+.chem-modal.open{display:flex}
+.chem-dialog{width:min(1020px,100%);max-height:88vh;display:flex;flex-direction:column;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.35)}
+.chem-dlg-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.chem-dlg-head h3{margin:0;font-size:18px;color:var(--heading)}
+.chem-dlg-body{padding:14px 18px 18px;overflow:auto}
+.chem-dlg-meta{margin:0 0 10px;font-size:13px;color:var(--muted)}
+.chem-h4{margin:18px 0 6px;font-size:14px;color:var(--heading)}
+html[data-theme="dark"] .chem-note-strip{background:rgba(245,158,11,.12)}
+.chem-note-strip.chem-err{background:rgba(220,38,38,.10);border-color:rgba(220,38,38,.45);color:var(--red);font-weight:600}
+html[data-theme="dark"] .chem-note-strip.chem-err{background:rgba(248,113,113,.14)}
+html[data-theme="dark"] .chem-table th{background:#0E1626}
+/* #0B7A3B (dark green) is unreadable on the dark card: use the theme green there */
+html[data-theme="dark"] .chem-great{color:var(--green)}
+html[data-theme="dark"] .chem-main-card.chem-great{border-left-color:var(--green)}
+@media(max-width:700px){.chem-ctl,.chem-ctl:first-child select{min-width:100%}.chem-ctl select{max-width:none}.chem-find input{width:100%}.chem-kpi .value{font-size:24px}}

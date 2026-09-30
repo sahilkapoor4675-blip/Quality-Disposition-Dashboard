@@ -13,6 +13,7 @@ header). `CHANGELOG.md` is the version history (V65 onward; older entries are in
   Decision, Defect Intensity), KPI cards with period-over-period change, drill-down to underlying coils.
 - **Quality Control Room (QCR)** – health score, early warnings, problem finder, why-changed analysis.
 - **Work Center & Grade**, **Defects List** (with 6M Fishbone / RCA reference) and **Period Trend** tabs.
+- **Chemistry SPC** tab – one heat = one point, ordered by heat number only (no dates): main-element Cpk strip (copper-base rating), I-MR control charts, histogram with LSL/USL, Cp/Cpk/Pp/Ppk, Western Electric rules 1-4, out-of-spec heat list, and every heat joined to its coils' defect/reject data on `heat_no`. Own selectors (grade, parameter, last N, find heat); the disposition filters do not apply. CSV downloads: Cpk table, heat-wise data of the charted parameter, and the out-of-spec heat list. Data comes from **Admin → Cast Chemistry** (validated import) and **Admin → Spec Limits** (Standard.xlsx import or manual edit).
 - **Compare Periods** – two dashboards side by side; saved views; global search; command palette (Ctrl/⌘+K) with categorised commands and field-name hints;
   light/dark theme; works on phones and tablets.
 - **Exports** – Excel, PDF, PowerPoint (chart + table on every slide) and raw CSV.
@@ -76,9 +77,9 @@ Disaster recovery (recovery points, off-site copies, restore, provider switch): 
 - See [docs/SECURITY.md](docs/SECURITY.md) for the full baseline.
 
 ## Admin console navigation
-- Sidebar navigation is grouped into a canonical 21-section sequence; sidebar and content use the same order.
+- Sidebar navigation is grouped into a canonical 23-section sequence; sidebar and content use the same order.
 - While scrolling, the active sidebar tab follows the section in view; clicking a tab jumps to the top of that section.
-- Overview production-health content and KPI target history live inside their logical parent sections; Import History is in the navigation.
+- Overview production-health content and KPI target history live inside their logical parent sections; Import History is in the navigation, followed by Cast Chemistry and Spec Limits (Chemistry SPC data).
 - There is no global search bar in Admin; use **Latest Records** (search + date filters + export/delete).
 
 ## Repository layout
@@ -90,6 +91,7 @@ from the root, so they must stay there). Tests and documentation live in their o
 |---|---|
 | `server.py` | HTTP server, API, database layer, imports, backups, admin |
 | `reports.py` | Excel / PDF / PowerPoint / CSV report builders |
+| `chem_spc.py` | Chemistry import validation, spec matching and SPC maths (pure functions; tested by `tests/test_chem_spc.py`) |
 | `alerts.py`, `logging_setup.py`, `session_store.py` | Backup-failure alerts, rotating logs, session/login store |
 | `dr_storage.py`, `dr_recovery.py`, `dr_pg_backup.py` | Off-site storage, snapshot verify/restore CLI, PostgreSQL dump runner (used by the GitHub Action) |
 | `index.html`, `sfx.js` | Dashboard UI |
@@ -100,7 +102,7 @@ from the root, so they must stay there). Tests and documentation live in their o
 | `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
 | `requirements.txt`, `runtime.txt`, `render.yaml`, `Procfile`, `.env.example`, `VERSION.txt` | Deployment config |
 | `.github/workflows/` | `dr-backup.yml` (12-hourly PostgreSQL dump), `dependency-audit.yml` (weekly `pip-audit`) |
-| `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_data_lifecycle.py`, `test_exports.py`, `test_browser.py` |
+| `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_chem_spc.py`, `test_data_lifecycle.py`, `test_exports.py`, `test_browser.py` |
 | `tools/self_host_fonts.sh` | One-time script to self-host Google Fonts locally (see "Fonts" below) — not needed for the app to run |
 | `docs/` | `DEPLOY.md`, `DISASTER_RECOVERY.md`, `SECURITY.md`, `CHANGELOG_ARCHIVE.md` |
 
@@ -158,3 +160,10 @@ The field-name hover tag is enabled across the main dashboard and Admin UI, incl
 - The **LIVE DATA** indicator includes a subtle pulsing status dot in the main dashboard header.
 - The pulse is CSS-based and remains unobtrusive while indicating the live state.
 - Existing Dashboard/Admin cursor-following field hints remain enabled; the Intro/Splash screen is excluded.
+
+### Chemistry SPC — data rules
+- **Key:** the workbook's `Coil No.` is the `heat_no` of the disposition table; one heat = one SPC point. Columns are matched by header name, so sheets with a different column order, extra columns (Hardness, Conductivity, HF No.) or a Date column (it is ignored) import fine.
+- **Import checks (admin):** blank/odd heat numbers, duplicate heats in the file (identical = skipped, conflicting = all copies rejected), text (a trailing % sign is accepted) or out-of-range % (below 0 / above 100), `Total%` far from the sum of the elements, alloy that does not fit the heat prefix, denomination that does not fit the sheet (not checked for sheet names of 30+ characters, which Excel may have truncated), analyst-name typos, and values more than one spec width outside the limits. Errors skip the row; warnings import it. Nothing is written until **Confirm**; a recovery point is taken first.
+- **Re-import:** the same heat updates in place (numbers are overwritten, changes are listed); identical rows are counted as unchanged; heats not in the file are never deleted. A blank analyst/sheet in the new file keeps the stored value.
+- **Spec matching:** sheet name → alloy code → denomination (for alloys with several specs, e.g. Ni-Brass 5 Rs vs 10/20 Rs). Specs are matched when charts are drawn, so editing a spec applies instantly. Heats with no matching spec are charted without LSL/USL.
+- **Maths:** I-chart limits = mean ± 3·MR̄/1.128, MR-chart UCL = 3.267·MR̄, Cp/Cpk use the within-σ (MR̄/d2), Pp/Ppk the overall standard deviation. Lower limits of 0 (impurity-type) are treated as "no lower limit". `Total%` gets an out-of-spec count only (it is a sum, so Cp/Cpk are not meaningful).

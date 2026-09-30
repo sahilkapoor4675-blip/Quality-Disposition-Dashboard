@@ -16,6 +16,7 @@ import re
 import difflib
 import traceback
 import threading
+import chem_spc
 
 # Safety valve: report/export generation (compute_qcr_intelligence + chart
 # rendering + reportlab/openpyxl/python-pptx building) can legitimately need
@@ -868,6 +869,8 @@ def ensure_fast_indexes():
             conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON disposition({expr})")
     for name, col in indexes:
         conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON disposition({col})")
+    # Chemistry SPC joins on UPPER(TRIM(heat_no)); an expression index keeps that join fast as disposition grows.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_disp_heat_norm ON disposition(UPPER(TRIM(heat_no)))")
     conn.commit()
     conn.close()
 
@@ -2683,7 +2686,7 @@ def _file_sha256(path):
 
 
 _RECOVERY_MANIFEST_FILES = (
-    "server.py", "reports.py", "session_store.py", "logging_setup.py",
+    "server.py", "reports.py", "chem_spc.py", "session_store.py", "logging_setup.py",
     "sfx.js", "sw.js", "admin.html", "index.html", "requirements.txt", "Procfile",
     "render.yaml", "VERSION.txt", ".env.example", ".gitignore"
 )
@@ -3173,6 +3176,11 @@ def _reset_postgres_sequences(conn, tables):
             raise RuntimeError(f"Could not resynchronise ID sequence for table '{table}': {exc}") from exc
 
 
+# Tables introduced after V5 backups first existed. A recovery point that predates them restores cleanly and
+# leaves them untouched (see _restore_backup_data).
+_ADDITIVE_TABLES = frozenset({"chem_heats", "chem_specs", "chem_import_history"})
+
+
 def _restore_backup_data(data):
     """Restore a V5 full persistent snapshot; retain compatibility with V4."""
     version = int(data.get("backup_version") or 0)
@@ -3189,6 +3197,10 @@ def _restore_backup_data(data):
         else:
             conn.execute("BEGIN IMMEDIATE")
         target_tables = _backup_table_names(conn)
+        # Tables added by a LATER version (chemistry SPC) are absent from older recovery points. Such a
+        # backup is still restorable: those tables are additive and independent of the restored data, so
+        # they are left exactly as they are (never wiped) instead of blocking the restore.
+        target_tables = [t for t in target_tables if t in backup_tables or t not in _ADDITIVE_TABLES]
         if set(backup_tables) != set(target_tables):
             missing = sorted(set(backup_tables) - set(target_tables))
             extra = sorted(set(target_tables) - set(backup_tables))
@@ -3610,6 +3622,387 @@ def _fishbone_match(defect_name):
     return no_match
 
 
+# ============================================================================
+# Chemistry SPC (cast chemistry import, grade spec limits, I-MR control charts)
+# Pure maths / validation lives in chem_spc.py; this block owns tables, locks,
+# backups and the SQL that joins chemistry to disposition on heat_no.
+# ============================================================================
+CHEM_WRITE_LOCK = threading.RLock()
+CHEM_PREVIEWS = {}
+CHEM_COLS = list(chem_spc.PARAMS)
+_CHEM_SELECT = "heat_no,sheet,alloy,denomination,analyst,hardness,conductivity,hf_no," + ",".join(CHEM_COLS)
+_CHEM_FIELDS = ["heat_no", "sheet", "alloy", "denomination", "analyst", "hardness", "conductivity", "hf_no"] + CHEM_COLS
+
+
+def _ensure_chem_schema(conn):
+    num = "DOUBLE PRECISION" if USE_POSTGRES else "REAL"
+    pk = "BIGSERIAL PRIMARY KEY" if USE_POSTGRES else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    ts = "TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP" if USE_POSTGRES else "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS chem_heats (
+        id {pk}, heat_no TEXT NOT NULL UNIQUE, cast_date TEXT DEFAULT '', sheet TEXT DEFAULT '', alloy TEXT DEFAULT '',
+        denomination TEXT DEFAULT '', analyst TEXT DEFAULT '', hardness TEXT DEFAULT '', conductivity {num}, hf_no TEXT DEFAULT '',
+        {", ".join(f"{c} {num}" for c in CHEM_COLS)}, created_at {ts}, updated_at {ts})""")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS chem_specs (
+        id {pk}, description TEXT NOT NULL UNIQUE, alloy TEXT DEFAULT '', limits_json TEXT NOT NULL DEFAULT '{{}}',
+        updated_by TEXT DEFAULT '', updated_at {ts})""")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS chem_import_history (
+        id {pk}, kind TEXT DEFAULT 'chemistry', filename TEXT, detected INTEGER DEFAULT 0, new_rows INTEGER DEFAULT 0,
+        updated INTEGER DEFAULT 0, unchanged INTEGER DEFAULT 0, duplicates INTEGER DEFAULT 0, errors INTEGER DEFAULT 0,
+        warnings INTEGER DEFAULT 0, imported_by TEXT DEFAULT '', created_at {ts})""")
+    # cast_date is kept ONLY so older databases/recovery points keep the same columns; chemistry SPC no longer reads or writes it.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chem_heats_date ON chem_heats(cast_date)")
+    conn.commit()
+
+
+def _chem_rec(row):
+    return dict(zip(_CHEM_FIELDS, list(row)))
+
+
+def _chem_load_specs(conn=None):
+    own = conn is None
+    conn = conn or get_conn()
+    try:
+        rows = conn.execute("SELECT id,description,alloy,limits_json FROM chem_specs ORDER BY description").fetchall()
+    finally:
+        if own: conn.close()
+    out = []
+    for r in rows:
+        try: lim = json.loads(r[3] or "{}")
+        except (TypeError, ValueError): lim = {}
+        out.append({"id": r[0], "description": r[1], "alloy": r[2] or "", "limits": {k: v for k, v in lim.items() if k in chem_spc.PARAMS}})
+    return out
+
+
+def _chem_load_heats(conn=None):
+    own = conn is None
+    conn = conn or get_conn()
+    try:
+        rows = conn.execute(f"SELECT {_CHEM_SELECT} FROM chem_heats").fetchall()
+    finally:
+        if own: conn.close()
+    return [_chem_rec(r) for r in rows]
+
+
+def _chem_revision(conn=None):
+    own = conn is None
+    conn = conn or get_conn()
+    try: return int(_app_state_get(conn, "chem_revision", "0") or 0)
+    except (TypeError, ValueError): return 0
+    finally:
+        if own: conn.close()
+
+
+def _chem_bump_revision(conn):
+    _app_state_set(conn, "chem_revision", _chem_revision(conn) + 1)
+
+
+def _chem_assign_specs(heats, specs):
+    """Attach the resolved spec description ('' when none matches) to each heat."""
+    for h in heats:
+        s = chem_spc.resolve_spec(specs, h.get("alloy"), h.get("sheet"), h.get("denomination")) if specs else None
+        h["_spec"] = s["description"] if s else ""
+    return heats
+
+
+def _chem_disposition_for(heat_nos):
+    """{HEAT: [disposition row dicts]} for the given heat numbers (case/space-insensitive)."""
+    wanted = sorted({str(h).strip().upper() for h in heat_nos if h})
+    out = {}
+    if not wanted: return out
+    conn = get_conn()
+    try:
+        for i in range(0, len(wanted), 400):
+            chunk = wanted[i:i + 400]
+            ph = ",".join("?" for _ in chunk)
+            rows = conn.execute(f"SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date FROM disposition WHERE UPPER(TRIM(heat_no)) IN ({ph})", tuple(chunk)).fetchall()
+            for r in rows:
+                d = dict(zip(["heat_no", "batch_no", "work_center", "grade", "output_weight", "main_defect", "defect_intensity", "quality_decision", "insp_lot_date"], list(r)))
+                out.setdefault(str(d["heat_no"]).strip().upper(), []).append(d)
+    finally:
+        conn.close()
+    return out
+
+
+def compute_chem_meta():
+    conn = get_conn()
+    try:
+        specs = _chem_load_specs(conn)
+        heats = _chem_assign_specs(_chem_load_heats(conn), specs)
+        disp_heats = {str(r[0]).strip().upper() for r in conn.execute("SELECT DISTINCT heat_no FROM disposition WHERE TRIM(COALESCE(heat_no,''))<>''").fetchall()}
+        rev = _chem_revision(conn)
+    finally:
+        conn.close()
+    by = {}
+    for h in heats:
+        by.setdefault(h["_spec"], []).append(h)
+
+    def info(hs):
+        return {"heats": len(hs), "with_disposition": sum(1 for x in hs if x["heat_no"] in disp_heats)}
+    out = []
+    for s in specs:
+        out.append({**s, **info(by.get(s["description"], []))})
+    un = by.get("", [])
+    return {"params": [{"key": p, "label": chem_spc.PARAM_LABEL[p]} for p in chem_spc.PARAMS], "specs": out,
+            "unassigned": info(un) if un else None, "total_heats": len(heats), "revision": rev}
+
+
+def compute_chem_spc(qs):
+    desc = str(qs.get("spec", "") or "")
+    param = str(qs.get("param", "") or "").lower()
+    if param not in chem_spc.PARAMS:
+        raise ValueError("Unknown parameter")
+    last_n = max(0, min(5000, _safe_int(qs.get("last_n"), 0)))
+    conn = get_conn()
+    try:
+        specs = _chem_load_specs(conn)
+        heats = _chem_assign_specs(_chem_load_heats(conn), specs)
+    finally:
+        conn.close()
+    spec = next((s for s in specs if s["description"] == desc), None) if desc != "__none__" else None
+    if desc != "__none__" and not spec:
+        raise ValueError("Unknown spec / grade")
+    group = [h for h in heats if h["_spec"] == (spec["description"] if spec else "")]
+    disp_rows = _chem_disposition_for([h["heat_no"] for h in group])
+    disp_by = {h: chem_spc.summarize_disposition(rows) for h, rows in disp_rows.items()}
+    view = chem_spc.build_spc_view([dict(h) for h in group], spec, param, disp_by, last_n)
+    # capability overview for every parameter of this spec (heat-number order, same last-N)
+    sel = sorted(group, key=chem_spc.order_key)
+    if last_n: sel = sel[-last_n:]
+    limits = (spec or {}).get("limits") or {}
+    overview = []
+    for p in chem_spc.PARAMS:
+        pts = [{"value": h[p]} for h in sel if h.get(p) is not None]
+        if len(pts) < 2 or (p not in limits and all((h.get(p) or 0) == 0 for h in sel)): continue
+        a = chem_spc.analyse_param(pts, limits, p)
+        cap = a["capability"]
+        overview.append({"param": p, "label": chem_spc.PARAM_LABEL[p], "n": a["n"], "mean": cap["mean"], "lsl": a["lsl"], "usl": a["usl"],
+                         "cp": cap["cp"], "cpk": cap["cpk"], "pp": cap["pp"], "ppk": cap["ppk"],
+                         "rating": chem_spc.cpk_rating(cap["cpk"]), "note": cap["note"],
+                         "ooc": sum(1 for r in a["rules"] if r), "oos": cap["n_below"] + cap["n_above"]})
+    # main elements (Cu + alloying elements) first, impurities after; Cpk of the main ones is what matters most
+    mains = chem_spc.main_elements(limits, {o["param"]: o["mean"] for o in overview})
+    rank = {p: i for i, p in enumerate(mains)}
+    for o in overview: o["main"] = o["param"] in rank
+    overview.sort(key=lambda o: (0, rank[o["param"]]) if o["main"] else (1, chem_spc.PARAMS.index(o["param"])))
+    view.update({"spec": {"description": spec["description"], "alloy": spec["alloy"], "limits": limits} if spec else {"description": "No spec assigned", "alloy": "", "limits": {}},
+                 "overview": overview, "filters": {"last_n": last_n},
+                 "cpk_bands": {"excellent": chem_spc.CPK_EXCELLENT, "capable": chem_spc.CPK_CAPABLE, "marginal": chem_spc.CPK_MARGINAL}})
+    return view
+
+
+def compute_chem_heat(heat_no):
+    heat_no = chem_spc.norm_heat(heat_no)
+    if not heat_no: raise ValueError("Heat number required")
+    conn = get_conn()
+    try:
+        specs = _chem_load_specs(conn)
+        row = conn.execute(f"SELECT {_CHEM_SELECT} FROM chem_heats WHERE heat_no=?", (heat_no,)).fetchone()
+    finally:
+        conn.close()
+    disp = _chem_disposition_for([heat_no]).get(heat_no, [])
+    rec = _chem_rec(row) if row else None
+    spec = chem_spc.resolve_spec(specs, rec.get("alloy"), rec.get("sheet"), rec.get("denomination")) if rec and specs else None
+    limits = spec["limits"] if spec else {}
+    viol = chem_spc.spec_violations(rec, limits) if rec and limits else []
+    params = []
+    if rec:
+        for p in chem_spc.PARAMS:
+            if rec.get(p) is None and p not in limits: continue
+            lsl, usl = chem_spc.eff_limits(limits, p)
+            bad = next((v for v in viol if v["param"] == p), None)
+            params.append({"param": p, "label": chem_spc.PARAM_LABEL[p], "value": rec.get(p), "lsl": lsl, "usl": usl, "side": bad["side"] if bad else ""})
+    return {"heat_no": heat_no, "found": bool(rec), "chem": rec, "spec": spec["description"] if spec else "", "params": params,
+            "coils": sorted(disp, key=lambda d: (str(d.get("insp_lot_date") or ""), str(d.get("batch_no") or ""))),
+            "summary": chem_spc.summarize_disposition(disp) if disp else None}
+
+
+def _chem_read_upload(handler):
+    ctype = handler.headers.get("Content-Type", ""); length = int(handler.headers.get("Content-Length", "0") or 0)
+    raw = handler.rfile.read(length)
+    msg = BytesParser(policy=default).parsebytes((f"Content-Type: {ctype}\r\nMIME-Version: 1.0\r\n\r\n").encode() + raw)
+    if msg.is_multipart():
+        for part in msg.iter_parts():
+            if "filename=" in part.get("Content-Disposition", ""):
+                return (part.get_filename() or "upload"), (part.get_payload(decode=True) or b"")
+    raise ValueError("No file was uploaded")
+
+
+def _chem_store_preview(item):
+    token = secrets.token_urlsafe(24)
+    with IMPORT_PREVIEW_LOCK:
+        now = time.time()
+        for k, v in list(CHEM_PREVIEWS.items()):
+            if now - v.get("created", 0) > IMPORT_PREVIEW_TTL: CHEM_PREVIEWS.pop(k, None)
+        while len(CHEM_PREVIEWS) >= 20:
+            CHEM_PREVIEWS.pop(min(CHEM_PREVIEWS, key=lambda k: CHEM_PREVIEWS[k]["created"]), None)
+        item["created"] = now
+        CHEM_PREVIEWS[token] = item
+    return token
+
+
+def _chem_take_preview(pid, kind):
+    with IMPORT_PREVIEW_LOCK:
+        item = CHEM_PREVIEWS.get(pid)
+    if not item or item.get("kind") != kind or time.time() - item.get("created", 0) > IMPORT_PREVIEW_TTL:
+        with IMPORT_PREVIEW_LOCK: CHEM_PREVIEWS.pop(pid, None)
+        raise ValueError("Import preview expired. Please upload the file again.")
+    if int(item["chem_revision"]) != _chem_revision():
+        raise ValueError("Chemistry data changed after this preview was generated. Please preview again before confirming.")
+    return item
+
+
+def chem_import_preview(filename, data):
+    raw, notes = chem_spc.read_chem_file(filename, data)
+    conn = get_conn()
+    try:
+        specs = _chem_load_specs(conn)
+        existing = {h["heat_no"]: h for h in _chem_load_heats(conn)}
+        rev = _chem_revision(conn)
+    finally:
+        conn.close()
+    res = chem_spc.validate_rows(raw, existing, specs)
+    sample = [{k: r.get(k) for k in ("heat_no", "sheet", "alloy", "denomination", "cu", "ni", "zn", "total", "_status", "_spec")} for r in res["records"][:30]]
+    summary = {k: res[k] for k in ("detected", "new", "updated", "unchanged", "duplicates", "errors", "warnings", "oos_heats", "unresolved_sheets")}
+    token = _chem_store_preview({"kind": "chem", "filename": filename, "records": res["records"], "summary": summary, "chem_revision": rev})
+    return {"ok": True, "preview_id": token, "filename": filename, "sheets": notes, **summary,
+            "issues": res["issues"][:300], "issue_counts": res["issue_counts"], "updated_details": res["updated_details"], "sample": sample}
+
+
+def _chem_apply_records(records, filename, summary, username):
+    with CHEM_WRITE_LOCK:
+        conn = get_conn()
+        try:
+            if USE_POSTGRES: conn.execute("SELECT pg_advisory_xact_lock(hashtext('quality-chem-import'))")
+            else: conn.execute("BEGIN IMMEDIATE")
+            ins = upd = 0
+            cols = ["heat_no", "sheet", "alloy", "denomination", "analyst", "hardness", "conductivity", "hf_no"] + CHEM_COLS
+            for r in records:
+                vals = [r.get(c) if c in CHEM_COLS or c == "conductivity" else (r.get(c) or "") for c in cols]
+                if r["_status"] == "new":
+                    conn.execute(f"INSERT INTO chem_heats ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)})", tuple(vals)); ins += 1
+                else:
+                    sets = ",".join(f"{c}=?" for c in cols[1:])
+                    conn.execute(f"UPDATE chem_heats SET {sets},updated_at=CURRENT_TIMESTAMP WHERE heat_no=?", tuple(vals[1:]) + (r["heat_no"],)); upd += 1
+            conn.execute("INSERT INTO chem_import_history(kind,filename,detected,new_rows,updated,unchanged,duplicates,errors,warnings,imported_by) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                         ("chemistry", str(filename)[:255], int(summary["detected"]), ins, upd, int(summary["unchanged"]), int(summary["duplicates"]), int(summary["errors"]), int(summary["warnings"]), str(username)[:150]))
+            _mark_non_disposition_changed(conn); _chem_bump_revision(conn)
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
+        finally:
+            try: conn.close()
+            except Exception: pass
+    _cache_clear()
+    return {"inserted": ins, "updated": upd}
+
+
+def chem_specs_preview(filename, data):
+    specs, issues = chem_spc.parse_spec_file(filename, data)
+    conn = get_conn()
+    try:
+        existing = {chem_spc.norm_key(s["description"]): s for s in _chem_load_specs(conn)}
+        rev = _chem_revision(conn)
+    finally:
+        conn.close()
+    rows, n_new, n_chg, n_same = [], 0, 0, 0
+    for s in specs:
+        old = existing.get(chem_spc.norm_key(s["description"]))
+        if not old: status = "new"; n_new += 1
+        elif old["limits"] != s["limits"] or (old["alloy"] or "") != (s["alloy"] or ""): status = "changed"; n_chg += 1
+        else: status = "unchanged"; n_same += 1
+        s["_status"] = status
+        rows.append({"description": s["description"], "alloy": s["alloy"], "status": status, "params": len(s["limits"]),
+                     "limits": {chem_spc.PARAM_LABEL[p]: v for p, v in s["limits"].items()}})
+    summary = {"detected": len(specs), "new": n_new, "changed": n_chg, "unchanged": n_same, "errors": sum(1 for i in issues if i["severity"] == "error")}
+    token = _chem_store_preview({"kind": "specs", "filename": filename, "specs": specs, "summary": summary, "chem_revision": rev})
+    return {"ok": True, "preview_id": token, "filename": filename, **summary, "issues": issues, "rows": rows}
+
+
+def _chem_upsert_specs(specs, filename, summary, username):
+    with CHEM_WRITE_LOCK:
+        conn = get_conn()
+        try:
+            if USE_POSTGRES: conn.execute("SELECT pg_advisory_xact_lock(hashtext('quality-chem-import'))")
+            else: conn.execute("BEGIN IMMEDIATE")
+            existing = {chem_spc.norm_key(r[1]): r[0] for r in conn.execute("SELECT id,description FROM chem_specs").fetchall()}
+            ins = upd = 0
+            for s in specs:
+                if s.get("_status") == "unchanged": continue
+                lim = json.dumps(s["limits"], separators=(",", ":"))
+                sid = existing.get(chem_spc.norm_key(s["description"]))
+                if sid is None:
+                    conn.execute("INSERT INTO chem_specs(description,alloy,limits_json,updated_by) VALUES(?,?,?,?)", (s["description"], s["alloy"], lim, username)); ins += 1
+                else:
+                    conn.execute("UPDATE chem_specs SET alloy=?,limits_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (s["alloy"], lim, username, sid)); upd += 1
+            conn.execute("INSERT INTO chem_import_history(kind,filename,detected,new_rows,updated,unchanged,errors,imported_by) VALUES(?,?,?,?,?,?,?,?)",
+                         ("specs", str(filename)[:255], int(summary["detected"]), ins, upd, int(summary["unchanged"]), int(summary["errors"]), str(username)[:150]))
+            _mark_non_disposition_changed(conn); _chem_bump_revision(conn)
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
+        finally:
+            try: conn.close()
+            except Exception: pass
+    _cache_clear()
+    return {"inserted": ins, "updated": upd}
+
+
+def _chem_save_spec(body, username):
+    limits, err = chem_spc.validate_spec_payload(body.get("alloy"), body.get("description"), body.get("limits"))
+    if err: raise ValueError(err)
+    desc = str(body.get("description")).strip(); alloy = str(body.get("alloy") or "").strip()
+    sid = body.get("id")
+    with CHEM_WRITE_LOCK:
+        conn = get_conn()
+        try:
+            if USE_POSTGRES: conn.execute("SELECT pg_advisory_xact_lock(hashtext('quality-chem-import'))")
+            else: conn.execute("BEGIN IMMEDIATE")
+            for r in conn.execute("SELECT id,description FROM chem_specs").fetchall():
+                if chem_spc.norm_key(r[1]) == chem_spc.norm_key(desc) and (sid is None or int(r[0]) != int(sid)):
+                    raise ValueError(f"A spec named '{r[1]}' already exists")
+            lim = json.dumps(limits, separators=(",", ":"))
+            if sid is None:
+                conn.execute("INSERT INTO chem_specs(description,alloy,limits_json,updated_by) VALUES(?,?,?,?)", (desc, alloy, lim, username))
+            else:
+                if not conn.execute("SELECT 1 FROM chem_specs WHERE id=?", (int(sid),)).fetchone(): raise ValueError("Spec not found")
+                conn.execute("UPDATE chem_specs SET description=?,alloy=?,limits_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (desc, alloy, lim, username, int(sid)))
+            _mark_non_disposition_changed(conn); _chem_bump_revision(conn)
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
+        finally:
+            try: conn.close()
+            except Exception: pass
+    _cache_clear()
+    return desc
+
+
+def _chem_delete_spec(sid):
+    with CHEM_WRITE_LOCK:
+        conn = get_conn()
+        try:
+            row = conn.execute("SELECT description FROM chem_specs WHERE id=?", (int(sid),)).fetchone()
+            if not row: raise ValueError("Spec not found")
+            conn.execute("DELETE FROM chem_specs WHERE id=?", (int(sid),))
+            _mark_non_disposition_changed(conn); _chem_bump_revision(conn)
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            raise
+        finally:
+            try: conn.close()
+            except Exception: pass
+    _cache_clear()
+    return row[0]
+
+
 def _ensure_admin_schema():
     conn = get_conn()
     if USE_POSTGRES:
@@ -3895,6 +4288,7 @@ def _ensure_admin_schema():
     # TABLEs before the guarded migration blocks below (same reasoning as
     # above — a later rollback must never be able to undo a CREATE TABLE).
     conn.commit()
+    _ensure_chem_schema(conn)
     # Older databases created before RCA/style support was added won't have
     # these columns on fishbone_import_history yet — add them if missing.
     for coldef in ("rca_detected INTEGER DEFAULT 0", "rca_imported INTEGER DEFAULT 0", "style_imported INTEGER DEFAULT 0"):
@@ -5831,6 +6225,26 @@ class Handler(BaseHTTPRequestHandler):
                     score=round(max(0,100*(1-(corrections/max(total,1)))),1)
                     self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_batch_rows":[{"batch_no":r[0],"count":int(r[1])} for r in duplicate_groups]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
+        elif path == "/api/chem/meta":
+            try: self._send_json(compute_chem_meta())
+            except Exception as e: self._send_json({"error": str(e)}, status=500)
+        elif path == "/api/chem/spc":
+            try: self._send_json(compute_chem_spc(qs))
+            except ValueError as e: self._send_json({"error": str(e)}, status=400)
+            except Exception as e:
+                log.exception("chem spc failed"); self._send_json({"error": "Could not compute SPC"}, status=500)
+        elif path == "/api/chem/heat":
+            try: self._send_json(compute_chem_heat(qs.get("heat_no", "")))
+            except ValueError as e: self._send_json({"error": str(e)}, status=400)
+            except Exception as e:
+                log.exception("chem heat failed"); self._send_json({"error": "Could not load heat"}, status=500)
+        elif path == "/api/admin/chem_history":
+            if not _is_admin(self): _auth_error(self)
+            else:
+                try:
+                    conn = get_conn(); rows = conn.execute("SELECT id,kind,filename,detected,new_rows,updated,unchanged,duplicates,errors,warnings,imported_by,created_at FROM chem_import_history ORDER BY id DESC LIMIT 50").fetchall(); conn.close()
+                    self._send_json({"rows": [dict(r) for r in rows]})
+                except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/admin/import_history":
             if not _is_admin(self): _auth_error(self)
             else:
@@ -6465,6 +6879,80 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "detected": len(records), **result, "recovery_point": recovery_point})
             except Exception as e:
                 self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/chem_import_preview":
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
+            try:
+                fname, data = _chem_read_upload(self)
+                self._send_json(chem_import_preview(fname, data))
+            except Exception as e: self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/chem_import_confirm":
+            if not _require_role(self, "admin", "qa_engineer", "importer"): return
+            try:
+                body = _json_body(self)
+                with CHEM_WRITE_LOCK:
+                    item = _chem_take_preview(str(body.get("preview_id", "")), "chem")
+                    if not item["records"]: raise ValueError("Nothing to import: every row is a duplicate, unchanged or has an error.")
+                    _require_safety_backup("before_chem_import")
+                    meta = _admin_meta(self) or {}
+                    result = _chem_apply_records(item["records"], item["filename"], item["summary"], meta.get("username", "Admin"))
+                    with IMPORT_PREVIEW_LOCK: CHEM_PREVIEWS.pop(str(body.get("preview_id", "")), None)
+                _activity_event(self, "chem_import_confirm", tab="Admin", filters={"filename": item["filename"], "inserted": result["inserted"]})
+                _audit(self, "chem_import_confirm", details={"filename": item["filename"], **result})
+                recovery_point = _post_mutation_backup("after_chem_import")
+                self._send_json({"ok": True, "filename": item["filename"], **result, "unchanged": item["summary"]["unchanged"], "errors": item["summary"]["errors"], "recovery_point": recovery_point})
+            except Exception as e: self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/chem_specs_preview":
+            if not _require_role(self, "admin", "qa_engineer", "qa_manager"): return
+            try:
+                fname, data = _chem_read_upload(self)
+                self._send_json(chem_specs_preview(fname, data))
+            except Exception as e: self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/chem_specs_confirm":
+            if not _require_role(self, "admin", "qa_engineer", "qa_manager"): return
+            try:
+                body = _json_body(self)
+                with CHEM_WRITE_LOCK:
+                    item = _chem_take_preview(str(body.get("preview_id", "")), "specs")
+                    if not any(s.get("_status") != "unchanged" for s in item["specs"]): raise ValueError("Nothing to import: every spec is unchanged.")
+                    _require_safety_backup("before_chem_specs_import")
+                    meta = _admin_meta(self) or {}
+                    result = _chem_upsert_specs(item["specs"], item["filename"], item["summary"], meta.get("username", "Admin"))
+                    with IMPORT_PREVIEW_LOCK: CHEM_PREVIEWS.pop(str(body.get("preview_id", "")), None)
+                _audit(self, "chem_specs_import", details={"filename": item["filename"], **result})
+                recovery_point = _post_mutation_backup("after_chem_specs_import")
+                self._send_json({"ok": True, **result, "recovery_point": recovery_point})
+            except Exception as e: self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/chem_spec":
+            if not _require_role(self, "admin", "qa_engineer", "qa_manager"): return
+            try:
+                meta = _admin_meta(self) or {}
+                desc = _chem_save_spec(_json_body(self), meta.get("username", "Admin"))
+                _audit(self, "chem_spec_save", details={"description": desc})
+                recovery_point = _post_mutation_backup("after_chem_spec_save")
+                self._send_json({"ok": True, "description": desc, "recovery_point": recovery_point})
+            except Exception as e: self._send_json({"error": str(e)}, status=400)
+            return
+
+        if path == "/api/admin/chem_spec_delete":
+            if not _require_role(self, "admin", "qa_engineer", "qa_manager"): return
+            try:
+                body = _json_body(self)
+                _require_safety_backup("before_chem_spec_delete")
+                desc = _chem_delete_spec(body.get("id"))
+                _audit(self, "chem_spec_delete", details={"description": desc})
+                recovery_point = _post_mutation_backup("after_chem_spec_delete")
+                self._send_json({"ok": True, "recovery_point": recovery_point})
+            except Exception as e: self._send_json({"error": str(e)}, status=400)
             return
 
         if path == "/api/admin/fishbone_import":
