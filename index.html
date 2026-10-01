@@ -387,6 +387,8 @@
 
   <div class="filter-summary-bar" id="filterSummaryBar"><span class="summary-label"><svg class="ic" aria-hidden="true"><use href="#ic-selection"/></svg>Selection:</span><span id="filterSummaryText">All Data</span><span class="summary-sep">•</span><span id="filterRecordCount">-- coils</span><div class="summary-actions" style="position:relative"><span class="saved-view-wrap"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg><select id="savedViewSelect" class="saved-view-select" aria-label="Saved filter views"><option value="">Saved Views</option></select></span><button id="saveViewBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg>Save Preset</button><button id="clearViewsBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-list-edit"/></svg>Manage Presets</button><div class="view-popover hidden" id="viewPopover" role="dialog" aria-label="Filter presets"></div></div></div>
 
+  <div class="filter-summary-bar chem-filter-summary" id="chemFilterSummaryBar"><span class="summary-label"><svg class="ic" aria-hidden="true"><use href="#ic-selection"/></svg>Selection:</span><span id="chemFilterSummaryText">All Chemistry Data</span><span class="summary-sep">•</span><span id="chemFilterRecordCount">-- heats</span><div class="summary-actions" style="position:relative"><span class="saved-view-wrap"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg><select id="chemSavedViewSelect" class="saved-view-select" aria-label="Saved Chemistry views"><option value="">Saved Views</option></select></span><button id="chemSaveViewBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg>Save Preset</button><button id="chemClearViewsBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-list-edit"/></svg>Manage Presets</button><div class="view-popover hidden" id="chemViewPopover" role="dialog" aria-label="Chemistry filter presets"></div></div></div>
+
   <div class="sticky-controls" id="stickyControls">
     <div class="filters" id="filters"></div>
     <div class="filters chem-topbar hidden" id="chemTopBar"></div>
@@ -631,7 +633,6 @@
 
   <div class="tab-panel hidden" id="tab-chem">
     <div id="chemControls"></div>
-    <div class="filter-summary-bar chem-filter-summary" id="chemFilterSummaryBar"><span class="summary-label"><svg class="ic" aria-hidden="true"><use href="#ic-selection"/></svg>Selection:</span><span id="chemFilterSummaryText">All Chemistry Data</span><span class="summary-sep">•</span><span id="chemFilterRecordCount">-- heats</span><div class="summary-actions" style="position:relative"><span class="saved-view-wrap"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg><select id="chemSavedViewSelect" class="saved-view-select" aria-label="Saved Chemistry views"><option value="">Saved Views</option></select></span><button id="chemSaveViewBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg>Save Preset</button><button id="chemClearViewsBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-list-edit"/></svg>Manage Presets</button><div class="view-popover hidden" id="chemViewPopover" role="dialog" aria-label="Chemistry filter presets"></div></div></div>
     <div class="period-banner" id="chemPeriodBanner"></div>
     <div class="chem-main-panel" id="chemMainBox"></div>
     <div id="chemNotes"></div>
@@ -657,7 +658,7 @@
     </div>
 
     <div class="panel">
-      <h3>🔗 Chemistry vs Disposition (joined on heat_no)</h3>
+      <h3>🔗 Does Chemistry Affect Quality? In-spec vs Out-of-spec Heats <small class="chem-h3-sub">joined to inspection data on heat_no · read-only</small></h3>
       <div class="panel-body" id="chemCompareBox"></div>
     </div>
 

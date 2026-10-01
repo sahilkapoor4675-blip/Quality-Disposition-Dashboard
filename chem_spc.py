@@ -404,6 +404,36 @@ def _map_header(cells):
     return mapping
 
 
+def _looks_like_date_cell(v):
+    """True for a cell that is clearly a date: a real date/datetime, or text such as 02.04.2026 / 2-Apr-26 / 2026-04-02.
+    Plain numbers are NOT accepted here (a Cu% value or a serial number must never be mistaken for a date)."""
+    if isinstance(v, (_dt.datetime, _dt.date)):
+        return True
+    if isinstance(v, str):
+        t = v.strip()
+        if not t or not re.search(r"\d", t) or not re.search(r"[-./ ]", t):
+            return False
+        return parse_cast_date(t)[0] != ""
+    return False
+
+
+def _detect_date_column(header, body, used_fields):
+    """The file has no header that says 'date', but one column may still hold the cast dates (e.g. header 'Day', 'Cast on', blank).
+    Pick the unmapped column where >= 60% of the non-empty cells are real dates. Returns the column index or None."""
+    best, best_ratio = None, 0.0
+    width = max([len(header)] + [len(r) for r in body[:200] if r is not None] or [0])
+    for i in range(width):
+        if i in used_fields:
+            continue
+        vals = [r[i] for r in body[:500] if r is not None and i < len(r) and r[i] is not None and str(r[i]).strip() != ""]
+        if len(vals) < 3:
+            continue
+        ratio = sum(1 for v in vals if _looks_like_date_cell(v)) / len(vals)
+        if ratio >= 0.6 and ratio > best_ratio:
+            best, best_ratio = i, ratio
+    return best
+
+
 def _rows_from_table(sheet, table):
     """table: iterable of row tuples (first row = header). Returns (rows, note)."""
     it = iter(table)
@@ -416,8 +446,14 @@ def _rows_from_table(sheet, table):
         return [], "no heat / coil number column found"
     if not any(f in ELEMENTS for f in mapping.values()):
         return [], "no element (Cu%, Ni%, ...) columns found"
+    body = list(it)
+    if "cast_date" not in mapping.values():
+        # No header says 'Date' -> look at the cell contents (a column full of dates is the cast date).
+        di = _detect_date_column(header, body, set(mapping.keys()))
+        if di is not None:
+            mapping[di] = "cast_date"
     rows = []
-    for offset, cells in enumerate(it, start=2):
+    for offset, cells in enumerate(body, start=2):
         if cells is None or all(c is None or str(c).strip() == "" for c in cells):
             continue
         raw = {}

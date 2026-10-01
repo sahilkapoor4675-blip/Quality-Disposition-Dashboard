@@ -189,6 +189,8 @@ const CHEM_QTY = [['0', 'All'], ['10', '10'], ['20', '20'], ['30', '30'], ['50',
 const CHEM_PERIOD_FIELDS = [['month', 'months'], ['week', 'weeks'], ['quarter', 'quarters'], ['fy', 'fys']];
 let chemLastPeriod = '', chemFindVal = '';
 function chemPeriodItems(list){ return [{value: '', label: 'All'}].concat((list || []).map(x => ({value: x, label: x}))); }
+// An empty Month / Week / Quarter / FY list means the stored heats carry no cast date (they were imported without the file's Date column).
+function chemNoDates(){ const p = chemMeta ? chemPeriods() : null; return !!(p && p.undated > 0 && !p.months.length); }
 // One dropdown, built with the SAME markup/classes as the dashboard filters (.filter-field > .filter-control > .filter-trigger + .filter-menu),
 // so size, font, icons, hover, open menu, dark mode and the "active" highlight all come from the dashboard's own CSS.
 function chemFieldHtml(key, icon, label, items, cur, active){
@@ -197,7 +199,21 @@ function chemFieldHtml(key, icon, label, items, cur, active){
   return `<div class="filter-field${active ? ' filter-active' : ''}" data-chem-key="${key}"><label>${icon} ${label}</label><div class="filter-control"><button type="button" class="filter-trigger" aria-haspopup="listbox"><span>${escQcr(shown)}</span><span class="chevron">${qdIc('chevron-down')}</span></button><div class="filter-menu"><input class="filter-search" type="text" placeholder="Search options…" autocomplete="off"><div class="filter-options">${opts}</div></div></div></div>`;
 }
 function chemCurVal(key){ return key === 'last_n' ? String(Number(chemSel.last_n) || 0) : String(chemSel[key] == null ? '' : chemSel[key]); }
-function chemIsActive(key){ const v = chemCurVal(key); return (key === 'last_n' ? v !== '0' : v !== '') && ['month', 'week', 'quarter', 'fy', 'last_n'].includes(key); }
+const CHEM_ACTIVE_KEYS = ['month', 'week', 'quarter', 'fy', 'last_n', 'param', 'spec'];
+// Baseline view = first grade + Cu% + no period + all heats (what Reset All restores). Anything else counts as an active filter,
+// exactly like a dashboard filter that is not "All".
+function chemDefaultSpec(){
+  const usable = (chemMeta && chemMeta.specs || []).filter(s => s.heats > 0);
+  return usable[0] ? usable[0].description : (chemMeta && chemMeta.unassigned ? '__none__' : '');
+}
+function chemIsActive(key){
+  if(!CHEM_ACTIVE_KEYS.includes(key)) return false;
+  const v = chemCurVal(key);
+  if(key === 'last_n') return v !== '0';
+  if(key === 'param') return v !== '' && v !== 'cu';
+  if(key === 'spec') return v !== '' && v !== chemDefaultSpec();
+  return v !== '';
+}
 // Re-sync trigger text / selected option / active highlight / "N Active" badge from chemSel without rebuilding the dropdowns.
 function chemSyncFields(){
   const bar = chemTopBarEl();
@@ -209,15 +225,17 @@ function chemSyncFields(){
     if(span && label != null) span.textContent = label;
     f.classList.toggle('filter-active', chemIsActive(key));
   });
-  const n = ['month', 'week', 'quarter', 'fy', 'last_n'].filter(chemIsActive).length, badge = document.getElementById('chemActiveBadge');
+  const n = CHEM_ACTIVE_KEYS.filter(chemIsActive).length, badge = document.getElementById('chemActiveBadge');
   if(badge){ badge.textContent = n + ' Active'; badge.classList.toggle('show', n > 0); }
+  const st = document.getElementById('statusActiveFilters'); if(st) st.textContent = String(n);
 }
 // Month / Week / Quarter / Fin. Year option lists follow the other three selections (like the dashboard's cascading filters).
 function chemFillPeriods(lists){
   CHEM_PERIOD_FIELDS.forEach(([k, l]) => {
     const f = chemTopBarEl().querySelector(`.filter-field[data-chem-key="${k}"] .filter-options`); if(!f) return;
     const cur = chemCurVal(k);
-    f.innerHTML = chemPeriodItems(lists[l]).map(x => `<div class="filter-option${x.value === '' ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('');
+    f.innerHTML = chemPeriodItems(lists[l]).map(x => `<div class="filter-option${x.value === '' ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('')
+      + ((lists[l] || []).length ? '' : `<div class="filter-empty">${chemNoDates() ? 'No cast dates stored — re-import the chemistry file' : 'No periods for this selection'}</div>`);
   });
   chemSyncFields();
 }
@@ -283,8 +301,8 @@ function renderChemControls(){
   chemTopBarEl().innerHTML = `
     <div class="filter-toolbar"><div class="filter-toolbar-title" title="${escQcr(tip)}">${qdIc('filter')}Chemistry Filters <span class="chem-tb-i">ⓘ</span></div><div class="filter-actions"><span id="chemActiveBadge" class="active-filter-badge">0 Active</span><button id="chemCompareBtn" class="reset-all" type="button">${qdIc('compare')}Compare Periods</button><button id="chemResetAll" class="reset-all" type="button">${qdIc('reset')}Reset All</button></div></div>
     ${F('month', '📅', 'Month', chemPeriodItems(per.months), chemIsActive('month'))}
-    ${F('param', '🔬', 'Parameter', chemMeta.params.map(p => ({value: p.key, label: p.label})), false)}
-    ${F('spec', '🧪', 'Grade', groups.map(g => ({value: g, label: chemGroupLabel(g)})), false)}
+    ${F('param', '🔬', 'Parameter', chemMeta.params.map(p => ({value: p.key, label: p.label})), chemIsActive('param'))}
+    ${F('spec', '🧪', 'Grade', groups.map(g => ({value: g, label: chemGroupLabel(g)})), chemIsActive('spec'))}
     ${F('last_n', '🔢', 'Heat Qty (Last N)', CHEM_QTY.map(([v, t]) => ({value: v, label: t})), chemIsActive('last_n'))}
     ${F('week', '🗓️', 'Week', chemPeriodItems(per.weeks), chemIsActive('week'))}
     ${F('quarter', '📊', 'Quarter', chemPeriodItems(per.quarters), chemIsActive('quarter'))}
@@ -324,8 +342,12 @@ function chemRenderPeriodBanner(d){
   const el = document.getElementById('chemPeriodBanner');
   if(!el) return;
   const p = d && d.period_comparison;
+  if(p && p.mode === 'last_n'){
+    el.innerHTML = `📅 <b>Current:</b> Last ${p.last_n} heats &nbsp;&nbsp;|&nbsp;&nbsp; ⏮️ <b>Compared to:</b> the ${p.prev_heats} heat${p.prev_heats === 1 ? '' : 's'} before them`;
+    return;
+  }
   if(!p || !p.current || !(p.current.month || p.current.week || p.current.quarter || p.current.fy)){
-    el.innerHTML = '📅 <b>Current Period:</b> All Periods &nbsp;&nbsp;|&nbsp;&nbsp; <i>Select a single Month/Week/Quarter/FY filter to see period-over-period comparison</i>';
+    el.innerHTML = '📅 <b>Current Period:</b> All Periods &nbsp;&nbsp;|&nbsp;&nbsp; <i>Select a single Month/Week/Quarter/FY (or a Heat Qty) to see the trend arrows</i>';
     return;
   }
   const labels = [];
@@ -415,7 +437,8 @@ function renderChemNotes(d){
   const aimNote = !chemSel.ins_aim ? [] : !aimAny ? ['No Aim limits are stored for this grade, so no Aim line can be drawn. Load the AIM sheet of Standard.xlsx in Admin → Spec Limits (or type the Aim limits there).']
     : (d.aim_lsl == null && d.aim_usl == null) ? [`This grade has no Aim limit for ${pl}, so no Aim line is drawn for it.`] : [];
   const notes = [].concat(d.summary.heats ? [] : ['No heats match this selection (check Month / Week / Quarter / Fin. Year, or the grade).'],
-    periodOn && per.undated ? [`${per.undated} heat(s) of this grade have no readable date and drop out while a Month / Week / Quarter / Fin. Year filter is set.`] : [],
+    chemNoDates() ? [`No cast date is stored for the ${per.undated.toLocaleString()} heat(s) of this grade, so the Month / Week / Quarter / Fin. Year lists, Compare Periods and the period trend are empty. Re-import the chemistry file in Admin → Cast Chemistry: its Date column is read on import and fills these filters (existing heats are updated, nothing is duplicated).`] : [],
+    periodOn && per.undated && !chemNoDates() ? [`${per.undated} heat(s) of this grade have no readable date and drop out while a Month / Week / Quarter / Fin. Year filter is set.`] : [],
     aimNote, d.warnings || [], c.note ? [c.note] : []);
   el.innerHTML = notes.length ? `<div class="chem-note-strip">${notes.map(n => 'ⓘ ' + escQcr(n)).join('<br>')}</div>` : '';
 }
@@ -713,7 +736,11 @@ function renderChemMain(d){
     const trendType = r.cpk_change_type || 'info';
     const trendClass = trendType === 'up' ? 'good' : trendType === 'down' ? 'bad' : trendType === 'equal' ? 'equal' : 'info';
     const pulseClass = trendType === 'up' ? 'kpi-up' : trendType === 'down' ? 'kpi-down' : 'kpi-pulse';
-    const trend = r.prev_cpk == null ? '<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: N/A</span><span class="trend info">— No comparable period</span></div>' : `<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: <b class="kpi-prev-val">${chemIdx(r.prev_cpk)}</b></span><span class="trend ${trendClass}">${trendType === 'up' ? '▲' : trendType === 'down' ? '▼' : '▬'} <b class="kpi-change-val">${r.cpk_change >= 0 ? '+' : ''}${chemIdx(r.cpk_change)}</b></span></div>`;
+    const pctTxt = v => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`, dTxt = v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`;
+    const hasChange = r.prev_cpk != null && r.cpk_change != null;
+    const trend = !hasChange
+      ? `<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: ${r.prev_cpk == null ? 'N/A' : `<b class="kpi-prev-val">${chemIdx(r.prev_cpk)}</b>`}</span><span class="trend info">${d.period_comparison ? '▬ Not enough data' : '▬ Select a period or Heat Qty'}</span></div>`
+      : `<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: <b class="kpi-prev-val">${chemIdx(r.prev_cpk)}</b></span><span class="trend ${trendClass}">${trendType === 'up' ? '▲' : trendType === 'down' ? '▼' : '▬'} ${trendType === 'equal' ? 'No change' : (r.cpk_change_pct != null ? `<b class="kpi-change-val">${pctTxt(r.cpk_change_pct)}</b> (<span class="kpi-delta-val">${dTxt(r.cpk_change)}</span>)` : `<span class="kpi-delta-val">${dTxt(r.cpk_change)}</span>`)}</span></div>`;
     const vars = `--el-c:${e.c};--el-d:${e.d};--el-t:${e.t};--el-glow:${chemHexA(e.c, .5)};--el-tint1:${chemHexA(e.c, .28)};--el-tint2:${chemHexA(e.c, .10)};--el-edge:${chemHexA(e.d, .45)};--kpi-stagger:${Math.min(i, 7) * 65}ms`;
     return `<div class="kpi-card ${pulseClass} chem-el-kpi status-${st}${r.param === d.param ? ' chem-cur' : ''}" data-param="${r.param}" role="button" tabindex="0" style="${vars}" aria-label="${escQcr(e.name)} — Cpk ${chemIdx(r.cpk)}, ${stTxt.toLowerCase()}. Click to chart">
       <div class="kpi-top">
@@ -731,7 +758,7 @@ function renderChemMain(d){
       </div></div><div class="chem-el-spark">${sparklineSvg(chemCardPrevCpk.get(r.param), r.cpk, st === 'good' ? 'good' : st === 'bad' ? 'bad' : st === 'amber' ? 'amber' : 'neutral')}</div></div>
     </div>`;
   };
-  box.innerHTML = `<div class="chem-el-grid-wrap">${mains.map(card).join('')}</div><div class="chem-foot">Left column: <b>Cp / Cpk</b> use the within (moving-range) σ; right column: <b>Pp / Ppk</b> use the overall σ; both against the <b>Standard</b> limits. Std. Dev. under each column is the σ that column uses. Green ≥ 1.33 · amber 1.00–1.33 · red &lt; 1.00. Trend compares Cpk with the immediately previous selected Week / Month / Quarter / Financial Year. Click a card to chart that element.</div>`;
+  box.innerHTML = `<div class="chem-el-grid-wrap">${mains.map(card).join('')}</div><div class="chem-foot">Left column: <b>Cp / Cpk</b> use the within (moving-range) σ; right column: <b>Pp / Ppk</b> use the overall σ; both against the <b>Standard</b> limits. Std. Dev. under each column is the σ that column uses. Green ≥ 1.33 · amber 1.00–1.33 · red &lt; 1.00. Trend compares Cpk with the immediately previous Week / Month / Quarter / Financial Year, or — when only Heat Qty (last N) is set — with the N heats before them (▲ better, ▼ worse). Click a card to chart that element.</div>`;
 
   // Same KPI interaction model: 5° pointer tilt, directional change classes, count-up/spring animation for headline + trend metrics.
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -772,30 +799,37 @@ function renderChemMain(d){
       animateChemNumber(ppkEl, oldTrend && Number.isFinite(oldTrend.ppk) ? oldTrend.ppk : r.ppk, r.ppk, chemIdx);
     }
     const prevEl = cardEl.querySelector('.kpi-prev-val');
-    const changeEl = cardEl.querySelector('.kpi-change-val');
+    const changeEl = cardEl.querySelector('.kpi-change-val'), deltaEl = cardEl.querySelector('.kpi-delta-val');
     if(!reduceMotion && r.prev_cpk != null && Number.isFinite(Number(r.prev_cpk))){
       const fromPrev = oldTrend && Number.isFinite(oldTrend.prev) ? oldTrend.prev : 0;
       animateChemNumber(prevEl, fromPrev, Number(r.prev_cpk), chemIdx);
     }
-    if(!reduceMotion && changeEl && r.cpk_change != null && Number.isFinite(Number(r.cpk_change))){
+    if(!reduceMotion && changeEl && r.cpk_change_pct != null && Number.isFinite(Number(r.cpk_change_pct))){
+      const fromPct = oldTrend && Number.isFinite(oldTrend.pct) ? oldTrend.pct : 0;
+      animateChemNumber(changeEl, fromPct, Number(r.cpk_change_pct), v => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
+    }
+    if(!reduceMotion && deltaEl && r.cpk_change != null && Number.isFinite(Number(r.cpk_change))){
       const fromChange = oldTrend && Number.isFinite(oldTrend.change) ? oldTrend.change : 0;
-      animateChemNumber(changeEl, fromChange, Number(r.cpk_change), v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`);
+      animateChemNumber(deltaEl, fromChange, Number(r.cpk_change), v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`);
     }
     nextCpk.set(r.param, Number.isFinite(Number(r.cpk)) ? Number(r.cpk) : null);
-    nextTrend.set(r.param, {prev:Number.isFinite(Number(r.prev_cpk)) ? Number(r.prev_cpk) : null, change:Number.isFinite(Number(r.cpk_change)) ? Number(r.cpk_change) : null, ppk:Number.isFinite(Number(r.ppk)) ? Number(r.ppk) : null});
+    nextTrend.set(r.param, {prev:Number.isFinite(Number(r.prev_cpk)) ? Number(r.prev_cpk) : null, change:Number.isFinite(Number(r.cpk_change)) ? Number(r.cpk_change) : null, pct:Number.isFinite(Number(r.cpk_change_pct)) ? Number(r.cpk_change_pct) : null, ppk:Number.isFinite(Number(r.ppk)) ? Number(r.ppk) : null});
   });
   chemCardPrevCpk = nextCpk;
   chemCardPrevTrend = nextTrend;
   chemFirstPaintDone = true;
 }
 
-function chemCmpCard(title, a, tone, hint, noLimits){
+function chemCmpCard(title, a, tone, hint, noLimits, emptyMsg){
   const has = !noLimits && a && a.heats > 0;
-  return `<div class="chem-cmp ${tone}"><div class="chem-cmp-t">${escQcr(title)}</div><div class="chem-cmp-v">${has && a.reject_pct != null ? a.reject_pct.toFixed(2) + '%' : '—'}</div><div class="chem-cmp-s">reject (by MT)</div><div class="chem-cmp-v2">${has && a.defect_pct != null ? a.defect_pct + '%' : '—'} <span>coils with a defect</span></div><div class="chem-cmp-f">${has ? `${a.heats} heats · ${a.coils} coils` : noLimits ? 'no limits defined for this group' : 'no heats with disposition data'}${has && a.heats < 10 ? '<br><b>small sample — read with care</b>' : ''}</div><div class="chem-cmp-h">${escQcr(hint)}</div></div>`;
+  return `<div class="chem-cmp ${tone}"><div class="chem-cmp-t">${escQcr(title)}</div><div class="chem-cmp-v">${has && a.reject_pct != null ? a.reject_pct.toFixed(2) + '%' : '—'}</div><div class="chem-cmp-s">reject (by MT)</div><div class="chem-cmp-v2">${has && a.defect_pct != null ? a.defect_pct + '%' : '—'} <span>coils with a defect</span></div><div class="chem-cmp-f">${has ? `${a.heats} heats · ${a.coils} coils` : noLimits ? 'no limits defined for this group' : escQcr(emptyMsg || 'no heats with disposition data')}${has && a.heats < 10 ? '<br><b>small sample — read with care</b>' : ''}</div><div class="chem-cmp-h">${escQcr(hint)}</div></div>`;
 }
 function renderChemCompare(d){
-  const c = d.summary.compare;
-  document.getElementById('chemCompareBox').innerHTML = `<div class="chem-cmp-grid">${chemCmpCard('In spec (all parameters)', c.in_spec, 'ok', 'Heats whose chemistry met every limit', d.summary.has_limits === false)}${chemCmpCard('Out of spec', c.out_of_spec, 'bad', 'Heats with at least one limit breach')}</div><div class="chem-foot">Only heats that also appear in the disposition data (matched on heat_no) are counted. ${d.summary.heats - d.summary.heats_with_disposition} of ${d.summary.heats} heats in this view have no disposition record yet (not inspected/rolled). Correlation is not proof of cause.</div>`;
+  const c = d.summary.compare, noLim = d.summary.has_limits === false;
+  const oosN = Number(d.oos_total || 0), oosDisp = c.out_of_spec ? Number(c.out_of_spec.heats || 0) : 0;
+  const oosEmpty = oosN === 0 ? 'No heat breached a limit in this selection ✔ — nothing to compare' : `${oosN} heat${oosN === 1 ? '' : 's'} breached a limit, but none of them has inspection data yet`;
+  const missing = d.summary.heats - d.summary.heats_with_disposition;
+  document.getElementById('chemCompareBox').innerHTML = `<div class="chem-cmp-why"><b>Why this is here:</b> it answers “do heats whose chemistry was out of limits end up with more rejects / defects on the coils rolled from them?” Heats are linked to the inspection (disposition) data through <b>heat_no</b>. If out-of-spec heats show a clearly higher reject % than in-spec heats, chemistry is a likely cause. This box is for reading only — nothing here is clickable; open the table below for individual heats.</div><div class="chem-cmp-grid">${chemCmpCard('In spec (all parameters)', c.in_spec, 'ok', 'Heats whose chemistry met every limit', noLim, 'no in-spec heat has inspection data yet')}${chemCmpCard('Out of spec', c.out_of_spec, 'bad', 'Heats with at least one limit breach', noLim, oosEmpty)}</div><div class="chem-foot">Only heats that also appear in the disposition data (matched on heat_no) are counted. ${missing} of ${d.summary.heats} heats in this view have no disposition record yet (not inspected/rolled). Correlation is not proof of cause.</div>`;
 }
 function chemOosRows(d, q){
   q = (q || '').trim().toUpperCase();

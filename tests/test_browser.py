@@ -278,7 +278,9 @@ def run():
             assert set(copts('month')) == {'', 'Mar-2026'}, f"Quarter=Q4 should leave only Mar-2026: {copts('month')}"
             assert set(copts('fy')) == {'', 'FY 2025-26'}, f"Quarter=Q4 should leave only FY 2025-26: {copts('fy')}"
             cpick('month', 'Mar-2026')
-            assert page.inner_text('#chemActiveBadge') == '2 Active', 'active-filter badge did not count the two period filters'
+            # Grade (not the baseline grade) + Quarter + Month = 3 active filters, like a dashboard filter that is not "All"
+            assert page.inner_text('#chemActiveBadge') == '3 Active', f"active-filter badge wrong: {page.inner_text('#chemActiveBadge')!r}"
+            assert 'filter-active' in (page.get_attribute('#chemTopBar [data-chem-key="spec"]', 'class') or ''), 'changed Grade is not highlighted as active'
             banner = page.inner_text('#chemPeriodBanner')
             assert 'Compared to' in banner and 'Feb-2026' in banner, f'previous-period banner missing/wrong: {banner!r}'
             # dropdown behaviour identical to the dashboard's: search box, one open at a time, click-outside closes

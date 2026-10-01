@@ -210,7 +210,13 @@ function wireCompareMode(){
   function fillDims(){
     const keep=dimSelect.value, list=dims();
     dimSelect.innerHTML=list.map(d=>`<option value="${d.key}">${escQcr(d.label)}</option>`).join('');
-    dimSelect.value=list.some(d=>d.key===keep)?keep:'month';
+    if(onChem()){
+      // A dimension with fewer than two values cannot be compared (e.g. Month when no cast dates are stored): say so and start on one that can.
+      const n=d=>chemCompareItems(d.key).length;
+      dimSelect.innerHTML=list.map(d=>`<option value="${d.key}">${escQcr(d.label)}${n(d)<2?' (not enough data)':''}</option>`).join('');
+      const ok=list.filter(d=>n(d)>=2);
+      dimSelect.value=(list.some(d=>d.key===keep)&&n(list.find(d=>d.key===keep))>=2)?keep:(ok[0]?ok[0].key:list[0].key);
+    } else dimSelect.value=list.some(d=>d.key===keep)?keep:'month';
     populateValues();
   }
   dimSelect.addEventListener('change',populateValues);
@@ -231,7 +237,7 @@ function wireCompareMode(){
   document.getElementById('compareEditBtn').addEventListener('click',()=>openSetup(false));
   document.getElementById('compareGoBtn').addEventListener('click',()=>{
     const key=dimSelect.value, a=valA.value, b=valB.value;
-    if(!a||!b){ showToast('error','Pick both values','Choose a value for both the left and right side.'); return; }
+    if(!a||!b){ showToast('error','Pick both values',onChem()?'This filter has no values to compare yet. If Month / Week / Quarter / Fin. Year are empty, re-import the chemistry file (Admin → Cast Chemistry) so its Date column is stored.':'Choose a value for both the left and right side.'); return; }
     const chem=onChem();
     const tab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
     function buildUrl(val){
@@ -239,7 +245,9 @@ function wireCompareMode(){
       if(tab!=='dashboard') params.set('tab',tab);
       if(chem){
         // Chemistry tab: carry the current Chemistry selection, with the compared filter set to this pane's value
-        const snap=chemSelSnapshot(); snap[key]=key==='last_n'?(Number(val)||0):val;
+        const snap=chemSelSnapshot();
+        if(['month','week','quarter','fy'].includes(key)) ['month','week','quarter','fy'].forEach(k=>{ snap[k]=''; });   // an old Month would blank a pane that compares Quarters
+        snap[key]=key==='last_n'?(Number(val)||0):val;
         chemWriteUrl(params,snap);
         return location.pathname+'?'+params.toString();
       }

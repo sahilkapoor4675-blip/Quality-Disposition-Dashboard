@@ -1,3 +1,13 @@
+## Chemistry SPC: dates, Selection bar, trend, Compare, Active filters — no version bump (2026-10-01, fourth pass)
+
+- **Month / Week / Quarter / FY lists empty.** Root cause: heats stored without a `cast_date` (imported before the Date column was read). The importer now also finds a date column by its content when no header says "Date". The dropdowns and a note on the tab say plainly "No cast dates stored — re-import the chemistry file"; re-importing updates the existing heats (no duplicates).
+- **Selection bar** for the Chemistry tab now sits under the header search, above the filters, like the other tabs.
+- **Trend on element cards** is KPI-style: `Prev: x  ▲/▼ +y% (+Δ)`. With only Heat Qty (last N) set, the last N heats are compared with the N before them (works without dates). API: `overview[].cpk_change_pct`, `period_comparison.mode`.
+- **Compare Periods** starts on a dimension that has 2+ values, marks the others "(not enough data)", and clears the other period filters in both panes.
+- **Chemistry vs Disposition** panel: purpose line, honest empty-state messages, no hover-lift (it is read-only).
+- **Active filters:** Grade and Parameter count (and highlight) when they differ from the default view; the status counter is updated too.
+- Files: `chem_spc.py`, `server.py`, `index.html`, `sw.js` (shell cache v12), `src/js/10, 21-chem-spc`, `src/css/16-chem-spc`, tests.
+
 ## Chemistry SPC: shareable link, Compare Periods, Saved Views, shared Export dialog, safer spec matching — no version bump (2026-10-01, third pass)
 
 **Added**

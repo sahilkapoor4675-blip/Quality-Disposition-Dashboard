@@ -124,13 +124,15 @@ html[data-theme="dark"] .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent)
 .chem-el-kpi .chem-el-trendline .trend.equal{color:#475569;background:#F3F4F6;}
 .chem-el-kpi .chem-el-trendline .trend.info{color:#0369A1;background:#E0F2FE;}
 .chem-cmp{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
-.chem-cmp:hover{transform:translateY(-2px);box-shadow:var(--shadow-card-hover);}
+.chem-cmp:hover{transform:none;box-shadow:none;}.chem-cmp{cursor:default;}
+.chem-cmp-why{margin:0 0 12px;padding:10px 12px;border-radius:9px;background:var(--card-soft,#f4f8fc);border:1px solid var(--border);color:var(--text);font-size:13px;line-height:1.5}
 .chem-pt{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:center;}
 .chem-pt:hover{stroke:var(--chart-strong);stroke-width:2;opacity:.88;transform:scale(1.12);}
 .chem-hist-bar{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:bottom;}
 .chem-hist-bar:hover{opacity:.9;transform:scaleY(1.02);}
 .chem-hist-label{pointer-events:none;}
-.chem-filter-summary{margin-top:0;margin-bottom:16px;}
+/* The Chemistry Selection bar lives next to the dashboard's own (under the header search, above the filters) and only shows on this tab. */
+.chem-filter-summary{display:none;margin-bottom:14px;}
 html.chem-mode .chem-filter-summary{display:flex;}
 @media(prefers-reduced-motion:reduce){.chem-el-kpi,.chem-cmp,.chem-pt,.chem-hist-bar{transition:none!important}.chem-el-kpi:hover,.chem-cmp:hover,.chem-pt:hover,.chem-hist-bar:hover{transform:none!important}}
 

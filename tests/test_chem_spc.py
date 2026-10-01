@@ -311,6 +311,15 @@ check(res["issue_counts"].get("sheet_alloy") == 1 and res["records"][0]["_spec"]
 res = c.validate_rows(rows({"heat_no": "NBS96", "alloy": "NBS", "_sheet": "Brass (5rs.)", "total": None}), None, _sp)
 check(not res["issue_counts"].get("sheet_alloy") and res["records"][0]["_spec"] == "Brass (5rs.)", "no warning when sheet and Alloy agree")
 
+# ---------------------------------------------------------------- date column found by content when no header says "Date"; last-N trend fallback
+import datetime as _d2
+_hdr = ("Cast on", "Heat No", "Alloy", "Name", "Cu%", "Zn%")
+_body = [(_d2.datetime(2026, 4, 2 + i), f"NBS{7000 + i}", "05", "ab", 62.0, 18.0) for i in range(5)]
+_rws, _ = _cs._rows_from_table("S", [_hdr] + _body)
+check(all(r.get("cast_date") for r in _rws) and len(_rws) == 5, "a column full of dates is used as the cast date even when its header does not say 'Date'")
+_rws2, _ = _cs._rows_from_table("S", [("Heat No", "Alloy", "Name", "Cu%", "Zn%")] + [(f"NBS{7000 + i}", "05", "ab", 62.0, 18.0) for i in range(5)])
+check(not any(r.get("cast_date") for r in _rws2), "no false date column when the file has none (numbers / names are never taken for dates)")
+
 if ERR:
     print("CHEM SPC FAIL"); [print(" -", e) for e in ERR]; sys.exit(1)
 print("CHEM SPC PASS — SPC maths, import validation, spec matching, HTTP flow, heat join, backup round-trip.")

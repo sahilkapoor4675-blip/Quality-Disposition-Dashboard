@@ -3908,10 +3908,19 @@ def compute_chem_spc(qs):
     # mixed selectors intentionally remain informational rather than inventing
     # a misleading comparison.
     prev_period = chem_spc.previous_period_filter(group, period)
+    prev_sel, trend_mode = None, None
     if prev_period:
         prev_sel = chem_spc.filter_by_period(group, prev_period)
         if last_n:
             prev_sel = sorted(prev_sel, key=chem_spc.order_key)[-last_n:]
+        trend_mode = "period"
+    elif last_n and not any(period.get(k) and str(period[k]).strip().lower() != "all" for k in chem_spc.PERIOD_KEYS):
+        # No Month/Week/Quarter/FY chosen but a Heat Qty (last N) is: compare the last N heats with the N heats just before them.
+        # Works even when the file carried no dates (heat-number order is all it needs).
+        ordered = sorted(group, key=chem_spc.order_key)
+        prev_sel = ordered[-2 * last_n:-last_n] if len(ordered) > last_n else []
+        trend_mode = "last_n"
+    if prev_sel is not None and trend_mode:
         prev_overview = []
         main_params = [o["param"] for o in overview if o.get("main")]
         for p in main_params:
@@ -3926,14 +3935,16 @@ def compute_chem_spc(qs):
             if o.get("cpk") is not None and pv is not None:
                 delta = o["cpk"] - pv
                 o["cpk_change"] = delta
+                o["cpk_change_pct"] = (delta / abs(pv) * 100.0) if abs(pv) > 1e-12 else None
                 o["cpk_change_type"] = "up" if delta > 1e-12 else "down" if delta < -1e-12 else "equal"
             else:
-                o["cpk_change"] = None
+                o["cpk_change"] = None; o["cpk_change_pct"] = None
                 o["cpk_change_type"] = "info"
-        view["period_comparison"] = {"current": period, "previous": prev_period}
+        view["period_comparison"] = {"mode": trend_mode, "current": period, "previous": prev_period, "last_n": last_n if trend_mode == "last_n" else 0,
+                                     "prev_heats": len(prev_sel)}
     else:
         for o in overview:
-            o["prev_cpk"] = None; o["cpk_change"] = None; o["cpk_change_type"] = "info"
+            o["prev_cpk"] = None; o["cpk_change"] = None; o["cpk_change_pct"] = None; o["cpk_change_type"] = "info"
         view["period_comparison"] = None
     return view
 
