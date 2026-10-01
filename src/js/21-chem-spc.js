@@ -544,7 +544,7 @@ function chemBindNearestHover(svg, rect, series, field, tipForIndex, heatForInde
 // Fixed-size box so labels stay readable; width follows the container like the other charts.
 function chemBox(el, h){
   const W = chartUnits(el), m = {l: 64, r: 122, t: 16, b: 46};
-  if(el.closest && el.closest('.chem-multi')) h = Math.round(h * 1.3);   // Parameter = All: each element chart is drawn bigger
+  if(el.closest && el.closest('.chem-multi') && !el.closest('.analytics-presentation-panel')) h = Math.round(h * 1.3);   // Parameter = All: each element chart is drawn bigger
   return {W, H: h, m, pw: W - m.l - m.r, ph: h - m.t - m.b};
 }
 function chemDomain(vals, d, extra){
@@ -663,7 +663,8 @@ function drawChemHist(el, d){
   const h = d.histogram;
   if(!d.n || !h || !h.bins.length) return chemEmptyChart(el, 'No data to build a histogram.');
   const redraw = () => {
-    const B = chemBox(el, 300), {W, H, m, pw, ph} = B, c = d.capability;
+    const B = chemBox(el, 300); B.m.r = 28; B.pw = B.W - B.m.l - B.m.r;   // the histogram has no limit labels in the right margin, so use that space for the plot
+    const {W, H, m, pw, ph} = B, c = d.capability;
     const maxN = Math.max(...h.bins.map(b => b.n), 1) * 1.12;
     // The server range only knows the Standard limits: widen it so the Aim limits are drawn too (unless they are far off the data)
     const dLo = h.bins[0].x0, dHi = h.bins[h.bins.length - 1].x1, ref = (dHi - dLo) || h.width || 0.01;

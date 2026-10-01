@@ -187,3 +187,17 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3
 .chem-multi .chem-pblock{margin:0;padding:14px 16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .chem-multi .chem-pblock-t{font-size:19px;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .chem-multi .chem-pchart{padding:0}
+
+/* ---- Card tiles (Cp / Pp / Std. Dev.): same font + size as the dashboard KPI card tiles (Space Grotesk, 14.5px) ---- */
+.kpi-card.chem-el-kpi .chem-el-tiles{gap:6px 10px!important;margin-top:8px!important;padding-top:8px!important}
+.kpi-card.chem-el-kpi .chem-el-tiles .kpi-target-item{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:2px 8px;padding:5px 9px;border-radius:6px;font-family:'Space Grotesk',sans-serif;line-height:1.2}
+.kpi-card.chem-el-kpi .chem-el-tiles .kpi-target-item span{font-family:'Space Grotesk',sans-serif;font-size:14.5px;font-weight:600;letter-spacing:0;text-transform:none;white-space:nowrap}
+.kpi-card.chem-el-kpi .chem-el-tiles .kpi-target-item b{font-family:'Space Grotesk',sans-serif;font-size:14.5px;font-weight:700;letter-spacing:-.15px;margin:0;white-space:nowrap}
+
+/* ---- Presentation mode, Parameter = All: each element chart gets the full stage; scroll down for the next element (nothing is cut off) ---- */
+.analytics-presentation-panel>.chart-scroll.chem-multi{display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;padding:8px 14px}
+.analytics-presentation-panel .chem-multi .chem-pblock{flex:0 0 100%;min-height:0;display:flex;flex-direction:column;padding:6px 10px 8px;border:0;border-radius:0;background:transparent}
+.analytics-presentation-panel .chem-multi .chem-pblock-t{flex:0 0 auto;margin:0 0 4px;padding-bottom:6px}
+.analytics-presentation-panel .chem-multi .chem-pchart{flex:1 1 0;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
+.analytics-presentation-panel .chem-multi .chem-pchart>.legend{flex:0 0 auto;margin:0 0 4px;padding:2px 8px 6px}
+.analytics-presentation-panel .chem-multi .chem-pchart>.chart-svg{flex:1 1 0;min-height:0;width:100%;height:100%;max-width:100%}
