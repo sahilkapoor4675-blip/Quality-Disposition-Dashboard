@@ -567,6 +567,18 @@ function chemDispLimits(d){
   o.aim_lsl = fillLo(d.aim_lsl, d.aim_usl);
   return o;
 }
+// Why a value counts as out of spec on the charts: outside the Standard limits, or outside the Aim (operating) band while Aim is shown. '' = in spec.
+function chemOutWhy(v, d, serverOos){
+  if(v == null || !isFinite(v)) return '';
+  const e = 1e-9;
+  if(d.lsl != null && v < d.lsl - e) return 'below Std LSL';
+  if(d.usl != null && v > d.usl + e) return 'above Std USL';
+  if(chemSel.ins_aim){
+    if(d.aim_lsl != null && v < d.aim_lsl - e) return 'below Aim LSL';
+    if(d.aim_usl != null && v > d.aim_usl + e) return 'above Aim USL';
+  }
+  return serverOos ? 'outside Std limits' : '';
+}
 // Centre line = middle of the Aim band (never the data mean / moving-range mean). No Aim band -> the data mean as a fallback.
 function chemMeanLine(d, fallback){
   if(d.aim_lsl != null && d.aim_usl != null) return (Number(d.aim_lsl) + Number(d.aim_usl)) / 2;
@@ -610,12 +622,12 @@ function drawChemI(el, d){
     if(dom.off.aim_usl) g += `<text x="${m.l + 6}" y="${m.t + 26}" font-size="11" font-weight="700" fill="#0D9488">▲ Aim USL ${chemNum(d.aim_usl)} is far above this scale</text>`;
     g += `<polyline fill="none" stroke="#118DFF" stroke-opacity=".55" stroke-width="1.2" points="${s.map((p, i) => `${X(i).toFixed(1)},${Y(p.value).toFixed(1)}`).join(' ')}"/>`;
     const r = n > 250 ? 2.4 : n > 120 ? 3 : 3.8;
-    const markerIdx = chemMarkerIndexes(s, p => !!p.oos);
+    const markerIdx = chemMarkerIndexes(s, p => !!chemOutWhy(p.value, d, p.oos));
     markerIdx.forEach(i => {
-      const p = s[i], cls = p.oos ? '#DC2626' : '#118DFF';
-      const tip = `${p.heat_no}${p.cast_date ? ' · ' + p.cast_date : ''} — ${chemNum(p.value)}` + (p.oos ? ' · OUT OF SPEC' : '') +
+      const p = s[i], why = chemOutWhy(p.value, d, p.oos), cls = why ? '#DC2626' : '#118DFF';
+      const tip = `${p.heat_no}${p.cast_date ? ' · ' + p.cast_date : ''} — ${chemNum(p.value)}` + (why ? ` · OUT OF SPEC (${why})` : '') +
         (p.disp ? ` · ${p.disp.coils} coils, reject ${p.disp.reject_pct}%${p.disp.top_defects[0] ? ', top defect ' + p.disp.top_defects[0].defect : ''}` : ' · no disposition data');
-      g += `<circle class="chem-pt" data-heat="${escQcr(p.heat_no)}" data-tip="${escQcr(tip)}" cx="${X(i).toFixed(1)}" cy="${Y(p.value).toFixed(1)}" r="${p.oos ? r + 1.8 : r}" fill="${cls}" ${p.oos ? 'stroke="#7f1d1d" stroke-width="1.6"' : 'stroke="var(--card)" stroke-width=".6"'}/>`;
+      g += `<circle class="chem-pt" data-heat="${escQcr(p.heat_no)}" data-tip="${escQcr(tip)}" cx="${X(i).toFixed(1)}" cy="${Y(p.value).toFixed(1)}" r="${why ? r + 1.8 : r}" fill="${cls}" ${why ? 'stroke="#7f1d1d" stroke-width="1.6"' : 'stroke="var(--card)" stroke-width=".6"'}/>`;
     });
     const nt = Math.min(n, Math.max(2, Math.floor(pw / 120)));
     for(let k = 0; k < nt; k++){
@@ -627,7 +639,8 @@ function drawChemI(el, d){
     el.innerHTML = `${chemLegend()}<svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Individuals control chart">${g}<rect class="chem-hover-layer" x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="transparent" style="pointer-events:all;cursor:crosshair"/></svg>`;
     const svg = el.querySelector('svg'), hover = svg?.querySelector('.chem-hover-layer');
     chemBindNearestHover(svg, hover, s, el.dataset.chartField, p => {
-      const tip = `${p.heat_no}${p.cast_date ? ' · ' + p.cast_date : ''} — ${chemNum(p.value)}` + (p.oos ? ' · OUT OF SPEC' : '') +
+      const why = chemOutWhy(p.value, d, p.oos);
+      const tip = `${p.heat_no}${p.cast_date ? ' · ' + p.cast_date : ''} — ${chemNum(p.value)}` + (why ? ` · OUT OF SPEC (${why})` : '') +
         (p.disp ? ` · ${p.disp.coils} coils, reject ${p.disp.reject_pct}%${p.disp.top_defects[0] ? ', top defect ' + p.disp.top_defects[0].defect : ''}` : ' · no disposition data');
       return tip;
     }, p => p.heat_no);
@@ -635,7 +648,7 @@ function drawChemI(el, d){
   redraw(); chartRemember(el, redraw);
 }
 function chemLegend(){
-  return `<div class="legend chem-legend"><span><i class="chem-dot" style="background:#118DFF"></i>Heat (in spec)</span><span><i class="chem-dot" style="background:#DC2626;box-shadow:0 0 0 2px #7f1d1d"></i>Out of spec</span>${chemSel.ins_cl ? '<span><i class="chem-ln" style="border-color:#16A34A"></i>Mean (centre line)</span>' : ''}<span><i class="chem-ln chem-dash" style="border-color:#DC2626"></i>Standard LSL / USL</span>${chemSel.ins_aim ? '<span><i class="chem-ln" style="border-color:#0D9488"></i>Aim LSL / USL (operating bounds)</span>' : ''}</div>`;
+  return `<div class="legend chem-legend"><span><i class="chem-dot" style="background:#118DFF"></i>Heat (in spec)</span><span><i class="chem-dot" style="background:#DC2626;box-shadow:0 0 0 2px #7f1d1d"></i>Out of spec${chemSel.ins_aim ? ' (outside Aim / Std limits)' : ''}</span>${chemSel.ins_cl ? '<span><i class="chem-ln" style="border-color:#16A34A"></i>Mean (centre line)</span>' : ''}<span><i class="chem-ln chem-dash" style="border-color:#DC2626"></i>Standard LSL / USL</span>${chemSel.ins_aim ? '<span><i class="chem-ln" style="border-color:#0D9488"></i>Aim LSL / USL (operating bounds)</span>' : ''}</div>`;
 }
 
 // ---------------------------------------------------------------- MR chart
@@ -688,7 +701,7 @@ function drawChemHist(el, d){
     let g = '';
     chemTicks(0, maxN, 4).forEach(v => { g += `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--chart-grid)"/><text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="var(--chart-muted)">${Math.round(v)}</text>`; });
     h.bins.forEach(b => {
-      const out = (d.lsl != null && b.x1 <= d.lsl) || (d.usl != null && b.x0 >= d.usl);
+      const out = (d.lsl != null && b.x1 <= d.lsl) || (d.usl != null && b.x0 >= d.usl) || (chemSel.ins_aim && ((d.aim_lsl != null && b.x1 <= d.aim_lsl) || (d.aim_usl != null && b.x0 >= d.aim_usl)));
       const x0 = X(b.x0), w = Math.max(1, X(b.x1) - X(b.x0) - 1);
       const labelY = Math.max(m.t + 11, Y(b.n) - 5);
       g += `<rect class="chart-bar chem-hist-bar" style="--i:${Math.min(h.bins.indexOf(b),10)}" data-tip="${escQcr(`${chemNum(b.x0)} – ${chemNum(b.x1)}: ${b.n} heat${b.n === 1 ? '' : 's'}${out ? ' (out of spec)' : ''}`)}" x="${x0.toFixed(1)}" y="${Y(b.n).toFixed(1)}" width="${w.toFixed(1)}" height="${(m.t + ph - Y(b.n)).toFixed(1)}" fill="${out ? '#DC2626' : '#118DFF'}" fill-opacity=".78"/>`;
@@ -1032,7 +1045,14 @@ async function openChemHeat(heat){
     m.querySelector('#chemDrillScope').textContent = s ? `${s.qty_mt} MT · reject ${s.reject_mt} MT (${s.reject_pct}%) · ${s.defect_coils} coils with a defect (${s.defect_pct}%)` : '';
     let html = '';
     if(!d.found) html += `<div class="chem-note-strip">No chemistry was imported for this heat.</div>`;
-    else html += `<div class="table-scroll"><table class="drill-table"><thead><tr><th>Parameter</th><th>Value</th><th>LSL</th><th>USL</th><th>Status</th></tr></thead><tbody>${d.params.map(p => `<tr><td><b>${escQcr(p.label)}</b></td><td>${chemNum(p.value)}</td><td>${p.lsl == null ? '—' : chemNum(p.lsl)}</td><td>${p.usl == null ? '—' : chemNum(p.usl)}</td><td class="${p.side ? 'chem-bad' : (p.lsl != null || p.usl != null) ? 'chem-good' : ''}">${p.side ? (p.side === 'below' ? 'BELOW LSL' : 'ABOVE USL') : (p.lsl != null || p.usl != null) ? 'OK' : ''}</td></tr>`).join('')}</tbody></table></div>`;
+    else html += `<div class="table-scroll"><table class="drill-table chem-drill-params"><thead><tr><th>Parameter</th><th>Value</th><th>Std LSL</th><th>Std USL</th><th>Aim LSL</th><th>Aim USL</th><th>Status</th></tr></thead><tbody>${d.params.map(p => {
+      // upper-limit-only elements (impurities): the lower bound is 0, same as on the charts
+      const fill = (lo, hi) => lo == null && hi != null && hi > 0 ? 0 : lo;
+      const lsl = fill(p.lsl, p.usl), alsl = fill(p.aim_lsl, p.aim_usl), cell = v => v == null ? '—' : chemNum(v);
+      const hasLim = p.lsl != null || p.usl != null || p.aim_lsl != null || p.aim_usl != null;
+      const status = p.side ? (p.side === 'below' ? 'OUT OF SPEC · BELOW LSL' : 'OUT OF SPEC · ABOVE USL') : p.aim_side ? (p.aim_side === 'below' ? 'OUT OF SPEC · BELOW AIM LSL' : 'OUT OF SPEC · ABOVE AIM USL') : hasLim ? 'OK' : '';
+      const bad = !!(p.side || p.aim_side);
+      return `<tr class="${bad ? 'chem-row-bad' : ''}"><td><b>${escQcr(p.label)}</b></td><td>${chemNum(p.value)}</td><td>${cell(lsl)}</td><td>${cell(p.usl)}</td><td>${cell(alsl)}</td><td>${cell(p.aim_usl)}</td><td class="${bad ? 'chem-bad' : hasLim ? 'chem-good' : ''}">${status}</td></tr>`; }).join('')}</tbody></table></div>`;
     if(s) html += `<h4 class="chem-h4">Disposition of this heat's coils</h4><div class="table-scroll"><table class="drill-table"><thead><tr><th>Batch no</th><th>Insp. date</th><th>Work center</th><th>Grade</th><th>MT</th><th>Main defect</th><th>Intensity</th><th>Decision</th></tr></thead><tbody>${d.coils.map(r => `<tr><td>${escQcr(r.batch_no)}</td><td>${escQcr(r.insp_lot_date)}</td><td>${escQcr(r.work_center)}</td><td>${escQcr(r.grade)}</td><td>${Number(r.output_weight || 0).toFixed(3)}</td><td>${escQcr(r.main_defect || '—')}</td><td>${escQcr(r.defect_intensity || '—')}</td><td class="${String(r.quality_decision).toUpperCase() === 'REJECT' ? 'chem-bad' : ''}">${escQcr(r.quality_decision)}</td></tr>`).join('')}</tbody></table></div>`;
     else html += `<div class="chem-muted" style="margin-top:12px">No disposition records exist for this heat yet.</div>`;
     body.innerHTML = html;
