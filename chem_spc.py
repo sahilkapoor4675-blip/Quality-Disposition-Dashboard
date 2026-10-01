@@ -689,16 +689,38 @@ def validate_spec_payload(alloy, description, limits):
     return clean, None
 
 
+def sheet_alloy_conflict(spec, alloy):
+    """True when a heat's Alloy column and the alloy code of the spec its sheet name points to are both
+    filled in and different (so the sheet name must not decide the spec)."""
+    sa, an = norm_key((spec or {}).get("alloy")), norm_key(alloy)
+    return bool(sa and an and sa != an)
+
+
+def sheet_named_spec(specs, sheet):
+    """The spec whose description equals the sheet name exactly (None when there is none)."""
+    sn = norm_key(sheet)
+    if not sn:
+        return None
+    return next((s for s in specs or [] if norm_key(s["description"]) == sn), None)
+
+
 def resolve_spec(specs, alloy, sheet="", denom=""):
     """Pick the spec that applies to a heat. specs: [{alloy, description, limits}, ...]"""
     if not specs:
         return None
     sn = norm_key(sheet)
+    an = norm_key(alloy)
     if sn:
         for s in specs:
             if norm_key(s["description"]) == sn:
-                return s
-    an = norm_key(alloy)
+                # A sheet named exactly like a grade only decides when it does not contradict the heat's own
+                # Alloy column. If both are present and differ, the sheet name is not trusted (a wrongly named
+                # sheet would otherwise put the heat on the wrong limits and give a wrong Cpk): the Alloy
+                # column decides instead, and when it cannot, the heat stays unassigned rather than guessed.
+                if not sheet_alloy_conflict(s, alloy):
+                    return s
+                sn = ""
+                break
     cands = [s for s in specs if an and norm_key(s.get("alloy")) == an]
     if len(cands) == 1:
         return cands[0]
@@ -950,6 +972,10 @@ def validate_rows(raw_rows, existing=None, specs=None, max_issues=400):
             issue("warn", "analyst_typo", f"Name '{rec['analyst']}' ({analysts[rec['analyst']]}×) looks like a typo of '{typo_map[rec['analyst']]}'", r, heat)
         spec = resolve_spec(specs, rec.get("alloy"), rec.get("sheet"), rec.get("denomination")) if specs else None
         rec["_spec"] = spec["description"] if spec else ""
+        named = sheet_named_spec(specs, rec.get("sheet")) if specs else None
+        if named and sheet_alloy_conflict(named, rec.get("alloy")):
+            issue("warn", "sheet_alloy", f"Sheet '{rec['sheet']}' is named like grade '{named['description']}' (alloy {named.get('alloy')}) but this heat's Alloy column says '{rec.get('alloy')}'; "
+                  + (f"the sheet name was ignored and the Alloy column chose '{spec['description']}'" if spec else "the sheet name was ignored and no spec could be chosen from the Alloy column, so the heat has no limits"), r, heat)
         if specs and not spec:
             unresolved[rec["sheet"] or rec.get("alloy") or "(unknown)"] += 1
         elif spec:

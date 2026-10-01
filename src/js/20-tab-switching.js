@@ -102,6 +102,7 @@ window.addEventListener('popstate', (e)=>{
   const restored = e.state || readUrlState();
   const filters = restored.filters || {};
   FILTER_DEFS.forEach(f=>{ currentFilters[f.key] = filters[f.key] || "All"; });
+  if(restored.chem && typeof chemApplyUrl==='function') chemApplyUrl(restored.chem);   // Chemistry SPC selection of that history entry
   syncFilterUiFromState();
   refreshCascadeFilters();
   activateTab(restored.tab || 'dashboard', true);

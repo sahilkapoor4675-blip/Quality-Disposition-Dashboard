@@ -328,6 +328,27 @@
         </div>
         <button type="button" class="export-dialog-close" id="exportDialogCloseBtn" aria-label="Close export dialog" title="Close"><svg class="ic" aria-hidden="true"><use href="#ic-x"/></svg></button>
       </div>
+      <div class="export-dialog-group hidden" id="exportChemGroup">
+        <div class="export-dialog-group-title">Chemistry SPC &mdash; current Chemistry selection</div>
+        <div class="export-dialog-options export-dialog-options-chem" role="group" aria-label="Chemistry exports">
+          <button type="button" class="export-dialog-option" data-chem-export="cpk">
+            <span class="export-dialog-option-icon eo-csv" aria-hidden="true"><svg class="ic"><use href="#ic-file-sheet"/></svg></span>
+            <span class="export-dialog-option-copy"><strong>Cpk table (CSV)</strong><small>Cp / Cpk / Pp / Ppk and Std. Dev. of every parameter.</small></span>
+            <span class="export-dialog-option-arrow" aria-hidden="true">&darr;</span>
+          </button>
+          <button type="button" class="export-dialog-option" data-chem-export="heats">
+            <span class="export-dialog-option-icon eo-csv" aria-hidden="true"><svg class="ic"><use href="#ic-database"/></svg></span>
+            <span class="export-dialog-option-copy"><strong>Heat data (CSV)</strong><small>One row per heat for the charted parameter.</small></span>
+            <span class="export-dialog-option-arrow" aria-hidden="true">&darr;</span>
+          </button>
+          <button type="button" class="export-dialog-option" data-chem-export="oos">
+            <span class="export-dialog-option-icon eo-csv" aria-hidden="true"><svg class="ic"><use href="#ic-file-text"/></svg></span>
+            <span class="export-dialog-option-copy"><strong>Out-of-spec heats (CSV)</strong><small>Heats outside their limits, with coils and defects.</small></span>
+            <span class="export-dialog-option-arrow" aria-hidden="true">&darr;</span>
+          </button>
+        </div>
+      </div>
+      <div class="export-dialog-group-title hidden" id="exportDispTitle">Disposition reports &mdash; dashboard filters</div>
       <div class="export-dialog-options" id="exportDialogOptions" role="group" aria-label="Export format">
         <button type="button" class="export-dialog-option" data-fmt="excel">
           <span class="export-dialog-option-icon eo-xl" aria-hidden="true"><svg class="ic"><use href="#ic-file-sheet"/></svg></span>
@@ -610,7 +631,7 @@
 
   <div class="tab-panel hidden" id="tab-chem">
     <div id="chemControls"></div>
-    <div class="filter-summary-bar chem-filter-summary" id="chemFilterSummaryBar"><span class="summary-label"><svg class="ic" aria-hidden="true"><use href="#ic-selection"/></svg>Selection:</span><span id="chemFilterSummaryText">All Chemistry Data</span><span class="summary-sep">•</span><span id="chemFilterRecordCount">-- heats</span></div>
+    <div class="filter-summary-bar chem-filter-summary" id="chemFilterSummaryBar"><span class="summary-label"><svg class="ic" aria-hidden="true"><use href="#ic-selection"/></svg>Selection:</span><span id="chemFilterSummaryText">All Chemistry Data</span><span class="summary-sep">•</span><span id="chemFilterRecordCount">-- heats</span><div class="summary-actions" style="position:relative"><span class="saved-view-wrap"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg><select id="chemSavedViewSelect" class="saved-view-select" aria-label="Saved Chemistry views"><option value="">Saved Views</option></select></span><button id="chemSaveViewBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-bookmark-plus"/></svg>Save Preset</button><button id="chemClearViewsBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-list-edit"/></svg>Manage Presets</button><div class="view-popover hidden" id="chemViewPopover" role="dialog" aria-label="Chemistry filter presets"></div></div></div>
     <div class="period-banner" id="chemPeriodBanner"></div>
     <div class="chem-main-panel" id="chemMainBox"></div>
     <div id="chemNotes"></div>

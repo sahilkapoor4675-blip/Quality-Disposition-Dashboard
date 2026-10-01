@@ -12,6 +12,7 @@ async function init(){
   // rather than being built as "All" and then corrected a moment later.
   const restored = readUrlState();
   Object.assign(currentFilters, restored.filters);
+  if(restored.chem && typeof chemApplyUrl==='function') chemApplyUrl(restored.chem);   // a shared Chemistry link: its selection wins over the remembered one
   await loadFilters();
   syncFilterUiFromState();
   // A shared/bookmarked link can encode a combination that no longer overlaps

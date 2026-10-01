@@ -81,7 +81,7 @@
   .compare-panes iframe{min-height:0;}
 }
 @media(max-width:550px){
-  .compare-modal,#compareModeBtn{display:none!important;} /* phones: not enough height left for two stacked dashboards either */
+  .compare-modal,#compareModeBtn,#chemCompareBtn{display:none!important;} /* phones: not enough height left for two stacked dashboards either */
 }
 
 /* ================================================================

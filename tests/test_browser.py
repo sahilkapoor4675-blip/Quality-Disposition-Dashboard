@@ -327,6 +327,74 @@ def run():
             page.go_forward(); page.wait_for_timeout(1500)
             assert page.locator('#tab-chem .chem-el-kpi').count() >= 1, 'browser Forward did not restore Chemistry SPC'
 
+            # ---- Chemistry SPC: shareable link, Saved Views, Compare Periods, Export dialog ----
+            page.click('#chemResetAll'); page.wait_for_timeout(1000)
+            cpick('spec', 'Test Brass'); cpick('quarter', 'Q4'); cpick('month', 'Mar-2026'); cpick('param', 'ni')
+            share_url = page.url
+            for part in ('tab=chem', 'chem_spec=Test+Brass', 'chem_param=ni', 'chem_quarter=Q4', 'chem_month=Mar-2026'):
+                assert part in share_url, f'Chemistry selection is not in the address bar ({part}): {share_url}'
+            # the link, opened by someone else (fresh browser profile = no remembered selection), restores the same selection
+            ctx2 = browser.new_context(viewport={"width": 1440, "height": 900})
+            ctx2.route("**/fonts.g*/**", lambda route: route.abort())
+            p2 = ctx2.new_page(); watch(p2, "shared-link")
+            p2.goto(share_url, wait_until="load")
+            p2.click("#introDashboardBtn"); p2.wait_for_timeout(2500)
+            def p2trig(key):
+                return p2.inner_text(f'#chemTopBar [data-chem-key="{key}"] .filter-trigger span')
+            assert p2.evaluate("document.documentElement.classList.contains('chem-mode')"), 'a shared Chemistry link did not open the Chemistry tab'
+            assert (p2trig('spec'), p2trig('quarter'), p2trig('month'), p2trig('param')) == (p2.inner_text('#chemTopBar [data-chem-key="spec"] .filter-trigger span'), 'Q4', 'Mar-2026', 'Ni%') and 'Test Brass' in p2trig('spec'), \
+                'a shared Chemistry link did not restore grade / period / parameter'
+            ctx2.close()
+            # Saved Views on this tab (own list, separate from the dashboard's)
+            assert page.locator('#chemSaveViewBtn').is_visible(), 'Chemistry tab has no Save Preset button'
+            page.click('#chemSaveViewBtn'); page.fill('#chemViewPopSaveName', 'Brass Mar Ni'); page.click('#chemViewPopSaveBtn'); page.wait_for_timeout(300)
+            assert 'Brass Mar Ni' in page.eval_on_selector_all('#chemSavedViewSelect option', "e => e.map(x => x.value)"), 'Chemistry preset was not saved'
+            assert 'Brass Mar Ni' not in page.evaluate("localStorage.getItem('qdash_saved_views') || ''"), 'Chemistry preset leaked into the dashboard presets'
+            page.click('#chemResetAll'); page.wait_for_timeout(1200)
+            assert ctrig('month') == 'All', 'Reset All did not clear before loading the preset'
+            page.select_option('#chemSavedViewSelect', 'Brass Mar Ni'); page.wait_for_timeout(1500)
+            assert (ctrig('quarter'), ctrig('month'), ctrig('param')) == ('Q4', 'Mar-2026', 'Ni%'), 'loading the Chemistry preset did not restore the selection'
+            assert 'chem_month=Mar-2026' in page.url, 'loading a Chemistry preset did not update the shareable address'
+            page.click('#chemClearViewsBtn'); page.wait_for_timeout(200)
+            page.click('#chemViewPopover .view-pop-del'); page.wait_for_timeout(200)
+            assert 'Brass Mar Ni' not in page.eval_on_selector_all('#chemSavedViewSelect option', "e => e.map(x => x.value)"), 'deleting a Chemistry preset did not remove it'
+            page.click('#chemViewPopCloseBtn')
+            # Compare Periods on this tab: two live copies of the Chemistry tab at two different periods
+            page.click('#chemResetAll'); page.wait_for_timeout(1000); cpick('spec', 'Test Brass')
+            assert page.locator('#chemCompareBtn').is_visible() and not page.locator('#compareModeBtn').is_visible(), 'Chemistry tab must show its own Compare Periods button'
+            page.click('#chemCompareBtn'); page.wait_for_timeout(400)
+            dims = page.eval_on_selector_all('#compareDimSelect option', "e => e.map(x => x.value)")
+            assert dims == ['month', 'week', 'quarter', 'fy', 'spec', 'param'], f'Chemistry compare offers the wrong filters: {dims}'
+            page.select_option('#compareDimSelect', 'month'); page.wait_for_timeout(200)
+            va, vb = page.input_value('#compareValueA'), page.input_value('#compareValueB')
+            assert va and vb and va != vb, f'Chemistry compare did not offer two different months ({va!r}, {vb!r})'
+            page.click('#compareGoBtn'); page.wait_for_timeout(3500)
+            for fid, want in (('compareFrameA', va), ('compareFrameB', vb)):
+                fr = page.frame_locator('#' + fid)
+                got = fr.locator('#chemTopBar [data-chem-key="month"] .filter-trigger span').first.inner_text()
+                assert got == want, f'{fid}: Chemistry compare pane shows month {got!r}, expected {want!r}'
+            assert 'Chemistry' in page.inner_text('#compareViewTitle'), 'Chemistry compare title missing'
+            stored_month = page.evaluate("JSON.parse(localStorage.getItem('qdash_chem_sel_v1') || '{}').month || ''")
+            assert stored_month == '', f'a Compare Periods pane overwrote the remembered Chemistry selection (month={stored_month!r})'
+            page.click('#compareCloseBtn'); page.wait_for_timeout(300)
+            # Export dialog: the Chemistry downloads sit in the SAME dialog (only on this tab), next to the disposition reports
+            page.click('#exportMenuBtn'); page.wait_for_timeout(300)
+            assert page.locator('#exportChemGroup').is_visible() and page.locator('#exportChemGroup .export-dialog-option').count() == 3, 'Chemistry downloads missing from the Export dialog on the Chemistry tab'
+            assert page.locator('#exportDialogOptions .export-dialog-option').count() == 4, 'the disposition report options disappeared'
+            with page.expect_download() as dl:
+                page.click('#exportChemGroup [data-chem-export="cpk"]')
+            assert dl.value.suggested_filename.startswith('chemistry_cpk_'), f'unexpected Chemistry export file name: {dl.value.suggested_filename}'
+            page.wait_for_timeout(400)
+            # dashboard tab: Compare Periods + Export dialog are unchanged (no Chemistry group)
+            page.keyboard.press('1'); page.wait_for_timeout(1200)
+            page.click('#exportMenuBtn'); page.wait_for_timeout(300)
+            assert not page.locator('#exportChemGroup').is_visible(), 'Chemistry downloads must not show in the Export dialog on other tabs'
+            page.keyboard.press('Escape'); page.wait_for_timeout(300)
+            page.click('#compareModeBtn'); page.wait_for_timeout(300)
+            assert 'work_center' in page.eval_on_selector_all('#compareDimSelect option', "e => e.map(x => x.value)"), 'dashboard Compare Periods lost its dimensions'
+            page.click('#compareCancelBtn'); page.wait_for_timeout(300)
+            page.keyboard.press('6'); page.wait_for_timeout(1200)
+
             # ---- Admin: login, and every sidebar link must highlight itself ----
             page2 = context.new_page()
             watch(page2, "admin")

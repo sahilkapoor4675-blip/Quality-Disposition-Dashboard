@@ -67,8 +67,10 @@ function initCommandPalette(){
     // Exports (Excel / PDF / PPT / CSV) live only in the header's "⬇ Export" button now
     // Exports open through the dedicated dialog (#exportDialogModal) instead of the Command Palette.
     // Compare mode is desktop-only (its button is hidden on narrow screens), so only offer it when the button is actually shown.
-    if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({cat:'filters',icon:'⊞',label:'Compare Periods (side-by-side)',desc:'Two periods next to each other',run:()=>document.getElementById('compareModeBtn')?.click()});
     const _onChem=(document.querySelector('.tab-btn.active')?.dataset.tab)==='chem';
+    // The Chemistry tab has its own Compare Periods button (the dashboard one is hidden there)
+    const _cmpBtn=document.getElementById(_onChem?'chemCompareBtn':'compareModeBtn');
+    if(_cmpBtn?.offsetParent) cmds.push({cat:'filters',icon:'⊞',label:'Compare Periods (side-by-side)',desc:_onChem?'Two Chemistry periods / grades next to each other':'Two periods next to each other',run:()=>_cmpBtn.click()});
     cmds.push({cat:'filters',icon:'↺',label:'Reset All Filters',desc:_onChem?'Clear every Chemistry filter':'Clear every dashboard filter',run:()=>document.getElementById(_onChem?'chemResetAll':'resetAllBtn')?.click()});
     cmds.push({cat:'nav',icon:'🔎',label:'Focus Search',hint:'/',desc:'Search any defect, grade or work center',run:()=>document.getElementById('globalSearchInput')?.focus()});
     const isDark=currentTheme()==='dark';

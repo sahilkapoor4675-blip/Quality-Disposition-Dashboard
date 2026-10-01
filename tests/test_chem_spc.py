@@ -296,6 +296,21 @@ _c = _cs.period_options_cascade(_recs, {"month": "Jan-2026", "quarter": "Q4", "f
 check(_c["months"] == ["Feb-2026", "Jan-2026"] and _c["quarters"] == ["Q4"] and _c["fys"] == ["FY 2025-26"] and all(w.startswith("Wk of") for w in _c["weeks"]),
       "period dropdown lists cascade: each list follows the OTHER three selections, never its own")
 
+# ---------------------------------------------------------------- a sheet named exactly like a grade must not override a contradicting Alloy column
+_sp = [{"alloy": "NBS", "description": "Brass (5rs.)", "limits": {"cu": [74, 76]}},
+       {"alloy": "CUNI", "description": "Cu-Ni", "limits": {"cu": [86, 88]}},
+       {"alloy": "NBS", "description": "Brass (10rs. & 20rs.)", "limits": {"cu": [74, 76]}}]
+check(c.resolve_spec(_sp, "NBS", "Brass (5rs.)", "") ["description"] == "Brass (5rs.)", "sheet name + matching Alloy -> that grade")
+check(c.resolve_spec(_sp, "", "Brass (5rs.)", "")["description"] == "Brass (5rs.)", "sheet name with a blank Alloy column still decides")
+check(c.resolve_spec(_sp, "CUNI", "Brass (5rs.)", "")["description"] == "Cu-Ni", "sheet named like grade A but Alloy says CUNI -> Alloy wins (not the wrong Brass limits)")
+check(c.resolve_spec(_sp, "ZZZ", "Brass (5rs.)", "") is None, "sheet named like a grade but an Alloy no spec knows -> unassigned, not guessed")
+check(c.resolve_spec(_sp, "nbs", "Brass (10rs. & 20rs.)", "5RS")["description"] == "Brass (10rs. & 20rs.)", "sheet name still beats denomination when the Alloy agrees (case-insensitive)")
+check(c.resolve_spec([{"alloy": "", "description": "G", "limits": {"cu": [1, 2]}}], "ANY", "G", "")["description"] == "G", "a spec without an alloy code cannot contradict, so the sheet name decides")
+res = c.validate_rows(rows({"heat_no": "NBS95", "alloy": "CUNI", "_sheet": "Brass (5rs.)", "cu": 87.0, "total": None}), None, _sp)
+check(res["issue_counts"].get("sheet_alloy") == 1 and res["records"][0]["_spec"] == "Cu-Ni", "import warns about the sheet/Alloy contradiction and uses the Alloy column")
+res = c.validate_rows(rows({"heat_no": "NBS96", "alloy": "NBS", "_sheet": "Brass (5rs.)", "total": None}), None, _sp)
+check(not res["issue_counts"].get("sheet_alloy") and res["records"][0]["_spec"] == "Brass (5rs.)", "no warning when sheet and Alloy agree")
+
 if ERR:
     print("CHEM SPC FAIL"); [print(" -", e) for e in ERR]; sys.exit(1)
 print("CHEM SPC PASS — SPC maths, import validation, spec matching, HTTP flow, heat join, backup round-trip.")

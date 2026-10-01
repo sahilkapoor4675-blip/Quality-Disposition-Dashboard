@@ -1,7 +1,8 @@
 /* 21-chem-spc.js — "Chemistry SPC" tab: one heat = one point, big element cards (symbol + picture, Cp/Cpk/Pp/Ppk and their Std. Dev.),
    Month/Parameter/Grade/Heat-Qty/Week/Quarter/Fin.Year/Heat-No filters (same look and size as the dashboard filters, shown in the TOP filter bar
    while this tab is open, replacing the disposition filters), I-MR control charts and histogram with Standard AND Aim limits + mean,
-   out-of-spec heat list joined to disposition defects/rejects by heat_no.
+   out-of-spec heat list joined to disposition defects/rejects by heat_no. The selection lives in the URL (chem_spec, chem_param, chem_month, ...),
+   so a Chemistry view can be shared as a link; Compare Periods, Saved Views and the header Export dialog work on this tab too.
    Bundled into /app.js in filename order; see README ("Frontend source layout"). All maths is server-side (chem_spc.py). */
 const CHEM_SEL_KEY = 'qdash_chem_sel_v1';
 let chemMeta = null, chemData = null;
@@ -12,6 +13,62 @@ let chemSel = { spec: '', param: 'cu', last_n: 0, month: '', week: '', quarter: 
 try { Object.assign(chemSel, JSON.parse(localStorage.getItem(CHEM_SEL_KEY) || '{}')); } catch (e) {}
 chemSel.ins_icon = chemSel.ins_cl = chemSel.ins_aim = true;   // the Insert box was removed: element pictures, centre line and Aim lines are always drawn
 delete chemSel.date_from; delete chemSel.date_to;   // older saved selections used a from/to date range; it was replaced by Month/Week/Quarter/Fin.Year
+
+// ---------------------------------------------------------------- selection <-> URL / saved views / compare
+// The selection is remembered in the browser (localStorage) AND written to the address bar while this tab is open, so the link can be shared
+// (and Compare Periods can open two live copies of this tab). A link that carries chem_* parameters wins over the stored selection.
+const CHEM_URL_KEYS = {spec: 'chem_spec', param: 'chem_param', last_n: 'chem_n', month: 'chem_month', week: 'chem_week', quarter: 'chem_quarter', fy: 'chem_fy'};
+const CHEM_PERIOD_KEYS = ['month', 'week', 'quarter', 'fy'];
+function chemSelSnapshot(){
+  return {spec: chemSel.spec || '', param: chemSel.param || '', last_n: Number(chemSel.last_n) || 0, month: chemSel.month || '', week: chemSel.week || '', quarter: chemSel.quarter || '', fy: chemSel.fy || ''};
+}
+function chemWriteUrl(params, snap){
+  snap = snap || chemSelSnapshot();
+  Object.keys(CHEM_URL_KEYS).forEach(k => { const v = snap[k]; if(v != null && v !== '' && v !== 0) params.set(CHEM_URL_KEYS[k], String(v)); });
+}
+function chemReadUrl(params){
+  if(!Object.values(CHEM_URL_KEYS).some(u => params.has(u))) return null;
+  const o = {};
+  Object.keys(CHEM_URL_KEYS).forEach(k => { o[k] = params.get(CHEM_URL_KEYS[k]) || ''; });
+  o.last_n = Number(o.last_n) || 0;
+  return o;
+}
+// Used for a link / the browser's back-forward buttons. Anything that is not in the link means "All" (a link is a complete selection).
+function chemApplyUrl(o){
+  if(!o) return;
+  if(o.spec) chemSel.spec = o.spec;
+  if(o.param) chemSel.param = o.param;
+  chemSel.last_n = Number(o.last_n) || 0;
+  CHEM_PERIOD_KEYS.forEach(k => { chemSel[k] = o[k] || ''; });
+  chemLastPeriod = '';
+  if(chemMeta) chemSanitiseSel();   // before the first load the loader sanitises it once the grades / periods are known
+}
+// Saved Views (Save Preset / Manage Presets in the Selection bar of this tab).
+function chemApplyView(v){
+  if(!chemMeta || !v) return;
+  const groups = chemMeta.specs.filter(s => s.heats > 0).map(s => s.description).concat(chemMeta.unassigned ? ['__none__'] : []);
+  if(v.spec){
+    if(groups.includes(v.spec)) chemSel.spec = v.spec;
+    else showToast('info', 'Grade not available', 'The grade saved in this preset is no longer in the data, so the current grade was kept.');
+  }
+  if(v.param) chemSel.param = v.param;
+  chemSel.last_n = Number(v.last_n) || 0;
+  CHEM_PERIOD_KEYS.forEach(k => { chemSel[k] = v[k] || ''; });
+  chemLastPeriod = '';
+  chemSanitiseSel(); chemSaveSel(); renderChemControls(); chemRefresh();
+}
+// Compare Periods on this tab: which filters can be compared, and the values each offers (the periods of the grade on screen).
+function chemCompareDims(){
+  return [{key: 'month', label: 'Month'}, {key: 'week', label: 'Week'}, {key: 'quarter', label: 'Quarter'}, {key: 'fy', label: 'Financial Year'}, {key: 'spec', label: 'Grade'}, {key: 'param', label: 'Parameter'}];
+}
+function chemCompareItems(key){
+  if(!chemMeta) return [];
+  const lists = {month: 'months', week: 'weeks', quarter: 'quarters', fy: 'fys'};
+  if(lists[key]) return (chemPeriods()[lists[key]] || []).map(v => ({value: v, label: v}));
+  if(key === 'spec') return chemMeta.specs.filter(x => x.heats > 0).map(x => x.description).concat(chemMeta.unassigned ? ['__none__'] : []).map(g => ({value: g, label: chemGroupLabel(g)}));
+  if(key === 'param') return chemMeta.params.map(p => ({value: p.key, label: p.label}));
+  return [];
+}
 
 function chemNum(v, d){
   if(v == null || !isFinite(v)) return '—';
@@ -30,7 +87,11 @@ function chemFetch(url, signal){
     return data;
   });
 }
-function chemSaveSel(){ try { localStorage.setItem(CHEM_SEL_KEY, JSON.stringify(chemSel)); } catch (e) {} }
+function chemSaveSel(){
+  // A Compare Periods pane is a framed copy of this page: it must not overwrite the selection the main window remembers.
+  try { if(window.self !== window.top) return; } catch (e) { return; }
+  try { localStorage.setItem(CHEM_SEL_KEY, JSON.stringify(chemSel)); } catch (e) {}
+}
 // Errors from a selector change (grade, parameter, dates, last-N) used to vanish into an unhandled promise
 // rejection while the previous charts stayed on screen as if nothing had happened.
 function chemShowError(msg){
@@ -169,6 +230,7 @@ function chemFilterOptions(ctl, term){
   else if(shown && em) em.remove();
 }
 function chemPick(key, value){
+  const sv = document.getElementById('chemSavedViewSelect'); if(sv) sv.value = '';
   if(key === 'spec'){ chemSel.spec = value; chemLastPeriod = ''; chemSanitiseSel(); chemSaveSel(); renderChemControls(); chemRefresh(); return; }
   if(key === 'last_n') chemSel.last_n = Number(value) || 0;
   else { chemSel[key] = value; if(CHEM_PERIOD_FIELDS.some(([k]) => k === key)) chemLastPeriod = key; }
@@ -184,6 +246,7 @@ function chemResetAll(){
   chemSel.month = chemSel.week = chemSel.quarter = chemSel.fy = '';
   chemSel.last_n = 0; chemLastPeriod = ''; chemFindVal = '';
   const inp = document.getElementById('chemFindHeat'); if(inp) inp.value = '';
+  const sv = document.getElementById('chemSavedViewSelect'); if(sv) sv.value = '';
   chemSaveSel(); renderChemControls(); chemRefresh();
 }
 function chemBindBar(bar){
@@ -199,6 +262,7 @@ function chemBindBar(bar){
     }
     const opt = e.target.closest('.filter-option');
     if(opt){ const f = opt.closest('.filter-field'); f.querySelector('.filter-control').classList.remove('open'); chemPick(f.dataset.chemKey, opt.dataset.value); return; }
+    if(e.target.closest('#chemCompareBtn')){ if(typeof window.qdOpenCompare === 'function') window.qdOpenCompare(); return; }
     if(e.target.closest('#chemResetAll')) chemResetAll();
   });
   bar.addEventListener('input', e => {
@@ -217,7 +281,7 @@ function renderChemControls(){
   const F = (key, icon, label, items, active) => chemFieldHtml(key, icon, label, items, chemCurVal(key), active);
   // same 4-column layout and order as the dashboard filters: Month | Work Center→Parameter | Grade | Quality Decision→Heat Qty  /  Week | Quarter | Fin. Year | Defect Intensity→Heat No.
   chemTopBarEl().innerHTML = `
-    <div class="filter-toolbar"><div class="filter-toolbar-title" title="${escQcr(tip)}">${qdIc('filter')}Chemistry Filters <span class="chem-tb-i">ⓘ</span></div><div class="filter-actions"><span id="chemActiveBadge" class="active-filter-badge">0 Active</span><button id="chemResetAll" class="reset-all" type="button">${qdIc('reset')}Reset All</button></div></div>
+    <div class="filter-toolbar"><div class="filter-toolbar-title" title="${escQcr(tip)}">${qdIc('filter')}Chemistry Filters <span class="chem-tb-i">ⓘ</span></div><div class="filter-actions"><span id="chemActiveBadge" class="active-filter-badge">0 Active</span><button id="chemCompareBtn" class="reset-all" type="button">${qdIc('compare')}Compare Periods</button><button id="chemResetAll" class="reset-all" type="button">${qdIc('reset')}Reset All</button></div></div>
     ${F('month', '📅', 'Month', chemPeriodItems(per.months), chemIsActive('month'))}
     ${F('param', '🔬', 'Parameter', chemMeta.params.map(p => ({value: p.key, label: p.label})), false)}
     ${F('spec', '🧪', 'Grade', groups.map(g => ({value: g, label: chemGroupLabel(g)})), false)}
@@ -322,6 +386,7 @@ async function refreshChemView(signal){
     chemRenderPeriodBanner(d);
     chemRenderFilterSummary(d);
     chemMarkChartsReady();
+    if(typeof writeUrlState === 'function') writeUrlState(false);   // keep the address bar = the selection on screen (shareable link)
   } finally {
     if(seq === chemReqSeq){
       box.classList.remove('chem-loading');
@@ -751,6 +816,18 @@ function renderChemOos(d){
   draw('');
   document.getElementById('chemOosSearch').addEventListener('input', e => draw(e.target.value));
   document.getElementById('chemOosCsv').addEventListener('click', () => chemExportOos(d));
+}
+// Header "Export" dialog -> Chemistry downloads (Cpk table / heat data / out-of-spec heats of the CURRENT Chemistry selection).
+// These are the same three downloads that sit inside the tab; the dialog only gives them one more way in.
+function chemRunExport(kind){
+  const d = chemData, none = t => { showToast('info', 'Nothing to export', t); return false; };
+  if(!d) return none('The Chemistry data is not loaded yet.');
+  if(kind === 'cpk'){ if(!(d.overview || []).length) return none('No capability figures for this selection.'); chemExportCpk(d); }
+  else if(kind === 'heats'){ if(!(d.series || []).length) return none('No heats with this parameter in the selection.'); chemExportHeats(d); }
+  else if(kind === 'oos'){ if(!(d.oos_heats || []).length) return none('No out-of-spec heats in this selection.'); chemExportOos(d); }
+  else return false;
+  showToast('success', 'Chemistry CSV downloaded', 'Built from the current Chemistry selection.');
+  return true;
 }
 // CSV helpers: cells are quoted and formula-looking text is neutralised (Excel formula injection).
 function chemCsvCell(v){ let s = String(v ?? ''); if(/^[=+\-@\t\r]/.test(s) && !(typeof v === 'number' && isFinite(v))) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }

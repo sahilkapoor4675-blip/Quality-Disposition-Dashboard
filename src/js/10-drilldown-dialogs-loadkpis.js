@@ -121,8 +121,13 @@ function wireExportDialog(){
   const btn=document.getElementById('exportMenuBtn');
   const modal=document.getElementById('exportDialogModal');
   const closeBtn=document.getElementById('exportDialogCloseBtn');
-  const options=[...document.querySelectorAll('.export-dialog-option')];
+  const options=[...document.querySelectorAll('.export-dialog-option[data-fmt]')];
   if(!btn||!modal||!closeBtn||!options.length) return;
+  // The Chemistry SPC tab adds its own downloads to this SAME dialog (Cpk table, heat data, out-of-spec heats); the disposition reports stay
+  // below them. They are only shown while the Chemistry tab is open.
+  const chemGroup=document.getElementById('exportChemGroup'), dispTitle=document.getElementById('exportDispTitle');
+  const chemOptions=[...document.querySelectorAll('.export-dialog-option[data-chem-export]')];
+  const onChem=()=>document.querySelector('.tab-btn.active')?.dataset.tab==='chem';
 
   let restoreFocusEl=null;
   const setOpenState=(open)=>{
@@ -141,31 +146,39 @@ function wireExportDialog(){
   };
   const open=()=>{
     restoreFocusEl=document.activeElement;
-    // Reports are built from the disposition data and the DASHBOARD filters. While the Chemistry SPC tab is open those
-    // filters are hidden, so say so (the Chemistry CSV downloads live inside the Chemistry SPC tab itself).
+    // Disposition reports are built from the disposition data and the DASHBOARD filters. While the Chemistry SPC tab is open those
+    // filters are hidden, so say so; the Chemistry downloads (current Chemistry selection) are listed first.
+    const chem=onChem();
     const _desc=document.getElementById('exportDialogDesc');
     if(_desc){
       if(!_desc.dataset.base) _desc.dataset.base=_desc.textContent;
-      _desc.textContent=(document.querySelector('.tab-btn.active')?.dataset.tab==='chem')
-        ? 'These reports cover the disposition data with the dashboard filters (not the Chemistry selection). Chemistry CSV downloads are inside the Chemistry SPC tab.'
+      _desc.textContent=chem
+        ? 'Chemistry downloads use the current Chemistry selection (grade, parameter, period). The disposition reports below cover the disposition data with the dashboard filters.'
         : _desc.dataset.base;
     }
+    if(chemGroup) chemGroup.classList.toggle('hidden',!chem);
+    if(dispTitle) dispTitle.classList.toggle('hidden',!chem);
     setOpenState(true);
-    requestAnimationFrame(()=>options[0]?.focus());
+    requestAnimationFrame(()=>(chem&&chemOptions[0]?chemOptions[0]:options[0])?.focus());
   };
   const runExport=(format)=>{
     close();
     exportDashboard(format);
   };
+  const runChemExport=(kind)=>{
+    close();
+    if(typeof chemRunExport==='function') chemRunExport(kind);
+  };
 
   btn.addEventListener('click',e=>{ e.stopPropagation(); modal.classList.contains('open') ? close({restoreFocus:true}) : open(); });
   closeBtn.addEventListener('click',()=>close({restoreFocus:true}));
   options.forEach(item=>item.addEventListener('click',()=>runExport(item.dataset.fmt)));
+  chemOptions.forEach(item=>item.addEventListener('click',()=>runChemExport(item.dataset.chemExport)));
   modal.addEventListener('click',e=>{ if(e.target===modal) close({restoreFocus:true}); });
   modal.addEventListener('keydown',e=>{
     if(e.key==='Escape'){ e.preventDefault(); close({restoreFocus:true}); return; }
     if(e.key!=='Tab') return;
-    const focusables=[closeBtn,...options];
+    const focusables=[closeBtn,...(onChem()?chemOptions:[]),...options];
     const first=focusables[0], last=focusables[focusables.length-1];
     if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
     else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
@@ -178,42 +191,70 @@ function wireCompareMode(){
   const btn=document.getElementById('compareModeBtn'), modal=document.getElementById('compareModal');
   if(!btn||!modal) return;
   const dimSelect=document.getElementById('compareDimSelect'), valA=document.getElementById('compareValueA'), valB=document.getElementById('compareValueB');
-  dimSelect.innerHTML=FILTER_DEFS.map(f=>`<option value="${f.key}">${f.label.replace(/^\S+\s/,'')}</option>`).join('');
-  dimSelect.value='month';
-  function populateValues(){
-    const key=dimSelect.value;
+  // Compare works on whichever tab is open: the dashboard tabs compare a dashboard filter (Month, Work Center, ...); the Chemistry SPC tab
+  // compares a Chemistry filter (Month, Week, Quarter, Fin. Year, Grade, Parameter). Both ride on the URL-state feature, so each pane is a live copy of the page.
+  const onChem=()=>document.querySelector('.tab-btn.active')?.dataset.tab==='chem' && typeof chemCompareDims==='function';
+  let shownMode=null;
+  function dims(){ return onChem() ? chemCompareDims() : FILTER_DEFS.map(f=>({key:f.key,label:f.label.replace(/^\S+\s/,'')})); }
+  function itemsFor(key){
+    if(onChem()) return chemCompareItems(key);
     const raw=(window._filterOptionsCache&&window._filterOptionsCache[key])||[];
-    const items=raw.map(item=>(item&&typeof item==='object')?item:{value:item,label:item}).filter(x=>x.value!=='All');
+    return raw.map(item=>(item&&typeof item==='object')?item:{value:item,label:item}).filter(x=>x.value!=='All');
+  }
+  function populateValues(){
+    const items=itemsFor(dimSelect.value);
     const optionsHtml=items.map(x=>`<option value="${escQcr(x.value)}">${escQcr(x.label)}</option>`).join('');
     valA.innerHTML=optionsHtml; valB.innerHTML=optionsHtml;
     if(items.length>1) valB.selectedIndex=1; // default to two different values instead of the same one twice
   }
+  function fillDims(){
+    const keep=dimSelect.value, list=dims();
+    dimSelect.innerHTML=list.map(d=>`<option value="${d.key}">${escQcr(d.label)}</option>`).join('');
+    dimSelect.value=list.some(d=>d.key===keep)?keep:'month';
+    populateValues();
+  }
   dimSelect.addEventListener('change',populateValues);
-  populateValues();
-  function openSetup(){ modal.classList.add('open'); document.getElementById('compareView').classList.add('hidden'); document.getElementById('compareSetup').style.display='block'; }
+  fillDims(); shownMode=onChem()?'chem':'dash';
+  // fresh=true: opened from a Compare button (re-read the lists, they depend on the current grade / filters on the Chemistry tab);
+  // fresh=false: "Change" inside the open comparison, which keeps the choices already made.
+  function openSetup(fresh){
+    const mode=onChem()?'chem':'dash';
+    if(fresh===true && (mode==='chem' || mode!==shownMode)){ shownMode=mode; fillDims(); }
+    else if(mode!==shownMode){ shownMode=mode; fillDims(); }
+    modal.classList.add('open'); document.getElementById('compareView').classList.add('hidden'); document.getElementById('compareSetup').style.display='block';
+  }
+  window.qdOpenCompare=()=>openSetup(true);
   function clearComparingToStatus(){ const s=document.getElementById('statusComparingTo'); if(s) s.textContent='None'; }
-  btn.addEventListener('click',openSetup);
+  btn.addEventListener('click',()=>openSetup(true));
   document.getElementById('compareCancelBtn').addEventListener('click',()=>{ modal.classList.remove('open'); clearComparingToStatus(); });
   document.getElementById('compareCloseBtn').addEventListener('click',()=>{ modal.classList.remove('open'); clearComparingToStatus(); });
-  document.getElementById('compareEditBtn').addEventListener('click',openSetup);
+  document.getElementById('compareEditBtn').addEventListener('click',()=>openSetup(false));
   document.getElementById('compareGoBtn').addEventListener('click',()=>{
     const key=dimSelect.value, a=valA.value, b=valB.value;
     if(!a||!b){ showToast('error','Pick both values','Choose a value for both the left and right side.'); return; }
+    const chem=onChem();
     const tab=document.querySelector('.tab-btn.active')?.dataset.tab||'dashboard';
     function buildUrl(val){
       const params=new URLSearchParams();
       if(tab!=='dashboard') params.set('tab',tab);
+      if(chem){
+        // Chemistry tab: carry the current Chemistry selection, with the compared filter set to this pane's value
+        const snap=chemSelSnapshot(); snap[key]=key==='last_n'?(Number(val)||0):val;
+        chemWriteUrl(params,snap);
+        return location.pathname+'?'+params.toString();
+      }
       FILTER_DEFS.forEach(f=>{ if(f.key===key) return; if(currentFilters[f.key]&&currentFilters[f.key]!=='All') params.set(f.key,currentFilters[f.key]); });
       params.set(key,val);
       return location.pathname+'?'+params.toString();
     }
     document.getElementById('compareFrameA').src=buildUrl(a);
     document.getElementById('compareFrameB').src=buildUrl(b);
-    const dimLabel=(FILTER_DEFS.find(f=>f.key===key)||{}).label||key;
-    document.getElementById('compareViewTitle').textContent=`Comparing ${dimLabel.replace(/^\S+\s/,'')}: ${a}  vs  ${b}`;
+    const dimLabel=(dims().find(d=>d.key===key)||{}).label||key;
+    const items=chem?itemsFor(key):[], lab=v=>chem?((items.find(x=>String(x.value)===String(v))||{}).label||v):v;
+    document.getElementById('compareViewTitle').textContent=`Comparing ${chem?'Chemistry ':''}${dimLabel}: ${lab(a)}  vs  ${lab(b)}`;
     document.getElementById('compareSetup').style.display='none';
     document.getElementById('compareView').classList.remove('hidden');
-    const s=document.getElementById('statusComparingTo'); if(s) s.textContent=`${a} vs ${b}`;
+    const s=document.getElementById('statusComparingTo'); if(s) s.textContent=`${lab(a)} vs ${lab(b)}`;
   });
 }
 function wireDrilldown(){
@@ -222,10 +263,15 @@ function wireDrilldown(){
 document.getElementById('drillBreadcrumb')?.addEventListener('click',e=>{const b=e.target.closest('[data-drill-level]');if(b)goToDrillLevel(Number(b.dataset.drillLevel));});
 document.getElementById('drillContent')?.addEventListener('click',e=>{const b=e.target.closest('.heat-detail-btn');if(b){const heat=b.dataset.heat;if(heat)pushDrilldown('heat_detail',`Heat ${heat} — Complete History`,{drill_value:heat},`Heat ${heat}`);return;} const pg=e.target.closest('[data-drill-page]');if(pg&&!pg.disabled)renderDrillPage(Number(pg.dataset.drillPage));});
   document.addEventListener('keydown',e=>{if(e.key==='Escape' && document.getElementById('drillModal')?.classList.contains('open')){e.preventDefault();e.stopImmediatePropagation();closeDrilldown();}});
-  document.getElementById('saveViewBtn')?.addEventListener('click',saveCurrentView);
-  document.getElementById('clearViewsBtn')?.addEventListener('click',manageSavedViews);
-  document.getElementById('savedViewSelect')?.addEventListener('change',e=>applySavedView(e.target.value));
-  renderSavedViews();
+  document.getElementById('saveViewBtn')?.addEventListener('click',()=>saveCurrentView('dash'));
+  document.getElementById('clearViewsBtn')?.addEventListener('click',()=>manageSavedViews('dash'));
+  document.getElementById('savedViewSelect')?.addEventListener('change',e=>applySavedView(e.target.value,'dash'));
+  renderSavedViews('dash');
+  // Chemistry SPC has its own Saved Views strip (own list of presets, stored separately from the dashboard's)
+  document.getElementById('chemSaveViewBtn')?.addEventListener('click',()=>saveCurrentView('chem'));
+  document.getElementById('chemClearViewsBtn')?.addEventListener('click',()=>manageSavedViews('chem'));
+  document.getElementById('chemSavedViewSelect')?.addEventListener('change',e=>applySavedView(e.target.value,'chem'));
+  renderSavedViews('chem');
   wireDrillDialogDragResize();
 }
 // When the selected filters match no coils (e.g. Month=Jun with Quarter=Q2), every KPI
