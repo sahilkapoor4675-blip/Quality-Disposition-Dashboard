@@ -196,8 +196,29 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3
 
 /* ---- Presentation mode, Parameter = All: each element chart gets the full stage; scroll down for the next element (nothing is cut off) ---- */
 .analytics-presentation-panel>.chart-scroll.chem-multi{display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;padding:8px 14px}
-.analytics-presentation-panel .chem-multi .chem-pblock{flex:0 0 100%;min-height:0;display:flex;flex-direction:column;padding:6px 10px 8px;border:0;border-radius:0;background:transparent}
+.analytics-presentation-panel .chem-multi .chem-pblock{flex:0 0 100%;min-height:0;display:flex;flex-direction:column;padding:8px 12px 10px}
 .analytics-presentation-panel .chem-multi .chem-pblock-t{flex:0 0 auto;margin:0 0 4px;padding-bottom:6px}
 .analytics-presentation-panel .chem-multi .chem-pchart{flex:1 1 0;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .analytics-presentation-panel .chem-multi .chem-pchart>.legend{flex:0 0 auto;margin:0 0 4px;padding:2px 8px 6px}
 .analytics-presentation-panel .chem-multi .chem-pchart>.chart-svg{flex:1 1 0;min-height:0;width:100%;height:100%;max-width:100%}
+
+/* ---- Parameter = All: element boxes use the dashboard's blue theme, with the same hover lift + glow + sheen as the KPI cards ---- */
+.chem-multi .chem-pblock{position:relative;overflow:hidden;background:linear-gradient(180deg,#E6F2FB 0%,#F3F9FD 100%);border:1px solid #B7D5EA;box-shadow:0 1px 2px rgba(15,42,74,.06),0 4px 12px rgba(35,136,201,.10);transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
+.chem-multi .chem-pblock-t{color:#1B5E8E;border-bottom-color:#B7D5EA}
+.chem-multi .chem-pblock .chem-pchart{background:transparent!important;box-shadow:none;border:0}
+.chem-multi .chem-pblock:hover{transform:translateY(-3px);border-color:#6FB0DC;box-shadow:0 4px 8px rgba(15,42,74,.09),0 18px 34px rgba(35,136,201,.24),0 0 0 1px rgba(35,136,201,.16),inset 0 1px 0 rgba(255,255,255,1);z-index:5}
+.chem-multi .chem-pblock:hover::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.55) 50%,transparent 58%);background-size:250% 100%;animation:kpiSheen .85s ease forwards}
+.analytics-presentation-panel .chem-multi .chem-pblock:hover{transform:none;box-shadow:0 1px 2px rgba(15,42,74,.06),0 4px 12px rgba(35,136,201,.10)}
+.analytics-presentation-panel .chem-multi .chem-pblock:hover::after{animation:none;background:none}
+html[data-theme="dark"] .chem-multi .chem-pblock{background:linear-gradient(180deg,#14304d 0%,#0f2740 100%);border-color:#24507a;box-shadow:0 1px 2px rgba(0,0,0,.3),0 4px 12px rgba(0,0,0,.35)}
+html[data-theme="dark"] .chem-multi .chem-pblock-t{color:#8FC6EE;border-bottom-color:#24507a}
+html[data-theme="dark"] .chem-multi .chem-pblock:hover{border-color:#3d7db3;box-shadow:0 4px 10px rgba(0,0,0,.35),0 16px 38px rgba(0,0,0,.5)}
+html[data-theme="dark"] .chem-multi .chem-pblock:hover::after{background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.16) 50%,transparent 58%);background-size:250% 100%}
+@media(prefers-reduced-motion:reduce){.chem-multi .chem-pblock:hover{transform:none}.chem-multi .chem-pblock:hover::after{animation:none;background:none}}
+
+/* ---- Heat drill-down: out-of-spec rows (Std or Aim) + row hover like the other dashboard tables ---- */
+.chem-drill-params tbody tr{transition:background-color .15s ease}
+.chem-drill-params tbody tr:hover{background:rgba(17,141,255,.08)}
+.chem-drill-params tbody tr.chem-row-bad{background:rgba(220,38,38,.07)}
+.chem-drill-params tbody tr.chem-row-bad:hover{background:rgba(220,38,38,.13)}
+.chem-drill-params td.chem-bad{font-weight:800;white-space:nowrap}
