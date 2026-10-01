@@ -16,6 +16,7 @@ import re
 import difflib
 import traceback
 import threading
+from collections import defaultdict, Counter, OrderedDict
 import chem_spc
 
 # Safety valve: report/export generation (compute_qcr_intelligence + chart
@@ -2258,11 +2259,23 @@ def _mark_non_disposition_changed(conn):
     """Increment the overall durable-data revision for configuration/admin changes."""
     return _mark_persistent_change(conn, disposition=False)
 
+def _chem_source_cache_clear():
+    with CHEM_SOURCE_CACHE_LOCK:
+        CHEM_SOURCE_CACHE["revision"] = None
+        CHEM_SOURCE_CACHE["specs"] = None
+        global CHEM_DISPOSITION_HEAT_SET
+        CHEM_SOURCE_CACHE["heats"] = None
+        CHEM_SOURCE_CACHE["by_spec"] = None
+        CHEM_OVERVIEW_CACHE.clear()
+        CHEM_DISPOSITION_CACHE.clear()
+        CHEM_DISPOSITION_HEAT_SET = None
+
 def _cache_clear():
     global RESPONSE_CACHE_BYTES
     with RESPONSE_CACHE_LOCK:
         RESPONSE_CACHE.clear()
         RESPONSE_CACHE_BYTES = 0
+    _chem_source_cache_clear()
     _backup_list_cache_clear()
 
 def _cache_get(key):
@@ -3632,6 +3645,20 @@ CHEM_PREVIEWS = {}
 CHEM_COLS = list(chem_spc.PARAMS)
 _CHEM_SELECT = "heat_no,sheet,cast_date,alloy,denomination,analyst,hardness,conductivity,hf_no," + ",".join(CHEM_COLS)
 _CHEM_FIELDS = ["heat_no", "sheet", "cast_date", "alloy", "denomination", "analyst", "hardness", "conductivity", "hf_no"] + CHEM_COLS
+# Chemistry SPC is read-heavy and filter changes do not change the underlying rows.
+# Keep one revision-keyed, already-spec-matched snapshot in memory so switching
+# Month / Week / FY / Grade does not repeatedly hit SQL and re-resolve every heat.
+CHEM_SOURCE_CACHE_LOCK = threading.RLock()
+CHEM_SOURCE_CACHE = {"revision": None, "specs": None, "heats": None, "by_spec": None}
+CHEM_OVERVIEW_CACHE = OrderedDict()
+CHEM_OVERVIEW_CACHE_MAX = 64
+# Exact-selection disposition cache. Parameter switching should not issue the same
+# normalized heat-number join repeatedly; mutation paths call _cache_clear(), which
+# invalidates this cache together with the response cache. Keep it bounded so a
+# large number of ad-hoc filter combinations cannot grow process memory forever.
+CHEM_DISPOSITION_CACHE = OrderedDict()
+CHEM_DISPOSITION_CACHE_MAX = 24
+CHEM_DISPOSITION_HEAT_SET = None
 
 
 def _ensure_chem_schema(conn):
@@ -3703,6 +3730,30 @@ def _chem_revision(conn=None):
         if own: conn.close()
 
 
+def _chem_source_snapshot():
+    """Load and spec-match chemistry once per durable chemistry revision."""
+    conn = get_conn()
+    try:
+        rev = _chem_revision(conn)
+        with CHEM_SOURCE_CACHE_LOCK:
+            if (CHEM_SOURCE_CACHE["revision"] == rev and CHEM_SOURCE_CACHE["specs"] is not None
+                    and CHEM_SOURCE_CACHE["heats"] is not None and CHEM_SOURCE_CACHE.get("by_spec") is not None):
+                return CHEM_SOURCE_CACHE["specs"], CHEM_SOURCE_CACHE["heats"], rev
+        specs = _chem_load_specs(conn)
+        heats = _chem_assign_specs(_chem_load_heats(conn), specs)
+        by_spec = defaultdict(list)
+        for h in heats:
+            by_spec[h.get("_spec", "")].append(h)
+        with CHEM_SOURCE_CACHE_LOCK:
+            CHEM_SOURCE_CACHE["revision"] = rev
+            CHEM_SOURCE_CACHE["specs"] = specs
+            CHEM_SOURCE_CACHE["heats"] = heats
+            CHEM_SOURCE_CACHE["by_spec"] = dict(by_spec)
+        return specs, heats, rev
+    finally:
+        conn.close()
+
+
 def _chem_bump_revision(conn):
     _app_state_set(conn, "chem_revision", _chem_revision(conn) + 1)
 
@@ -3715,37 +3766,72 @@ def _chem_assign_specs(heats, specs):
     return heats
 
 
+def _chem_overview_cached(cache_key, builder):
+    with CHEM_SOURCE_CACHE_LOCK:
+        hit = CHEM_OVERVIEW_CACHE.get(cache_key)
+        if hit is not None:
+            CHEM_OVERVIEW_CACHE.move_to_end(cache_key)
+            return [dict(x) for x in hit]
+    value = builder()
+    with CHEM_SOURCE_CACHE_LOCK:
+        # Bounded chemistry overview cache: selected spec + period states are
+        # cheap to retain, but an unbounded filter/parameter combination cache
+        # would grow forever on a long-lived production server.
+        CHEM_OVERVIEW_CACHE[cache_key] = [dict(x) for x in value]
+        CHEM_OVERVIEW_CACHE.move_to_end(cache_key)
+        while len(CHEM_OVERVIEW_CACHE) > CHEM_OVERVIEW_CACHE_MAX:
+            CHEM_OVERVIEW_CACHE.popitem(last=False)
+    return value
+
+
 def _chem_disposition_for(heat_nos):
     """{HEAT: [disposition row dicts]} for the given heat numbers (case/space-insensitive)."""
-    wanted = sorted({str(h).strip().upper() for h in heat_nos if h})
+    wanted = tuple(sorted({str(h).strip().upper() for h in heat_nos if h}))
+    if not wanted:
+        return {}
+    with CHEM_SOURCE_CACHE_LOCK:
+        hit = CHEM_DISPOSITION_CACHE.get(wanted)
+        if hit is not None:
+            CHEM_DISPOSITION_CACHE.move_to_end(wanted)
+            return {k: [dict(r) for r in rows] for k, rows in hit.items()}
     out = {}
-    if not wanted: return out
     conn = get_conn()
     try:
         for i in range(0, len(wanted), 400):
             chunk = wanted[i:i + 400]
             ph = ",".join("?" for _ in chunk)
-            rows = conn.execute(f"SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date FROM disposition WHERE UPPER(TRIM(heat_no)) IN ({ph})", tuple(chunk)).fetchall()
+            rows = conn.execute(f"SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date FROM disposition WHERE UPPER(TRIM(heat_no)) IN ({ph})", chunk).fetchall()
             for r in rows:
                 d = dict(zip(["heat_no", "batch_no", "work_center", "grade", "output_weight", "main_defect", "defect_intensity", "quality_decision", "insp_lot_date"], list(r)))
                 out.setdefault(str(d["heat_no"]).strip().upper(), []).append(d)
     finally:
         conn.close()
+    with CHEM_SOURCE_CACHE_LOCK:
+        CHEM_DISPOSITION_CACHE[wanted] = {k: [dict(r) for r in rows] for k, rows in out.items()}
+        CHEM_DISPOSITION_CACHE.move_to_end(wanted)
+        while len(CHEM_DISPOSITION_CACHE) > CHEM_DISPOSITION_CACHE_MAX:
+            CHEM_DISPOSITION_CACHE.popitem(last=False)
     return out
 
 
 def compute_chem_meta():
-    conn = get_conn()
-    try:
-        specs = _chem_load_specs(conn)
-        heats = _chem_assign_specs(_chem_load_heats(conn), specs)
-        disp_heats = {str(r[0]).strip().upper() for r in conn.execute("SELECT DISTINCT heat_no FROM disposition WHERE TRIM(COALESCE(heat_no,''))<>''").fetchall()}
-        rev = _chem_revision(conn)
-    finally:
-        conn.close()
-    by = {}
-    for h in heats:
-        by.setdefault(h["_spec"], []).append(h)
+    global CHEM_DISPOSITION_HEAT_SET
+    specs, heats, rev = _chem_source_snapshot()
+    with CHEM_SOURCE_CACHE_LOCK:
+        disp_heats = CHEM_DISPOSITION_HEAT_SET
+    if disp_heats is None:
+        conn = get_conn()
+        try:
+            disp_heats = {str(r[0]).strip().upper() for r in conn.execute("SELECT DISTINCT heat_no FROM disposition WHERE TRIM(COALESCE(heat_no,''))<>''").fetchall()}
+        finally:
+            conn.close()
+        with CHEM_SOURCE_CACHE_LOCK:
+            # The cache is invalidated with the same mutation boundary as
+            # Chemistry/disposition response caches, so it cannot outlive an
+            # application-managed data change.
+            CHEM_DISPOSITION_HEAT_SET = set(disp_heats)
+    with CHEM_SOURCE_CACHE_LOCK:
+        by = CHEM_SOURCE_CACHE.get("by_spec") or {}
 
     def info(hs):
         return {"heats": len(hs), "with_disposition": sum(1 for x in hs if x["heat_no"] in disp_heats), "periods": chem_spc.period_options(hs)}
@@ -3764,37 +3850,47 @@ def compute_chem_spc(qs):
         raise ValueError("Unknown parameter")
     last_n = max(0, min(5000, _safe_int(qs.get("last_n"), 0)))
     period = {k: str(qs.get(k, "") or "")[:40] for k in chem_spc.PERIOD_KEYS}      # month / week / quarter / fy ('' or 'All' = no filter)
-    conn = get_conn()
-    try:
-        specs = _chem_load_specs(conn)
-        heats = _chem_assign_specs(_chem_load_heats(conn), specs)
-    finally:
-        conn.close()
+    specs, heats, _rev = _chem_source_snapshot()
     spec = next((s for s in specs if s["description"] == desc), None) if desc != "__none__" else None
     if desc != "__none__" and not spec:
         raise ValueError("Unknown spec / grade")
-    group = [h for h in heats if h["_spec"] == (spec["description"] if spec else "")]
-    disp_rows = _chem_disposition_for([h["heat_no"] for h in group])
-    disp_by = {h: chem_spc.summarize_disposition(rows) for h, rows in disp_rows.items()}
-    view = chem_spc.build_spc_view([dict(h) for h in group], spec, param, disp_by, last_n, period=period)
-    # capability overview for every parameter of this spec (heat-number order, same period filter and last-N)
+    spec_key = spec["description"] if spec else ""
+    with CHEM_SOURCE_CACHE_LOCK:
+        group = CHEM_SOURCE_CACHE.get("by_spec", {}).get(spec_key, [])
+    # Filter and apply Last-N before joining to disposition. Parameter changes
+    # should only fetch disposition rows for heats actually visible in the view,
+    # not for every heat ever imported for the grade.
     sel = sorted(chem_spc.filter_by_period(group, period), key=chem_spc.order_key)
-    if last_n: sel = sel[-last_n:]
+    if last_n:
+        sel = sel[-last_n:]
+    disp_rows = _chem_disposition_for([h["heat_no"] for h in sel])
+    disp_by = {h: chem_spc.summarize_disposition(rows) for h, rows in disp_rows.items()}
+    view = chem_spc.build_spc_view(sel, spec, param, disp_by, 0, period=None)
+    # capability overview for every parameter of this spec (heat-number order, same period filter and last-N)
     limits = (spec or {}).get("limits") or {}
     aim = (spec or {}).get("aim") or {}
-    overview = []
-    for p in chem_spc.PARAMS:
-        pts = [{"value": h[p]} for h in sel if h.get(p) is not None]
-        if len(pts) < 2 or (p not in limits and all((h.get(p) or 0) == 0 for h in sel)): continue
-        a = chem_spc.analyse_param(pts, limits, p)
-        cap = a["capability"]
-        alsl, ausl = chem_spc.eff_limits(aim, p)
-        overview.append({"param": p, "label": chem_spc.PARAM_LABEL[p], "n": a["n"], "mean": cap["mean"], "lsl": a["lsl"], "usl": a["usl"],
-                         "aim_lsl": alsl, "aim_usl": ausl,
-                         "cp": cap["cp"], "cpk": cap["cpk"], "pp": cap["pp"], "ppk": cap["ppk"],
-                         "sigma_within": cap["sigma_within"], "sigma_overall": cap["sigma_overall"],
-                         "rating": chem_spc.cpk_rating(cap["cpk"]), "note": cap["note"],
-                         "oos": cap["n_below"] + cap["n_above"]})
+    # The main SPC chart still computes only the selected parameter. The 14-parameter
+    # overview is shared by all parameter tabs/cards for the same state, so avoid
+    # repeating the expensive capability pass on every parameter switch.
+    ov_key = (_rev, desc or "__none__", period["month"], period["week"], period["quarter"], period["fy"], last_n)
+
+    def _build_overview():
+        out = []
+        for p in chem_spc.PARAMS:
+            pts = [{"value": h[p]} for h in sel if h.get(p) is not None]
+            if len(pts) < 2 or (p not in limits and all((h.get(p) or 0) == 0 for h in sel)): continue
+            a = chem_spc.analyse_param(pts, limits, p)
+            cap = a["capability"]
+            alsl, ausl = chem_spc.eff_limits(aim, p)
+            out.append({"param": p, "label": chem_spc.PARAM_LABEL[p], "n": a["n"], "mean": cap["mean"], "lsl": a["lsl"], "usl": a["usl"],
+                        "aim_lsl": alsl, "aim_usl": ausl,
+                        "cp": cap["cp"], "cpk": cap["cpk"], "pp": cap["pp"], "ppk": cap["ppk"],
+                        "sigma_within": cap["sigma_within"], "sigma_overall": cap["sigma_overall"],
+                        "rating": chem_spc.cpk_rating(cap["cpk"]), "note": cap["note"],
+                        "oos": cap["n_below"] + cap["n_above"]})
+        return out
+
+    overview = _chem_overview_cached(ov_key, _build_overview)
     # main elements (Cu + alloying elements) first, impurities after; Cpk of the main ones is what matters most
     mains = chem_spc.main_elements(limits, {o["param"]: o["mean"] for o in overview})
     rank = {p: i for i, p in enumerate(mains)}
@@ -3805,6 +3901,40 @@ def compute_chem_spc(qs):
                  "periods": chem_spc.period_options(group),
                  "periods_cascade": chem_spc.period_options_cascade(group, period),
                  "cpk_bands": {"excellent": chem_spc.CPK_EXCELLENT, "capable": chem_spc.CPK_CAPABLE, "marginal": chem_spc.CPK_MARGINAL}})
+
+    # Main element cards use the same period-over-period comparison model as
+    # dashboard KPI cards. Compare Cpk because that is the headline metric.
+    # Only a single selected Week/Month/Quarter/FY produces a prior period;
+    # mixed selectors intentionally remain informational rather than inventing
+    # a misleading comparison.
+    prev_period = chem_spc.previous_period_filter(group, period)
+    if prev_period:
+        prev_sel = chem_spc.filter_by_period(group, prev_period)
+        if last_n:
+            prev_sel = sorted(prev_sel, key=chem_spc.order_key)[-last_n:]
+        prev_overview = []
+        main_params = [o["param"] for o in overview if o.get("main")]
+        for p in main_params:
+            pts = [{"value": h[p]} for h in prev_sel if h.get(p) is not None]
+            if len(pts) < 2 or (p not in limits and all((h.get(p) or 0) == 0 for h in prev_sel)): continue
+            a_prev = chem_spc.analyse_param(pts, limits, p)
+            prev_overview.append({"param": p, "cpk": a_prev["capability"]["cpk"]})
+        prev_map = {x["param"]: x["cpk"] for x in prev_overview}
+        for o in overview:
+            pv = prev_map.get(o["param"])
+            o["prev_cpk"] = pv
+            if o.get("cpk") is not None and pv is not None:
+                delta = o["cpk"] - pv
+                o["cpk_change"] = delta
+                o["cpk_change_type"] = "up" if delta > 1e-12 else "down" if delta < -1e-12 else "equal"
+            else:
+                o["cpk_change"] = None
+                o["cpk_change_type"] = "info"
+        view["period_comparison"] = {"current": period, "previous": prev_period}
+    else:
+        for o in overview:
+            o["prev_cpk"] = None; o["cpk_change"] = None; o["cpk_change_type"] = "info"
+        view["period_comparison"] = None
     return view
 
 
@@ -6251,10 +6381,20 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json({"total":total,"score":score,"records_require_correction":corrections,"issues":counts,"duplicate_batch_rows":[{"batch_no":r[0],"count":int(r[1])} for r in duplicate_groups]})
                 except Exception as e: self._send_json({"error":str(e)},status=500)
         elif path == "/api/chem/meta":
-            try: self._send_json(compute_chem_meta())
+            try:
+                cache_key = "chem:meta"
+                hit = _cache_get(cache_key)
+                if hit is None:
+                    hit = compute_chem_meta(); _cache_put(cache_key, hit)
+                self._send_json(hit)
             except Exception as e: self._send_json({"error": str(e)}, status=500)
         elif path == "/api/chem/spc":
-            try: self._send_json(compute_chem_spc(qs))
+            try:
+                cache_key = "chem:spc:" + json.dumps({k: str(qs.get(k, "") or "") for k in ("spec", "param", "last_n", "month", "week", "quarter", "fy")}, sort_keys=True, separators=(",", ":"))
+                hit = _cache_get(cache_key)
+                if hit is None:
+                    hit = compute_chem_spc(qs); _cache_put(cache_key, hit)
+                self._send_json(hit)
             except ValueError as e: self._send_json({"error": str(e)}, status=400)
             except Exception as e:
                 log.exception("chem spc failed"); self._send_json({"error": "Could not compute SPC"}, status=500)

@@ -141,6 +141,15 @@ function wireExportDialog(){
   };
   const open=()=>{
     restoreFocusEl=document.activeElement;
+    // Reports are built from the disposition data and the DASHBOARD filters. While the Chemistry SPC tab is open those
+    // filters are hidden, so say so (the Chemistry CSV downloads live inside the Chemistry SPC tab itself).
+    const _desc=document.getElementById('exportDialogDesc');
+    if(_desc){
+      if(!_desc.dataset.base) _desc.dataset.base=_desc.textContent;
+      _desc.textContent=(document.querySelector('.tab-btn.active')?.dataset.tab==='chem')
+        ? 'These reports cover the disposition data with the dashboard filters (not the Chemistry selection). Chemistry CSV downloads are inside the Chemistry SPC tab.'
+        : _desc.dataset.base;
+    }
     setOpenState(true);
     requestAnimationFrame(()=>options[0]?.focus());
   };

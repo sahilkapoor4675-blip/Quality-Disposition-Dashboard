@@ -24,6 +24,7 @@ import math
 import re
 import statistics
 from collections import Counter, defaultdict
+from functools import lru_cache
 
 ELEMENTS = ["cu", "ni", "zn", "al", "mn", "fe", "pb", "sn", "si", "p", "s", "c"]
 PARAMS = ELEMENTS + ["impurities", "total"]
@@ -225,6 +226,7 @@ def parse_cast_date(v):
     return d.isoformat(), note
 
 
+@lru_cache(maxsize=12000)
 def period_fields(iso):
     """ISO date -> (month, week, quarter, fy) with EXACTLY the labels the main dashboard uses
     (Apr-2026, Wk of 30-Mar-26 (Monday start), Q1 = Apr-Jun ..., FY 2026-27)."""
@@ -248,10 +250,14 @@ def filter_by_period(recs, flt):
     flt = {k: ("" if v.strip().lower() == "all" else v.strip()) for k, v in flt.items()}
     if not any(flt.values()):
         return list(recs)
+    wanted = tuple(flt[k] for k in PERIOD_KEYS)
     out = []
     for r in recs:
-        pf = dict(zip(PERIOD_KEYS, period_fields(r.get("cast_date"))))
-        if all(not want or pf[k] == want for k, want in flt.items()):
+        pf = period_fields(r.get("cast_date"))
+        if ((not wanted[0] or pf[0] == wanted[0]) and
+            (not wanted[1] or pf[1] == wanted[1]) and
+            (not wanted[2] or pf[2] == wanted[2]) and
+            (not wanted[3] or pf[3] == wanted[3])):
             out.append(r)
     return out
 
@@ -259,19 +265,24 @@ def filter_by_period(recs, flt):
 def period_options(recs):
     """Distinct periods present in recs, newest first (weeks/months chronologically descending)."""
     mo, wk, qt, fy = {}, {}, set(), set()
+    undated = 0
     for r in recs:
         iso = r.get("cast_date")
         m, w, q, f = period_fields(iso)
         if not m:
+            undated += 1
             continue
-        mo[m] = iso[:7]
-        wk[w] = (_dt.date.fromisoformat(iso[:10]) - _dt.timedelta(days=_dt.date.fromisoformat(iso[:10]).weekday())).isoformat()
+        mo[m] = str(iso)[:7]
+        # Sort key must be the ISO Monday date (chronological). Sorting the display label
+        # "DD-Mon-YY" as text puts 30-Mar before 29-Jun before 27-Apr (wrong order).
+        _d = _dt.date.fromisoformat(str(iso)[:10])
+        wk[w] = (_d - _dt.timedelta(days=_d.weekday())).isoformat()
         qt.add(q)
         fy.add(f)
     return {"months": [k for k, _ in sorted(mo.items(), key=lambda kv: kv[1], reverse=True)],
             "weeks": [k for k, _ in sorted(wk.items(), key=lambda kv: kv[1], reverse=True)],
             "quarters": sorted(qt), "fys": sorted(fy, reverse=True),
-            "undated": sum(1 for r in recs if not period_fields(r.get("cast_date"))[0])}
+            "undated": undated}
 
 
 def period_options_cascade(recs, flt):
@@ -286,6 +297,72 @@ def period_options_cascade(recs, flt):
         others = {kk: vv for kk, vv in flt.items() if kk != k}
         out[name] = period_options(filter_by_period(recs, others))[name]
     return out
+
+
+def previous_period_filter(recs, flt):
+    """Return the immediately previous comparable single-period filter.
+
+    Priority mirrors the main dashboard: Week > Month > Quarter > FY. The other
+    period selectors are cleared so a selected Month/Week does not accidentally
+    turn the comparison into an empty cross-period intersection. Returns None
+    when no single comparable period is selected.
+    """
+    flt = {k: str((flt or {}).get(k) or "").strip() for k in PERIOD_KEYS}
+    flt = {k: ("" if v.lower() == "all" else v) for k, v in flt.items()}
+
+    if flt["week"]:
+        m = re.match(r"^Wk of (\d{2}-[A-Za-z]{3}-\d{2})$", flt["week"])
+        if not m:
+            return None
+        try:
+            monday = _dt.datetime.strptime(m.group(1), "%d-%b-%y").date()
+        except ValueError:
+            return None
+        prev = monday - _dt.timedelta(days=7)
+        return {"month": "", "week": "Wk of " + prev.strftime("%d-%b-%y"), "quarter": "", "fy": ""}
+
+    if flt["month"]:
+        try:
+            d = _dt.datetime.strptime(flt["month"], "%b-%Y").date().replace(day=1)
+        except ValueError:
+            return None
+        prev = d - _dt.timedelta(days=1)
+        return {"month": prev.strftime("%b-%Y"), "week": "", "quarter": "", "fy": ""}
+
+    if flt["quarter"]:
+        q = re.match(r"^Q([1-4])$", flt["quarter"], re.I)
+        if not q:
+            return None
+        qn = int(q.group(1))
+        fy = flt["fy"]
+        if not fy:
+            dated = []
+            for r in recs:
+                pf = period_fields(r.get("cast_date"))
+                if pf[2] == flt["quarter"] and pf[3]:
+                    dated.append(r.get("cast_date"))
+            dated = [d for d in dated if d]
+            if not dated:
+                return None
+            fy = period_fields(max(dated))[3]
+        fm = re.match(r"^FY (\d{4})-(\d{2})$", fy, re.I)
+        if not fm:
+            return None
+        fy0 = int(fm.group(1))
+        if qn > 1:
+            pq, pfy0 = qn - 1, fy0
+        else:
+            pq, pfy0 = 4, fy0 - 1
+        return {"month": "", "week": "", "quarter": f"Q{pq}", "fy": f"FY {pfy0}-{(pfy0 + 1) % 100:02d}"}
+
+    if flt["fy"]:
+        fm = re.match(r"^FY (\d{4})-(\d{2})$", flt["fy"], re.I)
+        if not fm:
+            return None
+        fy0 = int(fm.group(1)) - 1
+        return {"month": "", "week": "", "quarter": "", "fy": f"FY {fy0}-{(fy0 + 1) % 100:02d}"}
+
+    return None
 
 
 # ----------------------------------------------------------------------------- reading files
@@ -1091,13 +1168,16 @@ def build_spc_view(records, spec, param, disp_by_heat, last_n=0, max_oos=500, pe
         recs = recs[-last_n:]
     limits = (spec or {}).get("limits") or {}
     aim_lsl, aim_usl = eff_limits((spec or {}).get("aim") or {}, param)
-    pts = [r for r in recs if r.get(param) is not None]
-    for r in pts:
-        r["value"] = r[param]
+    pts = [{"value": r[param]} for r in recs if r.get(param) is not None]
     a = analyse_param(pts, limits, param)
+    # Compute spec violations once per selected heat. The old implementation
+    # evaluated the full parameter-limit matrix twice and also injected a
+    # temporary ``value`` key into the revision-cached source dictionaries.
+    # Keeping the source snapshot immutable is safer under concurrent viewers.
+    viol_by_heat = {r["heat_no"]: (spec_violations(r, limits) if limits else []) for r in recs}
     series = []
-    for i, r in enumerate(pts):
-        viol = spec_violations(r, limits) if limits else []
+    for i, r in enumerate([r for r in recs if r.get(param) is not None]):
+        viol = viol_by_heat.get(r["heat_no"], [])
         prm_viol = [v for v in viol if v["param"] == param]
         series.append({
             "i": i + 1, "heat_no": r["heat_no"], "cast_date": r.get("cast_date") or "", "value": r[param], "analyst": r.get("analyst", ""),
@@ -1108,7 +1188,7 @@ def build_spc_view(records, spec, param, disp_by_heat, last_n=0, max_oos=500, pe
     # out-of-spec heats across ALL parameters that have limits
     oos_rows = []
     for r in recs:
-        viol = spec_violations(r, limits) if limits else []
+        viol = viol_by_heat.get(r["heat_no"], [])
         if viol:
             oos_rows.append({"heat_no": r["heat_no"], "analyst": r.get("analyst", ""),
                              "violations": [{"param": PARAM_LABEL[v["param"]], "key": v["param"], "value": v["value"],

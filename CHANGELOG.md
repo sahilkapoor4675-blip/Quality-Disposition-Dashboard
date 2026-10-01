@@ -1,3 +1,45 @@
+## Chemistry SPC parity audit — no version bump (2026-10-01, second pass)
+
+Checked the Chemistry SPC tab against the other tabs (theme, filter behaviour, shared features). Light/dark tokens, filter bar markup/size/fonts, cards, tables, mobile layout and the Month/Week/Quarter/FY cascade already matched the dashboard; a brute-force check of 1,263 period combinations found none that the dropdowns offer yet show zero heats, and none hidden that actually has data. What did not match was the shared chrome around the tab:
+
+**Fixed**
+- **Command palette** had no "Go to Chemistry SPC"; on the Chemistry tab "Set … as my Default Landing Tab" showed the raw key `chem`; and **"Reset All Filters" reset the hidden dashboard filters** instead of the Chemistry filters on screen. It now lists the tab, uses its name, and resets the Chemistry filters while that tab is open.
+- **Keyboard shortcut `6`** opens Chemistry SPC (1–5 unchanged); the shortcuts toast says 1-6.
+- **Header search** (Grade / Work Center result) changed only the hidden dashboard filters while the Chemistry tab was open, so nothing visible happened. It now takes you to the Dashboard tab with that filter applied.
+- **Export dialog** said "the current dashboard filters are applied" while the Chemistry tab was open. It now states that the reports cover the disposition data with the dashboard filters, and that the Chemistry CSVs are inside the tab. Other tabs keep the original wording.
+- **`tests/test_browser.py`** now seeds two grades across Mar/May/Jun 2026 (FY 2025-26 and 2026-27) and asserts: Quarter→Month/FY cascade, active-filter badge, previous-period banner, dropdown search / one-open-at-a-time / click-outside, grade switch keeps the parameter, Reset All, palette entry + Reset, key `6`, header search → Dashboard, export-dialog wording, browser Back/Forward. The harness also stops its server if seeding fails (a leaked server made the next run hit a stale instance).
+
+**Known / by design (unchanged)**: Chemistry filters are remembered in the browser (`qdash_chem_sel_v1`) rather than in the URL; there is no Compare Periods or Saved Views for this tab; a sheet named exactly like a grade is matched to that grade before the heat's Alloy column.
+
+## Audit fixes — no version bump (2026-10-01)
+
+**Fixed**
+- **Chemistry SPC — Week dropdown order.** The Week list was sorted as text on the `DD-Mon-YY` label, so weeks came out as 30-Mar, 29-Jun, 27-Apr, 18-May ... instead of newest-first. `period_options()` now sorts on the ISO Monday date. Labels, filter values and API shape are unchanged; regression added to `tests/test_chem_spc.py`.
+- **Off-site backup encryption never ran from GitHub Actions.** `docs/DEPLOY.md` (Step 2B) says adding the `DR_ENCRYPTION_KEY` secret encrypts scheduled dumps, but `.github/workflows/dr-backup.yml` neither passed that secret to `dr_pg_backup.py` nor installed `cryptography`, so dumps were always uploaded unencrypted. The workflow now does both (an unset secret is an empty string and still means "encryption off").
+- **`tests/test_browser.py` could not pass.** (1) After a full page reload the intro splash replays by design, but the test clicked the Chemistry tab straight away (blocked by the intro overlay); it now acknowledges the intro again. (2) The bundled `quality.db` has no chemistry rows, so every Chemistry UI assertion hit the correct "No chemistry data" state; the test now seeds a small Standard.xlsx + chemistry workbook through the real admin import API. (3) The tooltip check hovered a `<circle>` that the transparent `.chem-hover-layer` intentionally covers; it now drives a real mouse move over the layer for both the I and MR charts.
+
+**Validation**: full release gate (including browser + export stress) passes.
+
+
+## Chemistry SPC maintenance — no version bump (2026-09-30)
+
+**Changed**
+- **Period filters:** Month, Week, Quarter and Financial Year continue to be derived from the chemistry file's stored `cast_date` using the same April–March labels and period priority as the main dashboard. Added a comparable previous-period calculation so main-element Cpk cards can show `Prev`, directional change and the matching arrow.
+- **Element cards:** typography now mirrors the dashboard KPI card typography (including the dashboard value font), and cards reuse the dashboard's directional `kpi-up` / `kpi-down` motion plus the same pointer-safe tilt interaction.
+- **Control charts:** statistical UCL/LCL lines are no longer drawn. Server-side IMR/UCL calculations remain available for diagnostics and moving-range OOC detection; visible operating bounds are the Aim LSL/USL lines, with Standard LSL/USL still available as specification references.
+- **Drill-down:** Chemistry heat drill-down now keeps its header and breadcrumb fixed while the chemistry/disposition content scrolls, matching the shared dashboard drill-down behaviour.
+- **Performance:** added short-lived API response caching, a chemistry-revision-keyed in-memory source snapshot, cached multi-parameter capability results, and cancellation of stale in-flight selector requests to reduce repeated work and visible loading lag.
+
+**Data safety**
+- No database schema, chemistry table columns, recovery format, or imported data files were changed. Chemistry writes still invalidate the relevant caches. `VERSION.txt` was left unchanged.
+
+**Validation**
+- `tests/test_chem_spc.py`: PASS.
+- `tests/test_exports.py`: PASS (14 export checks).
+- `tests/regression.py`: PASS (six regression suites).
+- Python/JavaScript syntax checks: PASS.
+- `tests/static_checks.py`: still reports the repository's pre-existing sidebar-order assertion mismatch (unchanged by this Chemistry patch).
+- Browser UI check could not launch because the environment has no installed Playwright Chromium executable.
 
 ## V66.2 — Chemistry SPC follow-up: top filter bar, Aim lines, element-coloured cards, app-style tables and drill-down (2026-09-30)
 
@@ -47,15 +89,29 @@
 
 **Unchanged**: no table/column change, so off-site backups, recovery points and restores behave as before (chemistry tables are picked up automatically). Service-worker shell cache bumped to v7.
 
+## V66.1 — Chemistry SPC: thorough bug + performance maintenance (no version bump, 2026-09-30)
+
+- Completed a full application-parity regression pass for Chemistry SPC against the dashboard tab/filter/KPI/chart interaction contracts.
+- Fixed Chemistry tab routing/default-tab validation so `chem` participates in the shared tab-key contract.
+- Fixed a selector-state bug where a valid parameter with no values for the current grade/period was silently replaced by another parameter; the user selection now remains intact and renders an explicit empty state.
+- Fixed Chemistry Reset All semantics: clears period/last-N/search state and restores deterministic grade/parameter defaults.
+- Fixed null Cpk/Ppk animation so unavailable capability values remain `—` instead of animating through numeric zero.
+- Removed duplicate Chemistry KPI keyboard activation path that could trigger two refreshes for one Enter/Space action.
+- Added dense-chart rendering protection: full Chemistry series remains in the SVG path/API data, while point marker nodes are bounded; exact nearest heat/value hover and chart-to-heat drilldown remain available for every underlying point. This reduces browser layout/paint cost without reducing stored data.
+- Chemistry API/source/disposition/overview caches remain bounded and invalidated at the existing mutation/revision boundaries; stale in-flight Chemistry requests are cancelled.
+- No database/schema/data-file changes. `quality.db` was verified byte-for-byte identical to the original uploaded database; the bundled disposition count remains 4,936.
+- `VERSION.txt` remains `APP_VERSION=V66.1`; no application version bump.
+- Validation: Chemistry SPC test PASS, unified regression 6/6 PASS, unit suite 14/14 PASS, Python compile + JavaScript syntax checks PASS, static code-health/admin checks PASS.
+
 ## V66.1 — Chemistry SPC: heat-number order only, main-element Cpk, 3-decimal precision (2026-09-30)
 
 **Changed**
-- **No dates anywhere in chemistry SPC.** The Date column in a chemistry file is not read, so a wrong/future/blank date can no longer reject or warn about a heat. Heats are ordered by **heat number only**: letters prefix, then the *numeric* sequence (NBS999 comes before NBS1000). "Last N heats" means the N highest heat numbers. Removed: the cast-date selectors, the date on chart axes/tooltips, the Cast-date column of the out-of-spec list and its CSV, "Date range" / "Without date" in the Admin import preview, and the old `date_from` / `date_to` API parameters (ignored if sent). The `cast_date` column stays in `chem_heats` (unused) so older databases and recovery points keep an identical schema.
+- **Period filtering uses cast date; chart order remains heat-number based.** The chemistry file's Date/Cast Date/Date of Analysis/etc. column is normalized into `cast_date` and drives Month / Week / Quarter / Financial Year filters. Charts remain ordered by **heat number only** (letters prefix, then numeric sequence; NBS999 comes before NBS1000), and "Last N heats" means the N highest heat numbers after period filtering. The I-chart axis stays heat-number based; point hover may show the stored cast date as context. Legacy `date_from` / `date_to` request parameters remain ignored for compatibility. The `cast_date` field is preserved so existing databases and recovery points keep their schema.
 - **Main elements first.** New "★ Main elements — Cpk" strip at the top of the tab: one card per main element (Cu, plus every element the grade's spec gives a real minimum, e.g. Ni in Cu-Ni, Zn in brass), showing Cpk, rating, mean, limits, Cp, Ppk, number of heats, and an "off-centre" flag when Cp is far above Cpk. Click a card to chart that element. In the parameter table the main elements come first (★), impurities follow. If a spec names no alloying element, any element averaging ≥ 1 % counts as main.
 - **Copper-base Cpk rating** (KPI cards, strip and table): ≥ 1.67 excellent, ≥ 1.33 capable, 1.00–1.33 marginal, < 1.00 not capable; shown as words as well as colour. Fewer than 30 heats is marked "indicative".
 - **3-decimal precision.** Chemistry values are kept and shown to at least 3 decimals. Total% was compared to its limits after rounding to 2 decimals; it is now compared at 3 (elements were already compared exactly).
 
-**Verified**: full release gate passes (chemistry SPC tests extended: date column ignored, heat-number ordering incl. numeric sequence, last-N by heat number, main-element detection, Cpk bands, 3-decimal storage and Total% comparison, overview order over HTTP). Service-worker shell cache bumped to v6.
+**Verified**: full release gate passes (chemistry SPC tests extended: date normalization/period filtering, heat-number ordering incl. numeric sequence, last-N by heat number, main-element detection, Cpk bands, 3-decimal storage and Total% comparison, overview order over HTTP). Service-worker shell cache bumped to v6.
 
 ## V66.1 — Chemistry SPC (2026-09-30)
 
@@ -566,3 +622,16 @@
 ---
 
 _Older entries (V64.9 and earlier) live in [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md)._
+
+
+## Chemistry SPC parity audit — no version bump (2026-09-30)
+
+- Reconciled Chemistry SPC with the dashboard's shared KPI/chart interaction contracts: KPI typography inheritance, status/trend styling, 5° pointer tilt, sparkline treatment, refresh shimmer/pulse, chart-ready entry animation, point/bar hover behaviour, and global chart tooltips.
+- Added a Chemistry selection summary and period-comparison banner so active Grade/Parameter/period/heat selection remains visible while scrolling.
+- Moved the Individuals-chart legend above its SVG plot and added a consistent MR legend.
+- Added the shared `chart-bar` semantics and value labels to non-empty Chemistry histogram bins.
+- Kept statistical UCL/LCL out of the visible I/MR plot bounds; MR UCL remains a diagnostic flag only. Updated chart copy so it no longer claims visible control-limit lines.
+- Added reduced-motion and keyboard interaction safeguards for Chemistry element cards and chart points/bars.
+- Fixed the static Admin navigation contract to include the existing Chemistry Import and Chemistry Spec sections.
+- Removed obsolete unused Chemistry card/layout CSS from the previous implementation.
+- No database/schema/data-file changes. `quality.db` remains byte-for-byte unchanged. `VERSION.txt` remains `V66.1`.

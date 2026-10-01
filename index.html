@@ -610,11 +610,13 @@
 
   <div class="tab-panel hidden" id="tab-chem">
     <div id="chemControls"></div>
+    <div class="filter-summary-bar chem-filter-summary" id="chemFilterSummaryBar"><span class="summary-label"><svg class="ic" aria-hidden="true"><use href="#ic-selection"/></svg>Selection:</span><span id="chemFilterSummaryText">All Chemistry Data</span><span class="summary-sep">•</span><span id="chemFilterRecordCount">-- heats</span></div>
+    <div class="period-banner" id="chemPeriodBanner"></div>
     <div class="chem-main-panel" id="chemMainBox"></div>
     <div id="chemNotes"></div>
 
     <div class="panel">
-      <h3>📈 Individuals (I) Chart — <span id="chemTitleParam">Cu%</span> <small class="chem-h3-sub">one point = one heat · Standard &amp; Aim limits · mean · control limits from moving range</small></h3>
+      <h3>📈 Individuals (I) Chart — <span id="chemTitleParam">Cu%</span> <small class="chem-h3-sub">one point = one heat · Standard &amp; Aim limits · mean · MR-based variation diagnostic</small></h3>
       <div class="chart-scroll" id="chemIChart"></div>
     </div>
 

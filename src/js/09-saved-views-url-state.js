@@ -65,7 +65,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeViewPopover()
 // exact view they were looking at. Filter tweaks use replaceState (one
 // URL update, no extra back-button stop per click); switching tabs uses
 // pushState (each tab is a distinct "page" worth a back-button stop).
-const TAB_KEYS=['dashboard','controlroom','wcgrade','defects','weekly'];
+const TAB_KEYS=['dashboard','controlroom','wcgrade','defects','weekly','chem'];
 function readUrlState(){
   const params=new URLSearchParams(location.search);
   const tab=params.get('tab');

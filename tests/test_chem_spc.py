@@ -55,6 +55,15 @@ check(c._map_header(["Date", "Coil No.", "Cu%"]) == {0: "cast_date", 1: "heat_no
 recs_p = [{"heat_no": f"H{i}", "cast_date": d, "cu": 75 + i * .01} for i, d in enumerate(["2026-04-02", "2026-04-09", "2026-05-03", "2026-07-01", ""])]
 check([r["heat_no"] for r in c.filter_by_period(recs_p, {"month": "Apr-2026"})] == ["H0", "H1"] and [r["heat_no"] for r in c.filter_by_period(recs_p, {"quarter": "Q1", "fy": "FY 2026-27"})] == ["H0", "H1", "H2"] and len(c.filter_by_period(recs_p, {"week": "Wk of 30-Mar-26"})) == 1 and len(c.filter_by_period(recs_p, {})) == 5 and len(c.filter_by_period(recs_p, {"month": "All"})) == 5, "period filters (undated heats drop out only when a filter is on)")
 po = c.period_options(recs_p); check(po["months"][0] == "Jul-2026" and po["undated"] == 1 and po["quarters"] == ["Q1", "Q2"] and po["fys"] == ["FY 2026-27"], "period options newest first, undated counted")
+# Week list must be chronological (newest first). Sorting the "DD-Mon-YY" label as text put 30-Mar before 29-Jun before 27-Apr.
+_wk = c.period_options([{"heat_no": f"W{i}", "cast_date": d} for i, d in enumerate(["2026-04-02", "2026-04-09", "2026-05-03", "2026-07-01", "2026-12-15", "2027-01-05"])])["weeks"]
+check(_wk == ["Wk of 04-Jan-27", "Wk of 14-Dec-26", "Wk of 29-Jun-26", "Wk of 27-Apr-26", "Wk of 06-Apr-26", "Wk of 30-Mar-26"], f"week dropdown is in true date order, newest first: {_wk}")
+prev = c.previous_period_filter(recs_p, {"month": "May-2026"}); check(prev == {"month": "Apr-2026", "week": "", "quarter": "", "fy": ""}, "previous Month period matches dashboard cadence")
+prev = c.previous_period_filter(recs_p, {"week": "Wk of 04-May-26"}); check(prev["week"] == "Wk of 27-Apr-26" and not prev["month"], "previous Week period is seven days earlier")
+prev = c.previous_period_filter(recs_p, {"quarter": "Q1", "fy": "FY 2026-27"}); check(prev == {"month": "", "week": "", "quarter": "Q4", "fy": "FY 2025-26"}, "previous Quarter period rolls back across FY")
+recs_q = [dict(recs_p[0], cast_date="2025-05-02"), dict(recs_p[1], cast_date="2026-06-02"), dict(recs_p[2], cast_date="2026-08-02")]
+prev = c.previous_period_filter(recs_q, {"quarter": "Q2", "fy": ""}); check(prev == {"month": "", "week": "", "quarter": "Q1", "fy": "FY 2026-27"}, "previous Quarter without FY resolves the latest available FY")
+prev = c.previous_period_filter(recs_p, {"fy": "FY 2026-27"}); check(prev["fy"] == "FY 2025-26" and not prev["month"], "previous FY period rolls back one FY")
 res = c.validate_rows(rows({"heat_no": "NBS4", "cu": 175.0, "total": None})); check(res["issue_counts"].get("out_of_range") == 1, "% above 100")
 res = c.validate_rows(rows({"heat_no": "NBS5", "ni": -1})); check(res["issue_counts"].get("out_of_range") == 1, "negative %")
 res = c.validate_rows(rows({"heat_no": "NBS6", "cu": "abc"})); check(res["issue_counts"].get("bad_number") == 1, "text in a number cell")
@@ -145,6 +154,10 @@ v = c.build_spc_view([{"heat_no": "X1", "cast_date": "2026-05-01", "cu": 75.0}, 
 check(v["summary"]["has_limits"] is False and v["summary"]["compare"]["in_spec"]["heats"] == 0, "no limits -> no heat is reported as 'in spec'")
 v = c.build_spc_view([{"heat_no": "X1", "cast_date": "2026-05-01", "cu": 75.0}, {"heat_no": "X2", "cast_date": "2026-05-02", "cu": 75.1}], {"description": "S", "alloy": "N", "limits": {"cu": [74, 76]}}, "cu", {"X1": c.summarize_disposition([{"output_weight": 1, "quality_decision": "ACCEPT"}])})
 check(v["summary"]["has_limits"] is True and v["summary"]["compare"]["in_spec"]["heats"] == 1, "with limits, in-spec heats are still counted")
+_immut = [{"heat_no": "X1", "cast_date": "2026-05-01", "cu": 75.0}, {"heat_no": "X2", "cast_date": "2026-05-02", "cu": 75.1}]
+_immut_before = [dict(x) for x in _immut]
+c.build_spc_view(_immut, {"description": "S", "alloy": "N", "limits": {"cu": [74, 76]}}, "cu", {})
+check(_immut == _immut_before and all("value" not in x for x in _immut), "SPC view does not mutate the revision-cached chemistry source records")
 
 # ---------------------------------------------------------------- HTTP flow
 def http_flow():
@@ -215,6 +228,7 @@ def http_flow():
         s, v3 = call("GET", q + "&last_n=10", auth=False); check(s == 200 and v3["n"] == 10, "last N")
         s, _ = call("GET", "/api/chem/spc?spec=Nope&param=cu", auth=False); check(s == 400, "unknown spec -> 400")
         s, _ = call("GET", "/api/chem/spc?spec=Test%20Brass&param=zz", auth=False); check(s == 400, "unknown param -> 400")
+        s, v_empty_param = call("GET", "/api/chem/spc?spec=Test%20Brass&param=sn", auth=False); check(s == 200 and v_empty_param.get("param") == "sn" and v_empty_param.get("n") == 0, "a valid parameter with no values stays selected and returns an empty view")
         s, h = call("GET", "/api/chem/heat?heat_no=nbs6348", auth=False); check(s == 200 and h["found"] and h["coils"] and h["summary"]["coils"] == len(h["coils"]), "heat dialog data (case-insensitive)")
         # manual spec edit
         s, e = call("POST", "/api/admin/chem_spec", {"description": "Manual", "alloy": "M", "limits": {"cu": [1, 0]}}); check(s == 400, "manual spec with LSL>USL refused")
@@ -250,10 +264,24 @@ check(all(k in js for k in ("Std. Dev.", "chemElemArt", "chemFieldHtml", "chemFi
       "Dashboard-style filter bar, KPI-style element cards, Std. Dev. cells, Standard + Aim lines present; Insert box removed")
 check("data-aim" in adm and "AIM limits" in adm and "Date span" in adm, "admin: AIM limits editor and chemistry date summary present")
 css = (ROOT / "src/css/16-chem-spc.css").read_text(encoding="utf-8")
+server_src = open(ROOT / "server.py", encoding="utf-8").read()
 check("#0f2a4a" not in js and 'stroke="var(--text)"' in js, "histogram normal curve follows the theme (no fixed dark navy)")
 check('html[data-theme="dark"] .chem-great' in css, "dark-theme colour for the Excellent Cpk rating")
 check("chemExportCpk" in js and "chemExportHeats" in js and 'id="chemCpkCsv"' in js and 'id="chemHeatsCsv"' in js, "Cpk-table and heat-data CSV exports present")
-check("TAB_LOADERS.chem = loadChemSpc" in js and "#tabs .tab-btn" in css, "tab loader registered from the chemistry piece; tab bar stays on one row")
+check("const TAB_KEYS=['dashboard','controlroom','wcgrade','defects','weekly','chem'];" in js and "TAB_LOADERS.chem = loadChemSpc" in js and "#tabs .tab-btn" in css, "Chemistry participates in shared tab routing/default-tab validation; tab bar stays on one row")
+check("previous_period_filter" in open(ROOT / "chem_spc.py", encoding="utf-8").read() and "prev_cpk" in js and "chem-el-trendline" in js, "element-card period-over-period Cpk comparison is wired")
+check("attachKpiTilt(cardEl)" in js and "kpi-up" in js and "kpi-down" in js, "element cards reuse KPI tilt and change-animation classes")
+check("title=\"Click to chart" not in js and "aria-label=\"${escQcr(e.name)} — Cpk" in js, "element cards use accessible labels without browser-native hover popups")
+check("animateChemNumber(cpkEl, 0, Number(r.cpk)" not in js and "animateChemNumber(ppkEl, 0, Number(r.ppk)" not in js, "null Cpk/Ppk values cannot animate through numeric zero")
+check("document.addEventListener('keydown', e => {\n  if((e.key !== 'Enter'" not in js, "element-card keyboard activation has no duplicate delegated refresh handler")
+check("font-family:'Bahnschrift SemiBold'" in css and "font-family:'Space Grotesk'" not in css.split(".kpi-card.chem-el-kpi .chem-el-bv",1)[1].split("}",1)[0], "element-card headline font matches the dashboard KPI headline font")
+check("CHEM_OVERVIEW_CACHE_MAX" in server_src and "CHEM_DISPOSITION_HEAT_SET" in server_src, "chemistry caches are bounded and disposition meta lookup is cached")
+check("CHEM_MAX_POINT_MARKERS" in js and "chemMarkerIndexes" in js and "chemBindNearestHover" in js, "dense Chemistry charts bound DOM marker count while preserving exact nearest-point hover/drilldown")
+check("chemRefreshController" in js and "AbortController" in js, "rapid Chemistry selector changes cancel stale in-flight requests")
+check("chemSel.spec = usable[0]?.description" in js and "chemSel.param = (chemMeta?.params || []).some(p => p.key === 'cu')" in js, "Chemistry Reset All clears periods/last-N and restores deterministic grade/parameter defaults")
+check("im.ucl" not in js.split("function drawChemI")[1].split("function chemLegend")[0] and "im.lcl" not in js.split("function drawChemI")[1].split("function chemLegend")[0] and "Y(im.mr_ucl)" not in js.split("function drawChemMR")[1].split("function drawChemHist")[0], "UCL/LCL lines are not rendered in Chemistry charts")
+check("#chemDrillModal.chem-drill-open .drill-head" in css and "#chemDrillModal.chem-drill-open #chemDrillContent" in css, "chemistry drill-down header/content scrolling is scoped and sticky")
+check('cache_key = "chem:meta"' in server_src and 'cache_key = "chem:spc:"' in server_src and "CHEM_SOURCE_CACHE" in server_src, "chemistry API response/source caching is wired")
 check("row" in js.split("function drawChemHist")[1] and "Mean" in js.split("function drawChemHist")[1], "histogram labels use separate rows for Standard, Aim and Mean")
 
 # ---------------------------------------------------------------- period filters must get data (dates with a time part, any "…Date…" header, cascading lists)

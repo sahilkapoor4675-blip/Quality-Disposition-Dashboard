@@ -4,18 +4,10 @@
 .chem-empty{padding:22px;text-align:center;color:var(--muted);line-height:1.7}
 .chem-empty a{color:var(--accent);font-weight:700}
 .chem-empty-chart{padding:34px 12px;text-align:center;color:var(--muted);font-weight:600}
-.chem-kpi-grid{grid-auto-rows:auto}
-.chem-kpi{min-height:0!important}
-.chem-kpi .value{font-size:28px}
-.chem-kpi.chem-great .value,.chem-kpi.chem-good .value{color:var(--green)}
-.chem-kpi.chem-warn .value{color:var(--amber)}
-.chem-kpi.chem-bad .value{color:var(--red)}
 .chem-note-strip{grid-column:1/-1;padding:9px 13px;border-radius:9px;background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.35);color:var(--text);font-size:13px;line-height:1.5}
 .chem-great{color:#0B7A3B;font-weight:700}.chem-good{color:var(--green)}.chem-warn{color:var(--amber)}.chem-bad{color:var(--red);font-weight:700}
 .chem-muted{color:var(--muted);font-size:12.5px}
 .chem-h3-sub{font-size:12.5px;font-weight:600;color:var(--muted);margin-left:6px}
-.chem-pt{cursor:pointer}
-.chem-pt:hover{stroke:var(--chart-strong);stroke-width:2}
 .chem-legend{display:flex;flex-wrap:wrap;gap:14px;padding:6px 14px 12px;font-size:12px;color:var(--muted)}
 .chem-legend span{display:inline-flex;align-items:center;gap:6px}
 .chem-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
@@ -39,24 +31,6 @@
 .chem-cmp-f{margin-top:8px;font-size:12.5px;color:var(--text)}
 .chem-cmp-h{margin-top:6px;font-size:11.5px;color:var(--muted)}
 /* main elements: Cpk headline strip */
-.chem-main-panel:empty{display:none}
-.chem-main-panel{padding:14px 16px}
-.chem-main-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin-bottom:10px}
-.chem-main-head h3{margin:0;font-size:17px;color:var(--heading)}
-.chem-main-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px}
-.chem-main-card{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:12px;border:1px solid var(--border);border-left:6px solid var(--slate);background:var(--card);color:var(--text)}
-.chem-main-card:hover{border-color:var(--accent)}
-.chem-main-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.chem-main-card.chem-cur{box-shadow:0 0 0 2px rgba(17,141,255,.35)}
-.chem-main-card.chem-great{border-left-color:#0B7A3B}.chem-main-card.chem-good{border-left-color:var(--green)}
-.chem-main-card.chem-warn{border-left-color:var(--amber)}.chem-main-card.chem-bad{border-left-color:var(--red)}
-.chem-main-el{font-weight:800;font-size:14px;color:var(--heading)}
-.chem-main-cpk{font-size:34px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
-.chem-main-card.chem-great .chem-main-cpk,.chem-main-card.chem-good .chem-main-cpk{color:var(--green)}
-.chem-main-card.chem-warn .chem-main-cpk{color:var(--amber)}.chem-main-card.chem-bad .chem-main-cpk{color:var(--red)}
-.chem-main-tag{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
-.chem-main-sub{font-size:12px;color:var(--muted);line-height:1.4}
-.chem-tier{font-size:11px;font-weight:700;opacity:.85;margin-left:4px}
 .chem-table tr.chem-sep td{background:var(--bg);color:var(--muted);font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:5px 10px}
 .chem-table tr.chem-main-row td:first-child{color:var(--heading)}
 /* heat dialog */
@@ -66,7 +40,6 @@ html[data-theme="dark"] .chem-note-strip{background:rgba(245,158,11,.12)}
 html[data-theme="dark"] .chem-note-strip.chem-err{background:rgba(248,113,113,.14)}
 /* #0B7A3B (dark green) is unreadable on the dark card: use the theme green there */
 html[data-theme="dark"] .chem-great{color:var(--green)}
-html[data-theme="dark"] .chem-main-card.chem-great{border-left-color:var(--green)}
 /* Tab bar: 6 tabs must stay on ONE row. Wide screens share the row equally; narrower screens scroll sideways instead of wrapping. */
 @media(min-width:1000px){
   #tabs{display:grid!important;grid-auto-flow:column!important;grid-auto-columns:minmax(0,1fr)!important;flex-wrap:nowrap!important;gap:8px}
@@ -99,20 +72,23 @@ html[data-theme="dark"] .chem-topbar input.chem-heat-input:focus{background:#0F1
 #chemDrillModal.chem-drill-open{display:flex!important;opacity:1!important;visibility:visible!important;pointer-events:auto!important}
 
 /* ---- element cards: built on the dashboard's own .kpi-card (status bar, icon chip, status pill, tinted tiles, hover, dark mode) ---- */
+.kpi-card.chem-el-kpi{font-family:inherit;}
+/* Typography parity: headline metrics use exactly the shared KPI metric font. */
+.kpi-card.chem-el-kpi .chem-el-bv{font-family:'Bahnschrift SemiBold','Bahnschrift','Arial Narrow',sans-serif;font-size:34px;font-weight:600;letter-spacing:-1.2px;line-height:1.08;}
 .chem-el-grid-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:14px;margin-bottom:8px}
-.chem-el-kpi{cursor:pointer;min-height:0!important;display:flex;flex-direction:column;background-image:radial-gradient(ellipse at 88% 34%,var(--el-tint2,transparent) 0%,transparent 58%),linear-gradient(180deg,#FFFFFF 0%,#FBFDFF 100%)}
+.chem-el-kpi{cursor:pointer;min-height:0!important;display:flex;flex-direction:column;background-image:none!important}
 .chem-el-kpi:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent),var(--shadow-card-hover)}
 .chem-el-kpi .kpi-top{gap:10px}
 .chem-el-label{display:flex;align-items:center;gap:10px;min-width:0}
-.kpi-card.chem-el-kpi .kpi-icon.chem-el-chip{width:44px;height:44px;flex:0 0 auto;border-radius:11px;font-family:Georgia,"Times New Roman",serif;font-size:23px;font-weight:700;letter-spacing:-.5px;color:var(--el-t,var(--heading));background:var(--el-tint1,#f1f6fb)!important;box-shadow:inset 0 0 0 1px var(--el-edge,#E1EBF2)}
+.kpi-card.chem-el-kpi .kpi-icon.chem-el-chip{width:44px;height:44px;flex:0 0 auto;border-radius:11px;font-family:inherit;font-size:23px;font-weight:700;letter-spacing:-.5px;color:var(--el-t,var(--heading));background:var(--el-tint1,#f1f6fb)!important;box-shadow:inset 0 0 0 1px var(--el-edge,#E1EBF2)}
 .chem-el-nm{display:flex;flex-direction:column;min-width:0;line-height:1.15}
 .chem-el-nm small{margin-top:2px;font-size:11.5px;font-weight:700;letter-spacing:.3px;text-transform:none;color:var(--muted)}
 .chem-el-body{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .chem-el-metrics{display:flex;gap:22px;min-width:0}
 .chem-el-big{display:flex;flex-direction:column;line-height:1.05}
-.chem-el-bk{font-size:13px;font-weight:800;letter-spacing:.45px;text-transform:uppercase;color:var(--muted)}
-.chem-el-bv{font-family:'Bahnschrift SemiBold','Bahnschrift','Arial Narrow',sans-serif;font-size:36px;font-weight:600;letter-spacing:-1px;margin-top:4px;font-variant-numeric:tabular-nums lining-nums;color:#16324F}
+.chem-el-bk{font-family:'Manrope',sans-serif;font-size:14px;font-weight:700;letter-spacing:var(--ls-label);text-transform:uppercase;color:var(--muted)}
+.chem-el-bv{margin-top:4px;font-variant-numeric:tabular-nums lining-nums;color:#16324F}
 .chem-el-bv.is-great,.chem-el-bv.is-good{color:var(--green)}
 .chem-el-bv.is-warn{color:var(--amber)}
 .chem-el-bv.is-bad{color:var(--red)}
@@ -123,14 +99,52 @@ html[data-theme="dark"] .chem-topbar input.chem-heat-input:focus{background:#0F1
 .chem-el-tiles .kpi-target-item{display:flex;align-items:baseline;justify-content:space-between;gap:8px;text-align:left;padding:6px 10px}
 .chem-el-tiles .kpi-target-item span{font-size:12px;font-weight:800;letter-spacing:.45px;text-transform:uppercase}
 .chem-el-tiles .kpi-target-item b{display:inline;margin:0;font-size:16px;font-variant-numeric:tabular-nums}
-html[data-theme="dark"] .chem-el-kpi{background-image:radial-gradient(ellipse at 88% 34%,var(--el-tint1,transparent) 0%,transparent 60%),linear-gradient(180deg,#141B2C 0%,#111827 100%)}
 html[data-theme="dark"] .kpi-card.chem-el-kpi .kpi-icon.chem-el-chip{color:var(--el-c,var(--heading))}
 html[data-theme="dark"] .chem-el-bv{color:#E8EDF6}
 html[data-theme="dark"] .chem-el-bv.is-great,html[data-theme="dark"] .chem-el-bv.is-good{color:var(--green)}
 html[data-theme="dark"] .chem-el-bv.is-warn{color:var(--amber)}
 html[data-theme="dark"] .chem-el-bv.is-bad{color:var(--red)}
 html[data-theme="dark"] .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent),0 4px 10px rgba(0,0,0,.35),0 16px 38px rgba(0,0,0,.5)}
-@media(max-width:700px){.chem-el-grid-wrap{grid-template-columns:1fr}.chem-el-bv{font-size:32px}.chem-el-art{width:84px;flex-basis:84px}}
+.kpi-card.chem-el-kpi .chem-el-bv{font-variant-numeric:tabular-nums lining-nums;}
+.kpi-card.chem-el-kpi.kpi-up .chem-el-bv{animation:valueUp .65s ease-out var(--kpi-stagger,0s) both;}
+.kpi-card.chem-el-kpi.kpi-down .chem-el-bv{animation:valueDown .65s ease-out var(--kpi-stagger,0s) both;}
+.chem-el-trendline{margin-top:7px;margin-bottom:1px;display:flex;align-items:center;gap:7px;min-height:23px;}
+.chem-el-trendline .prev{font-size:13px;}
+.chem-el-trendline .trend{font-size:13px;}
+/* Dashboard parity: Chemistry reuses the shared KPI/chart interaction contract instead of introducing a second visual system. */
+.chem-el-kpi .sparkline{width:76px;height:28px;display:block;flex:0 0 76px;}
+.chem-el-kpi .sparkline polyline{fill:none;stroke-width:2.2;}
+.chem-el-kpi .kpi-bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:10px;}
+.chem-el-meta{min-width:0;flex:1;}
+.chem-el-spark{width:76px;flex:0 0 76px;padding-bottom:4px;}
+.chem-el-kpi .chem-el-trendline .prev{color:var(--muted);font-family:'Manrope',sans-serif;}
+.chem-el-kpi .chem-el-trendline .trend{font-family:'Space Grotesk',sans-serif;padding:2px var(--sp-2);border-radius:5px;}
+.chem-el-kpi .chem-el-trendline .trend.good{color:#15803D;background:#DCFCE7;}
+.chem-el-kpi .chem-el-trendline .trend.bad{color:#B91C1C;background:#FEE2E2;}
+.chem-el-kpi .chem-el-trendline .trend.equal{color:#475569;background:#F3F4F6;}
+.chem-el-kpi .chem-el-trendline .trend.info{color:#0369A1;background:#E0F2FE;}
+.chem-cmp{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
+.chem-cmp:hover{transform:translateY(-2px);box-shadow:var(--shadow-card-hover);}
+.chem-pt{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:center;}
+.chem-pt:hover{stroke:var(--chart-strong);stroke-width:2;opacity:.88;transform:scale(1.12);}
+.chem-hist-bar{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:bottom;}
+.chem-hist-bar:hover{opacity:.9;transform:scaleY(1.02);}
+.chem-hist-label{pointer-events:none;}
+.chem-filter-summary{margin-top:0;margin-bottom:16px;}
+html.chem-mode .chem-filter-summary{display:flex;}
+@media(prefers-reduced-motion:reduce){.chem-el-kpi,.chem-cmp,.chem-pt,.chem-hist-bar{transition:none!important}.chem-el-kpi:hover,.chem-cmp:hover,.chem-pt:hover,.chem-hist-bar:hover{transform:none!important}}
+
+/* Chemistry drill-down: only the content region scrolls; the modal header and breadcrumb stay frozen. */
+#chemDrillModal.chem-drill-open .drill-dialog{display:flex;flex-direction:column;max-height:min(92vh,980px);min-height:0;overflow:hidden;}
+#chemDrillModal.chem-drill-open .drill-head{position:sticky;top:0;z-index:70;flex:0 0 auto;}
+#chemDrillModal.chem-drill-open .drill-breadcrumb{flex:0 0 auto;}
+#chemDrillModal.chem-drill-open .drill-body{display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0;}
+#chemDrillModal.chem-drill-open #chemDrillContent{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;}
+#chemDrillModal.chem-drill-open #chemDrillContent .table-scroll{height:auto;max-height:none;overflow:visible;}
+#chemDrillModal.chem-drill-open #chemDrillContent .drill-table thead th{position:sticky;top:0;z-index:12;}
+
+@media(min-width:1500px){.kpi-card.chem-el-kpi .chem-el-bv{font-size:34px}}
+@media(max-width:700px){.chem-el-grid-wrap{grid-template-columns:1fr}.kpi-card.chem-el-kpi .chem-el-bv{font-size:27px}.chem-el-art{width:84px;flex-basis:84px}}
 .chem-topbar .reset-all{white-space:nowrap}
 .chem-topbar .filter-toolbar-title{min-width:0}
 /* dark mode: neutral (no rating) tiles and the element name need light text on the dark card */

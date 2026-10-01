@@ -60,7 +60,7 @@ function setDefaultLandingTab(tabName){
 function initCommandPalette(){
   const modal=document.getElementById('cmdkModal'), input=document.getElementById('cmdkInput'), list=document.getElementById('cmdkList');
   if(!modal||!input||!list) return;
-  const TAB_LABELS={dashboard:'📊 Dashboard',controlroom:'🚨 Quality Control Room',wcgrade:'🏭 Work Center & Grade',defects:'🎯 Defects List',weekly:'📅 Period Trend'};
+  const TAB_LABELS={dashboard:'📊 Dashboard',controlroom:'🚨 Quality Control Room',wcgrade:'🏭 Work Center & Grade',defects:'🎯 Defects List',weekly:'📅 Period Trend',chem:'🧪 Chemistry SPC'};
   function buildCommands(){
     const cmds=[];
     Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({cat:'nav',icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),desc:'Jump to this dashboard section',run:()=>activateTab(key)}));
@@ -68,7 +68,8 @@ function initCommandPalette(){
     // Exports open through the dedicated dialog (#exportDialogModal) instead of the Command Palette.
     // Compare mode is desktop-only (its button is hidden on narrow screens), so only offer it when the button is actually shown.
     if(document.getElementById('compareModeBtn')?.offsetParent) cmds.push({cat:'filters',icon:'⊞',label:'Compare Periods (side-by-side)',desc:'Two periods next to each other',run:()=>document.getElementById('compareModeBtn')?.click()});
-    cmds.push({cat:'filters',icon:'↺',label:'Reset All Filters',desc:'Clear every dashboard filter',run:()=>document.getElementById('resetAllBtn')?.click()});
+    const _onChem=(document.querySelector('.tab-btn.active')?.dataset.tab)==='chem';
+    cmds.push({cat:'filters',icon:'↺',label:'Reset All Filters',desc:_onChem?'Clear every Chemistry filter':'Clear every dashboard filter',run:()=>document.getElementById(_onChem?'chemResetAll':'resetAllBtn')?.click()});
     cmds.push({cat:'nav',icon:'🔎',label:'Focus Search',hint:'/',desc:'Search any defect, grade or work center',run:()=>document.getElementById('globalSearchInput')?.focus()});
     const isDark=currentTheme()==='dark';
     cmds.push({cat:'appearance',icon:isDark?'☀️':'🌙',label:isDark?'Switch to Light Mode':'Switch to Dark Mode',kw:'theme night day appearance',desc:'Change the theme',run:()=>toggleTheme()});
@@ -159,7 +160,7 @@ let refreshController = null;
 // hijacked; and Ctrl/Cmd/Alt combos other than the ones listed are left
 // alone so browser/OS shortcuts keep working normally.
 (function initKeyboardShortcuts(){
-  const TAB_ORDER = ['dashboard','controlroom','wcgrade','defects','weekly'];
+  const TAB_ORDER = ['dashboard','controlroom','wcgrade','defects','weekly','chem'];
   document.addEventListener('keydown', (e)=>{
     const ae=document.activeElement, tag=(ae&&ae.tagName||'').toLowerCase();
     const typing = tag==='input' || tag==='textarea' || tag==='select' || (ae&&ae.isContentEditable);
@@ -196,7 +197,7 @@ let refreshController = null;
       }
       return;
     }
-    if(!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-5]$/.test(e.key)){
+    if(!typing && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-6]$/.test(e.key)){
       const tabName = TAB_ORDER[Number(e.key)-1];
       const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
       if(btn){ e.preventDefault(); activateTab(tabName); }
@@ -204,7 +205,7 @@ let refreshController = null;
     }
     if(!typing && e.key==='?'){
       e.preventDefault();
-      showToast('info','Keyboard shortcuts','Ctrl+K command palette · / search · 1-5 switch tabs · Esc close');
+      showToast('info','Keyboard shortcuts','Ctrl+K command palette · / search · 1-6 switch tabs · Esc close');
     }
   });
 })();

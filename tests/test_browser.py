@@ -56,6 +56,76 @@ def _start_server(db_path):
     raise AssertionError("server did not become ready in time")
 
 
+def _seed_chemistry():
+    """Import a Standard.xlsx (Standard + AIM sheets) and a cast-chemistry workbook through the
+    real admin API, so the Chemistry SPC tab has data to render. The bundled quality.db carries
+    only disposition rows; without this the tab (correctly) shows its "No chemistry data" state
+    and none of the chemistry UI assertions below could ever pass."""
+    import io, json, re, urllib.request
+    import openpyxl
+    sys.path.insert(0, str(ROOT))
+
+    def xlsx_bytes(wb):
+        bio = io.BytesIO(); wb.save(bio); return bio.getvalue()
+
+    hdr = ["Alloy", "Grade Descriptions", "Cu% (LSL)", "Cu% (USL)", "Zn% (LSL)", "Zn% (USL)", "Ni% (LSL)", "Ni% (USL)", "Pb% (LSL)", "Pb% (USL)"]
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Standard"; ws.append(hdr)
+    ws.append(["NBS", "Test Brass", 74, 76, 19, 21, None, None, 0, .04])
+    ws.append(["CNI", "Cu-Ni 80-20", 78, 82, None, None, 19, 21, 0, .03])
+    w2 = wb.create_sheet("AIM"); w2.append(hdr)
+    w2.append(["NBS", "Test Brass", 74.2, 75.8, 19.2, 20.8, None, None, 0, .01])
+    w2.append(["CNI", "Cu-Ni 80-20", 78.5, 81.5, None, None, 19.5, 20.5, 0, .02])
+    std = xlsx_bytes(wb)
+
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Test Brass"
+    ws.append(["Date", "Coil No.", "Alloy", "Denomination", "Cu%", "Ni%", "Zn%", "Pb%", "Total%", "Name"])
+    for i in range(30):
+        cu = 75.0 + (i % 5 - 2) * 0.05; zn = 20 - (i % 5 - 2) * 0.05
+        ws.append([f"{1 + i % 27:02d}.05.2026", "NBS6348" if i == 0 else f"NBS9{i:03d}", "NBS", "5RS",
+                   cu, 5.0, zn, .003, cu + 5.0 + zn + .003, "SUNIL"])
+    # Extra Test Brass heats in March 2026 (FY 2025-26, Q4) and June 2026 (FY 2026-27, Q1) next to the 30 May heats,
+    # plus a second grade: enough variety for Month / Week / Quarter / Fin. Year to cascade for real.
+    import datetime as _dt
+    for i in range(8):
+        d = _dt.date(2026, 3, 2) + _dt.timedelta(days=3 * i); cu = 75.0 + (i % 3 - 1) * 0.1; zn = 20 - (i % 3 - 1) * 0.1
+        ws.append([d.strftime("%d.%m.%Y"), f"NBS7{100 + i}", "NBS", "5RS", cu, 5.0, zn, .003, cu + 5.0 + zn + .003, "SUNIL"])
+    for i in range(6):
+        d = _dt.date(2026, 6, 3) + _dt.timedelta(days=4 * i); cu = 75.0 + (i % 3 - 1) * 0.1; zn = 20 - (i % 3 - 1) * 0.1
+        ws.append([d.strftime("%d.%m.%Y"), f"NBS7{200 + i}", "NBS", "5RS", cu, 5.0, zn, .003, cu + 5.0 + zn + .003, "SUNIL"])
+    # Each grade has its own sheet, like the real files (a sheet named exactly like a grade is matched to that grade first).
+    ws2 = wb.create_sheet("Cu-Ni 80-20")
+    ws2.append(["Date", "Coil No.", "Alloy", "Denomination", "Cu%", "Ni%", "Zn%", "Pb%", "Total%", "Name"])
+    for i in range(10):
+        d = _dt.date(2026, 5, 4) + _dt.timedelta(days=3 * i); cu = 80.0 + (i % 4 - 1.5) * 0.2; ni = 20.0 - (i % 4 - 1.5) * 0.15
+        ws2.append([d.strftime("%d.%m.%Y"), f"CNI8{100 + i}", "CNI", "X", cu, ni, 0, .002, cu + ni + .002, "SUNIL"])
+    chem = xlsx_bytes(wb)
+
+    req = urllib.request.Request(BASE + "/api/login", method="POST",
+                                 data=json.dumps({"username": ADMIN_USER, "password": ADMIN_PASS}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        cookie = "; ".join(h.split(";")[0] for h in r.headers.get_all("Set-Cookie"))
+    csrf = re.search(r"qdash_csrf=([^;]+)", cookie).group(1)
+
+    def call(path, body=None, file=None):
+        h = {"Cookie": cookie, "X-CSRF-Token": csrf}
+        if file:
+            b = "----seed" + "x" * 12
+            data = (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="{file[0]}"\r\n'
+                    f'Content-Type: application/octet-stream\r\n\r\n').encode() + file[1] + f"\r\n--{b}--\r\n".encode()
+            h["Content-Type"] = f"multipart/form-data; boundary={b}"
+        else:
+            data = json.dumps(body).encode(); h["Content-Type"] = "application/json"
+        with urllib.request.urlopen(urllib.request.Request(BASE + path, data=data, headers=h, method="POST"), timeout=30) as r:
+            return json.loads(r.read().decode())
+
+    pv = call("/api/admin/chem_specs_preview", file=("Standard.xlsx", std))
+    call("/api/admin/chem_specs_confirm", {"preview_id": pv["preview_id"]})
+    pv = call("/api/admin/chem_import_preview", file=("chem.xlsx", chem))
+    done = call("/api/admin/chem_import_confirm", {"preview_id": pv["preview_id"]})
+    assert done.get("inserted") == 54, f"chemistry seed failed: {done}"
+
+
 def run():
     from playwright.sync_api import sync_playwright
 
@@ -67,6 +137,9 @@ def run():
     console_errors = []
     page_errors = []
     try:
+        # Seeding is inside the try on purpose: if it fails, the finally below still stops the server
+        # (a leaked server on this port made the NEXT run talk to a stale, already-seeded instance).
+        _seed_chemistry()
         with sync_playwright() as p:
             browser = p.chromium.launch(args=["--no-sandbox"])
             context = browser.new_context(viewport={"width": 1440, "height": 900})
@@ -131,11 +204,128 @@ def run():
             # can still encode a stale combo even though the UI itself now prevents picking one).
             page.keyboard.press("Escape")
             page.goto(f"{BASE}/?month={excluded_month.replace(' ', '%20')}&quarter=Q2")
+            # A full reload replays the intro splash (it is never skipped by design), so it
+            # must be acknowledged again before anything behind it can be clicked.
+            page.wait_for_timeout(1000)
+            page.click("#introDashboardBtn")
             page.wait_for_timeout(1800)
             banner = page.inner_text("#periodBanner")
             assert "No records match" in banner, f"empty-selection banner missing, got: {banner!r}"
 
             collect_csp(page, "dashboard")
+
+            # ---- Chemistry SPC: dashboard parity/runtime contracts ----
+            page.click('#tabs button[data-tab="chem"]')
+            page.wait_for_timeout(1800)
+            assert page.locator('#chemTopBar .filter-field').count() >= 8, 'Chemistry filter bar did not render'
+            assert page.locator('#chemFilterSummaryBar').count() == 1, 'Chemistry selection summary missing'
+            assert page.locator('#chemPeriodBanner').count() == 1, 'Chemistry period banner missing'
+            assert page.locator('#tab-chem .chem-el-kpi').count() >= 1, 'Chemistry element KPI cards did not render'
+            assert page.locator('#tab-chem .chem-el-kpi .sparkline').count() >= 1, 'Chemistry KPI sparkline parity missing'
+            # chart-ready is transient, so validate the shared chart classes/structure rather than waiting for a fragile animation state.
+            assert page.locator('#chemIChart .chart-svg').count() == 1, 'Chemistry I chart missing shared chart-svg class'
+            assert page.locator('#chemMRChart .chart-svg').count() == 1, 'Chemistry MR chart missing shared chart-svg class'
+            assert page.locator('#chemHist .chart-svg').count() == 1, 'Chemistry histogram missing shared chart-svg class'
+            assert page.locator('#chemIChart .chem-legend').count() == 1, 'Chemistry I chart legend missing'
+            assert page.locator('#chemMRChart .chem-legend').count() == 1, 'Chemistry MR chart legend missing'
+            assert page.locator('#chemHist .chart-bar').count() >= 1, 'Chemistry histogram is not using the shared chart-bar interaction contract'
+            # The I / MR charts show their tooltip through one transparent .chem-hover-layer rect
+            # (nearest-heat lookup on pointermove), so drive a real mouse move over that layer;
+            # hovering an individual <circle> is intercepted by the layer by design.
+            for chart_id in ('chemIChart', 'chemMRChart'):
+                shown = False
+                for _attempt in range(4):
+                    # Scrolling can shift/redraw the chart (sticky bar, resize observer), so scroll,
+                    # let it settle, then re-read the layer's box on EVERY attempt.
+                    page.evaluate(f"document.querySelector('#{chart_id} .chem-hover-layer').scrollIntoView({{block:'center'}})")
+                    page.wait_for_timeout(600)
+                    box = page.locator(f'#{chart_id} .chem-hover-layer').bounding_box()
+                    assert box, f'{chart_id} hover layer has no box'
+                    page.mouse.move(box['x'] + box['width'] * 0.25, box['y'] + box['height'] / 2)
+                    page.mouse.move(box['x'] + box['width'] * 0.5, box['y'] + box['height'] / 2, steps=4)
+                    page.wait_for_timeout(200)
+                    if page.locator('.chart-tooltip.show').count() == 1:
+                        shown = True
+                        break
+                assert shown, f'Chemistry {chart_id} tooltip did not appear'
+                tip_txt = page.locator('.chart-tooltip.show .ct-main').inner_text()
+                assert tip_txt.strip(), f'Chemistry {chart_id} tooltip is empty'
+                page.mouse.move(2, 2)
+                page.wait_for_timeout(150)
+            month_opts = page.locator('#chemTopBar .filter-field[data-chem-key="month"] .filter-option:not(.all-option)').count()
+            if month_opts:
+                page.click('#chemTopBar .filter-field[data-chem-key="month"] .filter-trigger')
+                page.locator('#chemTopBar .filter-field[data-chem-key="month"] .filter-option:not(.all-option)').first.click()
+                page.wait_for_timeout(1200)
+                assert page.locator('#chemFilterRecordCount').inner_text().strip() != '-- heats', 'Chemistry Month filter did not refresh the heat count'
+
+            # ---- Chemistry SPC: filter-logic + shared-feature parity with the other tabs ----
+            def copts(key):
+                return page.eval_on_selector_all(f'#chemTopBar [data-chem-key="{key}"] .filter-option', "e => e.map(x => x.dataset.value)")
+
+            def ctrig(key):
+                return page.inner_text(f'#chemTopBar [data-chem-key="{key}"] .filter-trigger span')
+
+            def cpick(key, value):
+                page.click(f'#chemTopBar [data-chem-key="{key}"] .filter-trigger')
+                page.click(f'#chemTopBar [data-chem-key="{key}"] .filter-option[data-value="{value}"]')
+                page.wait_for_timeout(1300)
+
+            page.click('#chemResetAll'); page.wait_for_timeout(1000)
+            cpick('spec', 'Test Brass')
+            # cascade: like the dashboard, a period you pick narrows the other period lists (no zero-overlap combos can be chosen)
+            cpick('quarter', 'Q4')
+            assert set(copts('month')) == {'', 'Mar-2026'}, f"Quarter=Q4 should leave only Mar-2026: {copts('month')}"
+            assert set(copts('fy')) == {'', 'FY 2025-26'}, f"Quarter=Q4 should leave only FY 2025-26: {copts('fy')}"
+            cpick('month', 'Mar-2026')
+            assert page.inner_text('#chemActiveBadge') == '2 Active', 'active-filter badge did not count the two period filters'
+            banner = page.inner_text('#chemPeriodBanner')
+            assert 'Compared to' in banner and 'Feb-2026' in banner, f'previous-period banner missing/wrong: {banner!r}'
+            # dropdown behaviour identical to the dashboard's: search box, one open at a time, click-outside closes
+            page.click('#chemTopBar [data-chem-key="week"] .filter-trigger')
+            page.fill('#chemTopBar [data-chem-key="week"] .filter-search', 'zzz'); page.wait_for_timeout(150)
+            assert page.locator('#chemTopBar [data-chem-key="week"] .filter-empty').count() == 1, 'Chemistry dropdown search has no empty state'
+            page.click('#chemTopBar [data-chem-key="param"] .filter-trigger')
+            assert page.locator('.filter-control.open').count() == 1, 'opening a 2nd Chemistry dropdown did not close the 1st'
+            page.mouse.click(4, 4); page.wait_for_timeout(150)
+            assert page.locator('.filter-control.open').count() == 0, 'clicking outside did not close the Chemistry dropdown'
+            # switching grade keeps the chosen parameter
+            cpick('param', 'ni'); cpick('spec', 'Cu-Ni 80-20')
+            assert ctrig('param') == 'Ni%', 'switching grade lost the selected parameter'
+            page.click('#chemResetAll'); page.wait_for_timeout(1200)
+            assert page.inner_text('#chemActiveBadge') == '0 Active' and ctrig('month') == 'All' and ctrig('quarter') == 'All', 'Reset All did not clear the Chemistry filters'
+
+            # shared features must know about this tab: command palette, number-key shortcut, Reset All command
+            cpick('spec', 'Test Brass'); cpick('quarter', 'Q1')
+            page.keyboard.press('Control+K'); page.wait_for_timeout(250)
+            page.fill('#cmdkInput', 'chemistry'); page.wait_for_timeout(250)
+            labels = page.eval_on_selector_all('#cmdkList [data-idx]', "e => e.map(x => x.textContent)")
+            assert any('Go to' in l and 'Chemistry SPC' in l for l in labels), f'command palette has no "Go to Chemistry SPC": {labels}'
+            page.fill('#cmdkInput', 'Reset All'); page.wait_for_timeout(250); page.keyboard.press('Enter'); page.wait_for_timeout(1300)
+            assert ctrig('quarter') == 'All' and page.inner_text('#chemActiveBadge') == '0 Active', 'palette "Reset All Filters" must reset the Chemistry filters while this tab is open'
+            page.mouse.click(10, 10); page.keyboard.press('1'); page.wait_for_timeout(900)
+            assert not page.evaluate("document.documentElement.classList.contains('chem-mode')"), 'key 1 did not leave the Chemistry tab'
+            page.keyboard.press('6'); page.wait_for_timeout(1500)
+            assert page.evaluate("document.documentElement.classList.contains('chem-mode')") and page.locator('#tab-chem .chem-el-kpi').count() >= 1, 'key 6 did not open the Chemistry tab'
+            # header search result for a Grade only changes dashboard filters -> must land on the Dashboard tab, not change hidden state
+            page.click('#globalSearchInput'); page.fill('#globalSearchInput', 'A'); page.wait_for_timeout(1200)
+            hit = page.locator('.gsr-item[data-type="grade"]').first
+            if hit.count():
+                hit.click(); page.wait_for_timeout(1500)
+                assert page.evaluate("document.querySelector('.tab-btn.active').dataset.tab") == 'dashboard', 'grade search from the Chemistry tab changed nothing visible'
+                page.click('#resetAllBtn'); page.wait_for_timeout(900)
+                page.keyboard.press('6'); page.wait_for_timeout(1500)
+            # export dialog: honest about scope on this tab
+            page.click('#exportMenuBtn'); page.wait_for_timeout(250)
+            assert 'Chemistry' in page.inner_text('#exportDialogDesc'), 'export dialog does not say it ignores the Chemistry selection'
+            page.keyboard.press('Escape'); page.wait_for_timeout(250)
+            # history: Back leaves the tab, Forward returns with data
+            page.click('#tabs button:nth-child(1)'); page.wait_for_timeout(700)
+            page.click('#tabs button[data-tab="chem"]'); page.wait_for_timeout(1300)
+            page.go_back(); page.wait_for_timeout(1300)
+            assert not page.evaluate("document.documentElement.classList.contains('chem-mode')"), 'browser Back did not leave Chemistry SPC'
+            page.go_forward(); page.wait_for_timeout(1500)
+            assert page.locator('#tab-chem .chem-el-kpi').count() >= 1, 'browser Forward did not restore Chemistry SPC'
 
             # ---- Admin: login, and every sidebar link must highlight itself ----
             page2 = context.new_page()
@@ -187,7 +377,7 @@ def run():
     assert not page_errors, "Uncaught JS error(s): " + "; ".join(page_errors)
     assert not console_errors, "Browser console error(s): " + "; ".join(console_errors)
     print("BROWSER REGRESSION PASS — dashboard load, all tabs, cascading filters, "
-          "empty-selection banner, admin nav highlighting, CSP-safe admin actions; "
+          "empty-selection banner, Chemistry SPC filter cascade + shared-feature parity, admin nav highlighting, CSP-safe admin actions; "
           "zero CSP violations / console errors / uncaught JS errors.")
 
 

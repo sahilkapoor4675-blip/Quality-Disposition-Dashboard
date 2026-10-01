@@ -57,7 +57,12 @@
         field.classList.add("filter-active");
       });
       if (typeof updateActiveFilterBadge === "function") updateActiveFilterBadge();
-      if (typeof triggerFilterRefresh === "function") triggerFilterRefresh();
+      // The Chemistry SPC tab has its own filters; these dashboard filters are hidden there, so show the result on the Dashboard tab.
+      if (document.querySelector(".tab-btn.active")?.dataset.tab === "chem" && typeof activateTab === "function"){
+        if (typeof writeUrlState === "function") writeUrlState(false);
+        activateTab("dashboard");
+        if (typeof refreshCascadeFilters === "function") refreshCascadeFilters();
+      } else if (typeof triggerFilterRefresh === "function") triggerFilterRefresh();
     } else if (type === "defect"){
       openDrilldown("quality_investigation", `Search — ${label}`, {drill_value: label});
     }

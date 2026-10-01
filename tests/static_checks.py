@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent   # repo root (this file lives in 
 
 EXPECTED = [
     "homePanel", "dataQualityPanel", "kpiPanel", "addRecordPanel", "importPanel",
-    "importHistoryPanel", "recordsPanel", "fishbonePanel", "fishboneMapPanel",
+    "importHistoryPanel", "chemImportPanel", "chemSpecPanel", "recordsPanel", "fishbonePanel", "fishboneMapPanel",
     "commandCenterPanel", "databasePanel", "performancePanel", "backupsPanel",
     "recoveryPanel", "securityPanel", "validationPanel", "usersPanel",
     "auditExplorerPanel", "auditTrailPanel", "auditAnalyticsPanel", "activityPanel",
