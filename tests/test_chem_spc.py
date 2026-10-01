@@ -54,10 +54,10 @@ res = c.validate_rows(rows({"heat_no": "NBS2", "cast_date": None})); check(res["
 check(c._map_header(["Date", "Coil No.", "Cu%"]) == {0: "cast_date", 1: "heat_no", 2: "cu"}, "the Date column of the chemistry file is mapped")
 recs_p = [{"heat_no": f"H{i}", "cast_date": d, "cu": 75 + i * .01} for i, d in enumerate(["2026-04-02", "2026-04-09", "2026-05-03", "2026-07-01", ""])]
 check([r["heat_no"] for r in c.filter_by_period(recs_p, {"month": "Apr-2026"})] == ["H0", "H1"] and [r["heat_no"] for r in c.filter_by_period(recs_p, {"quarter": "Q1", "fy": "FY 2026-27"})] == ["H0", "H1", "H2"] and len(c.filter_by_period(recs_p, {"week": "Wk of 30-Mar-26"})) == 1 and len(c.filter_by_period(recs_p, {})) == 5 and len(c.filter_by_period(recs_p, {"month": "All"})) == 5, "period filters (undated heats drop out only when a filter is on)")
-po = c.period_options(recs_p); check(po["months"][0] == "Jul-2026" and po["undated"] == 1 and po["quarters"] == ["Q1", "Q2"] and po["fys"] == ["FY 2026-27"], "period options newest first, undated counted")
-# Week list must be chronological (newest first). Sorting the "DD-Mon-YY" label as text put 30-Mar before 29-Jun before 27-Apr.
+po = c.period_options(recs_p); check(po["months"] == ["Apr-2026", "May-2026", "Jul-2026"] and po["undated"] == 1 and po["quarters"] == ["Q1", "Q2"] and po["fys"] == ["FY 2026-27"], "period options oldest first (like the dashboard filters), undated counted")
+# Week list must be chronological (oldest first, like the dashboard). Sorting the "DD-Mon-YY" label as text put 30-Mar before 29-Jun before 27-Apr.
 _wk = c.period_options([{"heat_no": f"W{i}", "cast_date": d} for i, d in enumerate(["2026-04-02", "2026-04-09", "2026-05-03", "2026-07-01", "2026-12-15", "2027-01-05"])])["weeks"]
-check(_wk == ["Wk of 04-Jan-27", "Wk of 14-Dec-26", "Wk of 29-Jun-26", "Wk of 27-Apr-26", "Wk of 06-Apr-26", "Wk of 30-Mar-26"], f"week dropdown is in true date order, newest first: {_wk}")
+check(_wk == ["Wk of 30-Mar-26", "Wk of 06-Apr-26", "Wk of 27-Apr-26", "Wk of 29-Jun-26", "Wk of 14-Dec-26", "Wk of 04-Jan-27"], f"week dropdown is in true date order, oldest first: {_wk}")
 prev = c.previous_period_filter(recs_p, {"month": "May-2026"}); check(prev == {"month": "Apr-2026", "week": "", "quarter": "", "fy": ""}, "previous Month period matches dashboard cadence")
 prev = c.previous_period_filter(recs_p, {"week": "Wk of 04-May-26"}); check(prev["week"] == "Wk of 27-Apr-26" and not prev["month"], "previous Week period is seven days earlier")
 prev = c.previous_period_filter(recs_p, {"quarter": "Q1", "fy": "FY 2026-27"}); check(prev == {"month": "", "week": "", "quarter": "Q4", "fy": "FY 2025-26"}, "previous Quarter period rolls back across FY")
@@ -229,6 +229,14 @@ def http_flow():
         s, _ = call("GET", "/api/chem/spc?spec=Nope&param=cu", auth=False); check(s == 400, "unknown spec -> 400")
         s, _ = call("GET", "/api/chem/spc?spec=Test%20Brass&param=zz", auth=False); check(s == 400, "unknown param -> 400")
         s, v_empty_param = call("GET", "/api/chem/spc?spec=Test%20Brass&param=sn", auth=False); check(s == 200 and v_empty_param.get("param") == "sn" and v_empty_param.get("n") == 0, "a valid parameter with no values stays selected and returns an empty view")
+        # Grade = All / Parameter = All defaults
+        s, va = call("GET", "/api/chem/spc?spec=__all__&param=__all__", auth=False)
+        check(s == 200 and va.get("all_grades") and va["n_heats"] == 32 and len(va["grades"]) == 1 and va["grades"][0]["description"] == "Test Brass" and all(o["main"] for o in va["grades"][0]["overview"]), f"Grade = All returns per-grade main-element cards ({s})")
+        s, vb = call("GET", "/api/chem/spc?spec=&param=", auth=False); check(s == 200 and vb.get("all_grades"), "empty spec/param mean All")
+        s, vp = call("GET", "/api/chem/spc?spec=Test%20Brass&param=__all__", auth=False)
+        check(s == 200 and vp["param"] == "__all__" and [p["param"] for p in vp["param_views"]][:2] == ["cu", "zn"] and all(p["series"] and p["imr"] for p in vp["param_views"]) and vp["oos_total"] >= 1 and vp["n_heats"] == 32, f"Parameter = All returns one chart set per main element ({s})")
+        check(m["all_periods"]["months"] == ["May-2026"] and m["all_periods"]["fys"] == ["FY 2026-27"], "meta carries the periods of ALL grades (Grade = All)")
+        check(server.get_kpi_targets()["Chemistry Capability (Cp/Cpk/Pp/Ppk)"]["target"] == 1.33, "chemistry capability bands exist as a KPI target (editable in Admin -> KPI Targets)")
         s, h = call("GET", "/api/chem/heat?heat_no=nbs6348", auth=False); check(s == 200 and h["found"] and h["coils"] and h["summary"]["coils"] == len(h["coils"]), "heat dialog data (case-insensitive)")
         # manual spec edit
         s, e = call("POST", "/api/admin/chem_spec", {"description": "Manual", "alloy": "M", "limits": {"cu": [1, 0]}}); check(s == 400, "manual spec with LSL>USL refused")
@@ -271,14 +279,14 @@ check("chemExportCpk" in js and "chemExportHeats" in js and 'id="chemCpkCsv"' in
 check("const TAB_KEYS=['dashboard','controlroom','wcgrade','defects','weekly','chem'];" in js and "TAB_LOADERS.chem = loadChemSpc" in js and "#tabs .tab-btn" in css, "Chemistry participates in shared tab routing/default-tab validation; tab bar stays on one row")
 check("previous_period_filter" in open(ROOT / "chem_spc.py", encoding="utf-8").read() and "prev_cpk" in js and "chem-el-trendline" in js, "element-card period-over-period Cpk comparison is wired")
 check("attachKpiTilt(cardEl)" in js and "kpi-up" in js and "kpi-down" in js, "element cards reuse KPI tilt and change-animation classes")
-check("title=\"Click to chart" not in js and "aria-label=\"${escQcr(e.name)} — Cpk" in js, "element cards use accessible labels without browser-native hover popups")
+check("title=\"Click to chart" not in js and "aria-label=\"${escQcr(e.name)}${g && g.grade" in js and "— Cpk ${chemIdx(r.cpk)}" in js, "element cards use accessible labels without browser-native hover popups")
 check("animateChemNumber(cpkEl, 0, Number(r.cpk)" not in js and "animateChemNumber(ppkEl, 0, Number(r.ppk)" not in js, "null Cpk/Ppk values cannot animate through numeric zero")
 check("document.addEventListener('keydown', e => {\n  if((e.key !== 'Enter'" not in js, "element-card keyboard activation has no duplicate delegated refresh handler")
 check("font-family:'Bahnschrift SemiBold'" in css and "font-family:'Space Grotesk'" not in css.split(".kpi-card.chem-el-kpi .chem-el-bv",1)[1].split("}",1)[0], "element-card headline font matches the dashboard KPI headline font")
 check("CHEM_OVERVIEW_CACHE_MAX" in server_src and "CHEM_DISPOSITION_HEAT_SET" in server_src, "chemistry caches are bounded and disposition meta lookup is cached")
 check("CHEM_MAX_POINT_MARKERS" in js and "chemMarkerIndexes" in js and "chemBindNearestHover" in js, "dense Chemistry charts bound DOM marker count while preserving exact nearest-point hover/drilldown")
 check("chemRefreshController" in js and "AbortController" in js, "rapid Chemistry selector changes cancel stale in-flight requests")
-check("chemSel.spec = usable[0]?.description" in js and "chemSel.param = (chemMeta?.params || []).some(p => p.key === 'cu')" in js, "Chemistry Reset All clears periods/last-N and restores deterministic grade/parameter defaults")
+check("chemSel.spec = '__all__'; chemSel.param = '__all__';" in js and "let chemSel = { spec: '__all__', param: '__all__'" in js, "Chemistry filters start on All and Reset All puts every filter back to All")
 check("im.ucl" not in js.split("function drawChemI")[1].split("function chemLegend")[0] and "im.lcl" not in js.split("function drawChemI")[1].split("function chemLegend")[0] and "Y(im.mr_ucl)" not in js.split("function drawChemMR")[1].split("function drawChemHist")[0], "UCL/LCL lines are not rendered in Chemistry charts")
 check("#chemDrillModal.chem-drill-open .drill-head" in css and "#chemDrillModal.chem-drill-open #chemDrillContent" in css, "chemistry drill-down header/content scrolling is scoped and sticky")
 check('cache_key = "chem:meta"' in server_src and 'cache_key = "chem:spc:"' in server_src and "CHEM_SOURCE_CACHE" in server_src, "chemistry API response/source caching is wired")
@@ -293,7 +301,7 @@ check(all(_cs._is_date_header(_cs._hnorm(h)) for h in ("Date", "Cast Date", "Dat
       "any header that says 'date' is the cast date column")
 _recs = [{"heat_no": f"NB{i}", "cast_date": d} for i, d in enumerate(["2026-01-05", "2026-01-20", "2026-02-10", "2026-04-15", "2026-07-01"])]
 _c = _cs.period_options_cascade(_recs, {"month": "Jan-2026", "quarter": "Q4", "fy": "FY 2025-26"})
-check(_c["months"] == ["Feb-2026", "Jan-2026"] and _c["quarters"] == ["Q4"] and _c["fys"] == ["FY 2025-26"] and all(w.startswith("Wk of") for w in _c["weeks"]),
+check(_c["months"] == ["Jan-2026", "Feb-2026"] and _c["quarters"] == ["Q4"] and _c["fys"] == ["FY 2025-26"] and all(w.startswith("Wk of") for w in _c["weeks"]),
       "period dropdown lists cascade: each list follows the OTHER three selections, never its own")
 
 # ---------------------------------------------------------------- a sheet named exactly like a grade must not override a contradicting Alloy column
@@ -323,3 +331,6 @@ check(not any(r.get("cast_date") for r in _rws2), "no false date column when the
 if ERR:
     print("CHEM SPC FAIL"); [print(" -", e) for e in ERR]; sys.exit(1)
 print("CHEM SPC PASS — SPC maths, import validation, spec matching, HTTP flow, heat join, backup round-trip.")
+check('id="chemCompareBox"' not in idx and "renderChemCompare" not in js and "Does Chemistry Affect Quality" not in idx, "the 'Does Chemistry Affect Quality?' box is gone")
+check('id="chemTitleParamMR"' in idx and 'id="chemTitleParamHist"' in idx and "chemTitleParamMR" in js, "I, MR and histogram headings all name the element")
+check("function chemWeekLabel" in js and "kpiTargetMarkup(CHEM_KPI_LABEL" in js and "chem-foot\">Left column" not in js, "week filter shows the full week range; element cards show LOW/MID/HIGH and no footer text")

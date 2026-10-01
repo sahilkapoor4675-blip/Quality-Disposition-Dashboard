@@ -21,15 +21,6 @@
 .chem-oos-bar input{min-width:220px}
 .chem-btn{padding:7px 12px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .chem-btn:hover{border-color:var(--accent);color:var(--accent)}
-.chem-cmp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
-.chem-cmp{padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card);border-top:4px solid var(--slate)}
-.chem-cmp.ok{border-top-color:var(--green)}.chem-cmp.bad{border-top-color:var(--red)}.chem-cmp.warn{border-top-color:var(--amber)}
-.chem-cmp-t{font-weight:800;font-size:14px;color:var(--heading)}
-.chem-cmp-v{font-size:30px;font-weight:800;margin-top:6px;line-height:1.1}
-.chem-cmp-s{font-size:12px;color:var(--muted);margin-bottom:8px}
-.chem-cmp-v2{font-size:18px;font-weight:800}.chem-cmp-v2 span{font-size:12px;font-weight:600;color:var(--muted)}
-.chem-cmp-f{margin-top:8px;font-size:12.5px;color:var(--text)}
-.chem-cmp-h{margin-top:6px;font-size:11.5px;color:var(--muted)}
 /* main elements: Cpk headline strip */
 .chem-table tr.chem-sep td{background:var(--bg);color:var(--muted);font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:5px 10px}
 .chem-table tr.chem-main-row td:first-child{color:var(--heading)}
@@ -123,9 +114,6 @@ html[data-theme="dark"] .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent)
 .chem-el-kpi .chem-el-trendline .trend.bad{color:#B91C1C;background:#FEE2E2;}
 .chem-el-kpi .chem-el-trendline .trend.equal{color:#475569;background:#F3F4F6;}
 .chem-el-kpi .chem-el-trendline .trend.info{color:#0369A1;background:#E0F2FE;}
-.chem-cmp{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
-.chem-cmp:hover{transform:none;box-shadow:none;}.chem-cmp{cursor:default;}
-.chem-cmp-why{margin:0 0 12px;padding:10px 12px;border-radius:9px;background:var(--card-soft,#f4f8fc);border:1px solid var(--border);color:var(--text);font-size:13px;line-height:1.5}
 .chem-pt{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:center;}
 .chem-pt:hover{stroke:var(--chart-strong);stroke-width:2;opacity:.88;transform:scale(1.12);}
 .chem-hist-bar{cursor:pointer;transition:opacity .15s ease,transform .15s ease;transform-box:fill-box;transform-origin:bottom;}
@@ -134,7 +122,7 @@ html[data-theme="dark"] .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent)
 /* The Chemistry Selection bar lives next to the dashboard's own (under the header search, above the filters) and only shows on this tab. */
 .chem-filter-summary{display:none;margin-bottom:14px;}
 html.chem-mode .chem-filter-summary{display:flex;}
-@media(prefers-reduced-motion:reduce){.chem-el-kpi,.chem-cmp,.chem-pt,.chem-hist-bar{transition:none!important}.chem-el-kpi:hover,.chem-cmp:hover,.chem-pt:hover,.chem-hist-bar:hover{transform:none!important}}
+@media(prefers-reduced-motion:reduce){.chem-el-kpi,.chem-pt,.chem-hist-bar{transition:none!important}.chem-el-kpi:hover,.chem-pt:hover,.chem-hist-bar:hover{transform:none!important}}
 
 /* Chemistry drill-down: only the content region scrolls; the modal header and breadcrumb stay frozen. */
 #chemDrillModal.chem-drill-open .drill-dialog{display:flex;flex-direction:column;max-height:min(92vh,980px);min-height:0;overflow:hidden;}
@@ -156,3 +144,9 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item:not(.target-good):not(.t
 html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-good b{color:#8FE3B5}
 html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-amber b{color:#F3D188}
 html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3A3}
+/* Grade = All: element cards grouped per grade; Parameter = All: one chart per element. Grade-only panels (charts, tables) are hidden while Grade = All. */
+.chem-grade-head{display:flex;align-items:baseline;gap:10px;margin:14px 2px 8px;font-size:15px;color:var(--heading)}
+.chem-grade-head span{font-size:12.5px;font-weight:600;color:var(--muted)}
+.chem-pblock{margin:0 0 14px}.chem-pblock-t{font-weight:800;font-size:13.5px;color:var(--heading);margin:2px 2px 6px}
+#tab-chem.chem-all-grades .chem-grade-only{display:none!important}
+.chem-el-meta .kpi-targets:not(.chem-el-tiles){margin-top:8px}

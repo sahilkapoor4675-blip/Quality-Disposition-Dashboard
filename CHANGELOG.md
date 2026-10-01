@@ -1,3 +1,12 @@
+## Chemistry SPC: ordered periods, KPI-style cards with admin LOW/MID/HIGH, All defaults, no Compare box — no version bump (2026-10-01, fifth pass)
+
+- **Month / Week / Quarter / FY** lists are now in date order (oldest first, like the dashboard). **Week** shows the full range (`06-Apr-2026 to 12-Apr-2026`). Older periods (e.g. FY 2025-26) were missing because the lists came only from the selected grade; Grade = All now lists the periods of every grade (`/api/chem/meta` -> `all_periods`).
+- **Element cards** are built like the dashboard KPI cards: LOW / MID / HIGH tiles + "Higher is better", status ON TARGET / WATCH / ACTION from the same rule as KPI cards. The bands are a KPI target row, **Chemistry Capability (Cp/Cpk/Pp/Ppk)** (default 0.67 / 1.00 / 1.33), editable in Admin -> KPI Targets. The explanatory text under the cards is removed.
+- **I, MR and Histogram headings** all name the element (e.g. "Individuals (I) Chart - Cu%").
+- **"Does Chemistry Affect Quality?"** panel removed.
+- **Filters start on All** (Grade, Parameter, periods, Heat Qty), also after Reset All; nothing is restored from the browser any more (a shared link or preset still sets them). Grade = All shows the element cards per grade (control charts need a grade); Parameter = All draws one I / MR / Histogram per main element. API: `spec`/`param` = `__all__` or empty.
+- Files: `chem_spc.py`, `server.py`, `index.html`, `admin.html`, `sw.js` (shell cache v13), `src/js/21-chem-spc.js`, `src/css/16-chem-spc.css`, `tests/test_chem_spc.py`, `tests/test_browser.py`.
+
 ## Chemistry SPC: dates, Selection bar, trend, Compare, Active filters — no version bump (2026-10-01, fourth pass)
 
 - **Month / Week / Quarter / FY lists empty.** Root cause: heats stored without a `cast_date` (imported before the Date column was read). The importer now also finds a date column by its content when no header says "Date". The dropdowns and a note on the tab say plainly "No cast dates stored — re-import the chemistry file"; re-importing updates the existing heats (no duplicates).

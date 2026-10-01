@@ -222,6 +222,28 @@ def run():
             assert page.locator('#chemPeriodBanner').count() == 1, 'Chemistry period banner missing'
             assert page.locator('#tab-chem .chem-el-kpi').count() >= 1, 'Chemistry element KPI cards did not render'
             assert page.locator('#tab-chem .chem-el-kpi .sparkline').count() >= 1, 'Chemistry KPI sparkline parity missing'
+            # Every Chemistry filter starts on All (like the dashboard filters): Grade = All shows per-grade cards and no pooled charts.
+            _trig = lambda k: page.inner_text(f'#chemTopBar [data-chem-key="{k}"] .filter-trigger span')
+            assert all(_trig(k) == 'All' for k in ('spec', 'param', 'month', 'week', 'quarter', 'fy', 'last_n')), 'Chemistry filters do not all start on All'
+            assert page.inner_text('#chemActiveBadge') == '0 Active', 'default Chemistry view must have 0 active filters'
+            assert page.locator('#tab-chem .chem-grade-head').count() >= 1 and page.locator('#tab-chem .chem-el-kpi .kpi-targets').count() >= 1, 'Grade = All must show element cards grouped per grade, with LOW/MID/HIGH'
+            assert page.locator('#chemMainBox .chem-foot').count() == 0, 'text under the element cards must be gone'
+            assert page.locator('#chemIChart').is_hidden(), 'control charts need a grade (Grade = All hides them)'
+            assert page.locator('#chemCompareBox').count() == 0, '"Does Chemistry Affect Quality?" box must be gone'
+            _wk = page.eval_on_selector_all('#chemTopBar [data-chem-key="week"] .filter-option:not(.all-option)', "e => e.map(x => [x.dataset.value, x.textContent])")
+            if _wk:
+                import datetime as _d
+                _dates = [_d.datetime.strptime(v.replace('Wk of ', ''), '%d-%b-%y') for v, _ in _wk]
+                assert _dates == sorted(_dates), f'week filter is not in date order: {_wk}'
+                assert all(' to ' in t for _, t in _wk), f'week filter must show the full week range: {_wk}'
+            _mo = page.eval_on_selector_all('#chemTopBar [data-chem-key="month"] .filter-option:not(.all-option)', "e => e.map(x => x.dataset.value)")
+            assert _mo == sorted(_mo, key=lambda m: __import__('datetime').datetime.strptime(m, '%b-%Y')), f'month filter is not in date order: {_mo}'
+            # pick a grade: Parameter = All draws one chart per main element, each under its own heading; a single parameter draws one chart
+            page.click('#chemTopBar [data-chem-key="spec"] .filter-trigger'); page.click('#chemTopBar [data-chem-key="spec"] .filter-option[data-value="Test Brass"]'); page.wait_for_timeout(1500)
+            assert page.locator('#chemIChart .chem-pchart').count() >= 2 and page.locator('#chemIChart .chem-pblock-t').count() >= 2, 'Parameter = All must draw one I chart per main element'
+            assert page.locator('#chemMRChart .chem-pblock-t').count() >= 2 and page.locator('#chemHist .chem-pblock-t').count() >= 2, 'MR chart and histogram must also be labelled per element'
+            page.click('#chemTopBar [data-chem-key="param"] .filter-trigger'); page.click('#chemTopBar [data-chem-key="param"] .filter-option[data-value="cu"]'); page.wait_for_timeout(1500)
+            assert 'Cu' in page.inner_text('#chemTitleParam') and 'Cu' in page.inner_text('#chemTitleParamMR') and 'Cu' in page.inner_text('#chemTitleParamHist'), 'I, MR and histogram headings must all name the element'
             # chart-ready is transient, so validate the shared chart classes/structure rather than waiting for a fragile animation state.
             assert page.locator('#chemIChart .chart-svg').count() == 1, 'Chemistry I chart missing shared chart-svg class'
             assert page.locator('#chemMRChart .chart-svg').count() == 1, 'Chemistry MR chart missing shared chart-svg class'

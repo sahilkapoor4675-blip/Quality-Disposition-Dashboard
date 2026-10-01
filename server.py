@@ -606,6 +606,9 @@ DEFAULT_KPI_TARGETS = {
     "Reject % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Salvage % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
     "Rework % Qty": {"target": 0.01, "warning": 0.03, "critical": 0.05, "direction": "lower"},
+    # Chemistry SPC element cards: one LOW / MID / HIGH band set for Cp, Cpk, Pp and Ppk (edited in Admin -> KPI Targets).
+    # HIGH (target) = capable, MID (warning) = watch, LOW (critical) = action. Copper-base practice: Cpk 1.33 capable, 1.00 minimum.
+    "Chemistry Capability (Cp/Cpk/Pp/Ppk)": {"target": 1.33, "warning": 1.00, "critical": 0.67, "direction": "higher"},
 }
 
 def _target_rows():
@@ -3840,16 +3843,49 @@ def compute_chem_meta():
         out.append({**s, **info(by.get(s["description"], []))})
     un = by.get("", [])
     return {"params": [{"key": p, "label": chem_spc.PARAM_LABEL[p]} for p in chem_spc.PARAMS], "specs": out,
-            "unassigned": info(un) if un else None, "total_heats": len(heats), "revision": rev}
+            "unassigned": info(un) if un else None, "total_heats": len(heats), "revision": rev,
+            "all_periods": chem_spc.period_options(heats)}
 
 
 def compute_chem_spc(qs):
+    """Chemistry SPC view. spec '' / '__all__' = every grade (one block of element cards per grade, no pooled control charts: grades have
+    different limits); param '' / '__all__' = every main element of the grade (one I / MR / histogram per element)."""
     desc = str(qs.get("spec", "") or "")
     param = str(qs.get("param", "") or "").lower()
-    if param not in chem_spc.PARAMS:
+    all_params = param in ("", "__all__")
+    if not all_params and param not in chem_spc.PARAMS:
         raise ValueError("Unknown parameter")
     last_n = max(0, min(5000, _safe_int(qs.get("last_n"), 0)))
     period = {k: str(qs.get(k, "") or "")[:40] for k in chem_spc.PERIOD_KEYS}      # month / week / quarter / fy ('' or 'All' = no filter)
+    if desc in ("", "__all__"):
+        return _compute_chem_all_grades(last_n, period)
+    return _compute_chem_spc_one(desc, "cu" if all_params else param, last_n, period, all_params)
+
+
+def _compute_chem_all_grades(last_n, period):
+    specs, heats, _rev = _chem_source_snapshot()
+    with CHEM_SOURCE_CACHE_LOCK:
+        by = CHEM_SOURCE_CACHE.get("by_spec", {})
+        groups = [s["description"] for s in specs if by.get(s["description"])] + (["__none__"] if by.get("") else [])
+    grades, total, prev_total, pc = [], 0, 0, None
+    for g in groups:
+        v = _compute_chem_spc_one(g, "cu", last_n, period, False)
+        if not v["n_heats"]:
+            continue
+        total += v["n_heats"]
+        if v.get("period_comparison"):
+            pc = pc or dict(v["period_comparison"]); prev_total += v["period_comparison"].get("prev_heats", 0)
+        grades.append({"description": g, "n_heats": v["n_heats"], "spec": {"description": v["spec"]["description"]},
+                       "overview": [o for o in v["overview"] if o.get("main")]})
+    if pc and pc.get("mode") == "last_n":
+        pc["prev_heats"] = prev_total
+    return {"all_grades": True, "param": "__all__", "n_heats": total, "grades": grades, "period_comparison": pc,
+            "filters": {"last_n": last_n, **period}, "series": [], "summary": {"heats": total, "has_limits": True},
+            "spec": {"description": "All grades", "limits": {}, "aim": {}}, "warnings": [], "capability": {},
+            "periods": chem_spc.period_options(heats), "periods_cascade": chem_spc.period_options_cascade(heats, period)}
+
+
+def _compute_chem_spc_one(desc, param, last_n, period, all_params=False):
     specs, heats, _rev = _chem_source_snapshot()
     spec = next((s for s in specs if s["description"] == desc), None) if desc != "__none__" else None
     if desc != "__none__" and not spec:
@@ -3901,6 +3937,18 @@ def compute_chem_spc(qs):
                  "periods": chem_spc.period_options(group),
                  "periods_cascade": chem_spc.period_options_cascade(group, period),
                  "cpk_bands": {"excellent": chem_spc.CPK_EXCELLENT, "capable": chem_spc.CPK_CAPABLE, "marginal": chem_spc.CPK_MARGINAL}})
+
+    if all_params:
+        # Parameter = All: one chart set per main element. The per-parameter pieces replace the single-parameter ones.
+        keep = ("param", "n", "lsl", "usl", "aim_lsl", "aim_usl", "imr", "mr", "mr_ooc", "capability", "histogram", "warnings", "series")
+        pviews = []
+        for p in mains:
+            pv = view if p == param else chem_spc.build_spc_view(sel, spec, p, disp_by, 0, period=None)
+            pviews.append({k: pv[k] for k in keep})
+        for k in ("n", "lsl", "usl", "aim_lsl", "aim_usl", "imr", "mr", "mr_ooc", "capability", "histogram", "series"):
+            view[k] = [] if k in ("mr", "series") else None
+        view["param"] = "__all__"; view["warnings"] = []
+        view["param_views"] = pviews
 
     # Main element cards use the same period-over-period comparison model as
     # dashboard KPI cards. Compare Cpk because that is the headline metric.

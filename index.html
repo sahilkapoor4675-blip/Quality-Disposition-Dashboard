@@ -637,32 +637,27 @@
     <div class="chem-main-panel" id="chemMainBox"></div>
     <div id="chemNotes"></div>
 
-    <div class="panel">
-      <h3>📈 Individuals (I) Chart — <span id="chemTitleParam">Cu%</span> <small class="chem-h3-sub">one point = one heat · Standard &amp; Aim limits · mean · MR-based variation diagnostic</small></h3>
+    <div class="panel chem-grade-only">
+      <h3>📈 Individuals (I) Chart — <span id="chemTitleParam">All</span> <small class="chem-h3-sub">one point = one heat · Standard &amp; Aim limits · mean · MR-based variation diagnostic</small></h3>
       <div class="chart-scroll" id="chemIChart"></div>
     </div>
 
-    <div class="panel">
-      <h3>📉 Moving Range (MR) Chart</h3>
+    <div class="panel chem-grade-only">
+      <h3>📉 Moving Range (MR) Chart — <span id="chemTitleParamMR">All</span></h3>
       <div class="chart-scroll" id="chemMRChart"></div>
     </div>
 
-    <div class="panel">
-      <h3>📊 Histogram with Standard &amp; Aim limits</h3>
+    <div class="panel chem-grade-only">
+      <h3>📊 Histogram with Standard &amp; Aim limits — <span id="chemTitleParamHist">All</span></h3>
       <div class="chart-scroll" id="chemHist"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel chem-grade-only">
       <h3>🧮 Capability — Cp / Cpk / Pp / Ppk and Std. Dev. by Parameter</h3>
       <div class="panel-body" id="chemOverviewBox"></div>
     </div>
 
-    <div class="panel">
-      <h3>🔗 Does Chemistry Affect Quality? In-spec vs Out-of-spec Heats <small class="chem-h3-sub">joined to inspection data on heat_no · read-only</small></h3>
-      <div class="panel-body" id="chemCompareBox"></div>
-    </div>
-
-    <div class="panel">
+    <div class="panel chem-grade-only">
       <h3>🚩 Out-of-Spec Heats and Their Defects</h3>
       <div class="panel-body" id="chemOosBox"></div>
     </div>

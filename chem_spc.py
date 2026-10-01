@@ -263,7 +263,7 @@ def filter_by_period(recs, flt):
 
 
 def period_options(recs):
-    """Distinct periods present in recs, newest first (weeks/months chronologically descending)."""
+    """Distinct periods present in recs in CHRONOLOGICAL order (oldest first, like the main dashboard's Month / Week / Quarter / FY filters)."""
     mo, wk, qt, fy = {}, {}, set(), set()
     undated = 0
     for r in recs:
@@ -279,9 +279,9 @@ def period_options(recs):
         wk[w] = (_d - _dt.timedelta(days=_d.weekday())).isoformat()
         qt.add(q)
         fy.add(f)
-    return {"months": [k for k, _ in sorted(mo.items(), key=lambda kv: kv[1], reverse=True)],
-            "weeks": [k for k, _ in sorted(wk.items(), key=lambda kv: kv[1], reverse=True)],
-            "quarters": sorted(qt), "fys": sorted(fy, reverse=True),
+    return {"months": [k for k, _ in sorted(mo.items(), key=lambda kv: kv[1])],
+            "weeks": [k for k, _ in sorted(wk.items(), key=lambda kv: kv[1])],
+            "quarters": sorted(qt), "fys": sorted(fy),
             "undated": undated}
 
 

@@ -9,10 +9,9 @@ let chemMeta = null, chemData = null;
 let chemCardPrevCpk = new Map();
 let chemCardPrevTrend = new Map();
 let chemFirstPaintDone = false;
-let chemSel = { spec: '', param: 'cu', last_n: 0, month: '', week: '', quarter: '', fy: '', ins_icon: true, ins_cl: true, ins_aim: true };
-try { Object.assign(chemSel, JSON.parse(localStorage.getItem(CHEM_SEL_KEY) || '{}')); } catch (e) {}
+let chemSel = { spec: '__all__', param: '__all__', last_n: 0, month: '', week: '', quarter: '', fy: '', ins_icon: true, ins_cl: true, ins_aim: true };
+// Like the dashboard filters, the Chemistry filters start on "All" on every visit (only a shared link / saved preset sets them); nothing is restored from the browser.
 chemSel.ins_icon = chemSel.ins_cl = chemSel.ins_aim = true;   // the Insert box was removed: element pictures, centre line and Aim lines are always drawn
-delete chemSel.date_from; delete chemSel.date_to;   // older saved selections used a from/to date range; it was replaced by Month/Week/Quarter/Fin.Year
 
 // ---------------------------------------------------------------- selection <-> URL / saved views / compare
 // The selection is remembered in the browser (localStorage) AND written to the address bar while this tab is open, so the link can be shared
@@ -24,7 +23,7 @@ function chemSelSnapshot(){
 }
 function chemWriteUrl(params, snap){
   snap = snap || chemSelSnapshot();
-  Object.keys(CHEM_URL_KEYS).forEach(k => { const v = snap[k]; if(v != null && v !== '' && v !== 0) params.set(CHEM_URL_KEYS[k], String(v)); });
+  Object.keys(CHEM_URL_KEYS).forEach(k => { const v = snap[k]; if(v != null && v !== '' && v !== 0 && v !== '__all__') params.set(CHEM_URL_KEYS[k], String(v)); });
 }
 function chemReadUrl(params){
   if(!Object.values(CHEM_URL_KEYS).some(u => params.has(u))) return null;
@@ -36,8 +35,8 @@ function chemReadUrl(params){
 // Used for a link / the browser's back-forward buttons. Anything that is not in the link means "All" (a link is a complete selection).
 function chemApplyUrl(o){
   if(!o) return;
-  if(o.spec) chemSel.spec = o.spec;
-  if(o.param) chemSel.param = o.param;
+  chemSel.spec = o.spec || '__all__';
+  chemSel.param = o.param || '__all__';
   chemSel.last_n = Number(o.last_n) || 0;
   CHEM_PERIOD_KEYS.forEach(k => { chemSel[k] = o[k] || ''; });
   chemLastPeriod = '';
@@ -46,7 +45,7 @@ function chemApplyUrl(o){
 // Saved Views (Save Preset / Manage Presets in the Selection bar of this tab).
 function chemApplyView(v){
   if(!chemMeta || !v) return;
-  const groups = chemMeta.specs.filter(s => s.heats > 0).map(s => s.description).concat(chemMeta.unassigned ? ['__none__'] : []);
+  const groups = ['__all__'].concat(chemMeta.specs.filter(s => s.heats > 0).map(s => s.description), chemMeta.unassigned ? ['__none__'] : []);
   if(v.spec){
     if(groups.includes(v.spec)) chemSel.spec = v.spec;
     else showToast('info', 'Grade not available', 'The grade saved in this preset is no longer in the data, so the current grade was kept.');
@@ -64,9 +63,9 @@ function chemCompareDims(){
 function chemCompareItems(key){
   if(!chemMeta) return [];
   const lists = {month: 'months', week: 'weeks', quarter: 'quarters', fy: 'fys'};
-  if(lists[key]) return (chemPeriods()[lists[key]] || []).map(v => ({value: v, label: v}));
-  if(key === 'spec') return chemMeta.specs.filter(x => x.heats > 0).map(x => x.description).concat(chemMeta.unassigned ? ['__none__'] : []).map(g => ({value: g, label: chemGroupLabel(g)}));
-  if(key === 'param') return chemMeta.params.map(p => ({value: p.key, label: p.label}));
+  if(lists[key]) return (chemPeriods()[lists[key]] || []).map(v => ({value: v, label: key === 'week' ? chemWeekLabel(v) : v}));
+  if(key === 'spec') return ['__all__'].concat(chemMeta.specs.filter(x => x.heats > 0).map(x => x.description), chemMeta.unassigned ? ['__none__'] : []).map(g => ({value: g, label: chemGroupLabel(g)}));
+  if(key === 'param') return [{value: '__all__', label: 'All'}].concat(chemMeta.params.map(p => ({value: p.key, label: p.label})));
   return [];
 }
 
@@ -77,9 +76,35 @@ function chemNum(v, d){
   return Number(v).toLocaleString(undefined, {minimumFractionDigits: d > 3 ? 3 : d, maximumFractionDigits: d});
 }
 function chemIdx(v){ return v == null || !isFinite(v) ? '—' : v.toFixed(2); }
-// Copper-base industry practice: Cpk >= 1.67 excellent, >= 1.33 capable, >= 1.00 marginal, below 1.00 not capable.
-function chemIdxClass(v){ return v == null ? '' : v >= 1.67 ? 'chem-great' : v >= 1.33 ? 'chem-good' : v >= 1 ? 'chem-warn' : 'chem-bad'; }
-function chemIdxLabel(v){ return v == null ? '' : v >= 1.67 ? 'Excellent' : v >= 1.33 ? 'Capable' : v >= 1 ? 'Marginal' : 'Not capable'; }
+// Capability bands = the dashboard KPI-card logic: HIGH (target) -> ON TARGET, MID (warning) -> WATCH, below -> ACTION. The numbers live in the
+// KPI target table (Admin -> KPI Targets, label below); the defaults are the copper-base practice (Cpk 1.33 capable, 1.00 minimum).
+const CHEM_KPI_LABEL = 'Chemistry Capability (Cp/Cpk/Pp/Ppk)';
+const CHEM_KPI_DEFAULT = {label: CHEM_KPI_LABEL, target: 1.33, warning: 1.0, critical: 0.67, direction: 'higher'};
+async function chemEnsureTargets(){
+  try { if(typeof KPI_TARGETS !== 'object' || !KPI_TARGETS) return; } catch (e) { return; }
+  if(!KPI_TARGETS[CHEM_KPI_LABEL] && typeof loadKpiTargets === 'function') await loadKpiTargets();
+  if(!KPI_TARGETS[CHEM_KPI_LABEL]) KPI_TARGETS[CHEM_KPI_LABEL] = Object.assign({}, CHEM_KPI_DEFAULT);
+}
+function chemThr(){ try { return (KPI_TARGETS && KPI_TARGETS[CHEM_KPI_LABEL]) || CHEM_KPI_DEFAULT; } catch (e) { return CHEM_KPI_DEFAULT; } }
+function chemKpiStatus(v){
+  if(v == null || !isFinite(v)) return 'neutral';
+  const c = chemThr(); if(c.target == null) return 'neutral';
+  const t = Number(c.target), w = Number(c.warning), d = String(c.direction || 'higher').toLowerCase();
+  if(d === 'lower') return v <= t ? 'good' : v <= w ? 'amber' : 'bad';
+  if(d === 'higher') return v >= t ? 'good' : v >= w ? 'amber' : 'bad';
+  return 'neutral';
+}
+function chemIdxClass(v){ const s = chemKpiStatus(v); return s === 'good' ? 'chem-good' : s === 'amber' ? 'chem-warn' : s === 'bad' ? 'chem-bad' : ''; }
+function chemIdxLabel(v){ const s = chemKpiStatus(v); return s === 'good' ? 'On target' : s === 'amber' ? 'Watch' : s === 'bad' ? 'Action' : ''; }
+// Month label of a week: "Wk of 06-Apr-26" -> "06-Apr-2026 to 12-Apr-2026" (full Monday-Sunday range, same text as the dashboard's Week filter).
+function chemWeekLabel(v){
+  const m = /^Wk of (\d{2})-([A-Za-z]{3})-(\d{2})$/.exec(String(v || '')); if(!m) return v;
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], mo = names.findIndex(n => n.toLowerCase() === m[2].toLowerCase());
+  if(mo < 0) return v;
+  const a = new Date(Date.UTC(2000 + Number(m[3]), mo, Number(m[1]))), b = new Date(a.getTime() + 6 * 864e5);
+  const f = d => String(d.getUTCDate()).padStart(2, '0') + '-' + names[d.getUTCMonth()] + '-' + d.getUTCFullYear();
+  return f(a) + ' to ' + f(b);
+}
 function chemFetch(url, signal){
   return fetch(url, {signal}).then(async res => {
     const data = await res.json().catch(() => ({}));
@@ -122,11 +147,13 @@ function chemRefresh(){
 // Periods (from the cast dates of the selected grade's heats) for the Month / Week / Quarter / Fin. Year filters.
 function chemPeriods(){
   const s = chemMeta.specs.find(x => x.description === chemSel.spec);
-  const p = chemSel.spec === '__none__' ? (chemMeta.unassigned && chemMeta.unassigned.periods) : (s && s.periods);
+  const p = chemSel.spec === '__all__' ? chemMeta.all_periods : chemSel.spec === '__none__' ? (chemMeta.unassigned && chemMeta.unassigned.periods) : (s && s.periods);
   return Object.assign({months: [], weeks: [], quarters: [], fys: [], undated: 0}, p || {});
 }
 function chemSanitiseSel(){
-  if(!chemMeta.params.some(p => p.key === chemSel.param)) chemSel.param = 'cu';
+  const grp = chemMeta.specs.filter(s => s.heats > 0).map(s => s.description).concat(chemMeta.unassigned ? ['__none__'] : []);
+  if(chemSel.spec !== '__all__' && !grp.includes(chemSel.spec)) chemSel.spec = '__all__';
+  if(chemSel.param !== '__all__' && !chemMeta.params.some(p => p.key === chemSel.param)) chemSel.param = '__all__';
   if(![0, 10, 20, 30, 50, 100, 200].includes(Number(chemSel.last_n))) chemSel.last_n = 0;
   chemSel.last_n = Number(chemSel.last_n) || 0;
   const per = chemPeriods();
@@ -140,7 +167,7 @@ async function loadChemSpc(signal){
   const groups = usable.map(s => s.description);
   if(chemMeta.unassigned) groups.push('__none__');
   if(!groups.length){ renderChemEmpty(); return; }
-  if(!groups.includes(chemSel.spec)) chemSel.spec = groups[0];
+  await chemEnsureTargets();
   chemSanitiseSel();
   renderChemControls();
   await refreshChemView(signal);
@@ -158,9 +185,10 @@ function renderChemEmpty(){
   if(count) count.textContent = '0 heats';
   if(banner) banner.innerHTML = '';
   document.getElementById('chemControls').innerHTML = '<div class="panel"><div class="panel-body"><div class="chem-empty"><b>No chemistry data yet.</b><br>An admin can load cast chemistry from <a href="/admin#chemImportPanel">Admin → Import Cast Chemistry</a> and grade limits from <a href="/admin#chemSpecPanel">Admin → Chemistry Spec Limits</a>.</div></div></div>';
-  ['chemMainBox','chemNotes','chemIChart','chemMRChart','chemHist','chemOverviewBox','chemCompareBox','chemOosBox'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+  ['chemMainBox','chemNotes','chemIChart','chemMRChart','chemHist','chemOverviewBox','chemOosBox'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
 }
 function chemGroupLabel(g){
+  if(g === '__all__') return 'All';
   if(g === '__none__') return 'No spec assigned (' + chemMeta.unassigned.heats + ' heats)';
   const s = chemMeta.specs.find(x => x.description === g);
   return s ? s.description + ' — ' + s.heats + ' heats' : g;
@@ -188,30 +216,28 @@ function chemSyncMode(){
 const CHEM_QTY = [['0', 'All'], ['10', '10'], ['20', '20'], ['30', '30'], ['50', '50'], ['100', '100'], ['200', '200']];
 const CHEM_PERIOD_FIELDS = [['month', 'months'], ['week', 'weeks'], ['quarter', 'quarters'], ['fy', 'fys']];
 let chemLastPeriod = '', chemFindVal = '';
-function chemPeriodItems(list){ return [{value: '', label: 'All'}].concat((list || []).map(x => ({value: x, label: x}))); }
+function chemPeriodItems(list, fmt){ return [{value: '', label: 'All'}].concat((list || []).map(x => ({value: x, label: fmt ? fmt(x) : x}))); }
+const chemIsAllVal = v => v === '' || v === '__all__';
 // An empty Month / Week / Quarter / FY list means the stored heats carry no cast date (they were imported without the file's Date column).
 function chemNoDates(){ const p = chemMeta ? chemPeriods() : null; return !!(p && p.undated > 0 && !p.months.length); }
 // One dropdown, built with the SAME markup/classes as the dashboard filters (.filter-field > .filter-control > .filter-trigger + .filter-menu),
 // so size, font, icons, hover, open menu, dark mode and the "active" highlight all come from the dashboard's own CSS.
 function chemFieldHtml(key, icon, label, items, cur, active){
   const shown = (items.find(x => x.value === cur) || items[0] || {label: 'All'}).label;
-  const opts = items.map(x => `<div class="filter-option${x.value === '' ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('');
+  const opts = items.map(x => `<div class="filter-option${chemIsAllVal(x.value) ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('');
   return `<div class="filter-field${active ? ' filter-active' : ''}" data-chem-key="${key}"><label>${icon} ${label}</label><div class="filter-control"><button type="button" class="filter-trigger" aria-haspopup="listbox"><span>${escQcr(shown)}</span><span class="chevron">${qdIc('chevron-down')}</span></button><div class="filter-menu"><input class="filter-search" type="text" placeholder="Search options…" autocomplete="off"><div class="filter-options">${opts}</div></div></div></div>`;
 }
 function chemCurVal(key){ return key === 'last_n' ? String(Number(chemSel.last_n) || 0) : String(chemSel[key] == null ? '' : chemSel[key]); }
 const CHEM_ACTIVE_KEYS = ['month', 'week', 'quarter', 'fy', 'last_n', 'param', 'spec'];
 // Baseline view = first grade + Cu% + no period + all heats (what Reset All restores). Anything else counts as an active filter,
 // exactly like a dashboard filter that is not "All".
-function chemDefaultSpec(){
-  const usable = (chemMeta && chemMeta.specs || []).filter(s => s.heats > 0);
-  return usable[0] ? usable[0].description : (chemMeta && chemMeta.unassigned ? '__none__' : '');
-}
+function chemDefaultSpec(){ return '__all__'; }
 function chemIsActive(key){
   if(!CHEM_ACTIVE_KEYS.includes(key)) return false;
   const v = chemCurVal(key);
   if(key === 'last_n') return v !== '0';
-  if(key === 'param') return v !== '' && v !== 'cu';
-  if(key === 'spec') return v !== '' && v !== chemDefaultSpec();
+  if(key === 'param') return v !== '' && v !== '__all__';
+  if(key === 'spec') return v !== '' && v !== '__all__';
   return v !== '';
 }
 // Re-sync trigger text / selected option / active highlight / "N Active" badge from chemSel without rebuilding the dropdowns.
@@ -234,7 +260,7 @@ function chemFillPeriods(lists){
   CHEM_PERIOD_FIELDS.forEach(([k, l]) => {
     const f = chemTopBarEl().querySelector(`.filter-field[data-chem-key="${k}"] .filter-options`); if(!f) return;
     const cur = chemCurVal(k);
-    f.innerHTML = chemPeriodItems(lists[l]).map(x => `<div class="filter-option${x.value === '' ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('')
+    f.innerHTML = chemPeriodItems(lists[l], k === 'week' ? chemWeekLabel : null).map(x => `<div class="filter-option${chemIsAllVal(x.value) ? ' all-option' : ''}${x.value === cur ? ' selected' : ''}" data-value="${escQcr(x.value)}">${escQcr(x.label)}</div>`).join('')
       + ((lists[l] || []).length ? '' : `<div class="filter-empty">${chemNoDates() ? 'No cast dates stored — re-import the chemistry file' : 'No periods for this selection'}</div>`);
   });
   chemSyncFields();
@@ -255,12 +281,8 @@ function chemPick(key, value){
   chemSaveSel(); chemSyncFields(); chemRefresh();
 }
 function chemResetAll(){
-  // Match the dashboard's Reset All semantics: clear every user-facing Chemistry
-  // filter, then restore the safest default grade/parameter selection so the tab
-  // returns to a deterministic baseline instead of retaining a hidden selection.
-  const usable = (chemMeta?.specs || []).filter(s => s.heats > 0);
-  chemSel.spec = usable[0]?.description || (chemMeta?.unassigned ? '__none__' : '');
-  chemSel.param = (chemMeta?.params || []).some(p => p.key === 'cu') ? 'cu' : ((chemMeta?.params || [])[0]?.key || 'cu');
+  // Same as the dashboard's Reset All: every Chemistry filter goes back to All.
+  chemSel.spec = '__all__'; chemSel.param = '__all__';
   chemSel.month = chemSel.week = chemSel.quarter = chemSel.fy = '';
   chemSel.last_n = 0; chemLastPeriod = ''; chemFindVal = '';
   const inp = document.getElementById('chemFindHeat'); if(inp) inp.value = '';
@@ -295,16 +317,16 @@ function chemBindBar(bar){
 function renderChemControls(){
   const groups = chemMeta.specs.filter(s => s.heats > 0).map(s => s.description).concat(chemMeta.unassigned ? ['__none__'] : []);
   const per = chemPeriods();
-  const tip = 'Month / Week / Quarter / Fin. Year come from the Date column of the chemistry file (financial year April–March, same labels as the main dashboard). Charts always run in heat-number order; “Heat Qty” = the N highest heat numbers of the selection. Cp / Cpk / Pp / Ppk are measured against the Standard limits.';
+  const tip = 'Month / Week / Quarter / Fin. Year come from the Date column of the chemistry file (financial year April–March, same labels as the main dashboard). Charts always run in heat-number order; “Heat Qty” = the N highest heat numbers of the selection (of each grade when Grade = All). Grade = All shows the element cards of every grade; pick a grade for its charts. Cp / Cpk / Pp / Ppk are measured against the Standard limits.';
   const F = (key, icon, label, items, active) => chemFieldHtml(key, icon, label, items, chemCurVal(key), active);
   // same 4-column layout and order as the dashboard filters: Month | Work Center→Parameter | Grade | Quality Decision→Heat Qty  /  Week | Quarter | Fin. Year | Defect Intensity→Heat No.
   chemTopBarEl().innerHTML = `
     <div class="filter-toolbar"><div class="filter-toolbar-title" title="${escQcr(tip)}">${qdIc('filter')}Chemistry Filters <span class="chem-tb-i">ⓘ</span></div><div class="filter-actions"><span id="chemActiveBadge" class="active-filter-badge">0 Active</span><button id="chemCompareBtn" class="reset-all" type="button">${qdIc('compare')}Compare Periods</button><button id="chemResetAll" class="reset-all" type="button">${qdIc('reset')}Reset All</button></div></div>
     ${F('month', '📅', 'Month', chemPeriodItems(per.months), chemIsActive('month'))}
-    ${F('param', '🔬', 'Parameter', chemMeta.params.map(p => ({value: p.key, label: p.label})), chemIsActive('param'))}
-    ${F('spec', '🧪', 'Grade', groups.map(g => ({value: g, label: chemGroupLabel(g)})), chemIsActive('spec'))}
+    ${F('param', '🔬', 'Parameter', [{value: '__all__', label: 'All'}].concat(chemMeta.params.map(p => ({value: p.key, label: p.label}))), chemIsActive('param'))}
+    ${F('spec', '🧪', 'Grade', ['__all__'].concat(groups).map(g => ({value: g, label: chemGroupLabel(g)})), chemIsActive('spec'))}
     ${F('last_n', '🔢', 'Heat Qty (Last N)', CHEM_QTY.map(([v, t]) => ({value: v, label: t})), chemIsActive('last_n'))}
-    ${F('week', '🗓️', 'Week', chemPeriodItems(per.weeks), chemIsActive('week'))}
+    ${F('week', '🗓️', 'Week', chemPeriodItems(per.weeks, chemWeekLabel), chemIsActive('week'))}
     ${F('quarter', '📊', 'Quarter', chemPeriodItems(per.quarters), chemIsActive('quarter'))}
     ${F('fy', '📆', 'Financial Year', chemPeriodItems(per.fys), chemIsActive('fy'))}
     <div class="filter-field"><label>🔥 Heat No.</label><div class="filter-control"><input type="search" id="chemFindHeat" class="filter-trigger chem-heat-input" placeholder="e.g. NBS6348 ↵" autocomplete="off" value="${escQcr(chemFindVal)}"></div></div>`;
@@ -351,13 +373,13 @@ function chemRenderPeriodBanner(d){
     return;
   }
   const labels = [];
-  if(p.current.week) labels.push(p.current.week);
+  if(p.current.week) labels.push(chemWeekLabel(p.current.week));
   if(p.current.month) labels.push(p.current.month);
   if(p.current.quarter) labels.push(p.current.quarter);
   if(p.current.fy) labels.push(p.current.fy);
   const cur = labels.join(' · ');
   const prev = p.previous;
-  const prevLabel = prev ? [prev.week,prev.month,prev.quarter,prev.fy].filter(Boolean).join(' · ') : '';
+  const prevLabel = prev ? [prev.week ? chemWeekLabel(prev.week) : '',prev.month,prev.quarter,prev.fy].filter(Boolean).join(' · ') : '';
   el.innerHTML = prevLabel
     ? `📅 <b>Current Period:</b> ${escQcr(cur)} &nbsp;&nbsp;|&nbsp;&nbsp; ⏮️ <b>Compared to:</b> ${escQcr(prevLabel)}`
     : `📅 <b>Current Period:</b> ${escQcr(cur)} &nbsp;&nbsp;|&nbsp;&nbsp; <i>No comparable previous period is available for this selection</i>`;
@@ -366,11 +388,11 @@ function chemRenderFilterSummary(d){
   const text = document.getElementById('chemFilterSummaryText');
   const count = document.getElementById('chemFilterRecordCount');
   if(!text || !count) return;
-  const spec = chemSel.spec === '__none__' ? 'No spec assigned' : (chemSel.spec || 'All Grades');
-  const param = (chemMeta && chemMeta.params.find(p => p.key === d.param)?.label) || d.param || 'Parameter';
+  const spec = chemSel.spec === '__none__' ? 'No spec assigned' : (chemSel.spec === '__all__' ? 'All grades' : (chemSel.spec || 'All grades'));
+  const param = d.param === '__all__' ? 'All parameters' : ((chemMeta && chemMeta.params.find(p => p.key === d.param)?.label) || d.param || 'Parameter');
   const parts = [spec, param];
   if(chemSel.month) parts.push(chemSel.month);
-  if(chemSel.week) parts.push(chemSel.week);
+  if(chemSel.week) parts.push(chemWeekLabel(chemSel.week));
   if(chemSel.quarter) parts.push(chemSel.quarter);
   if(chemSel.fy) parts.push(chemSel.fy);
   if(chemSel.last_n) parts.push(`Last ${chemSel.last_n} heats`);
@@ -416,15 +438,31 @@ async function refreshChemView(signal){
     }
   }
 }
+function chemParamLabel(key){ return key === '__all__' ? 'All elements' : ((chemMeta && chemMeta.params.find(p => p.key === key) || {}).label || key); }
+// Parameter = All: one chart per main element, each under its own element heading. A single parameter draws exactly one chart as before.
+function chemSubCharts(el, d, fn){
+  if(!el) return;
+  if(d.param !== '__all__'){ el.classList.remove('chem-multi'); fn(el, d); return; }
+  const pv = d.param_views || [];
+  el._qdRedraw = null; el.classList.add('chem-multi');
+  el.innerHTML = pv.length ? pv.map(p => `<div class="chem-pblock"><div class="chem-pblock-t">${escQcr(chemParamLabel(p.param))}</div><div class="chart-scroll chem-pchart"></div></div>`).join('') : '<div class="chem-empty-chart">No main elements with enough data in this selection.</div>';
+  el.querySelectorAll('.chem-pchart').forEach((sub, i) => fn(sub, Object.assign({}, d, pv[i])));
+}
 function renderChemAll(){
-  const d = chemData;
-  document.getElementById('chemTitleParam').textContent = (chemMeta.params.find(p => p.key === d.param) || {}).label || d.param;
+  const d = chemData, tab = document.getElementById('tab-chem');
+  tab.classList.toggle('chem-all-grades', !!d.all_grades);
+  const lbl = d.all_grades ? 'All' : chemParamLabel(d.param);
+  ['chemTitleParam', 'chemTitleParamMR', 'chemTitleParamHist'].forEach(id => { const el = document.getElementById(id); if(el) el.textContent = lbl; });
   renderChemMain(d);
   renderChemNotes(d);
-  drawChemI(document.getElementById('chemIChart'), d);
-  drawChemMR(document.getElementById('chemMRChart'), d);
-  drawChemHist(document.getElementById('chemHist'), d);
-  renderChemOverview(d); renderChemCompare(d); renderChemOos(d);
+  if(d.all_grades){   // grades have different limits, so no pooled charts: pick a grade for those (the hidden panels are emptied so no loading skeleton is left behind)
+    ['chemIChart', 'chemMRChart', 'chemHist', 'chemOverviewBox', 'chemOosBox'].forEach(id => { const el = document.getElementById(id); if(el){ el.innerHTML = ''; el._qdRedraw = null; } });
+    return;
+  }
+  chemSubCharts(document.getElementById('chemIChart'), d, drawChemI);
+  chemSubCharts(document.getElementById('chemMRChart'), d, drawChemMR);
+  chemSubCharts(document.getElementById('chemHist'), d, drawChemHist);
+  renderChemOverview(d); renderChemOos(d);
 }
 
 // ---------------------------------------------------------------- notes (no KPI cards any more)
@@ -434,12 +472,15 @@ function renderChemNotes(d){
   const per = chemPeriods(), periodOn = !!(chemSel.month || chemSel.week || chemSel.quarter || chemSel.fy);
   const aimAny = d.spec && d.spec.aim && Object.keys(d.spec.aim).length > 0;
   const pl = (chemMeta.params.find(p => p.key === d.param) || {}).label || d.param;
-  const aimNote = !chemSel.ins_aim ? [] : !aimAny ? ['No Aim limits are stored for this grade, so no Aim line can be drawn. Load the AIM sheet of Standard.xlsx in Admin → Spec Limits (or type the Aim limits there).']
+  const multi = d.all_grades || d.param === '__all__';
+  const pvWarn = Array.from(new Set((d.param_views || []).flatMap(p => (p.warnings || []).map(w => chemParamLabel(p.param) + ': ' + w))));
+  const aimNote = multi || !chemSel.ins_aim ? [] : !aimAny ? ['No Aim limits are stored for this grade, so no Aim line can be drawn. Load the AIM sheet of Standard.xlsx in Admin → Spec Limits (or type the Aim limits there).']
     : (d.aim_lsl == null && d.aim_usl == null) ? [`This grade has no Aim limit for ${pl}, so no Aim line is drawn for it.`] : [];
-  const notes = [].concat(d.summary.heats ? [] : ['No heats match this selection (check Month / Week / Quarter / Fin. Year, or the grade).'],
+  const notes = [].concat(d.all_grades ? ['Grade = All: the cards below are per grade (each grade is measured against its own limits). Pick a Grade in the filters, or click a card, to see its control charts, histogram, capability table and out-of-spec heats. Heat Qty applies to each grade separately.'] : [],
+    d.summary.heats ? [] : ['No heats match this selection (check Month / Week / Quarter / Fin. Year, or the grade).'],
     chemNoDates() ? [`No cast date is stored for the ${per.undated.toLocaleString()} heat(s) of this grade, so the Month / Week / Quarter / Fin. Year lists, Compare Periods and the period trend are empty. Re-import the chemistry file in Admin → Cast Chemistry: its Date column is read on import and fills these filters (existing heats are updated, nothing is duplicated).`] : [],
     periodOn && per.undated && !chemNoDates() ? [`${per.undated} heat(s) of this grade have no readable date and drop out while a Month / Week / Quarter / Fin. Year filter is set.`] : [],
-    aimNote, d.warnings || [], c.note ? [c.note] : []);
+    aimNote, d.warnings || [], pvWarn, c.note ? [c.note] : []);
   el.innerHTML = notes.length ? `<div class="chem-note-strip">${notes.map(n => 'ⓘ ' + escQcr(n)).join('<br>')}</div>` : '';
 }
 
@@ -678,7 +719,7 @@ function renderChemOverview(d){
   const tr = r => `<tr class="chem-click${r.param === d.param ? ' chem-cur' : ''}${r.main ? ' chem-main-row' : ''}" data-param="${r.param}"><td><b>${r.main ? '★ ' : ''}${escQcr(r.label)}</b></td><td>${r.n}</td><td>${chemNum(r.mean)}</td><td>${lim(r.lsl)}</td><td>${lim(r.usl)}</td><td>${lim(r.aim_lsl)}</td><td>${lim(r.aim_usl)}</td><td class="${chemIdxClass(r.cp)}">${chemIdx(r.cp)}</td><td class="${chemIdxClass(r.cpk)}">${chemIdx(r.cpk)}</td><td>${sd(r.sigma_within)}</td><td class="${chemIdxClass(r.pp)}">${chemIdx(r.pp)}</td><td class="${chemIdxClass(r.ppk)}">${chemIdx(r.ppk)}</td><td>${sd(r.sigma_overall)}</td><td class="${r.oos ? 'chem-bad' : ''}">${r.oos}</td></tr>`;
   const mains = rows.filter(r => r.main), others = rows.filter(r => !r.main);
   const sep = t => `<tr class="chem-sep"><td colspan="14">${t}</td></tr>`;
-  document.getElementById('chemOverviewBox').innerHTML = rows.length ? `<div class="chem-oos-bar"><button type="button" class="chem-btn" id="chemCpkCsv">⬇ Cpk table (CSV)</button><button type="button" class="chem-btn" id="chemHeatsCsv">⬇ Heat data — ${escQcr((chemMeta.params.find(p => p.key === d.param) || {}).label || d.param)} (CSV)</button></div><div class="table-scroll"><table class="chem-table"><thead><tr><th>Parameter</th><th>Heats</th><th>Mean</th><th>Std LSL</th><th>Std USL</th><th>Aim LSL</th><th>Aim USL</th><th>Cp</th><th>Cpk</th><th>Std. Dev. (Cp/Cpk)</th><th>Pp</th><th>Ppk</th><th>Std. Dev. (Pp/Ppk)</th><th>Out of spec</th></tr></thead><tbody>${mains.length ? sep('★ Main elements') + mains.map(tr).join('') : ''}${others.length ? sep('Impurities &amp; other parameters') + others.map(tr).join('') : ''}</tbody></table></div><div class="chem-foot">Click a row to chart that parameter. Cp/Cpk use the within σ (moving range ÷ 1.128), Pp/Ppk the overall σ; both against the Standard limits. Rating: ≥ 1.67 excellent, ≥ 1.33 capable (green), 1.00–1.33 marginal (amber), below 1.00 not capable (red). Where the lower limit is 0 (impurity-type limits) only the upper limit is used.</div>` : '<div class="chem-empty-chart">No parameters with enough data.</div>';
+  document.getElementById('chemOverviewBox').innerHTML = rows.length ? `<div class="chem-oos-bar"><button type="button" class="chem-btn" id="chemCpkCsv">⬇ Cpk table (CSV)</button><button type="button" class="chem-btn" id="chemHeatsCsv">⬇ Heat data — ${escQcr(chemParamLabel(d.param))} (CSV)</button></div><div class="table-scroll"><table class="chem-table"><thead><tr><th>Parameter</th><th>Heats</th><th>Mean</th><th>Std LSL</th><th>Std USL</th><th>Aim LSL</th><th>Aim USL</th><th>Cp</th><th>Cpk</th><th>Std. Dev. (Cp/Cpk)</th><th>Pp</th><th>Ppk</th><th>Std. Dev. (Pp/Ppk)</th><th>Out of spec</th></tr></thead><tbody>${mains.length ? sep('★ Main elements') + mains.map(tr).join('') : ''}${others.length ? sep('Impurities &amp; other parameters') + others.map(tr).join('') : ''}</tbody></table></div><div class="chem-foot">Click a row to chart that parameter. Cp/Cpk use the within σ (moving range ÷ 1.128), Pp/Ppk the overall σ; both against the Standard limits. Colour bands follow the KPI Targets set by the admin: ≥ ${Number(chemThr().target).toFixed(2)} on target (green), ≥ ${Number(chemThr().warning).toFixed(2)} watch (amber), below that action (red). Where the lower limit is 0 (impurity-type limits) only the upper limit is used.</div>` : '<div class="chem-empty-chart">No parameters with enough data.</div>';
   const b1 = document.getElementById('chemCpkCsv'), b2 = document.getElementById('chemHeatsCsv');
   if(b1) b1.addEventListener('click', () => chemExportCpk(d));
   if(b2) b2.addEventListener('click', () => chemExportHeats(d));
@@ -719,18 +760,22 @@ function chemElemArt(key){
   return `<svg class="chem-el-svg" viewBox="0 0 96 72" role="img" aria-label="${escQcr(e.name)}">${defs}${body}</svg>`;
 }
 // Rating -> [KPI status class, pill text] (same green / amber / red pills as the dashboard KPI cards).
-function chemStatus(v){ return v == null ? ['neutral', 'REFERENCE'] : v >= 1.67 ? ['good', 'EXCELLENT'] : v >= 1.33 ? ['good', 'CAPABLE'] : v >= 1 ? ['amber', 'MARGINAL'] : ['bad', 'NOT CAPABLE']; }
-function chemTone(v){ return v == null ? '' : v >= 1.33 ? 'target-good' : v >= 1 ? 'target-amber' : 'target-bad'; }
+function chemStatus(v){ const st = chemKpiStatus(v); return [st, st === 'good' ? 'ON TARGET' : st === 'amber' ? 'WATCH' : st === 'bad' ? 'ACTION' : 'REFERENCE']; }
+function chemTone(v){ const st = chemKpiStatus(v); return st === 'good' ? 'target-good' : st === 'amber' ? 'target-amber' : st === 'bad' ? 'target-bad' : ''; }
 // Main elements of the grade (Cu + its alloying elements), largest first. Built like the dashboard KPI cards (.kpi-card: coloured status bar on the left,
 // icon chip + label + status pill on top, big value, tinted tile row underneath). Left column = within σ (Cp / Cpk), right column = overall σ (Pp / Ppk).
 function renderChemMain(d){
   const box = document.getElementById('chemMainBox'); if(!box) return;
-  const mains = (d.overview || []).filter(r => r.main);
-  if(!mains.length){ box.innerHTML = ''; return; }
+  // One group of cards for the selected grade; with Grade = All one group per grade (each measured against its own limits).
+  const groups = d.all_grades
+    ? (d.grades || []).map(g => ({grade: g.description, title: g.description === '__none__' ? 'No spec assigned' : g.description, n: g.n_heats, rows: (g.overview || []).filter(r => r.main)})).filter(g => g.rows.length)
+    : [{grade: '', title: '', n: 0, rows: (d.overview || []).filter(r => r.main)}].filter(g => g.rows.length);
+  const flat = []; groups.forEach(g => g.rows.forEach(r => flat.push({g, r})));
+  if(!flat.length){ box.innerHTML = d.all_grades ? '<div class="chem-empty-chart">No heats with capability figures match this selection.</div>' : ''; return; }
   const sd = v => v == null || !isFinite(v) ? '—' : chemNum(v, v >= 1 ? 3 : v >= 0.1 ? 4 : 5);
   const big = (k, sub, v) => { const c = chemIdxClass(v); return `<div class="chem-el-big"><span class="chem-el-bk">${k}</span><b class="chem-el-bv ${c ? 'is-' + c.replace('chem-', '') : ''}" data-chem-value="${k.toLowerCase()}">${chemIdx(v)}</b><small>${sub}</small></div>`; };
   const tile = (k, v, cls) => `<div class="kpi-target-item ${cls || ''}"><span>${k}</span><b>${v}</b></div>`;
-  const card = (r, i) => {
+  const card = (r, i, g) => {
     const e = CHEM_ELEMENTS[r.param] || {sym: String(r.label).replace('%', ''), name: r.label, z: '', c: '#9DB5D9', d: '#5B6F8F', t: '#3F5675'};
     const [st, stTxt] = chemStatus(r.cpk);
     const trendType = r.cpk_change_type || 'info';
@@ -742,7 +787,8 @@ function renderChemMain(d){
       ? `<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: ${r.prev_cpk == null ? 'N/A' : `<b class="kpi-prev-val">${chemIdx(r.prev_cpk)}</b>`}</span><span class="trend info">${d.period_comparison ? '▬ Not enough data' : '▬ Select a period or Heat Qty'}</span></div>`
       : `<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: <b class="kpi-prev-val">${chemIdx(r.prev_cpk)}</b></span><span class="trend ${trendClass}">${trendType === 'up' ? '▲' : trendType === 'down' ? '▼' : '▬'} ${trendType === 'equal' ? 'No change' : (r.cpk_change_pct != null ? `<b class="kpi-change-val">${pctTxt(r.cpk_change_pct)}</b> (<span class="kpi-delta-val">${dTxt(r.cpk_change)}</span>)` : `<span class="kpi-delta-val">${dTxt(r.cpk_change)}</span>`)}</span></div>`;
     const vars = `--el-c:${e.c};--el-d:${e.d};--el-t:${e.t};--el-glow:${chemHexA(e.c, .5)};--el-tint1:${chemHexA(e.c, .28)};--el-tint2:${chemHexA(e.c, .10)};--el-edge:${chemHexA(e.d, .45)};--kpi-stagger:${Math.min(i, 7) * 65}ms`;
-    return `<div class="kpi-card ${pulseClass} chem-el-kpi status-${st}${r.param === d.param ? ' chem-cur' : ''}" data-param="${r.param}" role="button" tabindex="0" style="${vars}" aria-label="${escQcr(e.name)} — Cpk ${chemIdx(r.cpk)}, ${stTxt.toLowerCase()}. Click to chart">
+    const tgt = typeof kpiTargetMarkup === 'function' ? kpiTargetMarkup(CHEM_KPI_LABEL, 'num2') : '';
+    return `<div class="kpi-card ${pulseClass} chem-el-kpi status-${st}${!d.all_grades && r.param === d.param ? ' chem-cur' : ''}" ${d.all_grades ? `data-el="${escQcr(r.param)}"` : `data-param="${r.param}"`} role="button" tabindex="0" style="${vars}" aria-label="${escQcr(e.name)}${g && g.grade ? ' (' + escQcr(g.title) + ')' : ''} — Cpk ${chemIdx(r.cpk)}, ${stTxt.toLowerCase()}. Click to chart">
       <div class="kpi-top">
         <div class="label chem-el-label"><span class="kpi-icon chem-el-chip">${escQcr(e.sym)}</span><span class="chem-el-nm">${escQcr(e.name)}${e.z ? `<small>Atomic no. ${e.z}</small>` : ''}</span></div>
         <span class="kpi-status ${st}">${stTxt}</span>
@@ -755,23 +801,30 @@ function renderChemMain(d){
       <div class="kpi-bottom chem-el-bottom"><div class="kpi-meta chem-el-meta"><div class="kpi-targets chem-el-tiles">
         ${tile('Cp', chemIdx(r.cp), chemTone(r.cp))}${tile('Pp', chemIdx(r.pp), chemTone(r.pp))}
         ${tile('Std. Dev.', sd(r.sigma_within))}${tile('Std. Dev.', sd(r.sigma_overall))}
-      </div></div><div class="chem-el-spark">${sparklineSvg(chemCardPrevCpk.get(r.param), r.cpk, st === 'good' ? 'good' : st === 'bad' ? 'bad' : st === 'amber' ? 'amber' : 'neutral')}</div></div>
+      </div>${tgt}</div><div class="chem-el-spark">${sparklineSvg(chemCardPrevCpk.get((g.grade || '') + '|' + r.param), r.cpk, st === 'good' ? 'good' : st === 'bad' ? 'bad' : st === 'amber' ? 'amber' : 'neutral')}</div></div>
     </div>`;
   };
-  box.innerHTML = `<div class="chem-el-grid-wrap">${mains.map(card).join('')}</div><div class="chem-foot">Left column: <b>Cp / Cpk</b> use the within (moving-range) σ; right column: <b>Pp / Ppk</b> use the overall σ; both against the <b>Standard</b> limits. Std. Dev. under each column is the σ that column uses. Green ≥ 1.33 · amber 1.00–1.33 · red &lt; 1.00. Trend compares Cpk with the immediately previous Week / Month / Quarter / Financial Year, or — when only Heat Qty (last N) is set — with the N heats before them (▲ better, ▼ worse). Click a card to chart that element.</div>`;
+  let ci = 0;
+  box.innerHTML = groups.map(g => (d.all_grades ? `<div class="chem-grade-head"><b>🧪 ${escQcr(g.title)}</b><span>${g.n.toLocaleString()} heat${g.n === 1 ? '' : 's'}</span></div>` : '')
+    + `<div class="chem-el-grid-wrap">${g.rows.map(r => card(r, ci++, g)).join('')}</div>`).join('');
 
   // Same KPI interaction model: 5° pointer tilt, directional change classes, count-up/spring animation for headline + trend metrics.
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const isFirstPaint = !chemFirstPaintDone;
   const nextCpk = new Map(), nextTrend = new Map();
-  mains.forEach((r, i) => {
-    const cardEl = box.querySelector(`.chem-el-kpi[data-param="${r.param}"]`);
+  const cardEls = box.querySelectorAll('.chem-el-kpi');
+  flat.forEach(({g, r}, i) => {
+    const cardEl = cardEls[i], pkey = (g.grade || '') + '|' + r.param;
     if(!cardEl) return;
     if(typeof _kpiTiltEnabled !== 'undefined' && _kpiTiltEnabled && typeof attachKpiTilt === 'function') attachKpiTilt(cardEl);
-    const selectParam = () => { chemSel.param = r.param; chemSaveSel(); chemSyncFields(); chemRefresh(); };
+    const selectParam = () => {
+      chemSel.param = r.param;
+      if(g.grade){ chemSel.spec = g.grade; chemLastPeriod = ''; chemSanitiseSel(); chemSaveSel(); renderChemControls(); chemRefresh(); return; }   // Grade = All: a card opens its grade
+      chemSaveSel(); chemSyncFields(); chemRefresh();
+    };
     cardEl.addEventListener('click', e => { if(!e.target.closest('a,button,input,select')) selectParam(); });
     cardEl.addEventListener('keydown', e => { if((e.key === 'Enter' || e.key === ' ') && !e.target.closest('input,button,select')){ e.preventDefault(); selectParam(); } });
-    const oldCpk = chemCardPrevCpk.get(r.param), oldTrend = chemCardPrevTrend.get(r.param);
+    const oldCpk = chemCardPrevCpk.get(pkey), oldTrend = chemCardPrevTrend.get(pkey);
     const targets = cardEl.querySelectorAll('.chem-el-bv');
     const cpkEl = targets[0], ppkEl = targets[1];
     const duration = 680, token = (cardEl._chemAnimToken || 0) + 1;
@@ -812,25 +865,14 @@ function renderChemMain(d){
       const fromChange = oldTrend && Number.isFinite(oldTrend.change) ? oldTrend.change : 0;
       animateChemNumber(deltaEl, fromChange, Number(r.cpk_change), v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`);
     }
-    nextCpk.set(r.param, Number.isFinite(Number(r.cpk)) ? Number(r.cpk) : null);
-    nextTrend.set(r.param, {prev:Number.isFinite(Number(r.prev_cpk)) ? Number(r.prev_cpk) : null, change:Number.isFinite(Number(r.cpk_change)) ? Number(r.cpk_change) : null, pct:Number.isFinite(Number(r.cpk_change_pct)) ? Number(r.cpk_change_pct) : null, ppk:Number.isFinite(Number(r.ppk)) ? Number(r.ppk) : null});
+    nextCpk.set(pkey, Number.isFinite(Number(r.cpk)) ? Number(r.cpk) : null);
+    nextTrend.set(pkey, {prev:Number.isFinite(Number(r.prev_cpk)) ? Number(r.prev_cpk) : null, change:Number.isFinite(Number(r.cpk_change)) ? Number(r.cpk_change) : null, pct:Number.isFinite(Number(r.cpk_change_pct)) ? Number(r.cpk_change_pct) : null, ppk:Number.isFinite(Number(r.ppk)) ? Number(r.ppk) : null});
   });
   chemCardPrevCpk = nextCpk;
   chemCardPrevTrend = nextTrend;
   chemFirstPaintDone = true;
 }
 
-function chemCmpCard(title, a, tone, hint, noLimits, emptyMsg){
-  const has = !noLimits && a && a.heats > 0;
-  return `<div class="chem-cmp ${tone}"><div class="chem-cmp-t">${escQcr(title)}</div><div class="chem-cmp-v">${has && a.reject_pct != null ? a.reject_pct.toFixed(2) + '%' : '—'}</div><div class="chem-cmp-s">reject (by MT)</div><div class="chem-cmp-v2">${has && a.defect_pct != null ? a.defect_pct + '%' : '—'} <span>coils with a defect</span></div><div class="chem-cmp-f">${has ? `${a.heats} heats · ${a.coils} coils` : noLimits ? 'no limits defined for this group' : escQcr(emptyMsg || 'no heats with disposition data')}${has && a.heats < 10 ? '<br><b>small sample — read with care</b>' : ''}</div><div class="chem-cmp-h">${escQcr(hint)}</div></div>`;
-}
-function renderChemCompare(d){
-  const c = d.summary.compare, noLim = d.summary.has_limits === false;
-  const oosN = Number(d.oos_total || 0), oosDisp = c.out_of_spec ? Number(c.out_of_spec.heats || 0) : 0;
-  const oosEmpty = oosN === 0 ? 'No heat breached a limit in this selection ✔ — nothing to compare' : `${oosN} heat${oosN === 1 ? '' : 's'} breached a limit, but none of them has inspection data yet`;
-  const missing = d.summary.heats - d.summary.heats_with_disposition;
-  document.getElementById('chemCompareBox').innerHTML = `<div class="chem-cmp-why"><b>Why this is here:</b> it answers “do heats whose chemistry was out of limits end up with more rejects / defects on the coils rolled from them?” Heats are linked to the inspection (disposition) data through <b>heat_no</b>. If out-of-spec heats show a clearly higher reject % than in-spec heats, chemistry is a likely cause. This box is for reading only — nothing here is clickable; open the table below for individual heats.</div><div class="chem-cmp-grid">${chemCmpCard('In spec (all parameters)', c.in_spec, 'ok', 'Heats whose chemistry met every limit', noLim, 'no in-spec heat has inspection data yet')}${chemCmpCard('Out of spec', c.out_of_spec, 'bad', 'Heats with at least one limit breach', noLim, oosEmpty)}</div><div class="chem-foot">Only heats that also appear in the disposition data (matched on heat_no) are counted. ${missing} of ${d.summary.heats} heats in this view have no disposition record yet (not inspected/rolled). Correlation is not proof of cause.</div>`;
-}
 function chemOosRows(d, q){
   q = (q || '').trim().toUpperCase();
   return d.oos_heats.filter(o => !q || o.heat_no.includes(q) || o.violations.some(v => v.param.toUpperCase().includes(q)));
@@ -856,9 +898,15 @@ function renderChemOos(d){
 function chemRunExport(kind){
   const d = chemData, none = t => { showToast('info', 'Nothing to export', t); return false; };
   if(!d) return none('The Chemistry data is not loaded yet.');
-  if(kind === 'cpk'){ if(!(d.overview || []).length) return none('No capability figures for this selection.'); chemExportCpk(d); }
-  else if(kind === 'heats'){ if(!(d.series || []).length) return none('No heats with this parameter in the selection.'); chemExportHeats(d); }
-  else if(kind === 'oos'){ if(!(d.oos_heats || []).length) return none('No out-of-spec heats in this selection.'); chemExportOos(d); }
+  if(kind === 'cpk'){ if(!(d.all_grades ? (d.grades || []).length : (d.overview || []).length)) return none('No capability figures for this selection.'); chemExportCpk(d); }
+  else if(kind === 'heats'){
+    if(d.all_grades) return none('Pick a Grade first: heat data is exported for one grade at a time.');
+    if(!chemHeatSeries(d).length) return none('No heats with this parameter in the selection.'); chemExportHeats(d);
+  }
+  else if(kind === 'oos'){
+    if(d.all_grades) return none('Pick a Grade first: out-of-spec heats are exported for one grade at a time.');
+    if(!(d.oos_heats || []).length) return none('No out-of-spec heats in this selection.'); chemExportOos(d);
+  }
   else return false;
   showToast('success', 'Chemistry CSV downloaded', 'Built from the current Chemistry selection.');
   return true;
@@ -876,16 +924,31 @@ function chemFileTag(d){
 }
 // Capability of every parameter of the grade (main elements first) — the numbers behind the Cpk cards and table.
 function chemExportCpk(d){
-  const rows = (d && d.overview) || []; if(!rows.length) return;
+  const sets = d && d.all_grades ? (d.grades || []).map(g => ({grade: g.description === '__none__' ? 'No spec assigned' : g.description, rows: g.overview || []}))
+    : [{grade: (d && d.spec && d.spec.description) || '', rows: (d && d.overview) || []}];
+  if(!sets.some(x => x.rows.length)) return;
   const num = v => v == null || !isFinite(v) ? '' : Number(v);
   const lines = [['Grade / spec', 'Parameter', 'Main element', 'Heats', 'Mean', 'Std LSL', 'Std USL', 'Aim LSL', 'Aim USL', 'Cp', 'Cpk', 'Cpk rating', 'Std. Dev. (within, Cp/Cpk)', 'Pp', 'Ppk', 'Std. Dev. (overall, Pp/Ppk)', 'Out-of-spec heats', 'Indicative (< 30 heats)'].map(chemCsvCell).join(',')];
-  rows.forEach(r => lines.push([(d.spec && d.spec.description) || '', r.label, r.main ? 'Yes' : 'No', r.n, num(r.mean), num(r.lsl), num(r.usl), num(r.aim_lsl), num(r.aim_usl), num(r.cp), num(r.cpk),
-    r.cpk == null ? '' : chemIdxLabel(r.cpk), num(r.sigma_within), num(r.pp), num(r.ppk), num(r.sigma_overall), r.oos, r.n < 30 ? 'Yes' : 'No'].map(chemCsvCell).join(',')));
+  sets.forEach(st => st.rows.forEach(r => lines.push([st.grade, r.label, r.main ? 'Yes' : 'No', r.n, num(r.mean), num(r.lsl), num(r.usl), num(r.aim_lsl), num(r.aim_usl), num(r.cp), num(r.cpk),
+    r.cpk == null ? '' : chemIdxLabel(r.cpk), num(r.sigma_within), num(r.pp), num(r.ppk), num(r.sigma_overall), r.oos, r.n < 30 ? 'Yes' : 'No'].map(chemCsvCell).join(','))));
   chemDownloadCsv('chemistry_cpk_' + chemFileTag(d) + '.csv', lines);
 }
 // One row per heat for the charted parameter, in heat-number order, with its disposition summary.
+// Heat series of the view: the charted parameter, or (Parameter = All) the first main element's series (all elements are merged on export).
+function chemHeatSeries(d){ return d && d.param === '__all__' ? (((d.param_views || [])[0] || {}).series || []) : ((d && d.series) || []); }
 function chemExportHeats(d){
-  const s = (d && d.series) || []; if(!s.length) return;
+  const s = chemHeatSeries(d); if(!s.length) return;
+  if(d.param === '__all__'){
+    const pv = d.param_views || [], by = pv.map(p => new Map((p.series || []).map(x => [x.heat_no, x])));
+    const heats = [], seen = new Set();
+    pv.forEach(p => (p.series || []).forEach(x => { if(!seen.has(x.heat_no)){ seen.add(x.heat_no); heats.push(x); } }));
+    heats.sort((a, b) => (a.i || 0) - (b.i || 0));
+    const lines = [['Heat no', 'Date'].concat(pv.map(p => chemParamLabel(p.param)), ['Any parameter out of spec', 'Analyst', 'Coils', 'Reject %', 'Top defect']).map(chemCsvCell).join(',')];
+    heats.forEach(h => lines.push([h.heat_no, h.cast_date || ''].concat(by.map(m => m.has(h.heat_no) ? m.get(h.heat_no).value : ''), [h.heat_oos ? 'Yes' : 'No', h.analyst || '',
+      h.disp ? h.disp.coils : '', h.disp ? h.disp.reject_pct : '', h.disp && h.disp.top_defects && h.disp.top_defects[0] ? h.disp.top_defects[0].defect : '']).map(chemCsvCell).join(',')));
+    chemDownloadCsv('chemistry_heats_all_elements_' + chemFileTag(d) + '.csv', lines);
+    return;
+  }
   const label = (chemMeta && chemMeta.params.find(p => p.key === d.param) || {}).label || d.param;
   const lines = [['Heat no', 'Date', label, 'Out of spec (this parameter)', 'Any parameter out of spec', 'Analyst', 'Coils', 'Reject %', 'Top defect'].map(chemCsvCell).join(',')];
   s.forEach(p => lines.push([p.heat_no, p.cast_date || '', p.value, p.oos ? 'Yes' : 'No', p.heat_oos ? 'Yes' : 'No', p.analyst || '',
