@@ -3975,11 +3975,22 @@ def _compute_chem_spc_one(desc, param, last_n, period, all_params=False):
             pts = [{"value": h[p]} for h in prev_sel if h.get(p) is not None]
             if len(pts) < 2 or (p not in limits and all((h.get(p) or 0) == 0 for h in prev_sel)): continue
             a_prev = chem_spc.analyse_param(pts, limits, p)
-            prev_overview.append({"param": p, "cpk": a_prev["capability"]["cpk"]})
+            prev_overview.append({"param": p, "cpk": a_prev["capability"]["cpk"], "ppk": a_prev["capability"].get("ppk")})
         prev_map = {x["param"]: x["cpk"] for x in prev_overview}
+        prev_ppk_map = {x["param"]: x["ppk"] for x in prev_overview}
         for o in overview:
             pv = prev_map.get(o["param"])
             o["prev_cpk"] = pv
+            # Ppk gets the same period-over-period comparison as Cpk (element cards show a Prev line for both).
+            ppv = prev_ppk_map.get(o["param"])
+            o["prev_ppk"] = ppv
+            if o.get("ppk") is not None and ppv is not None:
+                pdelta = o["ppk"] - ppv
+                o["ppk_change"] = pdelta
+                o["ppk_change_pct"] = (pdelta / abs(ppv) * 100.0) if abs(ppv) > 1e-12 else None
+                o["ppk_change_type"] = "up" if pdelta > 1e-12 else "down" if pdelta < -1e-12 else "equal"
+            else:
+                o["ppk_change"] = None; o["ppk_change_pct"] = None; o["ppk_change_type"] = "info"
             if o.get("cpk") is not None and pv is not None:
                 delta = o["cpk"] - pv
                 o["cpk_change"] = delta
@@ -3993,6 +4004,7 @@ def _compute_chem_spc_one(desc, param, last_n, period, all_params=False):
     else:
         for o in overview:
             o["prev_cpk"] = None; o["cpk_change"] = None; o["cpk_change_pct"] = None; o["cpk_change_type"] = "info"
+            o["prev_ppk"] = None; o["ppk_change"] = None; o["ppk_change_pct"] = None; o["ppk_change_type"] = "info"
         view["period_comparison"] = None
     return view
 

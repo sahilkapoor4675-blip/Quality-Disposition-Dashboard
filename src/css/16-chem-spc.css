@@ -65,32 +65,38 @@ html[data-theme="dark"] .chem-topbar input.chem-heat-input:focus{background:#0F1
 /* ---- element cards: built on the dashboard's own .kpi-card (status bar, icon chip, status pill, tinted tiles, hover, dark mode) ---- */
 .kpi-card.chem-el-kpi{font-family:inherit;}
 /* Typography parity: headline metrics use exactly the shared KPI metric font. */
-.kpi-card.chem-el-kpi .chem-el-bv{font-family:'Bahnschrift SemiBold','Bahnschrift','Arial Narrow',sans-serif;font-size:34px;font-weight:600;letter-spacing:-1.2px;line-height:1.08;}
-.chem-el-grid-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:14px;margin-bottom:8px}
-.chem-el-kpi{cursor:pointer;min-height:0!important;display:flex;flex-direction:column;background-image:none!important}
+.kpi-card.chem-el-kpi .chem-el-bv{font-family:'Bahnschrift SemiBold','Bahnschrift','Arial Narrow',sans-serif;font-size:28px;font-weight:600;letter-spacing:-.9px;line-height:1.08;}
+.chem-el-grid-wrap{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:8px}
+@media(min-width:1700px){.chem-el-grid-wrap{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(min-width:2100px){.chem-el-grid-wrap{grid-template-columns:repeat(6,minmax(0,1fr))}}
+@media(max-width:1100px) and (min-width:901px){.chem-el-grid-wrap{gap:11px}}
+@media(max-width:900px){.chem-el-grid-wrap{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.chem-el-grid-wrap{grid-template-columns:1fr}}
+.chem-el-kpi{cursor:pointer;min-height:0!important;display:flex;flex-direction:column;background-image:none!important;container-type:inline-size;container-name:chemcard}
 .chem-el-kpi:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent),var(--shadow-card-hover)}
-.chem-el-kpi .kpi-top{gap:10px}
-.chem-el-label{display:flex;align-items:center;gap:10px;min-width:0}
-.kpi-card.chem-el-kpi .kpi-icon.chem-el-chip{width:44px;height:44px;flex:0 0 auto;border-radius:11px;font-family:inherit;font-size:23px;font-weight:700;letter-spacing:-.5px;color:var(--el-t,var(--heading));background:var(--el-tint1,#f1f6fb)!important;box-shadow:inset 0 0 0 1px var(--el-edge,#E1EBF2)}
-.chem-el-nm{display:flex;flex-direction:column;min-width:0;line-height:1.15}
-.chem-el-nm small{margin-top:2px;font-size:11.5px;font-weight:700;letter-spacing:.3px;text-transform:none;color:var(--muted)}
-.chem-el-body{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
-.chem-el-metrics{display:flex;gap:22px;min-width:0}
-.chem-el-big{display:flex;flex-direction:column;line-height:1.05}
-.chem-el-bk{font-family:'Manrope',sans-serif;font-size:14px;font-weight:700;letter-spacing:var(--ls-label);text-transform:uppercase;color:var(--muted)}
-.chem-el-bv{margin-top:4px;font-variant-numeric:tabular-nums lining-nums;color:#16324F}
+.chem-el-kpi .kpi-top{gap:8px;align-items:center}
+.chem-el-label{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 auto;margin:0}
+.kpi-card.chem-el-kpi .kpi-icon.chem-el-chip{width:34px;height:34px;flex:0 0 auto;border-radius:9px;font-family:'Manrope',sans-serif;font-size:15px;font-weight:800;letter-spacing:.2px;text-transform:none;color:#fff!important;background:linear-gradient(135deg,var(--el-c,#6b7f99) 0%,var(--el-d,#44566e) 100%)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),0 2px 5px var(--el-glow,rgba(0,0,0,.18));text-shadow:0 1px 1px rgba(0,0,0,.35)}
+.chem-el-nm{display:flex;flex-direction:column;min-width:0;line-height:1.15;font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chem-el-nm small{margin-top:1px;font-size:10.5px;font-weight:700;letter-spacing:.2px;text-transform:none;color:var(--muted)}
+.chem-el-tr{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.chem-el-art{display:block;width:50px;height:37px;flex:0 0 auto;border-radius:7px;overflow:hidden;background:var(--el-tint2,#f1f6fb);box-shadow:0 0 0 1px var(--el-edge,#E1EBF2),0 2px 5px var(--el-glow,rgba(0,0,0,.15))}
+.chem-el-photo{display:block;width:100%;height:100%;object-fit:cover;user-select:none}
+.chem-el-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px;min-width:0}
+.chem-el-big{display:flex;flex-direction:column;line-height:1.05;min-width:0}
+.chem-el-bk{font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:800;letter-spacing:var(--ls-label);text-transform:uppercase;color:var(--muted);display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.chem-el-bv{margin-top:2px;font-variant-numeric:tabular-nums lining-nums;color:#16324F}
 .chem-el-bv.is-great,.chem-el-bv.is-good{color:var(--green)}
 .chem-el-bv.is-warn{color:var(--amber)}
 .chem-el-bv.is-bad{color:var(--red)}
-.chem-el-big small{margin-top:3px;font-size:11.5px;font-weight:600;color:var(--muted)}
-.chem-el-art{flex:0 1 96px;min-width:64px;width:96px}
-.chem-el-svg{display:block;width:100%;height:auto;filter:drop-shadow(0 3px 3px rgba(0,0,0,.22))}
-.chem-el-tiles{grid-template-columns:repeat(2,1fr)!important;margin-top:10px!important}
-.chem-el-tiles .kpi-target-item{display:flex;align-items:baseline;justify-content:space-between;gap:8px;text-align:left;padding:6px 10px}
-.chem-el-tiles .kpi-target-item span{font-size:12px;font-weight:800;letter-spacing:.45px;text-transform:uppercase}
-.chem-el-tiles .kpi-target-item b{display:inline;margin:0;font-size:16px;font-variant-numeric:tabular-nums}
-html[data-theme="dark"] .kpi-card.chem-el-kpi .kpi-icon.chem-el-chip{color:var(--el-c,var(--heading))}
+.chem-el-big small{margin:0;font-size:10.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted)}
+.chem-el-svg{display:block;width:100%;height:100%}
+.chem-el-tiles{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:3px 10px!important;margin-top:5px!important;padding-top:5px!important}
+.chem-el-tiles .kpi-target-item{display:flex;align-items:baseline;justify-content:space-between;gap:6px;text-align:left;padding:2px 7px;border-radius:5px}
+.chem-el-tiles .kpi-target-item span{font-size:9.5px;font-weight:800;letter-spacing:.35px;text-transform:uppercase;white-space:nowrap}
+.chem-el-tiles .kpi-target-item b{display:inline;margin:0;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+html[data-theme="dark"] .kpi-card.chem-el-kpi .kpi-icon.chem-el-chip{color:#fff!important}
 html[data-theme="dark"] .chem-el-bv{color:#E8EDF6}
 html[data-theme="dark"] .chem-el-bv.is-great,html[data-theme="dark"] .chem-el-bv.is-good{color:var(--green)}
 html[data-theme="dark"] .chem-el-bv.is-warn{color:var(--amber)}
@@ -99,17 +105,24 @@ html[data-theme="dark"] .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent)
 .kpi-card.chem-el-kpi .chem-el-bv{font-variant-numeric:tabular-nums lining-nums;}
 .kpi-card.chem-el-kpi.kpi-up .chem-el-bv{animation:valueUp .65s ease-out var(--kpi-stagger,0s) both;}
 .kpi-card.chem-el-kpi.kpi-down .chem-el-bv{animation:valueDown .65s ease-out var(--kpi-stagger,0s) both;}
-.chem-el-trendline{margin-top:7px;margin-bottom:1px;display:flex;align-items:center;gap:7px;min-height:23px;}
-.chem-el-trendline .prev{font-size:13px;}
-.chem-el-trendline .trend{font-size:13px;}
+.chem-el-trendline{margin-top:2px;margin-bottom:0;display:flex;align-items:center;flex-wrap:nowrap;gap:2px 6px;min-height:18px;overflow:hidden;}
+.chem-el-trendline .prev{font-size:11.5px;white-space:nowrap}
+.chem-el-trendline .prev b{font-size:12px}
+.chem-el-trendline .trend{font-size:11px;white-space:nowrap}
+/* the absolute change "(-0.27)" only fits next to the % on wider cards, so every card keeps ONE Prev line of equal height */
+.chem-el-abs{display:none;margin-left:2px;font-weight:600;opacity:.85}
+@container chemcard (min-width:372px){.chem-el-abs{display:inline}}
 /* Dashboard parity: Chemistry reuses the shared KPI/chart interaction contract instead of introducing a second visual system. */
-.chem-el-kpi .sparkline{width:76px;height:28px;display:block;flex:0 0 76px;}
-.chem-el-kpi .sparkline polyline{fill:none;stroke-width:2.2;}
-.chem-el-kpi .kpi-bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:10px;}
-.chem-el-meta{min-width:0;flex:1;}
-.chem-el-spark{width:76px;flex:0 0 76px;padding-bottom:4px;}
+.chem-el-kpi .kpi-bottom{display:block;margin-top:0;}
+.chem-el-meta{min-width:0;}
+/* Low / Mid / High target tiles + direction hint: same data as the dashboard KPI cards, just tighter */
+.chem-el-meta .kpi-targets:not(.chem-el-tiles){margin-top:4px;padding-top:4px;gap:4px}
+.chem-el-meta .kpi-targets:not(.chem-el-tiles) .kpi-target-item{display:flex;align-items:baseline;justify-content:center;gap:5px;padding:2px 3px}
+.chem-el-meta .kpi-targets:not(.chem-el-tiles) .kpi-target-item span{font-size:9.5px;font-weight:800;letter-spacing:.3px}
+.chem-el-meta .kpi-targets:not(.chem-el-tiles) .kpi-target-item b{display:inline;margin:0;font-size:11.5px}
+.chem-el-meta .kpi-target{margin-top:3px;font-size:11px;line-height:1.15}
 .chem-el-kpi .chem-el-trendline .prev{color:var(--muted);font-family:'Manrope',sans-serif;}
-.chem-el-kpi .chem-el-trendline .trend{font-family:'Space Grotesk',sans-serif;padding:2px var(--sp-2);border-radius:5px;}
+.chem-el-kpi .chem-el-trendline .trend{font-family:'Space Grotesk',sans-serif;padding:1px 6px;border-radius:5px;}
 .chem-el-kpi .chem-el-trendline .trend.good{color:#15803D;background:#DCFCE7;}
 .chem-el-kpi .chem-el-trendline .trend.bad{color:#B91C1C;background:#FEE2E2;}
 .chem-el-kpi .chem-el-trendline .trend.equal{color:#475569;background:#F3F4F6;}
@@ -133,8 +146,8 @@ html.chem-mode .chem-filter-summary{display:flex;}
 #chemDrillModal.chem-drill-open #chemDrillContent .table-scroll{height:auto;max-height:none;overflow:visible;}
 #chemDrillModal.chem-drill-open #chemDrillContent .drill-table thead th{position:sticky;top:0;z-index:12;}
 
-@media(min-width:1500px){.kpi-card.chem-el-kpi .chem-el-bv{font-size:34px}}
-@media(max-width:700px){.chem-el-grid-wrap{grid-template-columns:1fr}.kpi-card.chem-el-kpi .chem-el-bv{font-size:27px}.chem-el-art{width:84px;flex-basis:84px}}
+@media(min-width:1500px){.kpi-card.chem-el-kpi .chem-el-bv{font-size:30px}}
+@media(max-width:700px){.kpi-card.chem-el-kpi .chem-el-bv{font-size:26px}}
 .chem-topbar .reset-all{white-space:nowrap}
 .chem-topbar .filter-toolbar-title{min-width:0}
 /* dark mode: neutral (no rating) tiles and the element name need light text on the dark card */
@@ -149,4 +162,3 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3
 .chem-grade-head span{font-size:12.5px;font-weight:600;color:var(--muted)}
 .chem-pblock{margin:0 0 14px}.chem-pblock-t{font-weight:800;font-size:13.5px;color:var(--heading);margin:2px 2px 6px}
 #tab-chem.chem-all-grades .chem-grade-only{display:none!important}
-.chem-el-meta .kpi-targets:not(.chem-el-tiles){margin-top:8px}

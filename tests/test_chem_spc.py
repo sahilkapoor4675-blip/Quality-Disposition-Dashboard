@@ -278,6 +278,7 @@ check('html[data-theme="dark"] .chem-great' in css, "dark-theme colour for the E
 check("chemExportCpk" in js and "chemExportHeats" in js and 'id="chemCpkCsv"' in js and 'id="chemHeatsCsv"' in js, "Cpk-table and heat-data CSV exports present")
 check("const TAB_KEYS=['dashboard','controlroom','wcgrade','defects','weekly','chem'];" in js and "TAB_LOADERS.chem = loadChemSpc" in js and "#tabs .tab-btn" in css, "Chemistry participates in shared tab routing/default-tab validation; tab bar stays on one row")
 check("previous_period_filter" in open(ROOT / "chem_spc.py", encoding="utf-8").read() and "prev_cpk" in js and "chem-el-trendline" in js, "element-card period-over-period Cpk comparison is wired")
+check("prev_ppk" in js and "prev_ppk" in server_src and "ppk_change_pct" in server_src and 'data-chem-prev="${key}"' in js and "chem-el-spark" not in js and "CHEM_ELEMENT_PHOTOS" in js, "element cards show a Prev line for BOTH Cpk and Ppk, carry the element photo, and no longer draw the sparkline")
 check("attachKpiTilt(cardEl)" in js and "kpi-up" in js and "kpi-down" in js, "element cards reuse KPI tilt and change-animation classes")
 check("title=\"Click to chart" not in js and "aria-label=\"${escQcr(e.name)}${g && g.grade" in js and "— Cpk ${chemIdx(r.cpk)}" in js, "element cards use accessible labels without browser-native hover popups")
 check("animateChemNumber(cpkEl, 0, Number(r.cpk)" not in js and "animateChemNumber(ppkEl, 0, Number(r.ppk)" not in js, "null Cpk/Ppk values cannot animate through numeric zero")

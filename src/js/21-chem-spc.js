@@ -726,18 +726,18 @@ function renderChemOverview(d){
 }
 // ---------------------------------------------------------------- element cards (symbol + picture + Cp/Cpk/Pp/Ppk/Std. Dev.)
 const CHEM_ELEMENTS = {
-  // c = light logo colour, d = dark logo colour, t = colour of the big symbol (the logo's colour, darkened just enough to read on white)
-  cu: {sym: 'Cu', name: 'Copper',     z: 29, c: '#E2925A', d: '#93511F', t: '#B4602A', kind: 'ingot'},
-  ni: {sym: 'Ni', name: 'Nickel',     z: 28, c: '#CBD3DB', d: '#7C8894', t: '#6B7885', kind: 'coin'},
-  zn: {sym: 'Zn', name: 'Zinc',       z: 30, c: '#B3C7D4', d: '#5F7A8C', t: '#557A93', kind: 'ingot'},
-  al: {sym: 'Al', name: 'Aluminium',  z: 13, c: '#E4E8ED', d: '#98A2B0', t: '#7B8797', kind: 'ingot'},
-  mn: {sym: 'Mn', name: 'Manganese',  z: 25, c: '#BE86D8', d: '#6B3D86', t: '#8A4FAE', kind: 'crystal'},
-  fe: {sym: 'Fe', name: 'Iron',       z: 26, c: '#95A1AE', d: '#434C57', t: '#59636F', kind: 'ingot'},
-  pb: {sym: 'Pb', name: 'Lead',       z: 82, c: '#8A919C', d: '#3A404A', t: '#4A515C', kind: 'ingot'},
-  sn: {sym: 'Sn', name: 'Tin',        z: 50, c: '#EEF1F5', d: '#A0A9B5', t: '#7E8896', kind: 'coin'},
-  si: {sym: 'Si', name: 'Silicon',    z: 14, c: '#7C8FBA', d: '#2E3B5C', t: '#43568A', kind: 'crystal'},
-  p:  {sym: 'P',  name: 'Phosphorus', z: 15, c: '#FF8A63', d: '#B02F12', t: '#D03A17', kind: 'crystal'},
-  s:  {sym: 'S',  name: 'Sulfur',     z: 16, c: '#F8DD54', d: '#B08F00', t: '#A98A00', kind: 'crystal'},
+  // c / d = the two ends of that element's header bar in the reference photo sheet (Element_Icons.png); t = accent colour (the dark end)
+  cu: {sym: 'Cu', name: 'Copper',     z: 29, c: '#AE5E31', d: '#6D2F10', t: '#8A4318', kind: 'ingot'},
+  ni: {sym: 'Ni', name: 'Nickel',     z: 28, c: '#939393', d: '#5E5D5D', t: '#5E5D5D', kind: 'coin'},
+  zn: {sym: 'Zn', name: 'Zinc',       z: 30, c: '#435B6B', d: '#2C414F', t: '#2C414F', kind: 'ingot'},
+  al: {sym: 'Al', name: 'Aluminium',  z: 13, c: '#5C87A3', d: '#41708F', t: '#41708F', kind: 'ingot'},
+  mn: {sym: 'Mn', name: 'Manganese',  z: 25, c: '#704385', d: '#5A336A', t: '#5A336A', kind: 'crystal'},
+  fe: {sym: 'Fe', name: 'Iron',       z: 26, c: '#6E4129', d: '#55311C', t: '#55311C', kind: 'ingot'},
+  pb: {sym: 'Pb', name: 'Lead',       z: 82, c: '#4B515B', d: '#393D43', t: '#393D43', kind: 'ingot'},
+  sn: {sym: 'Sn', name: 'Tin',        z: 50, c: '#9A6A47', d: '#805535', t: '#805535', kind: 'coin'},
+  si: {sym: 'Si', name: 'Silicon',    z: 14, c: '#4F6B45', d: '#3C5531', t: '#3C5531', kind: 'crystal'},
+  p:  {sym: 'P',  name: 'Phosphorus', z: 15, c: '#CC9620', d: '#B9810B', t: '#9A6B00', kind: 'crystal'},
+  s:  {sym: 'S',  name: 'Sulfur',     z: 16, c: '#DDB51C', d: '#C79B00', t: '#A98A00', kind: 'crystal'},
   c:  {sym: 'C',  name: 'Carbon',     z: 6,  c: '#5A6574', d: '#141A22', t: '#2A323D', kind: 'crystal'},
 };
 // '#RRGGBB' -> 'rgba(r,g,b,a)' (used for the soft element-coloured card background)
@@ -745,6 +745,8 @@ function chemHexA(hex, a){ const n = parseInt(String(hex).slice(1), 16); return 
 // Small drawn picture of the element's typical form (ingots / coin / crystal), coloured per element. Inline SVG: no image files, works offline.
 function chemElemArt(key){
   const e = CHEM_ELEMENTS[key]; if(!e) return '';
+  const photo = typeof CHEM_ELEMENT_PHOTOS !== 'undefined' && CHEM_ELEMENT_PHOTOS[key];
+  if(photo) return `<img class="chem-el-photo" src="${photo}" alt="${escQcr(e.name)}" width="144" height="108" loading="lazy" decoding="async" draggable="false">`;
   const gid = 'chemg-' + key;
   const defs = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${e.c}"/><stop offset="1" stop-color="${e.d}"/></linearGradient></defs>`;
   let body = '';
@@ -773,35 +775,33 @@ function renderChemMain(d){
   const flat = []; groups.forEach(g => g.rows.forEach(r => flat.push({g, r})));
   if(!flat.length){ box.innerHTML = d.all_grades ? '<div class="chem-empty-chart">No heats with capability figures match this selection.</div>' : ''; return; }
   const sd = v => v == null || !isFinite(v) ? '—' : chemNum(v, v >= 1 ? 3 : v >= 0.1 ? 4 : 5);
-  const big = (k, sub, v) => { const c = chemIdxClass(v); return `<div class="chem-el-big"><span class="chem-el-bk">${k}</span><b class="chem-el-bv ${c ? 'is-' + c.replace('chem-', '') : ''}" data-chem-value="${k.toLowerCase()}">${chemIdx(v)}</b><small>${sub}</small></div>`; };
+  const pctTxt = v => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`, dTxt = v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`;
+  // One metric column = label + big value + its OWN "Prev" line with the change vs the previous period (Cpk and Ppk each get one).
+  const metric = (key, k, sub, v, prevV, chg, pct, type) => {
+    const c = chemIdxClass(v), t = type || 'info';
+    const tc = t === 'up' ? 'good' : t === 'down' ? 'bad' : t === 'equal' ? 'equal' : 'info';
+    const prevHtml = `<span class="prev">Prev <b class="kpi-prev-val" data-chem-prev="${key}">${prevV == null ? 'N/A' : chemIdx(prevV)}</b></span>`;
+    const trendHtml = prevV == null || chg == null ? '' : `<span class="trend ${tc}">${t === 'up' ? '▲' : t === 'down' ? '▼' : '▬'} ${t === 'equal' ? 'No change' : (pct != null ? `<b class="kpi-change-val" data-chem-pct="${key}">${pctTxt(pct)}</b><span class="chem-el-abs">(<span class="kpi-delta-val" data-chem-delta="${key}">${dTxt(chg)}</span>)</span>` : `<span class="kpi-delta-val" data-chem-delta="${key}">${dTxt(chg)}</span>`)}</span>`;
+    return `<div class="chem-el-big"><span class="chem-el-bk">${k}<small>${sub}</small></span><b class="chem-el-bv ${c ? 'is-' + c.replace('chem-', '') : ''}" data-chem-value="${k.toLowerCase()}">${chemIdx(v)}</b><div class="kpi-trendline chem-el-trendline">${prevHtml}${trendHtml}</div></div>`;
+  };
   const tile = (k, v, cls) => `<div class="kpi-target-item ${cls || ''}"><span>${k}</span><b>${v}</b></div>`;
   const card = (r, i, g) => {
-    const e = CHEM_ELEMENTS[r.param] || {sym: String(r.label).replace('%', ''), name: r.label, z: '', c: '#9DB5D9', d: '#5B6F8F', t: '#3F5675'};
+    const e = CHEM_ELEMENTS[r.param] || {sym: String(r.label).replace('%', ''), name: r.label, z: '', c: '#7A8CA8', d: '#4F6180', t: '#3F5675'};
     const [st, stTxt] = chemStatus(r.cpk);
     const trendType = r.cpk_change_type || 'info';
-    const trendClass = trendType === 'up' ? 'good' : trendType === 'down' ? 'bad' : trendType === 'equal' ? 'equal' : 'info';
     const pulseClass = trendType === 'up' ? 'kpi-up' : trendType === 'down' ? 'kpi-down' : 'kpi-pulse';
-    const pctTxt = v => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`, dTxt = v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`;
-    const hasChange = r.prev_cpk != null && r.cpk_change != null;
-    const trend = !hasChange
-      ? `<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: ${r.prev_cpk == null ? 'N/A' : `<b class="kpi-prev-val">${chemIdx(r.prev_cpk)}</b>`}</span><span class="trend info">${d.period_comparison ? '▬ Not enough data' : '▬ Select a period or Heat Qty'}</span></div>`
-      : `<div class="kpi-trendline chem-el-trendline"><span class="prev">Prev: <b class="kpi-prev-val">${chemIdx(r.prev_cpk)}</b></span><span class="trend ${trendClass}">${trendType === 'up' ? '▲' : trendType === 'down' ? '▼' : '▬'} ${trendType === 'equal' ? 'No change' : (r.cpk_change_pct != null ? `<b class="kpi-change-val">${pctTxt(r.cpk_change_pct)}</b> (<span class="kpi-delta-val">${dTxt(r.cpk_change)}</span>)` : `<span class="kpi-delta-val">${dTxt(r.cpk_change)}</span>`)}</span></div>`;
     const vars = `--el-c:${e.c};--el-d:${e.d};--el-t:${e.t};--el-glow:${chemHexA(e.c, .5)};--el-tint1:${chemHexA(e.c, .28)};--el-tint2:${chemHexA(e.c, .10)};--el-edge:${chemHexA(e.d, .45)};--kpi-stagger:${Math.min(i, 7) * 65}ms`;
     const tgt = typeof kpiTargetMarkup === 'function' ? kpiTargetMarkup(CHEM_KPI_LABEL, 'num2') : '';
     return `<div class="kpi-card ${pulseClass} chem-el-kpi status-${st}${!d.all_grades && r.param === d.param ? ' chem-cur' : ''}" ${d.all_grades ? `data-el="${escQcr(r.param)}"` : `data-param="${r.param}"`} role="button" tabindex="0" style="${vars}" aria-label="${escQcr(e.name)}${g && g.grade ? ' (' + escQcr(g.title) + ')' : ''} — Cpk ${chemIdx(r.cpk)}, ${stTxt.toLowerCase()}. Click to chart">
       <div class="kpi-top">
         <div class="label chem-el-label"><span class="kpi-icon chem-el-chip">${escQcr(e.sym)}</span><span class="chem-el-nm">${escQcr(e.name)}${e.z ? `<small>Atomic no. ${e.z}</small>` : ''}</span></div>
-        <span class="kpi-status ${st}">${stTxt}</span>
+        <div class="chem-el-tr"><span class="chem-el-art">${chemElemArt(r.param)}</span><span class="kpi-status ${st}">${stTxt}</span></div>
       </div>
-      <div class="chem-el-body">
-        <div class="chem-el-metrics">${big('Cpk', 'within σ', r.cpk)}${big('Ppk', 'overall σ', r.ppk)}</div>
-        <div class="chem-el-art">${chemElemArt(r.param)}</div>
-      </div>
-      ${trend}
+      <div class="chem-el-metrics">${metric('cpk', 'Cpk', 'within σ', r.cpk, r.prev_cpk, r.cpk_change, r.cpk_change_pct, r.cpk_change_type)}${metric('ppk', 'Ppk', 'overall σ', r.ppk, r.prev_ppk, r.ppk_change, r.ppk_change_pct, r.ppk_change_type)}</div>
       <div class="kpi-bottom chem-el-bottom"><div class="kpi-meta chem-el-meta"><div class="kpi-targets chem-el-tiles">
         ${tile('Cp', chemIdx(r.cp), chemTone(r.cp))}${tile('Pp', chemIdx(r.pp), chemTone(r.pp))}
         ${tile('Std. Dev.', sd(r.sigma_within))}${tile('Std. Dev.', sd(r.sigma_overall))}
-      </div>${tgt}</div><div class="chem-el-spark">${sparklineSvg(chemCardPrevCpk.get((g.grade || '') + '|' + r.param), r.cpk, st === 'good' ? 'good' : st === 'bad' ? 'bad' : st === 'amber' ? 'amber' : 'neutral')}</div></div>
+      </div>${tgt}</div></div>
     </div>`;
   };
   let ci = 0;
@@ -851,22 +851,20 @@ function renderChemMain(d){
       animateChemNumber(cpkEl, oldCpk, r.cpk, chemIdx);
       animateChemNumber(ppkEl, oldTrend && Number.isFinite(oldTrend.ppk) ? oldTrend.ppk : r.ppk, r.ppk, chemIdx);
     }
-    const prevEl = cardEl.querySelector('.kpi-prev-val');
-    const changeEl = cardEl.querySelector('.kpi-change-val'), deltaEl = cardEl.querySelector('.kpi-delta-val');
-    if(!reduceMotion && r.prev_cpk != null && Number.isFinite(Number(r.prev_cpk))){
-      const fromPrev = oldTrend && Number.isFinite(oldTrend.prev) ? oldTrend.prev : 0;
-      animateChemNumber(prevEl, fromPrev, Number(r.prev_cpk), chemIdx);
-    }
-    if(!reduceMotion && changeEl && r.cpk_change_pct != null && Number.isFinite(Number(r.cpk_change_pct))){
-      const fromPct = oldTrend && Number.isFinite(oldTrend.pct) ? oldTrend.pct : 0;
-      animateChemNumber(changeEl, fromPct, Number(r.cpk_change_pct), v => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`);
-    }
-    if(!reduceMotion && deltaEl && r.cpk_change != null && Number.isFinite(Number(r.cpk_change))){
-      const fromChange = oldTrend && Number.isFinite(oldTrend.change) ? oldTrend.change : 0;
-      animateChemNumber(deltaEl, fromChange, Number(r.cpk_change), v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`);
-    }
+    // Prev / change numbers: Cpk and Ppk each have their own line; count from the last value shown (or 0 on first paint).
+    const fin = v => v != null && Number.isFinite(Number(v)), ot = oldTrend || {};
+    if(!reduceMotion) [
+      {key: 'cpk', prev: r.prev_cpk, pct: r.cpk_change_pct, chg: r.cpk_change, o: {prev: ot.prev, pct: ot.pct, chg: ot.change}},
+      {key: 'ppk', prev: r.prev_ppk, pct: r.ppk_change_pct, chg: r.ppk_change, o: {prev: ot.pprev, pct: ot.ppct, chg: ot.pchange}},
+    ].forEach(L => {
+      const pe = cardEl.querySelector(`[data-chem-prev="${L.key}"]`), ce = cardEl.querySelector(`[data-chem-pct="${L.key}"]`), de = cardEl.querySelector(`[data-chem-delta="${L.key}"]`);
+      if(pe && fin(L.prev)) animateChemNumber(pe, fin(L.o.prev) ? Number(L.o.prev) : 0, Number(L.prev), chemIdx);
+      if(ce && fin(L.pct)) animateChemNumber(ce, fin(L.o.pct) ? Number(L.o.pct) : 0, Number(L.pct), pctTxt);
+      if(de && fin(L.chg)) animateChemNumber(de, fin(L.o.chg) ? Number(L.o.chg) : 0, Number(L.chg), dTxt);
+    });
     nextCpk.set(pkey, Number.isFinite(Number(r.cpk)) ? Number(r.cpk) : null);
-    nextTrend.set(pkey, {prev:Number.isFinite(Number(r.prev_cpk)) ? Number(r.prev_cpk) : null, change:Number.isFinite(Number(r.cpk_change)) ? Number(r.cpk_change) : null, pct:Number.isFinite(Number(r.cpk_change_pct)) ? Number(r.cpk_change_pct) : null, ppk:Number.isFinite(Number(r.ppk)) ? Number(r.ppk) : null});
+    const nz = v => Number.isFinite(Number(v)) && v != null ? Number(v) : null;
+    nextTrend.set(pkey, {prev: nz(r.prev_cpk), change: nz(r.cpk_change), pct: nz(r.cpk_change_pct), ppk: nz(r.ppk), pprev: nz(r.prev_ppk), pchange: nz(r.ppk_change), ppct: nz(r.ppk_change_pct)});
   });
   chemCardPrevCpk = nextCpk;
   chemCardPrevTrend = nextTrend;
