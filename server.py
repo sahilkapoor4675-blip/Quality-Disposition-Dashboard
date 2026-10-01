@@ -4024,12 +4024,21 @@ def compute_chem_heat(heat_no):
     limits = spec["limits"] if spec else {}
     viol = chem_spc.spec_violations(rec, limits) if rec and limits else []
     params = []
+    aim = (spec or {}).get("aim") or {}
     if rec:
         for p in chem_spc.PARAMS:
             if rec.get(p) is None and p not in limits: continue
             lsl, usl = chem_spc.eff_limits(limits, p)
+            alsl, ausl = chem_spc.eff_limits(aim, p)
             bad = next((v for v in viol if v["param"] == p), None)
-            params.append({"param": p, "label": chem_spc.PARAM_LABEL[p], "value": rec.get(p), "lsl": lsl, "usl": usl, "side": bad["side"] if bad else ""})
+            val = rec.get(p)
+            # Outside the Aim (operating) band but still inside the Standard limits -> shown as out of spec in the drill-down too.
+            aim_side = ""
+            if val is not None:
+                if alsl is not None and val < alsl - 1e-9: aim_side = "below"
+                elif ausl is not None and val > ausl + 1e-9: aim_side = "above"
+            params.append({"param": p, "label": chem_spc.PARAM_LABEL[p], "value": val, "lsl": lsl, "usl": usl,
+                           "aim_lsl": alsl, "aim_usl": ausl, "side": bad["side"] if bad else "", "aim_side": aim_side})
     return {"heat_no": heat_no, "found": bool(rec), "chem": rec, "spec": spec["description"] if spec else "", "params": params,
             "coils": sorted(disp, key=lambda d: (str(d.get("insp_lot_date") or ""), str(d.get("batch_no") or ""))),
             "summary": chem_spc.summarize_disposition(disp) if disp else None}

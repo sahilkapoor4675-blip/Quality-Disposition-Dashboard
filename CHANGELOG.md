@@ -1,3 +1,14 @@
+## Chemistry SPC: out-of-Aim = out of spec, Aim limits in the heat drill-down, blue element boxes with hover — no version bump (2026-10-01, seventh pass)
+
+**Changed**
+- **A value outside the Aim band is shown as out of spec** (red marker) on the I chart, and the histogram bins that lie completely outside the Aim band turn red. The tooltip says why, e.g. `OUT OF SPEC (above Aim USL)` / `(below Std LSL)` (`chemOutWhy`). This follows the "Aim LSL / USL" chart toggle: with Aim hidden only the Standard limits count. The legend reads "Out of spec (outside Aim / Std limits)".
+- **Heat drill-down** now has **Std LSL, Std USL, Aim LSL and Aim USL** columns (upper-limit-only elements show 0 as the lower bound, like the charts). The Status column reads `OUT OF SPEC · ABOVE AIM USL` / `BELOW AIM LSL` besides the existing Standard checks; those rows get a light red background. `/api/chem/heat` returns `aim_lsl`, `aim_usl` and `aim_side` per parameter.
+- **Parameter = All:** every element box uses the dashboard's blue theme (light-blue gradient, blue border and heading, dark-mode variant) in normal **and presentation mode**, and has the KPI-card hover (lift, blue glow, one light sheen sweep). Drill-down parameter rows also highlight on hover.
+
+**Notes**: Cp/Cpk/Pp/Ppk, the Cpk table's "Out of spec" count, the out-of-spec heat list and CSV exports still count **Standard** limit violations only; the Aim rule is a chart / drill-down view. Files: `server.py`, `src/js/21-chem-spc.js`, `src/css/16-chem-spc.css`, `README.md`, `CHANGELOG.md`.
+
+**Validation**: `test_chem_spc.py` and `static_checks.py` pass; in headless Chromium a point between Aim USL and Std USL, a point below Std LSL and Pb above its Aim USL were forced and shown red with the right tooltip / drill-down status; blue box + hover checked in normal and presentation mode; no page errors.
+
 ## Chemistry SPC: one LOW/MID/HIGH note, full-width cards with dashboard fonts, limits always drawn, Aim-centred mean, presentation-mode fit — no version bump (2026-10-01, sixth pass)
 
 **Changed**
