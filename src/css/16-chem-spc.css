@@ -162,3 +162,28 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3
 .chem-grade-head span{font-size:12.5px;font-weight:600;color:var(--muted)}
 .chem-pblock{margin:0 0 14px}.chem-pblock-t{font-weight:800;font-size:13.5px;color:var(--heading);margin:2px 2px 6px}
 #tab-chem.chem-all-grades .chem-grade-only{display:none!important}
+
+/* ---- LOW / MID / HIGH are identical on every card: shown once as a note above the cards ---- */
+.chem-band-note{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:2px 0 12px;padding:8px 12px;border-radius:9px;background:var(--card);border:1px solid var(--border);font-size:12.5px;color:var(--muted)}
+.chem-band-note b{color:var(--heading);font-weight:800;margin-right:2px}
+.chem-band{display:inline-flex;align-items:baseline;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.3px;font-variant-numeric:tabular-nums;border:1px solid transparent}
+.chem-band.bad{color:var(--red);background:rgba(220,38,38,.10);border-color:rgba(220,38,38,.35)}
+.chem-band.amber{color:var(--amber);background:rgba(217,119,6,.10);border-color:rgba(217,119,6,.35)}
+.chem-band.good{color:var(--green);background:rgba(22,163,74,.10);border-color:rgba(22,163,74,.35)}
+.chem-band-dir{margin-left:auto;font-weight:700}
+
+/* ---- Cards always fill the full row width (same width as the dashboard KPI grid): with 1-3 cards they stretch instead of leaving blank space ---- */
+@media(min-width:901px){
+  .chem-el-grid-wrap[data-n="1"]{grid-template-columns:minmax(0,1fr)}
+  .chem-el-grid-wrap[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chem-el-grid-wrap[data-n="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .chem-el-grid-wrap[data-n="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+.chem-main-panel{width:100%}
+.chem-el-grid-wrap{width:100%;justify-content:stretch}
+
+/* ---- Parameter = All: one chart per element, with clear gaps and bigger element blocks ---- */
+.chem-multi{display:flex;flex-direction:column;gap:30px}
+.chem-multi .chem-pblock{margin:0;padding:14px 16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+.chem-multi .chem-pblock-t{font-size:19px;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.chem-multi .chem-pchart{padding:0}

@@ -334,4 +334,4 @@ if ERR:
 print("CHEM SPC PASS — SPC maths, import validation, spec matching, HTTP flow, heat join, backup round-trip.")
 check('id="chemCompareBox"' not in idx and "renderChemCompare" not in js and "Does Chemistry Affect Quality" not in idx, "the 'Does Chemistry Affect Quality?' box is gone")
 check('id="chemTitleParamMR"' in idx and 'id="chemTitleParamHist"' in idx and "chemTitleParamMR" in js, "I, MR and histogram headings all name the element")
-check("function chemWeekLabel" in js and "kpiTargetMarkup(CHEM_KPI_LABEL" in js and "chem-foot\">Left column" not in js, "week filter shows the full week range; element cards show LOW/MID/HIGH and no footer text")
+check("function chemWeekLabel" in js and "chem-band-note" in js and "chem-foot\">Left column" not in js, "week filter shows the full week range; LOW/MID/HIGH shown once above the element cards and no footer text")

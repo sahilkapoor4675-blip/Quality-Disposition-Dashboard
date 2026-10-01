@@ -544,28 +544,25 @@ function chemBindNearestHover(svg, rect, series, field, tipForIndex, heatForInde
 // Fixed-size box so labels stay readable; width follows the container like the other charts.
 function chemBox(el, h){
   const W = chartUnits(el), m = {l: 64, r: 122, t: 16, b: 46};
+  if(el.closest && el.closest('.chem-multi')) h = Math.round(h * 1.3);   // Parameter = All: each element chart is drawn bigger
   return {W, H: h, m, pw: W - m.l - m.r, ph: h - m.t - m.b};
 }
 function chemDomain(vals, d, extra){
   let lo = Math.min(...vals), hi = Math.max(...vals);
-  // Statistical UCL/LCL remain available in d.imr for diagnostics, but are not
-  // visual bounds. Aim limits are the plant operating bounds shown to users.
-  const off = {lsl: false, usl: false, aim_lsl: false, aim_usl: false};
-  const span0 = (hi - lo) || Math.abs(hi) * 0.02 || 0.01;
-  [['lsl', d.lsl], ['usl', d.usl]].forEach(([k, v]) => {
-    if(v == null) return;
-    const dist = k === 'lsl' ? lo - v : v - hi;
-    if(dist <= 2.5 * span0) { lo = Math.min(lo, v); hi = Math.max(hi, v); } else off[k] = true;
-  });
-  // Aim limits are handled exactly like the Standard limits: they widen the scale, or - when far outside the data - get a note
-  // (they used to vanish silently when they were far from the data).
-  if(chemSel.ins_aim) [['aim_lsl', d.aim_lsl, 'lo'], ['aim_usl', d.aim_usl, 'hi']].forEach(([k, v, side]) => {
-    if(v == null) return;
-    const dist = side === 'lo' ? lo - v : v - hi;
-    if(dist <= 2.5 * span0){ lo = Math.min(lo, v); hi = Math.max(hi, v); } else off[k] = true;
-  });
-  const pad = ((hi - lo) || 0.02) * 0.06;
-  return {lo: lo - pad, hi: hi + pad, off};
+  // Std LSL/USL and Aim LSL/USL are ALWAYS drawn: the scale widens to include every limit that exists, however small the data spread is.
+  // (Statistical UCL/LCL stay in d.imr for diagnostics only; they are not drawn.)
+  const lims = [d.lsl, d.usl];
+  if(chemSel.ins_aim) lims.push(d.aim_lsl, d.aim_usl);
+  lims.forEach(v => { if(v != null && isFinite(v)){ lo = Math.min(lo, v); hi = Math.max(hi, v); } });
+  const pad = ((hi - lo) || Math.abs(hi) * 0.02 || 0.02) * 0.06;
+  return {lo: lo - pad, hi: hi + pad, off: {lsl: false, usl: false, aim_lsl: false, aim_usl: false}};
+}
+// Centre line = middle of the Aim band (never the data mean / moving-range mean). No Aim band -> the data mean as a fallback.
+function chemMeanLine(d, fallback){
+  if(d.aim_lsl != null && d.aim_usl != null) return (Number(d.aim_lsl) + Number(d.aim_usl)) / 2;
+  if(d.aim_lsl != null) return Number(d.aim_lsl);
+  if(d.aim_usl != null) return Number(d.aim_usl);
+  return fallback == null ? null : fallback;
 }
 
 // ---------------------------------------------------------------- I chart
@@ -595,7 +592,7 @@ function drawChemI(el, d){
     }
     g += line(d.lsl, '#DC2626', '7 4', 'Std LSL', 1.8) + line(d.usl, '#DC2626', '7 4', 'Std USL', 1.8);
     if(chemSel.ins_aim) g += line(d.aim_lsl, '#0D9488', '', 'Aim LSL', 2.2) + line(d.aim_usl, '#0D9488', '', 'Aim USL', 2.2);
-    if(im && chemSel.ins_cl){ g += line(im.cl, '#16A34A', '', 'Mean', 1.8); }
+    if(chemSel.ins_cl){ g += line(chemMeanLine(d, im && im.cl), '#16A34A', '', 'Mean', 1.8); }
     if(dom.off.lsl) g += `<text x="${m.l + 6}" y="${m.t + ph - 6}" font-size="11" font-weight="700" fill="#DC2626">▼ Std LSL ${chemNum(d.lsl)} is far below this scale</text>`;
     if(dom.off.usl) g += `<text x="${m.l + 6}" y="${m.t + 12}" font-size="11" font-weight="700" fill="#DC2626">▲ Std USL ${chemNum(d.usl)} is far above this scale</text>`;
     if(dom.off.aim_lsl) g += `<text x="${m.l + 6}" y="${m.t + ph - 20}" font-size="11" font-weight="700" fill="#0D9488">▼ Aim LSL ${chemNum(d.aim_lsl)} is far below this scale</text>`;
@@ -671,10 +668,8 @@ function drawChemHist(el, d){
     // The server range only knows the Standard limits: widen it so the Aim limits are drawn too (unless they are far off the data)
     const dLo = h.bins[0].x0, dHi = h.bins[h.bins.length - 1].x1, ref = (dHi - dLo) || h.width || 0.01;
     let xmin = h.xmin, xmax = h.xmax, aimOffL = false, aimOffR = false;
-    if(chemSel.ins_aim){
-      if(d.aim_lsl != null){ if(dLo - d.aim_lsl <= 4 * ref) xmin = Math.min(xmin, d.aim_lsl - ref * 0.04); else aimOffL = true; }
-      if(d.aim_usl != null){ if(d.aim_usl - dHi <= 4 * ref) xmax = Math.max(xmax, d.aim_usl + ref * 0.04); else aimOffR = true; }
-    }
+    const hl = [d.lsl, d.usl].concat(chemSel.ins_aim ? [d.aim_lsl, d.aim_usl] : []).filter(v => v != null && isFinite(v));
+    if(hl.length){ const sp = (Math.max(xmax, ...hl) - Math.min(xmin, ...hl)) || ref; xmin = Math.min(xmin, ...hl) - sp * 0.04; xmax = Math.max(xmax, ...hl) + sp * 0.04; }
     const X = v => m.l + ((v - xmin) / (xmax - xmin)) * pw, Y = v => m.t + ph - (v / maxN) * ph;
     const xt = chemTicks(xmin, xmax, Math.max(4, Math.floor(pw / 90))), xf = chemTickFmt(xt.length > 1 ? xt[1] - xt[0] : 1);
     let g = '';
@@ -694,14 +689,14 @@ function drawChemHist(el, d){
     // one label row per kind of line (Standard, Aim, Mean) so labels never run over each other
     // a label that would run into the y-axis / right margin flips to the other side of its line; a card-coloured halo keeps text readable over bars
     const vline = (v, color, label, side0, row, solid) => { if(v == null || v < xmin || v > xmax) return ''; const side = side0 === 'l' && X(v) - m.l < 112 ? 'r' : side0 === 'r' && m.l + pw - X(v) < 112 ? 'l' : side0; return `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${m.t + ph}" stroke="${color}" stroke-width="${solid ? 2 : 1.8}" ${solid ? '' : 'stroke-dasharray="7 4"'}/><text x="${X(v) + (side === 'l' ? -4 : 4)}" y="${m.t + 12 + (row || 0) * 14}" text-anchor="${side === 'l' ? 'end' : 'start'}" font-size="11" font-weight="700" fill="${color}" stroke="var(--card)" stroke-width="3" paint-order="stroke">${label} ${chemNum(v)}</text>`; };
-    const mv = c && c.mean;
+    const mv = chemMeanLine(d, c && c.mean);
     g += vline(d.lsl, '#DC2626', 'Std LSL', 'l', 0) + vline(d.usl, '#DC2626', 'Std USL', 'r', 0);
     if(chemSel.ins_aim && d.aim_lsl != null && d.aim_usl != null && d.aim_lsl >= xmin && d.aim_usl <= xmax)   // light band between the Aim limits
       g += `<rect x="${X(d.aim_lsl).toFixed(1)}" y="${m.t}" width="${(X(d.aim_usl) - X(d.aim_lsl)).toFixed(1)}" height="${ph}" fill="#0D9488" fill-opacity=".07"/>`;
     if(chemSel.ins_aim) g += vline(d.aim_lsl, '#0D9488', 'Aim LSL', 'l', 1, true) + vline(d.aim_usl, '#0D9488', 'Aim USL', 'r', 1, true);
     if(chemSel.ins_cl) g += vline(mv, '#16A34A', 'Mean', mv != null && d.usl != null && d.lsl != null && (mv - d.lsl) > (d.usl - mv) ? 'l' : 'r', 2, true);
-    if(h.lsl_off) g += `<text x="${m.l + 6}" y="${m.t + 60}" font-size="11" font-weight="700" fill="#DC2626">◀ Std LSL ${chemNum(d.lsl)} is far to the left of the data</text>`;
-    if(h.usl_off) g += `<text x="${m.l + pw - 6}" y="${m.t + 60}" text-anchor="end" font-size="11" font-weight="700" fill="#DC2626">Std USL ${chemNum(d.usl)} is far to the right of the data ▶</text>`;
+    if(false) g += `<text x="${m.l + 6}" y="${m.t + 60}" font-size="11" font-weight="700" fill="#DC2626">◀ Std LSL ${chemNum(d.lsl)} is far to the left of the data</text>`;
+    if(false) g += `<text x="${m.l + pw - 6}" y="${m.t + 60}" text-anchor="end" font-size="11" font-weight="700" fill="#DC2626">Std USL ${chemNum(d.usl)} is far to the right of the data ▶</text>`;
     if(aimOffL) g += `<text x="${m.l + 6}" y="${m.t + 74}" font-size="11" font-weight="700" fill="#0D9488">◀ Aim LSL ${chemNum(d.aim_lsl)} is far to the left of the data</text>`;
     if(aimOffR) g += `<text x="${m.l + pw - 6}" y="${m.t + 74}" text-anchor="end" font-size="11" font-weight="700" fill="#0D9488">Aim USL ${chemNum(d.aim_usl)} is far to the right of the data ▶</text>`;
     xt.forEach(v => { g += `<text x="${X(v)}" y="${m.t + ph + 16}" text-anchor="middle" font-size="11" fill="var(--chart-muted)">${xf(v)}</text>`; });
@@ -791,7 +786,6 @@ function renderChemMain(d){
     const trendType = r.cpk_change_type || 'info';
     const pulseClass = trendType === 'up' ? 'kpi-up' : trendType === 'down' ? 'kpi-down' : 'kpi-pulse';
     const vars = `--el-c:${e.c};--el-d:${e.d};--el-t:${e.t};--el-glow:${chemHexA(e.c, .5)};--el-tint1:${chemHexA(e.c, .28)};--el-tint2:${chemHexA(e.c, .10)};--el-edge:${chemHexA(e.d, .45)};--kpi-stagger:${Math.min(i, 7) * 65}ms`;
-    const tgt = typeof kpiTargetMarkup === 'function' ? kpiTargetMarkup(CHEM_KPI_LABEL, 'num2') : '';
     return `<div class="kpi-card ${pulseClass} chem-el-kpi status-${st}${!d.all_grades && r.param === d.param ? ' chem-cur' : ''}" ${d.all_grades ? `data-el="${escQcr(r.param)}"` : `data-param="${r.param}"`} role="button" tabindex="0" style="${vars}" aria-label="${escQcr(e.name)}${g && g.grade ? ' (' + escQcr(g.title) + ')' : ''} — Cpk ${chemIdx(r.cpk)}, ${stTxt.toLowerCase()}. Click to chart">
       <div class="kpi-top">
         <div class="label chem-el-label"><span class="kpi-icon chem-el-chip">${escQcr(e.sym)}</span><span class="chem-el-nm">${escQcr(e.name)}${e.z ? `<small>Atomic no. ${e.z}</small>` : ''}</span></div>
@@ -801,12 +795,15 @@ function renderChemMain(d){
       <div class="kpi-bottom chem-el-bottom"><div class="kpi-meta chem-el-meta"><div class="kpi-targets chem-el-tiles">
         ${tile('Cp', chemIdx(r.cp), chemTone(r.cp))}${tile('Pp', chemIdx(r.pp), chemTone(r.pp))}
         ${tile('Std. Dev.', sd(r.sigma_within))}${tile('Std. Dev.', sd(r.sigma_overall))}
-      </div>${tgt}</div></div>
+      </div></div></div>
     </div>`;
   };
+  // LOW / MID / HIGH are the same on every card, so they are written ONCE above the cards instead of on each card.
+  const thr = chemThr(), tf = v => v == null || !isFinite(Number(v)) ? '—' : Number(v).toFixed(2);
+  const bandNote = `<div class="chem-band-note"><b>Capability bands</b> (Cpk / Ppk)<span class="chem-band bad">LOW ${tf(thr.critical)}</span><span class="chem-band amber">MID ${tf(thr.warning)}</span><span class="chem-band good">HIGH ${tf(thr.target)}</span><span class="chem-band-dir">↑ Higher is better</span></div>`;
   let ci = 0;
-  box.innerHTML = groups.map(g => (d.all_grades ? `<div class="chem-grade-head"><b>🧪 ${escQcr(g.title)}</b><span>${g.n.toLocaleString()} heat${g.n === 1 ? '' : 's'}</span></div>` : '')
-    + `<div class="chem-el-grid-wrap">${g.rows.map(r => card(r, ci++, g)).join('')}</div>`).join('');
+  box.innerHTML = bandNote + groups.map(g => (d.all_grades ? `<div class="chem-grade-head"><b>🧪 ${escQcr(g.title)}</b><span>${g.n.toLocaleString()} heat${g.n === 1 ? '' : 's'}</span></div>` : '')
+    + `<div class="chem-el-grid-wrap" data-n="${g.rows.length}">${g.rows.map(r => card(r, ci++, g)).join('')}</div>`).join('');
 
   // Same KPI interaction model: 5° pointer tilt, directional change classes, count-up/spring animation for headline + trend metrics.
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
