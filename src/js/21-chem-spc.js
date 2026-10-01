@@ -557,6 +557,16 @@ function chemDomain(vals, d, extra){
   const pad = ((hi - lo) || Math.abs(hi) * 0.02 || 0.02) * 0.06;
   return {lo: lo - pad, hi: hi + pad, off: {lsl: false, usl: false, aim_lsl: false, aim_usl: false}};
 }
+// Upper-limit-only parameters (impurities such as Pb: "0 - 0.04"): the server ignores a 0 / empty LSL for the capability maths, but the CHARTS still show it.
+// Std LSL and Aim LSL are drawn at 0 whenever the matching USL exists, so the mean line (middle of the Aim band) sits between 0 and the Aim USL.
+function chemDispLimits(d){
+  if(!d) return d;
+  const fillLo = (lo, hi) => (lo == null || !isFinite(lo)) && hi != null && isFinite(hi) && hi > 0 ? 0 : lo;
+  const o = Object.assign({}, d);
+  o.lsl = fillLo(d.lsl, d.usl);
+  o.aim_lsl = fillLo(d.aim_lsl, d.aim_usl);
+  return o;
+}
 // Centre line = middle of the Aim band (never the data mean / moving-range mean). No Aim band -> the data mean as a fallback.
 function chemMeanLine(d, fallback){
   if(d.aim_lsl != null && d.aim_usl != null) return (Number(d.aim_lsl) + Number(d.aim_usl)) / 2;
@@ -568,6 +578,7 @@ function chemMeanLine(d, fallback){
 // ---------------------------------------------------------------- I chart
 function drawChemI(el, d){
   if(!el) return;
+  d = chemDispLimits(d);
   el.dataset.chartField = (chemMeta && chemMeta.params.find(p => p.key === d.param)?.label) || d.param || 'Chemistry value';
   if(!d.series.length) return chemEmptyChart(el, 'No heats with this parameter in the selected range.');
   const redraw = () => {
@@ -590,8 +601,8 @@ function drawChemI(el, d){
       const y0 = Math.max(m.t, Math.min(m.t + ph, d.aim_usl != null ? Y(d.aim_usl) : m.t)), y1 = Math.max(m.t, Math.min(m.t + ph, d.aim_lsl != null ? Y(d.aim_lsl) : m.t + ph));
       if(y1 > y0) g += `<rect x="${m.l}" y="${y0.toFixed(1)}" width="${pw}" height="${(y1 - y0).toFixed(1)}" fill="#0D9488" fill-opacity=".07"/>`;
     }
-    g += line(d.lsl, '#DC2626', '7 4', 'Std LSL', 1.8) + line(d.usl, '#DC2626', '7 4', 'Std USL', 1.8);
     if(chemSel.ins_aim) g += line(d.aim_lsl, '#0D9488', '', 'Aim LSL', 2.2) + line(d.aim_usl, '#0D9488', '', 'Aim USL', 2.2);
+    g += line(d.lsl, '#DC2626', '7 4', 'Std LSL', 1.8) + line(d.usl, '#DC2626', '7 4', 'Std USL', 1.8);
     if(chemSel.ins_cl){ g += line(chemMeanLine(d, im && im.cl), '#16A34A', '', 'Mean', 1.8); }
     if(dom.off.lsl) g += `<text x="${m.l + 6}" y="${m.t + ph - 6}" font-size="11" font-weight="700" fill="#DC2626">▼ Std LSL ${chemNum(d.lsl)} is far below this scale</text>`;
     if(dom.off.usl) g += `<text x="${m.l + 6}" y="${m.t + 12}" font-size="11" font-weight="700" fill="#DC2626">▲ Std USL ${chemNum(d.usl)} is far above this scale</text>`;
@@ -659,6 +670,7 @@ function drawChemMR(el, d){
 // ---------------------------------------------------------------- Histogram
 function drawChemHist(el, d){
   if(!el) return;
+  d = chemDispLimits(d);
   el.dataset.chartField = (chemMeta && chemMeta.params.find(p => p.key === d.param)?.label) || d.param || 'Chemistry value';
   const h = d.histogram;
   if(!d.n || !h || !h.bins.length) return chemEmptyChart(el, 'No data to build a histogram.');

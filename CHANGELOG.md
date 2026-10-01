@@ -1,3 +1,21 @@
+## Chemistry SPC: one LOW/MID/HIGH note, full-width cards with dashboard fonts, limits always drawn, Aim-centred mean, presentation-mode fit — no version bump (2026-10-01, sixth pass)
+
+**Changed**
+- **LOW / MID / HIGH** are identical on every element card, so they are no longer repeated inside each card. They are written once in a note strip above the cards (*Capability bands (Cpk / Ppk): LOW 0.67 · MID 1.00 · HIGH 1.33 · Higher is better*), still read from the admin KPI target row **Chemistry Capability (Cp/Cpk/Pp/Ppk)**.
+- **Element cards fill the full row width** like the dashboard KPI grid: with 1-4 cards the grid uses exactly that many columns instead of leaving blank space on the right (`.chem-el-grid-wrap[data-n]`). 5-6 column layouts on very wide screens and the 2 / 1 column mobile layouts are unchanged.
+- **Cp / Pp / Std. Dev. tiles** use the dashboard KPI tile typography (Space Grotesk, 14.5px, bold values) instead of the 9.5px / 12px they had; tiles got a little more padding.
+- **Std LSL, Std USL, Aim LSL and Aim USL are always drawn** on the I chart and the histogram. The scale widens to include every limit however small the data spread; the old "Std/Aim limit is far below this scale" note and the silently dropped line are gone (`chemDomain`, histogram x-range).
+- **The "Mean" line is the middle of the Aim band** ((Aim LSL + Aim USL) / 2), never the data mean / moving-range mean (`chemMeanLine`). Only when a grade has no Aim limit at all does it fall back to the data mean. The MR chart keeps its own MR-bar line; the Cpk table's "Mean" column is still the data mean.
+- **Upper-limit-only elements (impurities such as Pb, limit 0 - 0.04):** Std LSL and Aim LSL are drawn at **0** and the mean sits between 0 and the Aim USL (e.g. Aim USL 0.010 -> mean 0.005). The server still treats a 0 LSL as "no lower limit" for Cp/Cpk and out-of-spec counts; only the drawing adds the 0 line (`chemDispLimits`). Where both lines coincide the Aim (solid) line is drawn first and the Std (dashed) line on top so both stay visible.
+- **Parameter = All:** each element chart sits in its own box with a 30px gap, a larger element heading and 30% more chart height.
+
+**Fixed**
+- **Presentation mode at 100% browser zoom, Parameter = All.** The stacked per-element charts were squeezed into one clipped panel (only the top of the first chart was visible). Each element now gets the full presentation stage and the stage scrolls to the next element; the chart is redrawn to the stage's shape so legend, limit labels and x-axis are never cut off. Applies to the I chart, MR chart and histogram. The histogram no longer reserves the empty right margin meant for limit labels.
+
+**Notes**: no API, table or column change; `VERSION.txt` untouched. Files: `src/js/21-chem-spc.js`, `src/css/16-chem-spc.css`, `tests/test_chem_spc.py` (the card check now looks for the band note instead of per-card LOW/MID/HIGH), `README.md`, `CHANGELOG.md`.
+
+**Validation**: `test_chem_spc.py` and `static_checks.py` pass; every parameter of both seeded grades was opened in headless Chromium (1536 px wide, 100% zoom) and its Std / Aim / Mean labels read back from the SVG; presentation mode checked for the I chart, MR chart and histogram, with Parameter = All and a single element; no page errors.
+
 ## Chemistry SPC: ordered periods, KPI-style cards with admin LOW/MID/HIGH, All defaults, no Compare box — no version bump (2026-10-01, fifth pass)
 
 - **Month / Week / Quarter / FY** lists are now in date order (oldest first, like the dashboard). **Week** shows the full range (`06-Apr-2026 to 12-Apr-2026`). Older periods (e.g. FY 2025-26) were missing because the lists came only from the selected grade; Grade = All now lists the periods of every grade (`/api/chem/meta` -> `all_periods`).
