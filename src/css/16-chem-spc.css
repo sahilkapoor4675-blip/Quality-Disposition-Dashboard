@@ -248,3 +248,13 @@ html[data-theme="dark"] .chem-multi .chem-pblock-t{background:linear-gradient(13
 .chem-foot::before{content:"ℹ️ "}
 .chem-table th{word-break:normal;overflow-wrap:normal}
 .chem-table th:first-child{min-width:128px}
+
+/* Tenth-pass display fixes -------------------------------------------------------------------------------------------
+   1) Cp / Cpk / Pp / Ppk are written in their usual mixed case (not CPK / PPK) on the cards and in the tables.
+   2) The Prev line and the trend chip (▲ +11.43% (+0.12)) wrap onto a second line instead of being clipped on narrower cards / 100% zoom.
+   3) Cp, Cpk, Pp and Ppk values in the capability table are bold. */
+.chem-el-bk,.chem-table th,.chem-drill-params th{text-transform:none}
+.chem-el-trendline{flex-wrap:wrap;overflow:visible;min-height:18px}
+.chem-el-trendline .trend{max-width:100%}
+.chem-el-abs{display:inline}
+.chem-table td.chem-cap-v{font-weight:800}

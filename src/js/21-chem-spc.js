@@ -690,7 +690,7 @@ function drawChemHist(el, d){
   const redraw = () => {
     const B = chemBox(el, 300); B.m.r = 28; B.pw = B.W - B.m.l - B.m.r;   // the histogram has no limit labels in the right margin, so use that space for the plot
     const {W, H, m, pw, ph} = B, c = d.capability;
-    const maxN = Math.max(...h.bins.map(b => b.n), 1) * 1.12;
+    const maxN = Math.max(...h.bins.map(b => b.n), 1) * 1.38;   // headroom: the tallest bar's count must stay clear of the Std / Aim / Mean line labels
     // The server range only knows the Standard limits: widen it so the Aim limits are drawn too (unless they are far off the data)
     const dLo = h.bins[0].x0, dHi = h.bins[h.bins.length - 1].x1, ref = (dHi - dLo) || h.width || 0.01;
     let xmin = h.xmin, xmax = h.xmax, aimOffL = false, aimOffR = false;
@@ -705,7 +705,12 @@ function drawChemHist(el, d){
       const x0 = X(b.x0), w = Math.max(1, X(b.x1) - X(b.x0) - 1);
       const labelY = Math.max(m.t + 11, Y(b.n) - 5);
       g += `<rect class="chart-bar chem-hist-bar" style="--i:${Math.min(h.bins.indexOf(b),10)}" data-tip="${escQcr(`${chemNum(b.x0)} – ${chemNum(b.x1)}: ${b.n} heat${b.n === 1 ? '' : 's'}${out ? ' (out of spec)' : ''}`)}" x="${x0.toFixed(1)}" y="${Y(b.n).toFixed(1)}" width="${w.toFixed(1)}" height="${(m.t + ph - Y(b.n)).toFixed(1)}" fill="${out ? '#DC2626' : '#118DFF'}" fill-opacity=".78"/>`;
-      if(b.n > 0 && w >= 22) g += `<text class="chem-hist-label" x="${(x0 + w/2).toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--chart-muted)">${b.n}</text>`;
+      if(b.n > 0 && w >= 6){
+        // Count above every bar, at any chart width: normal text on wide bars, smaller on medium bars, vertical on narrow ones (a halo keeps it readable).
+        const cx = x0 + w / 2, txt = String(b.n), fs = w >= 22 ? 10 : w >= 14 ? 9 : 8.5, vert = w < txt.length * fs * 0.62 + 3;
+        const lx = cx.toFixed(1), ly = (vert ? Math.max(m.t + txt.length * fs * 0.62 + 2, Y(b.n) - 4) : labelY).toFixed(1);
+        g += `<text class="chem-hist-label" x="${lx}" y="${ly}" text-anchor="${vert ? 'start' : 'middle'}" ${vert ? `transform="rotate(-90 ${lx} ${ly})" dy="${(fs * 0.35).toFixed(1)}"` : ''} font-size="${fs}" font-weight="700" fill="var(--chart-muted)" stroke="var(--card)" stroke-width="2.5" paint-order="stroke">${txt}</text>`;
+      }
     });
     if(c && c.sigma_overall > 0 && c.mean != null){
       const area = d.n * h.width, pts = [];
@@ -736,8 +741,8 @@ function drawChemHist(el, d){
 function renderChemOverview(d){
   const rows = d.overview || [];
   const lim = v => v == null ? '—' : chemNum(v);
-  const sd = v => v == null || !isFinite(v) ? '—' : chemNum(v, v >= 1 ? 3 : v >= 0.1 ? 4 : 5);
-  const tr = r => `<tr class="chem-click${r.param === d.param ? ' chem-cur' : ''}${r.main ? ' chem-main-row' : ''}" data-param="${r.param}"><td><b>${r.main ? '★ ' : ''}${escQcr(r.label)}</b></td><td>${r.n}</td><td>${chemNum(r.mean)}</td><td>${lim(r.lsl)}</td><td>${lim(r.usl)}</td><td>${lim(r.aim_lsl)}</td><td>${lim(r.aim_usl)}</td><td class="${chemIdxClass(r.cp)}">${chemIdx(r.cp)}</td><td class="${chemIdxClass(r.cpk)}">${chemIdx(r.cpk)}</td><td>${sd(r.sigma_within)}</td><td class="${chemIdxClass(r.pp)}">${chemIdx(r.pp)}</td><td class="${chemIdxClass(r.ppk)}">${chemIdx(r.ppk)}</td><td>${sd(r.sigma_overall)}</td><td class="${r.oos ? 'chem-bad' : ''}">${r.oos}</td></tr>`;
+  const sd = v => v == null || !isFinite(v) ? '—' : chemNum(v, 3);   // Std. Dev. is always shown to 3 decimals
+  const tr = r => `<tr class="chem-click${r.param === d.param ? ' chem-cur' : ''}${r.main ? ' chem-main-row' : ''}" data-param="${r.param}"><td><b>${r.main ? '★ ' : ''}${escQcr(r.label)}</b></td><td>${r.n}</td><td>${chemNum(r.mean)}</td><td>${lim(r.lsl)}</td><td>${lim(r.usl)}</td><td>${lim(r.aim_lsl)}</td><td>${lim(r.aim_usl)}</td><td class="chem-cap-v ${chemIdxClass(r.cp)}">${chemIdx(r.cp)}</td><td class="chem-cap-v ${chemIdxClass(r.cpk)}">${chemIdx(r.cpk)}</td><td>${sd(r.sigma_within)}</td><td class="chem-cap-v ${chemIdxClass(r.pp)}">${chemIdx(r.pp)}</td><td class="chem-cap-v ${chemIdxClass(r.ppk)}">${chemIdx(r.ppk)}</td><td>${sd(r.sigma_overall)}</td><td class="${r.oos ? 'chem-bad' : ''}">${r.oos}</td></tr>`;
   const mains = rows.filter(r => r.main), others = rows.filter(r => !r.main);
   const sep = t => `<tr class="chem-sep"><td colspan="14">${t}</td></tr>`;
   document.getElementById('chemOverviewBox').innerHTML = rows.length ? `<div class="chem-oos-bar"><button type="button" class="chem-btn" id="chemCpkCsv">⬇ Cpk table (CSV)</button><button type="button" class="chem-btn" id="chemHeatsCsv">⬇ Heat data — ${escQcr(chemParamLabel(d.param))} (CSV)</button></div><div class="table-scroll"><table class="chem-table"><thead><tr><th>🧪 Parameter</th><th>🔢 Heats</th><th>📍 Mean</th><th>🔻 Std LSL</th><th>🔺 Std USL</th><th>🎯 Aim LSL</th><th>🎯 Aim USL</th><th>🎯 Cp</th><th>📈 Cpk</th><th>📉 Std. Dev. (Cp/Cpk)</th><th>📐 Pp</th><th>📊 Ppk</th><th>📉 Std. Dev. (Pp/Ppk)</th><th>🚩 Out of spec</th></tr></thead><tbody>${mains.length ? sep('★ Main elements') + mains.map(tr).join('') : ''}${others.length ? sep('🧫 Impurities &amp; other parameters') + others.map(tr).join('') : ''}</tbody></table></div><div class="chem-foot">Click a row to chart that parameter. Cp/Cpk use the within σ (moving range ÷ 1.128), Pp/Ppk the overall σ; both against the Standard limits. Colour bands follow the KPI Targets set by the admin: ≥ ${Number(chemThr().target).toFixed(2)} on target (green), ≥ ${Number(chemThr().warning).toFixed(2)} watch (amber), below that action (red). Where the lower limit is 0 (impurity-type limits) only the upper limit is used.</div>` : '<div class="chem-empty-chart">No parameters with enough data.</div>';
@@ -795,7 +800,7 @@ function renderChemMain(d){
     : [{grade: '', title: '', n: 0, rows: (d.overview || []).filter(r => r.main)}].filter(g => g.rows.length);
   const flat = []; groups.forEach(g => g.rows.forEach(r => flat.push({g, r})));
   if(!flat.length){ box.innerHTML = d.all_grades ? '<div class="chem-empty-chart">No heats with capability figures match this selection.</div>' : ''; return; }
-  const sd = v => v == null || !isFinite(v) ? '—' : chemNum(v, v >= 1 ? 3 : v >= 0.1 ? 4 : 5);
+  const sd = v => v == null || !isFinite(v) ? '—' : chemNum(v, 3);   // Std. Dev. is always shown to 3 decimals
   const pctTxt = v => `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`, dTxt = v => `${v >= 0 ? '+' : ''}${chemIdx(v)}`;
   // One metric column = label + big value + its OWN "Prev" line with the change vs the previous period (Cpk and Ppk each get one).
   const metric = (key, k, sub, v, prevV, chg, pct, type) => {

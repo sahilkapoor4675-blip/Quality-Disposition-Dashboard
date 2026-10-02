@@ -1,3 +1,22 @@
+## Chemistry SPC display polish — no version bump (2026-10-02, eleventh pass)
+
+**Changed**
+- **Cp / Cpk / Pp / Ppk wording.** The element cards and every Chemistry table header showed *CPK* / *PPK* in capitals
+  (CSS `text-transform: uppercase`); they now read **Cpk** / **Ppk** (Cp, Pp likewise), cards and tables alike.
+- **Std. Dev. to 3 decimals** on the element cards and in the capability table (it used 3–5 decimals depending on size).
+  The Cpk table CSV still exports the full-precision value.
+- **Cp, Cpk, Pp and Ppk are bold** in the capability table (colour bands unchanged).
+
+**Fixed**
+- **Trend chip cut on the element cards** at 100 % browser zoom (the `% change` and the `(± value)` in brackets were hidden
+  by `overflow: hidden` / no-wrap). The Prev line and the chip now wrap onto a second line inside the card, and the bracketed
+  value is always shown. Checked at 1280 / 1366 / 1536 / 1920 px with a wider font and a worst-case `-100.00% (-1.25)`.
+- **Histogram data labels missing outside presentation mode.** A count was drawn only when the bar was at least 22 units
+  wide, which narrow charts (more bins, limits widening the axis, smaller screens) never reached; presentation mode is wider,
+  so it showed them. Every non-empty bar is now labelled (size 10 → 9 → 8.5, vertical text on very narrow bars, card-coloured
+  halo). The y-axis also has more headroom so the tallest bar's count no longer sits under the Std / Aim / Mean line labels.
+  Reproduced before the fix: 0 of 21 labels at 800 px; after: 21 of 21 at 520, 800 and 1440 px.
+
 ## Audit pass: import parsing, normalisation, filter consistency, Chemistry SPC checks — no version bump (2026-10-02, tenth pass)
 
 **Audit method.** Full re-check of the release gate, then an independent re-computation: 61 random filter
