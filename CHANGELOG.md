@@ -1,3 +1,21 @@
+## Drill-downs: Excel-style header filters, bold centred headers; Chemistry SPC icons — no version bump (2026-10-02, ninth pass)
+
+**Added**
+- **Column filters in every drill-down header.** Each column header of the main drill-down (KPI card / chart bar / QCR investigation / search / Heat No. history) and of both tables in the Chemistry heat drill-down has a funnel button that opens an Excel-like menu: search box, *(Select All)*, a check list of the column's values with record counts, **OK / Clear filter / Cancel**. Filters on several columns combine, and each list only shows values that are still possible under the other columns' filters. An active column gets a blue funnel and a tinted header; a *Filtered* strip above the table lists the active filters with **Clear all filters**.
+- **Filters cover every record, not only the page on screen.** The drill-down is paginated (250 rows per page); opening a filter menu loads the remaining pages once (500 rows per request), then the table is filtered across all of them. While filtered, the count reads `959 of 4,936 records`, totals in the footer are recomputed, and paging is hidden; clearing filters returns to the normal pages.
+- **Export Selected Records exports only the filtered rows** while a filter is active (CSV with the 9 on-screen columns, Excel-friendly UTF-8); with no filter the server export is unchanged.
+- **Chemistry SPC icons where there were none:** capability-table headers (🧪 Parameter, 🔢 Heats, 📍 Mean, 🔻 Std LSL, 🔺 Std USL, 🎯 Aim LSL/USL, 🎯 Cp, 📈 Cpk, 📐 Pp, 📊 Ppk, 📉 Std. Dev., 🚩 Out of spec), the *Impurities & other parameters* row (🧫), the *Capability bands* strip (🎯), the element-card labels (📈 Cpk, 📊 Ppk, 🕘 Prev) and tiles (🎯 Cp, 📐 Pp, 📉 Std. Dev.), the out-of-spec heat list headers and search box, the heat drill-down table headers, its status cells (✅ OK / 🚩 OUT OF SPEC) and the *Disposition of this heat's coils* heading (🏭), and ℹ️ in front of the explanatory notes.
+
+**Changed**
+- **Drill-down table headers are bold (800), centred horizontally and middle-aligned vertically**, and long labels wrap at spaces instead of inside words (Date / Weight (MT) used to break letter by letter). The main drill-down column widths were adjusted slightly so the label and funnel fit.
+- Chemistry capability table: the *Parameter* header no longer wraps inside the word.
+
+**Fixed (test only)**: `tests/test_browser.py` asserted a `.sparkline` inside the Chemistry element cards, which the cards stopped having earlier; it now checks the status pill instead (the full gate was failing on this one line before). New browser checks: 9 funnel buttons, header style, a Work Center filter narrowing across all pages, *Clear all filters*.
+
+**Notes**: no API, table or calculation change; `VERSION.txt` untouched. Dashboard tables outside drill-downs (Decision / Defect / Weekly tables, Chemistry capability and out-of-spec lists) are unchanged: the dashboard tables keep their existing click-to-sort headers. Files: `src/js/21-drill-header-filters.js` (new), `src/js/10-drilldown-dialogs-loadkpis.js`, `src/js/21-chem-spc.js`, `src/css/17-drill-header-filters.css` (new), `src/css/16-chem-spc.css`, `sw.js` (shell cache `qdash-shell-v15`), `tests/test_browser.py`, `README.md`, `CHANGELOG.md`.
+
+**Validation**: full release gate passes (py_compile, node --check on 25 JS files + bundle, static checks, regression x6, unit, smoke, data lifecycle, exports, Chromium browser suite). In headless Chromium: Total Coils drill-down -> 9 funnels, header `800 / center / middle`, Work Center = CND_PIC gave 959 of 4,936 records (all CND_PIC, rows beyond page 1 included), Grade list narrowed by that filter, Esc closed only the menu, Clear all filters restored page 1 of 250; Heat history and the Chemistry heat drill-down (15 funnels on 2 tables) checked; no page errors or console errors.
+
 ## Chemistry SPC: bigger grade headings on blue, heading-only blue on element charts, one font system on every tab — no version bump (2026-10-02, eighth pass)
 
 **Changed**
