@@ -243,3 +243,8 @@ html[data-theme="dark"] .chem-multi .chem-pblock-t{background:linear-gradient(13
 .chem-table tr.chem-sep td{font-size:12.5px}
 #tab-chem .chart-svg text{font-family:'Manrope',sans-serif}
 
+
+/* ---- icons: notes get an info icon, long header labels keep their words whole ---- */
+.chem-foot::before{content:"ℹ️ "}
+.chem-table th{word-break:normal;overflow-wrap:normal}
+.chem-table th:first-child{min-width:128px}

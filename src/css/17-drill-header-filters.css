@@ -1,0 +1,64 @@
+/* 17-drill-header-filters.css — Drill-down table headers (bold, centred horizontally + vertically) and the Excel-style column filter. Bundled into /app.css in filename order; see README. */
+.drill-table thead th{font-weight:800;text-align:center;vertical-align:middle;line-height:1.25}
+.drill-table thead th .qdhf-th{display:flex;align-items:center;justify-content:center;gap:5px;min-height:30px}
+.drill-table thead th .qdhf-label{display:block;text-align:center;font-weight:800;font-size:inherit;word-break:normal;overflow-wrap:normal;hyphens:none}
+.qdhf-btn{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:1px solid transparent;border-radius:5px;background:transparent;color:#6b8299;cursor:pointer;line-height:1}
+/* main drill-down: column widths that fit the longer header labels (label + filter button) */
+#drillContent .drill-table th:nth-child(1),#drillContent .drill-table td:nth-child(1){width:9%}
+#drillContent .drill-table th:nth-child(2),#drillContent .drill-table td:nth-child(2){width:10%}
+#drillContent .drill-table th:nth-child(3),#drillContent .drill-table td:nth-child(3){width:11%}
+#drillContent .drill-table th:nth-child(4),#drillContent .drill-table td:nth-child(4){width:11%}
+#drillContent .drill-table th:nth-child(5),#drillContent .drill-table td:nth-child(5){width:15%}
+#drillContent .drill-table th:nth-child(6),#drillContent .drill-table td:nth-child(6){width:14%}
+#drillContent .drill-table th:nth-child(7),#drillContent .drill-table td:nth-child(7){width:10%}
+#drillContent .drill-table th:nth-child(8),#drillContent .drill-table td:nth-child(8){width:11%}
+#drillContent .drill-table th:nth-child(9),#drillContent .drill-table td:nth-child(9){width:9%}
+.qdhf-btn:hover,.qdhf-btn:focus-visible{background:#e3eef8;border-color:#b7d5ea;color:#1B5E8E;outline:none}
+.qdhf-btn.on{background:#118DFF;border-color:#118DFF;color:#fff}
+.drill-table thead th.qdhf-on{background:#e3eef8!important}
+.drill-table tr.qdhf-hide,.qdhf-table tr.qdhf-hide{display:none!important}
+
+/* filter drop-down */
+.qdhf-pop{position:fixed;z-index:2147483000;width:272px;max-width:calc(100vw - 16px);background:var(--card,#fff);color:var(--text,#16324F);border:1px solid var(--border,#d7e2eb);border-radius:10px;box-shadow:0 10px 30px rgba(15,42,74,.22),0 2px 6px rgba(15,42,74,.12);font:600 13.5px 'Inter',system-ui,sans-serif;overflow:hidden}
+.qdhf-title{display:flex;align-items:center;gap:7px;padding:9px 12px;background:linear-gradient(135deg,#E6F2FB 0%,#D3E8F7 100%);border-bottom:1px solid #B7D5EA;color:#1B5E8E;font-family:'DM Sans','Manrope',sans-serif;font-weight:800;font-size:14px}
+.qdhf-title span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qdhf-body{padding:10px 10px 8px}
+.qdhf-loading,.qdhf-none{padding:14px 6px;text-align:center;color:var(--muted,#6b8299);font-weight:600}
+.qdhf-search{width:100%;box-sizing:border-box;padding:7px 9px;margin-bottom:8px;border:1px solid var(--border,#d7e2eb);border-radius:7px;background:var(--bg,#fff);color:inherit;font:inherit}
+.qdhf-search:focus{outline:2px solid #118DFF55;border-color:#118DFF}
+.qdhf-list{max-height:220px;overflow:auto;border:1px solid var(--border,#d7e2eb);border-radius:7px;padding:3px 0}
+.qdhf-row{display:flex;align-items:center;gap:8px;padding:5px 9px;cursor:pointer;user-select:none}
+.qdhf-row:hover{background:rgba(17,141,255,.09)}
+.qdhf-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.qdhf-row em{font-style:normal;font-size:12px;font-weight:700;color:var(--muted,#6b8299);font-variant-numeric:tabular-nums}
+.qdhf-row input{margin:0;accent-color:#118DFF;width:15px;height:15px;flex:0 0 auto}
+.qdhf-selall{margin-bottom:5px;border-bottom:1px solid var(--border,#d7e2eb);font-weight:800}
+.qdhf-more{padding:6px 4px 0;font-size:12px;color:var(--muted,#6b8299);font-weight:600}
+.qdhf-actions{display:flex;align-items:center;gap:7px;margin-top:10px}
+.qdhf-spacer{flex:1}
+.qdhf-actions button{padding:6px 12px;border-radius:7px;border:1px solid var(--border,#d7e2eb);background:var(--card,#fff);color:inherit;font:inherit;font-weight:700;cursor:pointer}
+.qdhf-actions button:hover{border-color:#118DFF;color:#118DFF}
+.qdhf-actions .qdhf-ok{background:#118DFF;border-color:#118DFF;color:#fff}
+.qdhf-actions .qdhf-ok:hover{background:#0b78dc;color:#fff}
+.qdhf-actions .qdhf-ok:disabled{opacity:.45;cursor:not-allowed}
+.qdhf-actions .qdhf-clear{border-color:transparent;background:transparent;color:#b42318;padding-left:2px}
+
+/* "Filtered" strip above the table */
+.qdhf-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 8px;padding:7px 11px;border:1px solid #B7D5EA;border-left:4px solid #118DFF;border-radius:8px;background:linear-gradient(135deg,#F1F8FE 0%,#E3F0FA 100%);font:700 13.5px 'Inter',system-ui,sans-serif;color:#1B5E8E}
+.qdhf-bar[hidden]{display:none}
+.qdhf-bar-t{display:inline-flex;align-items:center;gap:6px;font-weight:800}
+.qdhf-chip{padding:2px 9px;border-radius:999px;background:#fff;border:1px solid #B7D5EA;font-weight:700;color:#16324F}
+.qdhf-clear-all{margin-left:auto;padding:4px 11px;border-radius:7px;border:1px solid #b42318;background:#fff;color:#b42318;font:inherit;font-weight:800;cursor:pointer}
+.qdhf-clear-all:hover{background:#b42318;color:#fff}
+
+/* dark mode */
+html[data-theme="dark"] .qdhf-btn{color:#9AB3CC}
+html[data-theme="dark"] .qdhf-btn:hover,html[data-theme="dark"] .qdhf-btn:focus-visible{background:#1a3f63;border-color:#24507a;color:#8FC6EE}
+html[data-theme="dark"] .qdhf-btn.on{background:#2483ce;border-color:#2483ce;color:#fff}
+html[data-theme="dark"] .drill-table thead th.qdhf-on{background:#173a63!important}
+html[data-theme="dark"] .qdhf-pop{box-shadow:0 10px 30px rgba(0,0,0,.55)}
+html[data-theme="dark"] .qdhf-title{background:linear-gradient(135deg,#14304d 0%,#1a3f63 100%);border-bottom-color:#24507a;color:#8FC6EE}
+html[data-theme="dark"] .qdhf-bar{background:linear-gradient(135deg,#14304d 0%,#1a3f63 100%);border-color:#24507a;border-left-color:#4DA3FF;color:#8FC6EE}
+html[data-theme="dark"] .qdhf-chip{background:#0f2740;border-color:#24507a;color:#E8EDF6}
+html[data-theme="dark"] .qdhf-clear-all{background:transparent;border-color:#f08b8b;color:#f5a3a3}
+html[data-theme="dark"] .qdhf-actions .qdhf-clear{color:#f5a3a3}
