@@ -948,8 +948,10 @@ def validate_rows(raw_rows, existing=None, specs=None, max_issues=400):
             keep.append(first)
         else:
             where = ", ".join(f"{g['sheet'] or 'file'} row {g['_row']}" for g in group)
+            only_sheet = all({c["field"] for c in _record_diff(first, g)} <= {"sheet"} for g in group[1:])
+            why = "on different sheets (same values, so the grade is ambiguous)" if only_sheet else "with different values"
             for g in group:
-                issue("error", "dup_conflict", f"Heat {heat} appears {len(group)} times with different values ({where}); none imported, fix the source", {"_sheet": g["sheet"], "_row": g["_row"]}, heat)
+                issue("error", "dup_conflict", f"Heat {heat} appears {len(group)} times {why} ({where}); none imported, fix the source", {"_sheet": g["sheet"], "_row": g["_row"]}, heat)
             dup_skipped += len(group)
     built = keep
 

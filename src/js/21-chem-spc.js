@@ -154,7 +154,7 @@ function chemSanitiseSel(){
   const grp = chemMeta.specs.filter(s => s.heats > 0).map(s => s.description).concat(chemMeta.unassigned ? ['__none__'] : []);
   if(chemSel.spec !== '__all__' && !grp.includes(chemSel.spec)) chemSel.spec = '__all__';
   if(chemSel.param !== '__all__' && !chemMeta.params.some(p => p.key === chemSel.param)) chemSel.param = '__all__';
-  if(![0, 10, 20, 30, 50, 100, 200].includes(Number(chemSel.last_n))) chemSel.last_n = 0;
+  { const n = Number(chemSel.last_n); if(!Number.isInteger(n) || n < 0 || n > 5000) chemSel.last_n = 0; }   // any whole number 1-5000 from a shared link is kept (the API accepts up to 5000)
   chemSel.last_n = Number(chemSel.last_n) || 0;
   const per = chemPeriods();
   [['month', 'months'], ['week', 'weeks'], ['quarter', 'quarters'], ['fy', 'fys']].forEach(([k, l]) => { if(chemSel[k] && !per[l].includes(chemSel[k])) chemSel[k] = ''; });
@@ -325,7 +325,7 @@ function renderChemControls(){
     ${F('month', '📅', 'Month', chemPeriodItems(per.months), chemIsActive('month'))}
     ${F('param', '🔬', 'Parameter', [{value: '__all__', label: 'All'}].concat(chemMeta.params.map(p => ({value: p.key, label: p.label}))), chemIsActive('param'))}
     ${F('spec', '🧪', 'Grade', ['__all__'].concat(groups).map(g => ({value: g, label: chemGroupLabel(g)})), chemIsActive('spec'))}
-    ${F('last_n', '🔢', 'Heat Qty (Last N)', CHEM_QTY.map(([v, t]) => ({value: v, label: t})), chemIsActive('last_n'))}
+    ${F('last_n', '🔢', 'Heat Qty (Last N)', (CHEM_QTY.some(q => q[0] === String(chemSel.last_n)) ? CHEM_QTY : CHEM_QTY.concat([[String(chemSel.last_n), String(chemSel.last_n)]])).map(([v, t]) => ({value: v, label: t})), chemIsActive('last_n'))}
     ${F('week', '🗓️', 'Week', chemPeriodItems(per.weeks, chemWeekLabel), chemIsActive('week'))}
     ${F('quarter', '📊', 'Quarter', chemPeriodItems(per.quarters), chemIsActive('quarter'))}
     ${F('fy', '📆', 'Financial Year', chemPeriodItems(per.fys), chemIsActive('fy'))}

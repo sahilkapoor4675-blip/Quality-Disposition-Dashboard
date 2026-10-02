@@ -59,6 +59,16 @@ Health probes: `GET`/`HEAD /healthz` and `/readyz` (no database access; `render.
 - Imports (`.xlsx/.xlsm/.csv/.tsv`) are validated and previewed before writing; each data-changing import
   creates a safety backup. Imports are transaction-locked so concurrent uploads cannot create the same batch.
 - CSV exports neutralise spreadsheet-formula characters.
+- **Import normalisation (tenth pass).** Dates are read day-first from real dates, Excel serials and the text
+  formats plants export (`12.04.2026`, `2026-04-12 00:00:00`, `2026-04-12T08:30`, `12 Apr 2026`, `2026/04/12`;
+  a month-first value such as `04/13/2026` is used only when it cannot be read day-first). `BATCH NO` /
+  `HEAT NO` stored as floats (`2000000001.0`) read as `2000000001`; `HEAT NO` has spaces removed and is
+  upper-cased (this is also how the Chemistry join matches). `WORK CENTER` and `GRADE` have repeated spaces
+  collapsed and, when they differ from a value already in the database only by case/spacing, take the stored
+  spelling, so a typo-level difference never becomes a second filter entry.
+- **Quarter without a financial year.** `Q1..Q4` repeat every FY; with Quarter picked and FY on *All*, every
+  KPI, table and the comparison use the latest FY that has that quarter (same as the period label).
+- The *Defect Intensity* list offers `NONE` only when blank-intensity coils exist under the other filters.
 
 ## Backups
 JSON-GZIP snapshots with integrity checksums, created after every import, on demand (Admin → Backups) and on
@@ -103,7 +113,7 @@ from the root, so they must stay there). Tests and documentation live in their o
 | `supabase_schema.sql` | Reference PostgreSQL schema (startup migrations stay authoritative) |
 | `requirements.txt`, `runtime.txt`, `render.yaml`, `Procfile`, `.env.example`, `VERSION.txt` | Deployment config |
 | `.github/workflows/` | `dr-backup.yml` (12-hourly PostgreSQL dump), `dependency-audit.yml` (weekly `pip-audit`) |
-| `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_chem_spc.py`, `test_data_lifecycle.py`, `test_exports.py`, `test_browser.py` |
+| `tests/` | Release gate: `run_gate.py` runs `static_checks.py`, `regression.py`, `test_units.py`, `test_smoke.py`, `test_chem_spc.py`, `test_import_normalization.py`, `test_data_lifecycle.py`, `test_exports.py`, `test_browser.py` |
 | `tools/self_host_fonts.sh` | One-time script to self-host Google Fonts locally (see "Fonts" below) — not needed for the app to run |
 | `docs/` | `DEPLOY.md`, `DISASTER_RECOVERY.md`, `SECURITY.md`, `CHANGELOG_ARCHIVE.md` |
 

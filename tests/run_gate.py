@@ -34,6 +34,7 @@ checks += [
     ("static checks (code health + admin UX)", [PY, str(T / "static_checks.py")]),
     ("regression (6 suites)", [PY, str(T / "regression.py")]),
     ("unit tests (alerts + disaster recovery)", [PY, str(T / "test_units.py")]),
+    ("import normalisation + filter fixes", [PY, str(T / "test_import_normalization.py")]),
     ("smoke (server + 47 routes)", [PY, str(T / "test_smoke.py")]),
     ("data lifecycle (import confirm + backup/restore)", [PY, str(T / "test_data_lifecycle.py")]),
     ("exports" + ("" if FAST else " + stress"), [PY, str(T / "test_exports.py")] + ([] if FAST else ["--stress"])),

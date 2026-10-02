@@ -186,7 +186,11 @@ function refreshCascadeFilters(){
   refreshFilterOptionsAfterDataChange(true).catch(()=>{});
 }
 
+let _cascadeSeq=0;
 async function refreshFilterOptionsAfterDataChange(cascade=false){
+  // Only the newest request may update the dropdowns: a slower, older response (scoped to a previous
+  // selection) must never overwrite the lists or reset a value the user picked in the meantime.
+  const mySeq=++_cascadeSeq;
   // cascade=true (called after the user changes a filter) scopes every OTHER
   // dropdown's options to what actually co-occurs with the current selection,
   // so picking Month=Jun then Quarter can't offer a Q2 that has zero overlap
@@ -195,6 +199,7 @@ async function refreshFilterOptionsAfterDataChange(cascade=false){
   const res=await fetch('/api/filters'+qs,{cache:'no-store'});
   if(!res.ok) throw new Error(`Filter refresh failed (HTTP ${res.status}).`);
   const options=await res.json();
+  if(mySeq!==_cascadeSeq) return false;
   window._filterOptionsCache=options;
   let selectionChanged=false;
 

@@ -1161,8 +1161,13 @@ def get_filter_options(active_filters=None):
         else:
             vals.sort()
         if key == "defect_intensity":
-            vals = [v for v in vals if str(v or "").strip().upper() != "NONE"] + ["NONE"]
-            vals = list(dict.fromkeys(vals))
+            vals = [v for v in vals if str(v or "").strip().upper() != "NONE"]
+            # "NONE" (blank intensity) is only offered when such rows exist under the other active filters.
+            nw = build_where(active_filters, exclude={key})[0] if active_filters else ""
+            np_ = build_where(active_filters, exclude={key})[1] if active_filters else []
+            cur.execute(f"SELECT 1 FROM disposition {nw} {'AND' if nw else 'WHERE'} TRIM(COALESCE(defect_intensity,'')) IN ('', 'NONE') LIMIT 1", np_)
+            if cur.fetchone():
+                vals.append("NONE")
         if key == "week":
             options[key] = [{"value":"All", "label":"All"}] + [
                 {"value": v, "label": _week_display_label(v)} for v in vals
@@ -1945,17 +1950,35 @@ def _detect_headers_only(filename, data):
     return headers, auto_map
 
 
+_DISP_DATE_FMTS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d-%b-%Y", "%d-%b-%y", "%d/%m/%y", "%d.%m.%y", "%d-%m-%y",
+                   "%Y/%m/%d", "%Y.%m.%d", "%d %b %Y", "%d %B %Y", "%d-%B-%Y", "%d %b %y", "%m/%d/%Y")
+_DISP_TIME_TAIL = re.compile(r"(?:[T\s]+\d{1,2}[:.]\d{2}(?:[:.]\d{2}(?:\.\d+)?)?\s*(?:[AaPp][Mm])?\s*(?:Z|[+-]\d{2}:?\d{2})?)$")
+
+
 def _parse_date(v):
+    """Date cell -> date | None. Accepts real dates, Excel serials, and day-first text in the formats plants
+    actually export (SAP 12.04.2026, ISO with a time part, 12 Apr 2026 ...). Day-first wins; a US-style
+    month-first value is only used when it cannot be read day-first (e.g. 04/13/2026)."""
     if v in (None, ""):
         return None
     if isinstance(v, (_dt.datetime, _dt.date)):
         return v.date() if isinstance(v, _dt.datetime) else v
-    text = str(v).strip()
-    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d-%b-%Y", "%d-%b-%y", "%d/%m/%y", "%m/%d/%Y"):
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        f = float(v)
+        if 30000 <= f <= 80000:
+            return (_dt.datetime(1899, 12, 30) + _dt.timedelta(days=int(f))).date()
+        return None
+    text = re.sub(r"\s+", " ", str(v).strip())
+    text = _DISP_TIME_TAIL.sub("", text).strip()
+    if re.fullmatch(r"\d{5}(\.0+)?", text):
+        return _parse_date(float(text))
+    for fmt in _DISP_DATE_FMTS:
         try:
-            return _dt.datetime.strptime(text, fmt).date()
+            d = _dt.datetime.strptime(text, fmt).date()
         except ValueError:
-            pass
+            continue
+        if 2000 <= d.year <= 2100:
+            return d
     return None
 
 
@@ -1971,6 +1994,38 @@ def _derive_period_fields(insp_date):
     quarter = f"Q{q}"
     fy = f"FY {fy_start}-{(fy_start + 1) % 100:02d}"
     return month, week, quarter, fy
+
+
+def _id_text(v):
+    """ID cell -> text. A whole number stored as a float (2000000001.0) must read 2000000001, or the same
+    coil would be inserted twice (once with '.0')."""
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    s = str(v).strip()
+    return s[:-2] if re.fullmatch(r"\d{6,}\.0", s) else s
+
+
+def _canonicalize_dimensions(records):
+    """Make Work Center / Grade of an upload use the spelling already in the database when they differ only in
+    case or spacing (cnd_slt -> CND_SLT), so such a difference never becomes a second filter entry."""
+    conn = get_conn()
+    try:
+        canon = {}
+        for col in ("work_center", "grade"):
+            counts = {}
+            for val, n in conn.execute(f"SELECT {col}, COUNT(*) FROM disposition WHERE TRIM(COALESCE({col},''))<>'' GROUP BY {col}").fetchall():
+                counts.setdefault(re.sub(r"\s+", " ", str(val)).strip().lower(), []).append((n, str(val)))
+            canon[col] = {k: max(v)[1] for k, v in counts.items()}
+    finally:
+        conn.close()
+    for r in records:
+        for col in ("work_center", "grade"):
+            key = re.sub(r"\s+", " ", str(r.get(col) or "")).strip().lower()
+            if key in canon[col]:
+                r[col] = canon[col][key]
+    return records
 
 
 def _record_from_values(values, mapping):
@@ -2015,10 +2070,10 @@ def _record_from_values(values, mapping):
         weight = None
 
     return {
-        "heat_no": str(get("heat_no") or "").strip(),
-        "batch_no": str(get("batch_no") or "").strip(),
-        "work_center": str(get("work_center") or "").strip(),
-        "grade": str(get("grade") or "").strip(),
+        "heat_no": re.sub(r"\s+", "", _id_text(get("heat_no"))).upper(),
+        "batch_no": re.sub(r"\s+", "", _id_text(get("batch_no"))),
+        "work_center": re.sub(r"\s+", " ", str(get("work_center") or "")).strip(),
+        "grade": re.sub(r"\s+", " ", str(get("grade") or "")).strip(),
         "output_weight": weight,
         "main_defect": str(get("main_defect") or "").strip().upper(),
         "defect_intensity": ("" if str(get("defect_intensity") or "").strip().upper() == "NONE" else str(get("defect_intensity") or "").strip().upper()),
@@ -4712,6 +4767,23 @@ def _filters_from_qs(qs):
     for k in FILTER_KEYS:
         v = str(qs.get(k, "All") or "").strip()[:200]
         out[k] = "All" if (not v or v.lower() == "all") else v
+    # Quarter values (Q1..Q4) repeat every financial year. With a Quarter picked and FY left on All, use the same
+    # financial year the period label and the previous-period comparison already name (the latest one that has
+    # that quarter), so the numbers, the label and the comparison describe one and the same period.
+    if out.get("quarter", "All") != "All" and out.get("financial_year", "All") == "All":
+        try:
+            conn = get_conn()
+            try:
+                w, p = build_where(out, exclude={"quarter", "financial_year", "month", "week"})
+                rows = conn.execute(f"SELECT DISTINCT financial_year FROM disposition {w + (' AND ' if w else 'WHERE ')}quarter = ? AND TRIM(COALESCE(financial_year,''))<>''",
+                                    list(p) + [out["quarter"]]).fetchall()
+            finally:
+                conn.close()
+            fys = sorted(str(r[0]).strip() for r in rows)
+            if len(fys) > 1:
+                out["financial_year"] = fys[-1]
+        except Exception:
+            pass
     return out
 
 
@@ -5778,7 +5850,7 @@ class Handler(BaseHTTPRequestHandler):
                 rows=_drilldown_rows(filters, metric, drill_value, limit=page_size, offset=offset)
                 self._send_json({'count':int(total_coils or 0),'row_count':int(total_rows or 0),'total_weight':float(total_weight or 0),'rows':rows,'scope':_filter_summary(filters),'page':page,'page_size':page_size,'total_pages':max(1,(int(total_rows or 0)+page_size-1)//page_size)})
             except Exception as e:
-                self._send_json({'error':str(e)}, status=500)
+                log.exception("drilldown failed"); self._send_json({'error':'Could not load records'}, status=500)
         elif path == "/api/drilldown/export":
             try:
                 filters = _filters_from_qs(qs)
@@ -7006,7 +7078,7 @@ class Handler(BaseHTTPRequestHandler):
                 if raw_map:
                     try: column_map=json.loads(raw_map)
                     except (TypeError, ValueError): column_map=None
-                records=_parse_uploaded_file(uploaded[0],uploaded[1],column_map)
+                records=_canonicalize_dimensions(_parse_uploaded_file(uploaded[0],uploaded[1],column_map))
                 if len(records)>10000: raise ValueError("Import limited to 10,000 records per upload")
                 conn=get_conn(); existing_state=_disposition_state(conn); existing_rows=conn.execute("SELECT heat_no,batch_no,work_center,grade,output_weight,main_defect,defect_intensity,quality_decision,insp_lot_date,ud_date,month,week,quarter,financial_year FROM disposition").fetchall(); existing_map={str(r[1] or "").strip().upper():r for r in existing_rows};
                 wcs={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT work_center FROM disposition WHERE TRIM(COALESCE(work_center,''))<>''").fetchall()}; grades={str(r[0]).strip() for r in conn.execute("SELECT DISTINCT grade FROM disposition WHERE TRIM(COALESCE(grade,''))<>''").fetchall()}; conn.close()
@@ -7103,7 +7175,7 @@ class Handler(BaseHTTPRequestHandler):
                             break
                 if not uploaded:
                     raise ValueError("No file was uploaded")
-                records = _parse_uploaded_file(uploaded[0], uploaded[1])
+                records = _canonicalize_dimensions(_parse_uploaded_file(uploaded[0], uploaded[1]))
                 if len(records) > 10000:
                     raise ValueError("Import limited to 10,000 records per upload")
                 _require_safety_backup("before_disposition_import")

@@ -1,3 +1,43 @@
+## Audit pass: import parsing, normalisation, filter consistency, Chemistry SPC checks — no version bump (2026-10-02, tenth pass)
+
+**Audit method.** Full re-check of the release gate, then an independent re-computation: 61 random filter
+combinations (KPIs, drill-down row counts, Work Center / Grade rows, monthly / weekly / quarterly totals,
+Defect register, decision and intensity tables, every offered filter option) compared against plain SQL on
+`quality.db`; Chemistry SPC (Cp, Cpk, Pp, Ppk, within / overall σ, out-of-spec count, Month / Week / Quarter / FY
+filters, Heat Qty, previous-period Cpk, disposition join per heat) compared against a separate implementation on a
+1,075-heat dataset; XSS payloads in grade / defect / work centre / analyst / sheet names; console and page errors on
+every tab. All of those numbers matched. The items below are what the audit found.
+
+**Fixed**
+- **Disposition CSV dates.** `12.04.2026` (SAP), `2026-04-12 00:00:00`, `2026-04-12T08:30:00`, `12 Apr 2026`,
+  `2026/04/12`, `12.04.26` and Excel serial numbers were rejected with "INSP LOT DATE is required", failing the
+  whole row. They are now read (day-first; month-first only when it cannot be day-first). The Chemistry importer
+  already accepted these; both importers now agree.
+- **Duplicate coils from float IDs.** A batch stored as `2000000001.0` was inserted as a second coil next to
+  `2000000001`. Whole-number floats now read as integers.
+- **Work Center / Grade / Heat No. spelling.** `cnd_slt`, `NI-Brass   (Ni - 05)` or `NBS 6348` created extra filter
+  entries and broke the Chemistry heat join. Heat No. is whitespace-stripped and upper-cased; Work Center and Grade
+  are space-collapsed and snapped to the spelling already stored when only case / spacing differs.
+- **`NONE` in the Defect Intensity list** was always offered, so choosing it under some filters returned 0 rows. It is
+  now offered only when blank-intensity coils exist under the other active filters.
+- **Filter-option race.** Slower, older option responses could overwrite the dropdown lists (and reset a value picked
+  meanwhile) after quick successive changes. Only the newest request now updates the lists.
+- **Quarter with FY = All** (latent until a second financial year exists, i.e. April 2027): numbers combined every FY's
+  Q1 while the label and previous-period comparison named the latest FY. Both now use the latest FY with that quarter.
+- `/api/drilldown` no longer returns the raw exception text on failure (logged server-side instead).
+- **Chemistry SPC:** a shared link with `chem_n` outside the preset list (e.g. 25) silently fell back to *All*; any
+  whole number up to 5000 is kept and shown in the Heat Qty list. A heat repeated on two sheets with identical values
+  was reported as "different values"; the message now says it is on different sheets (grade ambiguous).
+
+**Added**
+- `tests/test_import_normalization.py` (in `run_gate.py`): date formats, ID / spelling normalisation, `NONE` option,
+  quarter-to-FY resolution and the duplicate-heat messages.
+
+**Observations, not changed (source data / design choices)**
+- 152 defect coils have a blank intensity and 7 *NO DEFECT* coils carry an intensity; the *WITHOUT INTENSITY* row of the
+  intensity table includes NO DEFECT coils; `WAVINESS` and `POOR SHAPE/WAVINESS` are separate defects; grade names mix
+  `NI-Silver(Ni10,…)` and `Ni-Silver (Ni-20%,…)` styles. Cleaning these needs a grade / defect alias master.
+
 ## Drill-downs: Excel-style header filters, bold centred headers; Chemistry SPC icons — no version bump (2026-10-02, ninth pass)
 
 **Added**
