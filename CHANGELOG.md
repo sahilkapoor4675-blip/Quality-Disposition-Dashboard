@@ -1,3 +1,14 @@
+## Chemistry SPC: bigger grade headings on blue, heading-only blue on element charts, one font system on every tab — no version bump (2026-10-02, eighth pass)
+
+**Changed**
+- **Grade = All:** every grade title (e.g. `Cu-Ni 80-20`, `Test Brass`) is now a larger heading (22px, DM Sans) on a light-blue band with a blue left accent (dark-mode variant included), so the grades are easy to tell apart. The heat count beside it is 14px.
+- **Parameter = All (Cu% / Zn% / Ni% charts):** the blue background of the whole chart box is removed. The box now has the normal card background and border; only the element heading (`Cu%`, `Zn%`, `Ni%`) sits on the light-blue band. The lift / sheen hover on the box was removed together with the blue. Presentation mode keeps the same heading band.
+- **Fonts and sizes are now consistent across tabs.** The Chemistry panel titles (Individuals / Moving Range / Histogram / Capability / Out-of-Spec) had no shared rule and were 18px; they now use the same card-heading style as the Dashboard, Work Center & Grade, Defects and Period Trend tabs (DM Sans 16px / 800, light-blue header strip with accent bar, dark-mode too). Inside the Chemistry tab the mixed fonts and sizes (Bahnschrift, Manrope, Space Grotesk and Inter at 9.5 - 13px) were unified: element-card labels, big Cpk/Ppk values (30px), sub-labels, status pill, Prev / trend and element names use Space Grotesk like the dashboard KPI cards; capability-band note, notes, footers, buttons and the period banner use Inter 14px like the dashboard tables / banners; chart legends use Manrope 14px like the dashboard legends; chart axis text uses Manrope. Nothing on the tab is below 12px any more (the table section separators are 12.5px).
+
+**Notes**: no API, data, table or calculation change; `VERSION.txt` untouched. The light teal shading *inside* a chart between Aim LSL and Aim USL is part of the chart (it marks the operating band) and is unchanged. Service-worker shell cache bumped to `qdash-shell-v14` so browsers fetch the new CSS. Files: `src/css/05-typography-layout-drilldown.css`, `src/css/16-chem-spc.css`, `sw.js`, `README.md`, `CHANGELOG.md`.
+
+**Validation**: full gate run (`py_compile`, `node --check`, static checks, regression x6, unit, smoke, data lifecycle, exports) passes. Headless Chromium (1440 px) read back computed fonts of every tab before/after and screenshots of Grade = All and Parameter = All; no page errors. Known and unrelated to this change: `tests/test_browser.py` line 224 still asserts a `.sparkline` inside the Chemistry element cards, but the cards no longer have one (it fails identically on the zip as uploaded); every other browser check passes.
+
 ## Chemistry SPC: out-of-Aim = out of spec, Aim limits in the heat drill-down, blue element boxes with hover — no version bump (2026-10-01, seventh pass)
 
 **Changed**
