@@ -179,6 +179,10 @@ The field-name hover tag is enabled across the main dashboard and Admin UI, incl
 - **Export:** with a filter active, *Export Selected Records* downloads only the filtered rows (CSV of the 9 on-screen columns); without a filter it is the unchanged server export.
 - **New drill-down tables:** call `QDHF.decorateStatic(table)` after the table is in the DOM (tables whose rows are all in the page); the paginated main table is rendered by `QDHF.renderDrill()` from `renderDrillPage()`.
 
+### Chemistry SPC — Heat Qty window and dates
+- With **Heat Qty (Last N)** the banner shows the heat range and the min / max cast date of the current window and of the previous N heats it is compared with; the Heat Qty dropdown shows each option's date span; notes cover fewer heats than N, heats without a cast date and overlapping dates. The same text heads the Chemistry CSVs and the print / Save-as-PDF view. Built in `chem_spc.window_of()`; returned as `window` by `/api/chem/spc`.
+- Dates are shown **dd-mm-yyyy** in tables, tooltips, drill-downs, CSV exports and Admin tables (stored internally as ISO).
+
 ### Chemistry SPC — data rules
 - **Cast dates:** Month / Week / Quarter / Fin. Year come from the stored `cast_date` (the file's Date column, read on import; if no header says "Date", a column where most cells are real dates is used). Heats imported without a date have empty period lists — the tab says so; re-import the chemistry file (heats update in place, no duplicates) to fill them. Heat Qty (last N) and its trend work without dates.
 - **Chemistry vs Disposition panel:** read-only comparison of reject % / defect % on coils of in-spec vs out-of-spec heats, joined on `heat_no`; an empty card means no such heat exists in the selection or none has inspection data yet.

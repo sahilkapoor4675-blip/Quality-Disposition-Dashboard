@@ -106,6 +106,14 @@ from session_store import (
     db_login_attempts_snapshot,
 )
 
+def _dmy_cell(v):
+    """Date cell of a CSV export -> dd-mm-yyyy (the format shown everywhere in the app). Non-dates are returned unchanged."""
+    if isinstance(v, (_dt.datetime, _dt.date)):
+        return v.strftime("%d-%m-%Y")
+    t = str(v or "")
+    return "%s-%s-%s" % (t[8:10], t[5:7], t[0:4]) if re.match(r"^\d{4}-\d{2}-\d{2}", t) else v
+
+
 def _csv_safe_value(value):
     """Return CSV text that spreadsheet programs treat as literal text.
     Numeric values remain numeric; externally supplied strings beginning with
@@ -3931,10 +3939,26 @@ def _compute_chem_all_grades(last_n, period):
         if v.get("period_comparison"):
             pc = pc or dict(v["period_comparison"]); prev_total += v["period_comparison"].get("prev_heats", 0)
         grades.append({"description": g, "n_heats": v["n_heats"], "spec": {"description": v["spec"]["description"]},
-                       "overview": [o for o in v["overview"] if o.get("main")]})
+                       "overview": [o for o in v["overview"] if o.get("main")], "window": v.get("window")})
     if pc and pc.get("mode") == "last_n":
         pc["prev_heats"] = prev_total
-    return {"all_grades": True, "param": "__all__", "n_heats": total, "grades": grades, "period_comparison": pc,
+    wins = [g["window"] for g in grades if g.get("window")]
+    qs_map = {}
+    for w in wins:
+        for q in w["qty_spans"]:
+            a = qs_map.setdefault(q["n"], {"n": q["n"], "heats": 0, "date_min": "", "date_max": ""})
+            a["heats"] += q["heats"]
+            if q["date_min"] and (not a["date_min"] or q["date_min"] < a["date_min"]): a["date_min"] = q["date_min"]
+            if q["date_max"] and q["date_max"] > a["date_max"]: a["date_max"] = q["date_max"]
+    av_lo = [w["available_span"]["date_min"] for w in wins if w["available_span"]["date_min"]]
+    av_hi = [w["available_span"]["date_max"] for w in wins if w["available_span"]["date_max"]]
+    window = {"requested": last_n, "available": sum(w["available"] for w in wins), "grades": len(grades),
+              "grades_short": sum(1 for w in wins if last_n and w["available"] < last_n),
+              "current": chem_spc.merge_windows([w["current"] for w in wins]),
+              "previous": (chem_spc.merge_windows([w["previous"] for w in wins if w.get("previous")]) if any(w.get("previous") for w in wins) else None),
+              "available_span": {"date_min": min(av_lo) if av_lo else "", "date_max": max(av_hi) if av_hi else "", "undated": sum(w["available_span"]["undated"] for w in wins)},
+              "overlap": any(w["overlap"] for w in wins), "qty_spans": [qs_map[k] for k in sorted(qs_map)]}
+    return {"all_grades": True, "param": "__all__", "n_heats": total, "grades": grades, "period_comparison": pc, "window": window,
             "filters": {"last_n": last_n, **period}, "series": [], "summary": {"heats": total, "has_limits": True},
             "spec": {"description": "All grades", "limits": {}, "aim": {}}, "warnings": [], "capability": {},
             "periods": chem_spc.period_options(heats), "periods_cascade": chem_spc.period_options_cascade(heats, period)}
@@ -3951,9 +3975,8 @@ def _compute_chem_spc_one(desc, param, last_n, period, all_params=False):
     # Filter and apply Last-N before joining to disposition. Parameter changes
     # should only fetch disposition rows for heats actually visible in the view,
     # not for every heat ever imported for the grade.
-    sel = sorted(chem_spc.filter_by_period(group, period), key=chem_spc.order_key)
-    if last_n:
-        sel = sel[-last_n:]
+    sel_full = sorted(chem_spc.filter_by_period(group, period), key=chem_spc.order_key)
+    sel = sel_full[-last_n:] if last_n else sel_full
     disp_rows = _chem_disposition_for([h["heat_no"] for h in sel])
     disp_by = {h: chem_spc.summarize_disposition(rows) for h, rows in disp_rows.items()}
     view = chem_spc.build_spc_view(sel, spec, param, disp_by, 0, period=None)
@@ -4061,6 +4084,14 @@ def _compute_chem_spc_one(desc, param, last_n, period, all_params=False):
             o["prev_cpk"] = None; o["cpk_change"] = None; o["cpk_change_pct"] = None; o["cpk_change_type"] = "info"
             o["prev_ppk"] = None; o["ppk_change"] = None; o["ppk_change_pct"] = None; o["ppk_change_type"] = "info"
         view["period_comparison"] = None
+    # Heat range + cast-date span of the current window and of the window it is compared with (banner, Heat Qty dropdown, CSV / print headers).
+    cur_w = chem_spc.window_of(sel)
+    prev_w = chem_spc.window_of(sorted(prev_sel, key=chem_spc.order_key)) if prev_sel else None
+    full_w = chem_spc.window_of(sel_full)
+    view["window"] = {"requested": last_n, "available": len(sel_full), "current": cur_w, "previous": prev_w,
+                      "available_span": {"date_min": full_w["date_min"], "date_max": full_w["date_max"], "undated": full_w["undated"]},
+                      "overlap": chem_spc.windows_overlap(cur_w, prev_w),
+                      "qty_spans": chem_spc.qty_spans(sel_full, (last_n,))}
     return view
 
 
@@ -5857,7 +5888,7 @@ class Handler(BaseHTTPRequestHandler):
                 rows = _drilldown_rows(filters, qs.get('metric',''), qs.get('drill_value'), limit=50000)
                 out=io.StringIO(newline=''); w=csv.writer(out)
                 w.writerow(['Insp Lot Date','HEAT NO','BATCH NO','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)'])
-                for r in rows: w.writerow([_csv_safe_value(r['insp_lot_date']),_csv_safe_value(r['heat_no']),_csv_safe_value(r['batch_no']),_csv_safe_value(r['work_center']),_csv_safe_value(r['grade']),_csv_safe_value(r['main_defect']),_csv_safe_value(r['defect_intensity']),_csv_safe_value(r['quality_decision']),r['output_weight']])
+                for r in rows: w.writerow([_csv_safe_value(_dmy_cell(r['insp_lot_date'])),_csv_safe_value(r['heat_no']),_csv_safe_value(r['batch_no']),_csv_safe_value(r['work_center']),_csv_safe_value(r['grade']),_csv_safe_value(r['main_defect']),_csv_safe_value(r['defect_intensity']),_csv_safe_value(r['quality_decision']),r['output_weight']])
                 _activity_event(self, 'drilldown_export_csv', filters=filters)
                 _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
             except Exception as e:
@@ -6060,7 +6091,7 @@ class Handler(BaseHTTPRequestHandler):
                             if not batch:
                                 break
                             for r in batch:
-                                yield [_csv_safe_value(v) for v in r]
+                                yield [_csv_safe_value(_dmy_cell(r[0]))] + [_csv_safe_value(v) for v in list(r)[1:]]
                     finally:
                         try: cur.close()
                         except Exception: pass

@@ -1,3 +1,28 @@
+## Chemistry SPC: heat / date window for "Heat Qty (Last N)" + dd-mm-yyyy dates — no version bump (2026-10-02, twelfth pass)
+
+**Added**
+- **Banner shows the window, not just "Last 50 heats".** Two lines: `Current: Last 50 heats · NBS6101 → NBS6150 · Cast 12-Jun-26 to 03-Jul-26 (22 days)` and
+  `Compared to: previous 50 heats · NBS6051 → NBS6100 · Cast 20-May-26 to 11-Jun-26`. Month / Week / Quarter / FY selections that are
+  combined with Heat Qty read `Last 50 heats of Jun-2026 · ...`.
+- **Min / max cast date, not first / last heat.** Heats run in heat-number order, not date order, so the span is the earliest and latest cast
+  date inside the window. When the date spans of the two windows really intersect the banner adds `dates overlap with previous window`
+  (a single shared boundary day does not count).
+- **Heat Qty dropdown options carry their span**: `Last 50 · 12-Jun → 03-Jul` (follows Grade and Month / Week / Quarter / FY). Fewer
+  heats than the option: `Last 200 · only 150 · ...`. `All` stays plain.
+- **Edge-case notes**: `Last 100 requested, only 71 heats available (Mar-26 → Sep-26)`, `3 heats have no cast date`,
+  `Previous window has only X of N heats`, and for Grade = All `K grades have fewer than N heats`.
+- **Grade = All**: banner says `Last N heats per grade`; each grade heading shows its own heat range and cast span when Heat Qty is set.
+- **Where it is written**: the banner, a header block at the top of all three Chemistry CSVs (selection, current / compared window, notes,
+  export date), and a print header (Ctrl+P / Save as PDF) on the Chemistry tab. The server-built PPTX / PDF / Excel reports cover the
+  disposition data only and are unchanged.
+- API: `/api/chem/spc` now returns `window` (`requested`, `available`, `current`, `previous`, `overlap`, `qty_spans`, `available_span`).
+
+**Changed**
+- **dd-mm-yyyy everywhere** (was yyyy-mm-dd): Chemistry heat drill-down (subtitle, coil table, its CSV), chart tooltips, Chemistry CSVs,
+  disposition CSV exports (full CSV and drill-down export), Admin record tables / import previews and chemistry import warnings.
+
+**Files**: `chem_spc.py`, `server.py`, `admin.html`, `index.html`, `src/js/21-chem-spc.js`, `src/css/16-chem-spc.css`.
+
 ## Chemistry SPC display polish — no version bump (2026-10-02, eleventh pass)
 
 **Changed**

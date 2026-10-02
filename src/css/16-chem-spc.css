@@ -258,3 +258,22 @@ html[data-theme="dark"] .chem-multi .chem-pblock-t{background:linear-gradient(13
 .chem-el-trendline .trend{max-width:100%}
 .chem-el-abs{display:inline}
 .chem-table td.chem-cap-v{font-weight:800}
+
+/* Heat / date window banner (Heat Qty = Last N): one line per window, notes underneath */
+.period-banner.period-banner-multi{display:flex;flex-direction:column;gap:4px;line-height:1.45;}
+.period-banner-multi .pb-line{overflow-wrap:anywhere;}
+.period-banner-multi .pb-note{font-size:12.5px;color:var(--muted);}
+.period-banner-multi .pb-note[title]{cursor:help;}
+/* Heat Qty dropdown carries a date span ("Last 50 · 12-Jun → 03-Jul"): keep the trigger on one line, cut with an ellipsis if the column is narrow */
+.filter-field[data-chem-key="last_n"] .filter-trigger span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.filter-field[data-chem-key="last_n"] .filter-option{white-space:nowrap;}
+/* Print header (Ctrl+P / Save as PDF): selection + heat / date window, because the printed page has no filter bar */
+.chem-print-head{display:none;}
+@media print{
+  .chem-print-head{display:block;border-bottom:2px solid #183A58;margin:0 0 12px;padding:0 0 8px;font-size:12px;color:#1c2b3a;}
+  .chem-print-head .cph-title{font-size:18px;font-weight:800;color:#183A58;}
+  .chem-print-head .cph-sel{font-weight:700;margin:2px 0 6px;}
+  .chem-print-head .cph-note{color:#5b6c82;}
+  .chem-print-head .cph-date{margin-top:4px;color:#5b6c82;font-size:11px;}
+  #tab-chem .period-banner{display:none!important;}
+}

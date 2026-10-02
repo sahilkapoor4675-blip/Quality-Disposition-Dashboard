@@ -262,6 +262,63 @@ def filter_by_period(recs, flt):
     return out
 
 
+def fmt_dmy(iso):
+    """'2026-06-12' -> '12-06-2026' (the date format shown everywhere to the user); anything else is returned unchanged."""
+    t = str(iso or "")
+    return "%s-%s-%s" % (t[8:10], t[5:7], t[0:4]) if re.match(r"^\d{4}-\d{2}-\d{2}", t) else t
+
+
+# ----------------------------------------------------------------------------- heat / date window of a selection
+# "Last 50 heats" is a heat-number window; the dates of those heats are shown next to it so the reader can see WHICH time span the Cpk covers.
+# Heats run in heat-number order, not date order, so the span is the MIN / MAX cast date of the window, never the first / last heat's date.
+QTY_STEPS = (10, 20, 30, 50, 100, 200)
+
+
+def _iso_ok(v):
+    try:
+        _dt.date.fromisoformat(str(v)[:10]); return True
+    except (TypeError, ValueError):
+        return False
+
+
+def window_of(ordered):
+    """Heat range + date span of records ALREADY in heat-number order. Dates are ISO 'YYYY-MM-DD' ('' = none)."""
+    ordered = list(ordered or [])
+    dates = sorted(str(r.get("cast_date"))[:10] for r in ordered if r.get("cast_date") and _iso_ok(r.get("cast_date")))
+    lo, hi = (dates[0], dates[-1]) if dates else ("", "")
+    days = ((_dt.date.fromisoformat(hi) - _dt.date.fromisoformat(lo)).days + 1) if dates else 0
+    return {"n": len(ordered), "first_heat": ordered[0]["heat_no"] if ordered else "", "last_heat": ordered[-1]["heat_no"] if ordered else "",
+            "date_min": lo, "date_max": hi, "days": days, "undated": len(ordered) - len(dates)}
+
+
+def windows_overlap(a, b):
+    """True when the date spans of two windows really intersect (a shared boundary day is normal and does not count)."""
+    if not a or not b or not a.get("date_min") or not b.get("date_min"):
+        return False
+    return b["date_max"] > a["date_min"] and b["date_min"] < a["date_max"]
+
+
+def qty_spans(ordered_full, extra=()):
+    """For every Heat Qty option: how many heats it really takes and the date span of those heats (the N highest heat numbers)."""
+    out = []
+    for n in (0,) + QTY_STEPS + tuple(x for x in extra if x and x not in QTY_STEPS):
+        w = window_of(ordered_full[-n:] if n else ordered_full)
+        out.append({"n": n, "heats": w["n"], "date_min": w["date_min"], "date_max": w["date_max"]})
+    return out
+
+
+def merge_windows(ws):
+    """One combined window for several grades (Grade = All): heat range only when there is a single grade, since heat numbers of different grades do not form one range."""
+    ws = [w for w in ws if w and w.get("n")]
+    if not ws:
+        return {"n": 0, "first_heat": "", "last_heat": "", "date_min": "", "date_max": "", "days": 0, "undated": 0}
+    los = [w["date_min"] for w in ws if w.get("date_min")]; his = [w["date_max"] for w in ws if w.get("date_max")]
+    lo, hi = (min(los), max(his)) if los else ("", "")
+    return {"n": sum(w["n"] for w in ws), "first_heat": ws[0]["first_heat"] if len(ws) == 1 else "", "last_heat": ws[0]["last_heat"] if len(ws) == 1 else "",
+            "date_min": lo, "date_max": hi, "days": ((_dt.date.fromisoformat(hi) - _dt.date.fromisoformat(lo)).days + 1) if los else 0,
+            "undated": sum(w.get("undated", 0) for w in ws)}
+
+
 def period_options(recs):
     """Distinct periods present in recs in CHRONOLOGICAL order (oldest first, like the main dashboard's Month / Week / Quarter / FY filters)."""
     mo, wk, qt, fy = {}, {}, set(), set()
@@ -885,11 +942,11 @@ def validate_rows(raw_rows, existing=None, specs=None, max_issues=400):
         if dnote == "unreadable":
             issue("warn", "bad_date", f"Date '{r.get('cast_date')}' could not be read; the heat is imported without a date (it will not appear under Month/Week/Quarter/FY filters)", r, heat)
         elif dnote == "guessed":
-            issue("warn", "date_guess", f"Date typed as the number {r.get('cast_date')}; read as {rec['cast_date']} (dd.mm.yyyy). Please confirm it in the source file", r, heat)
+            issue("warn", "date_guess", f"Date typed as the number {r.get('cast_date')}; read as {fmt_dmy(rec['cast_date'])} (dd-mm-yyyy). Please confirm it in the source file", r, heat)
         elif dnote == "blank":
             issue("info", "no_date", "Date is blank; the heat is imported without a date", r, heat)
         if rec["cast_date"] and rec["cast_date"] > _dt.date.today().isoformat():
-            issue("warn", "future_date", f"Date {rec['cast_date']} is in the future; check the day/month/year in the source (the heat is still imported with this date)", r, heat)
+            issue("warn", "future_date", f"Date {fmt_dmy(rec['cast_date'])} is in the future; check the day/month/year in the source (the heat is still imported with this date)", r, heat)
         rec["denomination"] = norm_denom(r.get("denomination"))
         rec["analyst"] = re.sub(r"\s+", " ", str(r.get("analyst") or "")).strip().upper()
         rec["hardness"] = "" if r.get("hardness") is None else str(r.get("hardness")).strip()
