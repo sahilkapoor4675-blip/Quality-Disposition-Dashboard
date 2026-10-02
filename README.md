@@ -183,6 +183,12 @@ The field-name hover tag is enabled across the main dashboard and Admin UI, incl
 - With **Heat Qty (Last N)** the banner shows the heat range and the min / max cast date of the current window and of the previous N heats it is compared with; the Heat Qty dropdown shows each option's date span; notes cover fewer heats than N, heats without a cast date and overlapping dates. The same text heads the Chemistry CSVs and the print / Save-as-PDF view. Built in `chem_spc.window_of()`; returned as `window` by `/api/chem/spc`.
 - Dates are shown **dd-mm-yyyy** in tables, tooltips, drill-downs, CSV exports and Admin tables (stored internally as ISO).
 
+### Chemistry SPC — drill-down, MR note and card layout (2026-10-02)
+- **Histogram bars are clickable**: a bar opens the list of heats in that value range inside the Chemistry heat dialog (`openChemBin`); a row opens the usual heat drill-down. *Export Selected Records* exports the bin list. Bins with 0 heats are not clickable.
+- **MR chart** has a "How to read this" note: an orange dot is a moving range above 3.267 x MR-bar, i.e. a sudden jump versus the previous heat. It is a stability signal, not an out-of-spec result.
+- **Element cards**: the Prev line and the trend chip always stack (Prev on top, chip below). **Heat drill-down Status** wraps (`OUT OF SPEC` / `ABOVE USL`) so no horizontal scroll is needed.
+- **Capability table**: header icon above label on every column; the table has no CSV buttons. The Cpk table and Heat data CSVs are in the header **Export** dialog only.
+
 ### Chemistry SPC — data rules
 - **Cast dates:** Month / Week / Quarter / Fin. Year come from the stored `cast_date` (the file's Date column, read on import; if no header says "Date", a column where most cells are real dates is used). Heats imported without a date have empty period lists — the tab says so; re-import the chemistry file (heats update in place, no duplicates) to fill them. Heat Qty (last N) and its trend work without dates.
 - **Chemistry vs Disposition panel:** read-only comparison of reject % / defect % on coils of in-spec vs out-of-spec heats, joined on `heat_no`; an empty card means no such heat exists in the selection or none has inspection data yet.

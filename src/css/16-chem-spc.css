@@ -277,3 +277,23 @@ html[data-theme="dark"] .chem-multi .chem-pblock-t{background:linear-gradient(13
   .chem-print-head .cph-date{margin-top:4px;color:#5b6c82;font-size:11px;}
   #tab-chem .period-banner{display:none!important;}
 }
+
+/* Fix: Prev line and the change chip always stack the same way (Prev on top, trend chip below) on every card. */
+.chem-el-trendline{flex-direction:column;align-items:flex-start;flex-wrap:nowrap;gap:3px;overflow:visible}
+.chem-el-trendline .prev,.chem-el-trendline .trend{white-space:nowrap;max-width:100%}
+
+/* Heat drill-down: Status never runs past the table edge - the text wraps to two lines (OUT OF SPEC / ABOVE USL). */
+.chem-drill-params{table-layout:auto;width:100%}
+.chem-drill-params th:last-child,.chem-drill-params td:last-child{min-width:150px;width:150px}
+.chem-drill-params td.chem-bad{white-space:normal;line-height:1.25}
+.chem-drill-params td.chem-bad small{display:block;font-size:11px;font-weight:700;letter-spacing:.2px;opacity:.9}
+
+/* Capability table header: icon on top, label below, every column centred the same way. */
+.chem-table thead th{text-align:center;vertical-align:middle;line-height:1.2}
+.chem-table thead th .chem-th-ic{display:block;height:18px;line-height:18px;font-size:14px;margin:0 auto 2px}
+.chem-table thead th .chem-th-tx{display:block;white-space:normal}
+.chem-table thead th:first-child{text-align:center}
+
+.chem-mr-note{margin:8px 4px 0;padding:8px 12px;border-radius:8px;background:rgba(217,119,6,.08);border-left:3px solid #D97706;color:var(--muted);font-size:12.5px;line-height:1.5}
+.chem-mr-note b{color:var(--heading)}
+.chem-mr-note b[style]{color:#D97706!important}

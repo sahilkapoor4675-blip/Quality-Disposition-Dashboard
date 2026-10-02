@@ -1,3 +1,29 @@
+## Chemistry SPC UI fixes — no version bump (2026-10-02, thirteenth pass)
+
+**Fixed**
+- **Element cards: trend chip position.** The `% change (± value)` chip sat beside the Prev value on some cards and below it on others
+  (it only wrapped when it did not fit). The Prev line and the chip now always stack the same way (Prev on top, chip below) on every card,
+  for Cpk and Ppk alike.
+- **Heat drill-down: Status column ran past the table edge** (horizontal scroll needed for `OUT OF SPEC · ABOVE USL`). The status now wraps to two
+  lines (`🚩 OUT OF SPEC` / `ABOVE USL`) in a fixed-width column. Same format in the new histogram bin list.
+- **Capability table header:** icon and label were misaligned from column to column. Every header is now icon on top, label below, centred.
+
+**Added**
+- **Histogram drill-down.** Clicking a histogram bar opens the heats that fall inside that value range (heat, cast date, value, status, coils,
+  reject %); click a heat for its full chemistry + coil disposition. *Export Selected Records* downloads the bin's list. Empty bars are not clickable;
+  the tooltip says "click to see heats".
+- **Moving Range chart: "How to read this" note** under the chart. It explains that a dot above the limit (3.267 x MR-bar, value shown) is a sudden jump
+  from the previous heat, lists likely causes (charge / raw-material change, furnace practice, sampling or analysis error), states that it is a process
+  stability signal and not an out-of-spec result, and shows how many jumps the current selection has. Tooltip wording is now
+  `above UCL: big jump vs previous heat`.
+
+**Removed**
+- **"Cpk table (CSV)" / "Heat data (CSV)" buttons from the Capability table.** Both downloads remain in the header **Export** dialog.
+
+**Tests**: `tests/test_chem_spc.py` now checks that the CSV exports live only in the header Export dialog. `test_chem_spc.py` and `static_checks.py` pass.
+
+**Files**: `src/js/21-chem-spc.js`, `src/css/16-chem-spc.css`, `tests/test_chem_spc.py`, `README.md`, `CHANGELOG.md`.
+
 ## Chemistry SPC: heat / date window for "Heat Qty (Last N)" + dd-mm-yyyy dates — no version bump (2026-10-02, twelfth pass)
 
 **Added**
