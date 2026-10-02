@@ -44,6 +44,7 @@ function goToDrillLevel(i){
 function renderDrillPage(page=1){
   const {metric,title,extra}=currentDrill(), modal=document.getElementById('drillModal'), content=document.getElementById('drillContent'); if(!modal||!content)return;
   currentDrill().page=page;
+  if(typeof QDHF!=='undefined') QDHF.resetDrill();   // header filters belong to one loaded drill-down: drop them while a new one loads
   const dt=document.getElementById('drillTitle');
   if(dt){ const dtt=dt.querySelector('.drill-title-text'); (dtt||dt).textContent=title||'Underlying Records'; }
   const subEl=document.getElementById('drillSubtitle'); if(subEl) subEl.textContent=activeFilterSummary();
@@ -58,14 +59,8 @@ function renderDrillPage(page=1){
     const scEl=document.getElementById('drillScope');
     if(scEl) scEl.textContent=(data.scope||'')+' • '+Number(data.row_count||data.rows?.length||0).toLocaleString()+' records';
     if(!data.rows||!data.rows.length){content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('No underlying records found for this KPI/selection.','Try a wider date range or clear a filter.')+'</div>';return;}
-    const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    const fmtDate=v=>{const s=String(v||''); if(/^\d{4}-\d{2}-\d{2}/.test(s)){const [y,m,d]=s.slice(0,10).split('-'); return `${d}-${m}-${y}`;} return s;};
-    const heads=['Date','Heat No','Batch No','Work Center','Grade','Main Defect','Defect Intensity','Decision','Weight (MT)'];
-    let html='<div class="table-scroll"><table class="drill-table"><thead><tr>'+heads.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
-    data.rows.forEach(r=>{const heat=esc(r.heat_no); html+=`<tr><td>${esc(fmtDate(r.insp_lot_date))}</td><td><button class="heat-detail-btn" type="button" data-heat="${heat}">${heat||'—'}</button></td><td>${esc(r.batch_no||r.coil_lot)}</td><td>${esc(r.work_center)}</td><td>${esc(r.grade)}</td><td>${esc(r.main_defect)}</td><td>${esc(r.defect_intensity||'—')}</td><td>${esc(r.quality_decision)}</td><td>${Number(r.output_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr>`});
-    html+=`</tbody><tfoot><tr class="grand-total-row"><td colspan="2">Grand Total — ${Number(data.count||0).toLocaleString()} coils</td><td></td><td></td><td></td><td></td><td></td><td>Records: ${Number(data.row_count||0).toLocaleString()}</td><td>${Number(data.total_weight||0).toLocaleString(undefined,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr></tfoot></table></div>`;
-    if(Number(data.total_pages||1)>1) html+=`<div class="drill-pagination"><button type="button" data-drill-page="${Math.max(1,Number(data.page||1)-1)}" ${Number(data.page||1)<=1?'disabled':''}>‹ Previous</button><span>Page ${Number(data.page||1)} of ${Number(data.total_pages||1)}</span><button type="button" data-drill-page="${Math.min(Number(data.total_pages||1),Number(data.page||1)+1)}" ${Number(data.page||1)>=Number(data.total_pages||1)?'disabled':''}>Next ›</button></div>`;
-    content.innerHTML=html;
+    // Table + Excel-style header filters (src/js/21-drill-header-filters.js) — same columns, rows, totals and pagination as before.
+    QDHF.renderDrill(content,data,{metric,extra,cntEl});
   }).catch(e=>{
     content.innerHTML='<div class="drill-empty">'+emptyStateMarkup('Unable to load records.',String(e.message||e),'error')+'</div>';
     if(cntEl){ cntEl.textContent='Error'; cntEl.classList.remove('loading-pulse-text'); }
