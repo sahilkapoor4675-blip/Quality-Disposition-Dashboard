@@ -1,13 +1,14 @@
 /* 05-typography-layout-drilldown.css — Card headings, global typography/layout, wide screens, drill-down modal. Bundled into /app.css in filename order (cascade order matters); see README. */
 /* ================================================================
    V64.6 CARD-HEADING FINISH
-   Only dashboard analytics cards use this treatment. QCR, Admin, drills and
+   Only dashboard analytics cards use this treatment (the Chemistry SPC panels share it, see the #tab-chem selectors). QCR, Admin, drills and
    other section headers are intentionally excluded to avoid visual drift.
    ================================================================ */
 #tab-dashboard .panel > h3,
 #tab-wcgrade .panel > h3,
 #tab-defects .panel > h3,
-#tab-weekly .panel > h3{
+#tab-weekly .panel > h3,
+#tab-chem .panel > h3{
   position:relative;
   overflow:hidden;
   margin:0 !important;
@@ -31,7 +32,8 @@
 #tab-dashboard .panel > h3::before,
 #tab-wcgrade .panel > h3::before,
 #tab-defects .panel > h3::before,
-#tab-weekly .panel > h3::before{
+#tab-weekly .panel > h3::before,
+#tab-chem .panel > h3::before{
   content:"";
   position:absolute;
   left:10px;
@@ -53,7 +55,8 @@
 html[data-theme="dark"] #tab-dashboard .panel > h3,
 html[data-theme="dark"] #tab-wcgrade .panel > h3,
 html[data-theme="dark"] #tab-defects .panel > h3,
-html[data-theme="dark"] #tab-weekly .panel > h3{
+html[data-theme="dark"] #tab-weekly .panel > h3,
+html[data-theme="dark"] #tab-chem .panel > h3{
   background:linear-gradient(135deg,#142541 0%,#173a63 62%,#194b78 100%) !important;
   color:#F2F7FF !important;
   border-bottom-color:#2A5A86 !important;
@@ -62,7 +65,8 @@ html[data-theme="dark"] #tab-weekly .panel > h3{
 html[data-theme="dark"] #tab-dashboard .panel > h3::before,
 html[data-theme="dark"] #tab-wcgrade .panel > h3::before,
 html[data-theme="dark"] #tab-defects .panel > h3::before,
-html[data-theme="dark"] #tab-weekly .panel > h3::before{
+html[data-theme="dark"] #tab-weekly .panel > h3::before,
+html[data-theme="dark"] #tab-chem .panel > h3::before{
   background:linear-gradient(180deg,#8fd0ff 0%,#4DA3FF 52%,#2483ce 100%);
   box-shadow:0 0 8px rgba(77,163,255,.28);
 }

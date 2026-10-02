@@ -158,9 +158,12 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-good b{color:#8FE
 html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-amber b{color:#F3D188}
 html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3A3}
 /* Grade = All: element cards grouped per grade; Parameter = All: one chart per element. Grade-only panels (charts, tables) are hidden while Grade = All. */
-.chem-grade-head{display:flex;align-items:baseline;gap:10px;margin:14px 2px 8px;font-size:15px;color:var(--heading)}
-.chem-grade-head span{font-size:12.5px;font-weight:600;color:var(--muted)}
-.chem-pblock{margin:0 0 14px}.chem-pblock-t{font-weight:800;font-size:13.5px;color:var(--heading);margin:2px 2px 6px}
+.chem-grade-head{display:flex;align-items:center;gap:12px;margin:16px 0 10px;padding:9px 16px;border-radius:10px;border:1px solid #B7D5EA;border-left:4px solid #2388C9;background:linear-gradient(135deg,#E6F2FB 0%,#D3E8F7 100%);font-family:'DM Sans','Manrope',sans-serif;font-size:22px;font-weight:800;line-height:1.25;color:#1B5E8E}
+.chem-grade-head b{font-weight:800}
+.chem-grade-head span{font-family:'Manrope',sans-serif;font-size:14px;font-weight:700;color:#4A7FA5}
+html[data-theme="dark"] .chem-grade-head{background:linear-gradient(135deg,#14304d 0%,#1a3f63 100%);border-color:#24507a;border-left-color:#4DA3FF;color:#8FC6EE}
+html[data-theme="dark"] .chem-grade-head span{color:#A9B8CE}
+.chem-pblock{margin:0 0 14px}.chem-pblock-t{font-weight:800;font-size:19px;color:var(--heading);margin:2px 2px 6px}
 #tab-chem.chem-all-grades .chem-grade-only{display:none!important}
 
 /* ---- LOW / MID / HIGH are identical on every card: shown once as a note above the cards ---- */
@@ -197,24 +200,17 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3
 /* ---- Presentation mode, Parameter = All: each element chart gets the full stage; scroll down for the next element (nothing is cut off) ---- */
 .analytics-presentation-panel>.chart-scroll.chem-multi{display:flex;flex-direction:column;gap:14px;overflow-y:auto;overflow-x:hidden;padding:8px 14px}
 .analytics-presentation-panel .chem-multi .chem-pblock{flex:0 0 100%;min-height:0;display:flex;flex-direction:column;padding:8px 12px 10px}
-.analytics-presentation-panel .chem-multi .chem-pblock-t{flex:0 0 auto;margin:0 0 4px;padding-bottom:6px}
+.analytics-presentation-panel .chem-multi .chem-pblock-t{flex:0 0 auto;margin:-8px -12px 6px;padding:8px 12px}
 .analytics-presentation-panel .chem-multi .chem-pchart{flex:1 1 0;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .analytics-presentation-panel .chem-multi .chem-pchart>.legend{flex:0 0 auto;margin:0 0 4px;padding:2px 8px 6px}
 .analytics-presentation-panel .chem-multi .chem-pchart>.chart-svg{flex:1 1 0;min-height:0;width:100%;height:100%;max-width:100%}
 
-/* ---- Parameter = All: element boxes use the dashboard's blue theme, with the same hover lift + glow + sheen as the KPI cards ---- */
-.chem-multi .chem-pblock{position:relative;overflow:hidden;background:linear-gradient(180deg,#E6F2FB 0%,#F3F9FD 100%);border:1px solid #B7D5EA;box-shadow:0 1px 2px rgba(15,42,74,.06),0 4px 12px rgba(35,136,201,.10);transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
-.chem-multi .chem-pblock-t{color:#1B5E8E;border-bottom-color:#B7D5EA}
+/* ---- Parameter = All: the CHART BOX stays plain (normal card background); only the element heading (Cu%, Zn%, Ni%) carries the light-blue band ---- */
+.chem-multi .chem-pblock{position:relative;overflow:hidden;background:var(--card);border:1px solid var(--border);box-shadow:0 1px 2px rgba(15,42,74,.05)}
+.chem-multi .chem-pblock-t{display:flex;align-items:center;margin:-14px -16px 12px;padding:10px 16px;border-bottom:1px solid #B7D5EA;background:linear-gradient(135deg,#E6F2FB 0%,#D3E8F7 100%);color:#1B5E8E;font-family:'DM Sans','Manrope',sans-serif;font-size:19px;font-weight:800;letter-spacing:.1px;line-height:1.3}
 .chem-multi .chem-pblock .chem-pchart{background:transparent!important;box-shadow:none;border:0}
-.chem-multi .chem-pblock:hover{transform:translateY(-3px);border-color:#6FB0DC;box-shadow:0 4px 8px rgba(15,42,74,.09),0 18px 34px rgba(35,136,201,.24),0 0 0 1px rgba(35,136,201,.16),inset 0 1px 0 rgba(255,255,255,1);z-index:5}
-.chem-multi .chem-pblock:hover::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.55) 50%,transparent 58%);background-size:250% 100%;animation:kpiSheen .85s ease forwards}
-.analytics-presentation-panel .chem-multi .chem-pblock:hover{transform:none;box-shadow:0 1px 2px rgba(15,42,74,.06),0 4px 12px rgba(35,136,201,.10)}
-.analytics-presentation-panel .chem-multi .chem-pblock:hover::after{animation:none;background:none}
-html[data-theme="dark"] .chem-multi .chem-pblock{background:linear-gradient(180deg,#14304d 0%,#0f2740 100%);border-color:#24507a;box-shadow:0 1px 2px rgba(0,0,0,.3),0 4px 12px rgba(0,0,0,.35)}
-html[data-theme="dark"] .chem-multi .chem-pblock-t{color:#8FC6EE;border-bottom-color:#24507a}
-html[data-theme="dark"] .chem-multi .chem-pblock:hover{border-color:#3d7db3;box-shadow:0 4px 10px rgba(0,0,0,.35),0 16px 38px rgba(0,0,0,.5)}
-html[data-theme="dark"] .chem-multi .chem-pblock:hover::after{background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.16) 50%,transparent 58%);background-size:250% 100%}
-@media(prefers-reduced-motion:reduce){.chem-multi .chem-pblock:hover{transform:none}.chem-multi .chem-pblock:hover::after{animation:none;background:none}}
+html[data-theme="dark"] .chem-multi .chem-pblock{background:var(--card);border-color:var(--border);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+html[data-theme="dark"] .chem-multi .chem-pblock-t{background:linear-gradient(135deg,#14304d 0%,#1a3f63 100%);border-bottom-color:#24507a;color:#8FC6EE}
 
 /* ---- Heat drill-down: out-of-spec rows (Std or Aim) + row hover like the other dashboard tables ---- */
 .chem-drill-params tbody tr{transition:background-color .15s ease}
@@ -222,3 +218,28 @@ html[data-theme="dark"] .chem-multi .chem-pblock:hover::after{background:linear-
 .chem-drill-params tbody tr.chem-row-bad{background:rgba(220,38,38,.07)}
 .chem-drill-params tbody tr.chem-row-bad:hover{background:rgba(220,38,38,.13)}
 .chem-drill-params td.chem-bad{font-weight:800;white-space:nowrap}
+
+/* ---- One font system for the whole tab (same as the other tabs) ----
+   Headings: DM Sans | KPI-card text + numbers: Space Grotesk | tables, notes, buttons, banners: Inter 14px | chart legends: Manrope 14px.
+   No text on this tab is smaller than 12px any more (it used to mix Bahnschrift / Manrope / Space Grotesk / Inter at 9.5-13px). */
+.kpi-card.chem-el-kpi .chem-el-bv{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:600;letter-spacing:-.6px}
+@media(min-width:1500px){.kpi-card.chem-el-kpi .chem-el-bv{font-size:32px}}
+@media(max-width:700px){.kpi-card.chem-el-kpi .chem-el-bv{font-size:28px}}
+.chem-el-bk{font-family:'Space Grotesk',sans-serif;font-size:14px}
+.chem-el-big small,.chem-el-nm small{font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600}
+.chem-el-nm{font-family:'Space Grotesk',sans-serif;font-size:14px}
+.kpi-card.chem-el-kpi .kpi-status{font-family:'Space Grotesk',sans-serif;font-size:12px}
+.kpi-card.chem-el-kpi .chem-el-trendline .prev,.kpi-card.chem-el-kpi .kpi-prev-val{font-family:'Space Grotesk',sans-serif;font-size:13px}
+.kpi-card.chem-el-kpi .chem-el-trendline .prev b{font-size:13px}
+.kpi-card.chem-el-kpi .chem-el-trendline .trend{font-family:'Space Grotesk',sans-serif;font-size:13px}
+.chem-band-note{font-family:'Inter',system-ui,sans-serif;font-size:14px}
+.chem-band{font-family:'Space Grotesk',sans-serif;font-size:13px}
+.chem-note-strip,.chem-foot,.chem-muted{font-family:'Inter',system-ui,sans-serif;font-size:14px}
+.chem-h3-sub{font-family:'DM Sans','Manrope',sans-serif;font-size:13px}
+.chem-legend{font-family:'Manrope',sans-serif;font-size:14px;font-weight:600}
+.chem-chip{font-size:13px}
+.chem-btn,.chem-oos-bar input{font-family:'Inter',system-ui,sans-serif;font-size:14px}
+.chem-h4{font-family:'DM Sans','Manrope',sans-serif;font-size:16px;font-weight:800}
+.chem-table tr.chem-sep td{font-size:12.5px}
+#tab-chem .chart-svg text{font-family:'Manrope',sans-serif}
+
