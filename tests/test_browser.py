@@ -175,6 +175,21 @@ def run():
             page.click("#tabs button:nth-child(1)")
             page.wait_for_timeout(400)
 
+            # Drill-down header filters (Excel-style): bold/centred headers, a funnel per column, and a filter must work on ALL pages of the drill-down.
+            page.click(".kpi-card >> nth=0"); page.wait_for_timeout(2500)
+            assert page.locator("#drillContent .qdhf-btn").count() == 9, "every drill-down column header needs a filter button"
+            _th = page.evaluate("() => { const c = getComputedStyle(document.querySelector('#drillContent thead th')); return [c.fontWeight, c.textAlign, c.verticalAlign]; }")
+            assert _th == ["800", "center", "middle"], f"drill-down header must be bold, centred and middle-aligned, got {_th}"
+            _total = int(page.inner_text("#drillCount").split()[0].replace(",", ""))
+            page.click("#drillContent .qdhf-btn[data-qdhf-col='3']"); page.wait_for_selector(".qdhf-pop .qdhf-list label", timeout=20000)
+            page.click(".qdhf-pop .qdhf-all"); page.click(".qdhf-pop .qdhf-list label >> nth=0 >> input"); page.click(".qdhf-pop .qdhf-ok"); page.wait_for_timeout(500)
+            _n = page.locator("#drillContent tbody tr").count()
+            assert 0 < _n and "of" in page.inner_text("#drillCount") and _n < _total, "a drill-down column filter must narrow the records (across all pages)"
+            assert len(set(page.eval_on_selector_all("#drillContent tbody tr td:nth-child(4)", "e => e.map(x => x.textContent)"))) == 1, "filtered rows must all match the chosen value"
+            page.click("#qdhfBar .qdhf-clear-all"); page.wait_for_timeout(400)
+            assert page.locator("#drillContent tbody tr").count() >= 1 and page.locator("#qdhfBar").is_hidden(), "Clear all filters must restore the normal drill-down"
+            page.click("#drillCloseBtn"); page.wait_for_timeout(300)
+
             # Cascading filters (#4): narrowing one dropdown must narrow the others.
             def options_for(key):
                 return page.eval_on_selector_all(
@@ -221,7 +236,7 @@ def run():
             assert page.locator('#chemFilterSummaryBar').count() == 1, 'Chemistry selection summary missing'
             assert page.locator('#chemPeriodBanner').count() == 1, 'Chemistry period banner missing'
             assert page.locator('#tab-chem .chem-el-kpi').count() >= 1, 'Chemistry element KPI cards did not render'
-            assert page.locator('#tab-chem .chem-el-kpi .sparkline').count() >= 1, 'Chemistry KPI sparkline parity missing'
+            assert page.locator('#tab-chem .chem-el-kpi .kpi-status').count() >= 1, 'Chemistry KPI status pill parity missing'   # (the cards no longer carry a sparkline; the old assertion on it was stale)
             # Every Chemistry filter starts on All (like the dashboard filters): Grade = All shows per-grade cards and no pooled charts.
             _trig = lambda k: page.inner_text(f'#chemTopBar [data-chem-key="{k}"] .filter-trigger span')
             assert all(_trig(k) == 'All' for k in ('spec', 'param', 'month', 'week', 'quarter', 'fy', 'last_n')), 'Chemistry filters do not all start on All'
