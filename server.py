@@ -10,6 +10,7 @@ import json
 import uuid
 import math
 import gzip
+import zlib
 import os
 import sys
 import re
@@ -164,6 +165,7 @@ _ASSET_ROOT = os.path.dirname(os.path.abspath(__file__))
 # server.py is served as before.
 _BUNDLED_ASSETS = {"app.js": ("src/js", ".js"), "app.css": ("src/css", ".css")}
 _BUNDLE_CACHE = {}
+_GZ_STATIC_CACHE = {}   # path -> ((len, crc32), gzip bytes) for /app.js, /app.css, /sfx.js
 
 def _bundle_parts(name):
     spec = _BUNDLED_ASSETS.get(name)
@@ -2355,6 +2357,16 @@ def _cache_get(key):
             RESPONSE_CACHE.pop(key, None)
             RESPONSE_CACHE_BYTES = max(0, RESPONSE_CACHE_BYTES - int(hit[2]))
     return None
+
+def _cached_compute(prefix, filters, fn):
+    """Same short-lived, mutation-cleared cache the QCR endpoint already uses (RESPONSE_CACHE_TTL, wiped by _cache_clear() on
+    every import / edit), so repeated identical dashboard requests (tab switches, Compare Periods panes, several viewers) skip the database."""
+    key = prefix + ":" + json.dumps(filters, sort_keys=True, separators=(",", ":"), default=str)
+    hit = _cache_get(key)
+    if hit is None:
+        hit = fn()
+        _cache_put(key, hit)
+    return hit
 
 def _cache_put(key, payload):
     global RESPONSE_CACHE_BYTES
@@ -5575,9 +5587,19 @@ class Handler(BaseHTTPRequestHandler):
     def _compression_allowed(self):
         return "gzip" in self.headers.get("Accept-Encoding", "").lower()
 
-    def _write_body(self, body, compress=True):
+    def _write_body(self, body, compress=True, static_key=None):
         if compress and len(body) >= 512 and self._compression_allowed():
-            encoded = gzip.compress(body, compresslevel=6, mtime=0)
+            if static_key is not None:
+                # app.js / app.css never change between deploys: compress once (max level), not on every first visit.
+                sig = (len(body), zlib.crc32(body))
+                hit = _GZ_STATIC_CACHE.get(static_key)
+                if hit and hit[0] == sig:
+                    encoded = hit[1]
+                else:
+                    encoded = gzip.compress(body, compresslevel=9, mtime=0)
+                    _GZ_STATIC_CACHE[static_key] = (sig, encoded)
+            else:
+                encoded = gzip.compress(body, compresslevel=6, mtime=0)
             if len(encoded) < len(body):
                 self.send_header("Content-Encoding", "gzip")
                 self.send_header("Vary", "Accept-Encoding")
@@ -5769,7 +5791,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "public, max-age=31536000, immutable")
                 self.send_header("X-App-Version", APP_VERSION)
                 self.send_header("X-Content-Type-Options", "nosniff")
-                self._write_body(body)
+                self._write_body(body, static_key=path)
                 return
             else:
                 self.send_error(404)
@@ -6017,38 +6039,40 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/kpis":
             filters = _filters_from_qs(qs)
             try:
-                self._send_json(compute_kpis(filters))
+                self._send_json(_cached_compute("kpis", filters, lambda: compute_kpis(filters)))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/work_center_grade":
             filters = _filters_from_qs(qs)
             try:
-                self._send_json(compute_work_center_grade(filters))
+                self._send_json(_cached_compute("wcg", filters, lambda: compute_work_center_grade(filters)))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/defect_analysis":
             filters = _filters_from_qs(qs)
             try:
-                self._send_json(compute_defect_analysis(filters))
+                self._send_json(_cached_compute("defan", filters, lambda: compute_defect_analysis(filters)))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/monthly_trend":
             filters = _filters_from_qs(qs)
             try:
-                self._send_json(compute_monthly_trend(filters))
+                self._send_json(_cached_compute("mtrend", filters, lambda: compute_monthly_trend(filters)))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/period_trend":
             filters = _filters_from_qs(qs)
             try:
-                weekly_d = compute_period_trend(filters)
-                quarterly_d = compute_quarterly_trend(filters)
-                yearly_d = compute_yearly_trend(filters)
-                self._send_json({
-                    "weekly": weekly_d["rows"], "weekly_total": weekly_d["total"],
-                    "quarterly": quarterly_d["rows"], "quarterly_total": quarterly_d["total"],
-                    "yearly": yearly_d["rows"], "yearly_total": yearly_d["total"],
-                })
+                def _period_payload():
+                    weekly_d = compute_period_trend(filters)
+                    quarterly_d = compute_quarterly_trend(filters)
+                    yearly_d = compute_yearly_trend(filters)
+                    return {
+                        "weekly": weekly_d["rows"], "weekly_total": weekly_d["total"],
+                        "quarterly": quarterly_d["rows"], "quarterly_total": quarterly_d["total"],
+                        "yearly": yearly_d["rows"], "yearly_total": yearly_d["total"],
+                    }
+                self._send_json(_cached_compute("ptrend", filters, _period_payload))
             except Exception as e:
                 self._send_json({"error": str(e)}, status=500)
         elif path == "/api/export/excel":

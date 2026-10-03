@@ -434,6 +434,54 @@ def run():
             page.click('#compareCancelBtn'); page.wait_for_timeout(300)
             page.keyboard.press('6'); page.wait_for_timeout(1200)
 
+            # ---- Assistant voice: nothing may keep talking / listening after the person leaves it ----
+            # (regression: a pop-up's 🔊 kept playing after the pop-up / Help mode was closed, a second tap did not stop it,
+            #  and every tap on 🎤 created a new recogniser that was never stopped). speechSynthesis / SpeechRecognition are
+            #  replaced by recorders, because a headless browser has no real voice.
+            vctx = browser.new_context(viewport={"width": 1440, "height": 900})
+            vctx.add_init_script("""(() => { const T = window.__tts = {speaking: false, log: []}, R = window.__rec = {starts: 0, stops: 0, aborts: 0};
+              window.SpeechSynthesisUtterance = class { constructor(t){ this.text = t; } };
+              Object.defineProperty(window, 'speechSynthesis', {configurable: true, value: {
+                speak(){ T.speaking = true; T.log.push('speak'); }, cancel(){ T.speaking = false; T.log.push('cancel'); }, getVoices(){ return []; }, pause(){}, resume(){} }});
+              window.SpeechRecognition = class { start(){ R.starts++; } stop(){ R.stops++; this.onend && this.onend(); } abort(){ R.aborts++; } }; })();""")
+            vp = vctx.new_page()
+            vp.add_init_script("document.addEventListener('securitypolicyviolation', e => (window.__csp = window.__csp || []).push(e.violatedDirective + ': ' + e.blockedURI));")
+            vp.on("pageerror", lambda e: page_errors.append(f"voice: {str(e)[:300]}"))   # JS errors + CSP only: a blocked external-font request is a network matter, not an app bug
+            vp.goto(BASE + "/", wait_until="load"); vp.wait_for_timeout(1000)
+            vp.click("#introDashboardBtn"); vp.wait_for_timeout(2000)
+            speaking = lambda: vp.evaluate("window.__tts.speaking")
+            def pop_ready(n):
+                vp.click(f".kpi-card >> nth={n}")
+                vp.wait_for_selector("#qaPop:not([hidden]) .qa-pop-body .qa-dots", state="detached", timeout=8000)
+            vp.evaluate("QDAssist.helpMode(true)")
+            pop_ready(0); vp.click('#qaPop [data-qa-p="say"]'); vp.wait_for_timeout(250)
+            assert speaking(), "pop-up 🔊 did not start reading"
+            vp.click('#qaPop [data-qa-p="say"]'); vp.wait_for_timeout(200)
+            assert not speaking(), "tapping the pop-up 🔊 a second time must stop the reading"
+            vp.click('#qaPop [data-qa-p="say"]'); vp.wait_for_timeout(250)
+            vp.click('#qaPop [data-qa-p="close"]')
+            assert not speaking(), "closing the Help pop-up must stop the reading (audio kept playing in the background)"
+            pop_ready(1); vp.click('#qaPop [data-qa-p="say"]'); vp.wait_for_timeout(250)
+            vp.keyboard.press("Escape"); vp.keyboard.press("Escape")
+            assert not speaking(), "Esc / leaving Help mode must stop the reading"
+            vp.evaluate("QDAssist.open('ask')"); vp.wait_for_timeout(400)
+            vp.click("#qaBody [data-qa-say] >> nth=0"); vp.wait_for_timeout(250)
+            assert speaking() and vp.inner_text("#qaBody [data-qa-say] >> nth=0") == "⏹", "message 🔊 must start reading and show a stop icon"
+            vp.evaluate("Object.defineProperty(document, 'visibilityState', {value: 'hidden', configurable: true}); document.dispatchEvent(new Event('visibilitychange'))")
+            assert not speaking(), "hiding the tab must silence the assistant"
+            vp.evaluate("Object.defineProperty(document, 'visibilityState', {value: 'visible', configurable: true})")
+            vp.click("#qaBody [data-qa-say] >> nth=0"); vp.wait_for_timeout(250); vp.click("#qaClose")
+            assert not speaking(), "closing the Assistant panel must stop the reading"
+            vp.evaluate("QDAssist.open('ask')"); vp.wait_for_timeout(300)
+            vp.click("#qaMic"); vp.click("#qaMic")
+            rec = vp.evaluate("window.__rec")
+            assert rec["starts"] == 1 and rec["stops"] == 1, f"🎤 must toggle one recogniser on/off, got {rec}"
+            vp.click("#qaMic"); vp.click("#qaClose")
+            rec = vp.evaluate("window.__rec")
+            assert rec["aborts"] == 1, f"closing the panel must release the microphone, got {rec}"
+            collect_csp(vp, "voice")
+            vctx.close()
+
             # ---- Admin: login, and every sidebar link must highlight itself ----
             page2 = context.new_page()
             watch(page2, "admin")
@@ -484,7 +532,7 @@ def run():
     assert not page_errors, "Uncaught JS error(s): " + "; ".join(page_errors)
     assert not console_errors, "Browser console error(s): " + "; ".join(console_errors)
     print("BROWSER REGRESSION PASS — dashboard load, all tabs, cascading filters, "
-          "empty-selection banner, Chemistry SPC filter cascade + shared-feature parity, admin nav highlighting, CSP-safe admin actions; "
+          "empty-selection banner, Chemistry SPC filter cascade + shared-feature parity, Assistant voice stops when closed, admin nav highlighting, CSP-safe admin actions; "
           "zero CSP violations / console errors / uncaught JS errors.")
 
 

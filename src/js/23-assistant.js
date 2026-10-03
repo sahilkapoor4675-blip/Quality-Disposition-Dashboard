@@ -20,6 +20,72 @@ const fmtK = (k, v) => v == null ? '—' : k.fmt === 'pct' ? pct(v) : k.fmt === 
 const plainLabel = s => String(s || '').replace(/^[^A-Za-z0-9]+/, '').trim();
 const setLangStore = l => { lang = l; try { localStorage.setItem(LS_LANG, l); } catch(e){} };
 
+// ---------------------------------------------------------------- voice: read-aloud (TTS) + voice input (mic)
+// One controller each. Rules: only ONE thing speaks at a time; clicking the same 🔊 again stops it; every way of leaving stops it
+// (close pop-up / panel, Esc, Help mode off, tour step / end, tab or language change, a new question, page hidden or closed);
+// the mic is a real on/off toggle, is released on close, and never submits after the panel has been closed.
+const TTSOK = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+const Voice = (() => {
+  let key = null, gen = 0, timer = null;
+  const mark = () => document.querySelectorAll('[data-qa-say],[data-qa-p="say"]').forEach(b => {
+    const k = b.dataset.qaSay != null ? 'm' + b.dataset.qaSay : 'pop', on = key !== null && k === key;
+    b.classList.toggle('qa-speaking', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.textContent = on ? '⏹' : '🔊';
+  });
+  // Chrome silently stops a long utterance after ~15 s, so the text is read sentence by sentence
+  const chunks = txt => {
+    const s = String(txt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1800), out = []; let cur = '';
+    (s.match(/[^.!?।\n]+[.!?।]*\s*/g) || [s]).forEach(x => { if(cur && (cur + x).length > 170){ out.push(cur); cur = x; } else cur += x; });
+    if(cur.trim()) out.push(cur); return out.map(x => x.trim()).filter(Boolean);
+  };
+  const pickVoice = l => { try { const vs = speechSynthesis.getVoices() || [], w = l.toLowerCase(); return vs.find(v => v.lang && v.lang.toLowerCase() === w) || vs.find(v => v.lang && v.lang.toLowerCase().indexOf(w.slice(0, 2)) === 0) || null; } catch(e){ return null; } };
+  function stop(){
+    gen++; if(timer){ clearTimeout(timer); timer = null; }
+    const was = key !== null; key = null;
+    if(TTSOK){ try { speechSynthesis.cancel(); } catch(e){} }   // always cancel: even if our own state was lost, nothing keeps talking
+    if(was) mark();
+  }
+  function speak(k, text){
+    if(!TTSOK) return false;
+    if(key === k){ stop(); return true; }                       // the same button again = stop
+    stop(); const parts = chunks(text); if(!parts.length) return false;
+    const my = ++gen, L = lang === 'dv' ? 'hi-IN' : 'en-IN'; key = k; mark(); let i = 0;
+    const next = () => {
+      if(my !== gen) return;
+      if(i >= parts.length){ key = null; mark(); return; }
+      const u = new SpeechSynthesisUtterance(parts[i++]); u.lang = L; const v = pickVoice(L); if(v) u.voice = v;
+      u.onend = next; u.onerror = ev => { if(my !== gen) return; if(ev && (ev.error === 'canceled' || ev.error === 'interrupted')) return; key = null; mark(); };
+      try { speechSynthesis.speak(u); } catch(e){ key = null; mark(); }
+    };
+    timer = setTimeout(() => { timer = null; if(my === gen) next(); }, 60);   // Chrome drops a speak() issued in the same tick as cancel()
+    return true;
+  }
+  return {speak, stop, isOn: k => key === k};
+})();
+
+const SRC = window.SpeechRecognition || window.webkitSpeechRecognition;
+const Mic = (() => {
+  let rec = null, tm = null;
+  const ui = () => { const m = $('qaMic'); if(!m) return; const on = !!rec; m.classList.toggle('rec', on); m.setAttribute('aria-pressed', on ? 'true' : 'false');
+    m.title = on ? t('Stop listening', 'Sunna band karo', 'सुनना बंद करें') : t('Speak', 'Bolkar poochho', 'बोलकर पूछें'); };
+  const clear = () => { if(tm){ clearTimeout(tm); tm = null; } };
+  function stop(){ const r = rec; rec = null; clear(); if(r){ r.onresult = r.onend = r.onerror = null; try { r.abort(); } catch(e){ try { r.stop(); } catch(e2){} } } ui(); }   // discard
+  function finish(){ if(rec){ try { rec.stop(); } catch(e){ stop(); } } }                                                                            // stop listening, use what was heard
+  function start(onText, onProblem){
+    if(!SRC) return; stop(); Voice.stop();                      // never listen while it is talking (it would hear itself)
+    const r = new SRC(); let heard = '';
+    r.lang = lang === 'dv' ? 'hi-IN' : 'en-IN'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    r.onresult = ev => { let part = ''; for(let i = ev.resultIndex; i < ev.results.length; i++){ const x = ev.results[i]; if(x.isFinal) heard += x[0].transcript + ' '; else part += x[0].transcript; } if(input) input.value = (heard + part).trim(); };
+    r.onerror = ev => { if(rec === r){ rec = null; clear(); ui(); } onProblem(ev && ev.error); };
+    r.onend = () => { const mine = rec === r; if(mine){ rec = null; clear(); ui(); } const txt = heard.trim(); if(mine && txt && panel && panel.classList.contains('open')) onText(txt); };
+    rec = r; try { r.start(); } catch(e){ rec = null; }
+    ui(); tm = setTimeout(() => { if(rec === r) finish(); }, 20000);   // never leave the microphone open
+  }
+  return {start, stop, finish, isOn: () => !!rec, ui};
+})();
+// leaving the page or hiding the tab must silence everything (this was the "audio keeps playing in the background" bug)
+['pagehide', 'beforeunload'].forEach(ev => window.addEventListener(ev, () => { Voice.stop(); Mic.stop(); }));
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden'){ Voice.stop(); Mic.stop(); } });
+
 // ---------------------------------------------------------------- understanding typed text (English / Hinglish / Devanagari Hindi)
 // Hindi words are mapped to the Roman keywords the router already knows, so every question works in all three scripts.
 const DEVA = [
@@ -399,12 +465,12 @@ function setHelpMode(on){
 let pop = null, popAnswer = null;
 function ensurePop(){
   if(pop) return pop; pop = document.createElement('div'); pop.id = 'qaPop'; pop.className = 'qa-pop'; pop.setAttribute('role', 'dialog'); pop.hidden = true;
-  pop.innerHTML = '<div class="qa-pop-bar"><span class="qa-pop-ico">✨</span><span class="qa-pop-tag"></span><button type="button" data-qa-p="say" title="🔊">🔊</button><button type="button" data-qa-p="close" aria-label="Close">✕</button></div><div class="qa-pop-body"></div><div class="qa-pop-chips"></div><div class="qa-pop-foot"></div>';
+  pop.innerHTML = `<div class="qa-pop-bar"><span class="qa-pop-ico">✨</span><span class="qa-pop-tag"></span>${TTSOK ? '<button type="button" data-qa-p="say" title="🔊" aria-pressed="false">🔊</button>' : ''}<button type="button" data-qa-p="close" aria-label="Close">✕</button></div><div class="qa-pop-body"></div><div class="qa-pop-chips"></div><div class="qa-pop-foot"></div>`;
   document.body.appendChild(pop);
   pop.addEventListener('click', e => {
     const b = e.target.closest('[data-qa-p],[data-qa-chip],[data-qa-kbchip],[data-qa-popact]'); if(!b) return;
     if(b.dataset.qaP === 'close'){ hidePop(); return; }
-    if(b.dataset.qaP === 'say'){ speak({plain: popAnswer && popAnswer.plain}); return; }
+    if(b.dataset.qaP === 'say'){ Voice.speak('pop', popAnswer && popAnswer.plain); return; }
     if(b.dataset.qaP === 'more'){ const r = popAnswer; hidePop(); openPanel('ask'); if(r) addBot(r.r); return; }
     if(b.dataset.qaChip){ const q = b.dataset.qaChip; hidePop(); ask(q, b.textContent); return; }
     if(b.dataset.qaKbchip){ const en = kbById(b.dataset.qaKbchip); hidePop(); openPanel('ask'); addUser(kbTitle(en)); addBot(R(kbHtml(en))); return; }
@@ -416,7 +482,7 @@ function chipHtml(c){ return c.kb ? `<button type="button" data-qa-kbchip="${esc
 const mdHtml = s => s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
 const plainOf = s => s.replace(/\*\*/g, '').replace(/[▲▼•→✅⚠️🎯🩺🔴🟠🟢📍ℹ️👆]/g, ' ');
 function showPop(r, at, loading, anchor){
-  const p = ensurePop(); const body = p.querySelector('.qa-pop-body');
+  Voice.stop(); const p = ensurePop(); const body = p.querySelector('.qa-pop-body');
   if(loading || !r){ p.querySelector('.qa-pop-tag').textContent = t('Explaining…', 'Samjha raha hoon…', 'समझा रहा हूँ…'); body.innerHTML = '<span class="qa-dots"><i></i><i></i><i></i></span>'; p.querySelector('.qa-pop-chips').innerHTML = ''; p.querySelector('.qa-pop-foot').innerHTML = ''; }
   else {
     popAnswer = {r, plain: plainOf(r.html)};
@@ -435,7 +501,7 @@ function place(p, at, anchor){
   else { x = at.x + 14; y = at.y + 14; if(x + pw > W - 8) x = at.x - pw - 14; if(y + ph > H - 8) y = at.y - ph - 14; }
   p.style.left = Math.max(8, Math.min(x, W - pw - 8)) + 'px'; p.style.top = Math.max(8, Math.min(y, H - ph - 8)) + 'px';
 }
-function hidePop(){ if(pop) pop.hidden = true; popAnswer = null; }
+function hidePop(){ Voice.stop(); if(pop) pop.hidden = true; popAnswer = null; }
 
 // ---------------------------------------------------------------- guided tour
 const TOUR = [
@@ -451,6 +517,7 @@ let tourI = -1;
 function startTour(){ setHelpMode(false); closePanel(); tourI = 0; showTour(); }
 function endTour(){ tourI = -1; document.querySelectorAll('.qa-tour-hl').forEach(e => e.classList.remove('qa-tour-hl')); hidePop(); }
 function showTour(){
+  Voice.stop();
   document.querySelectorAll('.qa-tour-hl').forEach(e => e.classList.remove('qa-tour-hl'));
   let i = tourI; while(i < TOUR.length && !document.querySelector(TOUR[i][0])) i++;
   if(i >= TOUR.length){ endTour(); return; } tourI = i;
@@ -469,7 +536,7 @@ document.addEventListener('click', e => {
 });
 
 // ---------------------------------------------------------------- panel UI
-let panel, body, input, chipsEl, helpView, askView, msgs = [], mode = 'ask', speaking = null;
+let panel, body, input, chipsEl, helpView, askView, msgs = [], mode = 'ask';
 function buildPanel(){
   if($('qaPanel')) return;
   panel = document.createElement('aside'); panel.id = 'qaPanel'; panel.className = 'qa-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Quality Assistant'); panel.setAttribute('aria-hidden', 'true');
@@ -491,15 +558,20 @@ function buildPanel(){
   $('qaHelpSearch').addEventListener('input', renderHelpList);
   body.addEventListener('click', e => {
     const c = e.target.closest('[data-qa-act]'); if(c){ const m = msgs[+c.dataset.qaMsg], a = m && m.actions && m.actions[+c.dataset.qaAct]; if(a) a.run(); return; }
-    const s = e.target.closest('[data-qa-say]'); if(s) speak(msgs[+s.dataset.qaSay]);
+    const s = e.target.closest('[data-qa-say]'); if(s){ const m = msgs[+s.dataset.qaSay]; if(m) Voice.speak('m' + s.dataset.qaSay, m.plain); }
   });
   chipsEl.addEventListener('click', e => { const c = e.target.closest('[data-qa-chip],[data-qa-kbchip]'); if(!c) return; if(c.dataset.qaKbchip){ const en = kbById(c.dataset.qaKbchip); addUser(kbTitle(en)); addBot(R(kbHtml(en))); } else ask(c.dataset.qaChip, c.textContent); });
   helpView.addEventListener('click', e => { const b = e.target.closest('[data-qa-kb]'); if(b){ const en = kbById(b.dataset.qaKb); setTab('ask'); addUser(kbTitle(en)); addBot(R(kbHtml(en))); } });
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(SR){ const mic = $('qaMic'); mic.hidden = false; mic.addEventListener('click', () => { try { const r = new SR(); r.lang = lang === 'dv' ? 'hi-IN' : 'en-IN'; r.interimResults = false; mic.classList.add('rec'); r.onresult = ev => { input.value = ev.results[0][0].transcript; ask(input.value); }; r.onend = () => mic.classList.remove('rec'); r.onerror = () => mic.classList.remove('rec'); r.start(); } catch(e){ mic.classList.remove('rec'); } }); }
+  if(SRC){ const mic = $('qaMic'); mic.hidden = false; mic.setAttribute('aria-pressed', 'false');
+    const problem = e => { const m = { 'not-allowed': ['Microphone is blocked — allow it from the lock icon in the address bar.', 'Microphone block hai — address bar ke lock icon se allow karo.', 'माइक्रोफ़ोन बंद है — एड्रेस बार के लॉक आइकन से अनुमति दें।'],
+        'service-not-allowed': ['Microphone is blocked — allow it from the lock icon in the address bar.', 'Microphone block hai — address bar ke lock icon se allow karo.', 'माइक्रोफ़ोन बंद है — एड्रेस बार के लॉक आइकन से अनुमति दें।'],
+        'audio-capture': ['No microphone found.', 'Microphone nahi mila.', 'माइक्रोफ़ोन नहीं मिला।'], 'network': ['Voice input needs an internet connection.', 'Voice input ke liye internet chahiye.', 'वॉइस इनपुट के लिए इंटरनेट चाहिए।'],
+        'no-speech': ['I did not hear anything — tap 🎤 and try again.', 'Kuch sunai nahi diya — 🎤 dabakar dobara bolo.', 'कुछ सुनाई नहीं दिया — 🎤 दबाकर फिर बोलें।'] }[e];
+      if(m && panel && panel.classList.contains('open')) addBot(R(t(m[0], m[1], m[2]), {chips: chipsDefault()})); };
+    mic.addEventListener('click', () => { if(Mic.isOn()) Mic.finish(); else Mic.start(txt => ask(txt), problem); }); }
   relabel(); renderHelpList(); greet();
 }
-function setLang(l){ setLangStore(l); if(panel){ relabel(); renderHelpList(); } relabelHeader(); if(helpOn) setHelpMode(true); }
+function setLang(l){ Voice.stop(); Mic.stop(); setLangStore(l); if(panel){ relabel(); renderHelpList(); } relabelHeader(); if(helpOn) setHelpMode(true); }
 function relabelHeader(){
   const o = $('qaOpenBtn'), h = $('qaHelpBtn');
   if(o){ const tx = o.querySelector('.cmdk-text'); if(tx) tx.textContent = t('Assistant', 'Assistant', 'असिस्टेंट'); o.title = t('Assistant — ask about the numbers, in English / Hinglish / Hindi (Ctrl+/)', 'Assistant — numbers ke baare mein poochho, English / Hinglish / Hindi mein (Ctrl+/)', 'असिस्टेंट — आँकड़ों के बारे में पूछें, English / Hinglish / हिन्दी में (Ctrl+/)'); }
@@ -513,9 +585,10 @@ function relabel(){
   input.placeholder = t('Ask about the numbers…  e.g. “What is the reject %?”', 'Numbers ke baare mein poochho… jaise “Reject % kitna hai?”', 'आँकड़ों के बारे में पूछें… जैसे “रिजेक्ट % कितना है?”');
   $('qaHelpSearch').placeholder = t('Search help: Cpk, export, filters…', 'Help dhundo: Cpk, export, filters…', 'हेल्प खोजें: Cpk, export, फ़िल्टर…');
   $('qaTourBtn').textContent = '🧭 ' + t('Take a tour', 'Tour karo', 'टूर करें'); $('qaHelpModeBtn').textContent = '❓ ' + t('Click-to-explain mode', 'Click karke samjho', 'क्लिक करके समझें');
-  $('qaMic').title = t('Speak', 'Bolkar poochho', 'बोलकर पूछें'); $('qaSend').title = t('Send', 'Bhejo', 'भेजें');
+  Mic.ui(); $('qaSend').title = t('Send', 'Bhejo', 'भेजें');
 }
 function setTab(k){
+  Voice.stop(); if(k !== 'ask') Mic.stop();
   mode = k; panel.querySelectorAll('[data-qa-tab]').forEach(b => b.classList.toggle('active', b.dataset.qaTab === k));
   askView.hidden = k !== 'ask'; helpView.hidden = k !== 'help'; if(k === 'ask') setTimeout(() => input.focus(), 30); else setTimeout(() => $('qaHelpSearch').focus(), 30);
 }
@@ -530,7 +603,7 @@ function renderHelpList(){
 function addMsg(who, html, o){
   const i = msgs.push({who, html, plain: o && o.plain, actions: o && o.actions}) - 1, el = document.createElement('div'); el.className = 'qa-msg qa-' + who + (o && o.typing ? ' qa-typing' : '');
   el.innerHTML = o && o.raw ? html : (who === 'user' ? esc(html) : html);
-  if(who === 'bot' && !(o && o.typing)) el.insertAdjacentHTML('beforeend', `<div class="qa-msg-tools"><button type="button" data-qa-say="${i}" title="${esc(t('Read aloud', 'Padhkar sunao', 'पढ़कर सुनाएँ'))}">🔊</button></div>`);
+  if(who === 'bot' && TTSOK && !(o && o.typing)) el.insertAdjacentHTML('beforeend', `<div class="qa-msg-tools"><button type="button" data-qa-say="${i}" aria-pressed="false" title="${esc(t('Read aloud', 'Padhkar sunao', 'पढ़कर सुनाएँ'))}">🔊</button></div>`);
   if(o && o.actions && o.actions.length) el.insertAdjacentHTML('beforeend', `<div class="qa-acts">${o.actions.map((a, n) => `<button type="button" data-qa-msg="${i}" data-qa-act="${n}">${esc(a.label)}</button>`).join('')}</div>`);
   body.appendChild(el); body.scrollTop = body.scrollHeight; return el;
 }
@@ -541,17 +614,12 @@ function addBot(r){
 }
 function greet(){ addBot(R(t('Hi! I explain the numbers on this dashboard — free and offline. Ask in English, Hinglish or Hindi, or turn on **Help mode** and click any card or chart.', 'Namaste! Main is dashboard ke numbers samjhata hoon — free aur offline. English, Hinglish ya Hindi mein poochho, ya **Help mode** on karke kisi bhi card ya chart par click karo.', 'नमस्ते! मैं इस डैशबोर्ड के आँकड़े समझाता हूँ — मुफ़्त और ऑफ़लाइन। English, Hinglish या हिन्दी में पूछें, या **हेल्प मोड** चालू करके किसी भी कार्ड या चार्ट पर क्लिक करें।'), {chips: chipsDefault().concat([CH.tour()])})); }
 async function ask(text, shown){
+  Voice.stop();
   if(/[\u0900-\u097F]/.test(text) && lang !== 'dv'){ setLang('dv'); }   // typed in Devanagari -> answer in Hindi
   setTab('ask'); addUser(shown || text); input.value = ''; chipsEl.innerHTML = '';
   const typing = addMsg('bot', '<span class="qa-dots"><i></i><i></i><i></i></span>', {typing: true, raw: true});
   try { const r = await answer(text); typing.remove(); addBot(r); }
   catch(e){ typing.remove(); addBot(R('⚠️ ' + t('Could not read the data', 'Data nahi padh paya', 'डेटा नहीं पढ़ पाया') + ': ' + esc(e.message), {chips: chipsDefault()})); }
-}
-function speak(m){
-  if(!m || !m.plain || !('speechSynthesis' in window)) return;
-  const u = new SpeechSynthesisUtterance(String(m.plain).replace(/<[^>]+>/g, ' ').slice(0, 900)); u.lang = lang === 'dv' ? 'hi-IN' : 'en-IN';
-  if(speaking){ speechSynthesis.cancel(); const same = speaking === m; speaking = null; if(same) return; }
-  speaking = m; u.onend = () => { speaking = null; }; speechSynthesis.speak(u);
 }
 function openPanel(tab){
   buildPanel(); hidePop(); panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false'); document.documentElement.classList.add('qa-open');
@@ -560,7 +628,7 @@ function openPanel(tab){
 }
 function closePanel(){
   if(!panel) return; panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); document.documentElement.classList.remove('qa-open');
-  const b = $('qaOpenBtn'); if(b) b.setAttribute('aria-expanded', 'false'); if('speechSynthesis' in window) speechSynthesis.cancel();
+  const b = $('qaOpenBtn'); if(b) b.setAttribute('aria-expanded', 'false'); Voice.stop(); Mic.stop();
 }
 const togglePanel = tab => (panel && panel.classList.contains('open') && (!tab || tab === mode)) ? closePanel() : openPanel(tab);
 

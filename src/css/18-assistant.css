@@ -118,3 +118,7 @@ html[data-theme="dark"] .qa-pop-bar{background:#2a2110;border-bottom-color:#5a44
 html[data-theme="dark"] .qa-pop-chips button,html[data-theme="dark"] .qa-pop-foot button{background:#14233A;color:#9CCBFF;border-color:#2A4468}
 html[data-theme="dark"] .qa-help-top button{background:#14233A;color:#9CCBFF;border-color:#2A4468}
 @media print{.qa-pop{display:none!important}}
+
+/* read-aloud / mic state: the active 🔊 shows ⏹ and is highlighted, so it is obvious what is playing and how to stop it */
+.qa-msg-tools button.qa-speaking,.qa-pop-bar button.qa-speaking{opacity:1;color:#DC2626;background:rgba(220,38,38,.12);border-radius:6px}
+.qa-input #qaMic[aria-pressed="true"]{box-shadow:0 0 0 3px rgba(220,38,38,.25)}

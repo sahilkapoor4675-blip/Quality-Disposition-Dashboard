@@ -1,3 +1,23 @@
+## Assistant voice stays quiet when closed + faster loading — no version bump (2026-10-03, nineteenth pass)
+
+**Fixed (bugs)**
+- **Read-aloud kept playing after it was closed** (Help-mode pop-up 🔊, then ✕ / Esc / leaving Help mode / ending the tour). Only the side panel stopped the voice; the pop-up never did, and the 🔊 in a pop-up could not be tapped off
+  again because every tap built a new object, so "same button = stop" never matched. There is now **one voice controller**: only one thing speaks at a time, tapping the same 🔊 again stops it (the icon turns into a red ⏹ while it plays),
+  and it is stopped by closing the pop-up or the panel, Esc, Help mode off, tour step / end, switching tab or language, asking a new question, **hiding the browser tab, or leaving / reloading the page** (the "audio in the background" case).
+- **🎤 voice input could not be switched off.** Each tap created a new recogniser that nothing ever stopped, and a late result could still fire a question after the panel was closed. It is now a real on/off toggle (tap again = stop and use what was heard),
+  shows what it hears while you speak, is released when the panel closes / the tab is hidden / after 20 s, never listens while the assistant is speaking, and explains problems (blocked microphone, no internet, nothing heard) in the chat.
+- Long answers were cut at 900 characters and Chrome silently stopped long sentences after ~15 s; the text is now read sentence by sentence (up to ~1,800 characters) with a Hindi / Indian-English voice when the browser has one.
+  The 🔊 / 🎤 buttons are hidden in browsers that do not support speech.
+
+**Faster loading**
+- **Page start-up no longer waits in a line**: the KPI-targets request now runs at the same time as the filters request (they were one after the other, adding a full server round trip before any KPI could be requested). Measured with a 4x slower CPU: the KPI request starts ~0.4 s earlier.
+- **Server caches the five hot dashboard calls** (`/api/kpis`, `/api/monthly_trend`, `/api/work_center_grade`, `/api/defect_analysis`, `/api/period_trend`) with the same 10-second, cleared-on-every-import/edit cache the Control Room already used — tab switches, Compare Periods panes and several people opening the same view no longer re-read the database each time (22 ms -> ~1 ms locally; far more on a remote PostgreSQL).
+- `app.js` / `app.css` are compressed **once** (max level) instead of on every visitor's first load.
+- **"Server is waking up" message**: if the first data has not arrived after 6 s (free hosting sleeping), a toast explains it instead of the page looking frozen.
+- New optional workflow `.github/workflows/keep-alive.yml` pings `/readyz` every 10 minutes so the free Render service does not fall asleep — **set the repo variable `APP_URL` to switch it on** (it does nothing until then). This is the biggest fix for "first open of the day takes very long".
+
+**Tests**: `tests/test_browser.py` now drives the Assistant with a recorded `speechSynthesis` / `SpeechRecognition` (pop-up ✕, Esc, second tap, panel close, tab hidden, mic toggle / release); `tests/test_chem_spc.py` has static checks for the new controllers.
+
 ## Assistant: Hindi / Hinglish / English, pop-up Help mode, guided tour, Help-list fix — no version bump (2026-10-03, eighteenth pass)
 
 **Fixed**

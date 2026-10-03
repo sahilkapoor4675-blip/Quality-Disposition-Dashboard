@@ -350,6 +350,11 @@ check("QDAssist.open('ask')" in js and "Help Mode" in js and "Help Topics & Glos
 check(".qa-panel" in _ac and "html.qa-help" in _ac and "@media print" in _ac, "assistant CSS: panel, help-mode outline, print hides it")
 check(len(__import__('re').findall(r"^ \['[a-z_]+','(?:kpi|spc|chart|howto)'", _as, __import__('re').M)) >= 30, "help knowledge base has 30+ topics")
 
+# ---- 19th pass: voice must stop (read-aloud + mic) ----
+check("const Voice = (() =>" in _as and "const Mic = (() =>" in _as and "speechSynthesis.speak" in _as and _as.count("speechSynthesis.speak") == 1, "assistant: one Voice controller and one Mic controller (no stray speak() calls)")
+check("function hidePop(){ Voice.stop();" in _as and "Voice.stop(); Mic.stop();\n}" in _as and "visibilitychange" in _as and "pagehide" in _as, "assistant: closing the pop-up / panel and hiding or leaving the page stop the voice and the mic")
+check("qa-speaking" in _ac, "assistant CSS: the active 🔊 is highlighted")
+
 if ERR:
     print("CHEM SPC FAIL"); [print(" -", e) for e in ERR]; sys.exit(1)
 print("CHEM SPC PASS — SPC maths, import validation, spec matching, HTTP flow, heat join, backup round-trip.")
