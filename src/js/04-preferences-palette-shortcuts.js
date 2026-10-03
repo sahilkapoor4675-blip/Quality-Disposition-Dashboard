@@ -63,6 +63,12 @@ function initCommandPalette(){
   const TAB_LABELS={dashboard:'📊 Dashboard',controlroom:'🚨 Quality Control Room',wcgrade:'🏭 Work Center & Grade',defects:'🎯 Defects List',weekly:'📅 Period Trend',chem:'🧪 Chemistry SPC'};
   function buildCommands(){
     const cmds=[];
+    if(window.QDAssist){
+      cmds.push({cat:'assist',icon:'✨',label:'Ask Assistant',hint:'Ctrl /',kw:'ai help chat assistant sawal poochho question bot',desc:'Ask about the numbers (free, offline)',run:()=>QDAssist.open('ask')});
+      cmds.push({cat:'assist',icon:'❓',label:QDAssist.isHelpMode()?'Turn Off Help Mode':'Help Mode — click any card or chart to explain',kw:'help mode explain click samjhao card chart tooltip guide',desc:'Click a KPI, chart, tab or filter to have it explained',run:()=>QDAssist.helpMode()});
+      cmds.push({cat:'assist',icon:'📘',label:'Help Topics & Glossary',hint:'?',kw:'help glossary cpk ppk fpy meaning matlab how to guide',desc:'KPIs, SPC terms and how-to',run:()=>QDAssist.help()});
+      cmds.push({cat:'assist',icon:'🌐',label:`Assistant Language: switch to ${QDAssist.lang()==='en'?'Hinglish':'English'}`,kw:'language hindi hinglish english bhasha',desc:'English / Hinglish answers',run:()=>{QDAssist.toggleLang();showToast('success','Assistant language',QDAssist.lang()==='en'?'English':'Hinglish');}});
+    }
     Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({cat:'nav',icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),desc:'Jump to this dashboard section',run:()=>activateTab(key)}));
     // Exports (Excel / PDF / PPT / CSV) live only in the header's "⬇ Export" button now
     // Exports open through the dedicated dialog (#exportDialogModal) instead of the Command Palette.
@@ -99,6 +105,7 @@ function initCommandPalette(){
   // Categories, in the order they appear in the palette. Commands are grouped under these
   // headings (headings only show when at least one command in them matches the search).
   const CATS=[
+    {key:'assist',label:'Assistant & Help',icon:'✨'},
     {key:'nav',label:'Navigation',icon:'🧭'},
     {key:'filters',label:'Filters & Compare',icon:'🎛️'},
     {key:'appearance',label:'Appearance',icon:'🎨'},

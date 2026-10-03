@@ -340,6 +340,15 @@ check("chemXlsxCpk" in js and "chemXlsxHeats" in js and "chemXlsxOos" in js and 
 check("'Aim LSL', 'Aim USL', 'Status / Decision'" in js and "chemVisible(d.params" in js, "heat drill-down CSV carries Aim LSL / Aim USL and honours the column filters")
 check('name="chemExpFmt"' in idx and "(Excel)" in idx, "Export dialog lets the person pick Excel or CSV for Chemistry downloads")
 
+# ---- 14th pass: free offline Assistant (Ask / Help / Help mode) ----
+_as = (ROOT / "src" / "js" / "23-assistant.js").read_text(encoding="utf-8"); _ac = (ROOT / "src" / "css" / "18-assistant.css").read_text(encoding="utf-8")
+check('id="qaOpenBtn"' in idx and "qa-clock-row" in idx, "header has the Assistant button beside the clock (does not widen the button row)")
+check("fetch('/api/qcr?'" in _as and "api.anthropic" not in _as and "openai" not in _as.lower(), "assistant is free: it only reads the dashboard's own /api/qcr, no paid AI API")
+check("window.QDAssist" in _as and "setHelpMode" in _as and "explainElement" in _as and "speechSynthesis" in _as, "assistant has Help mode, click-to-explain and read-aloud")
+check("QDAssist.open('ask')" in js and "Help Mode" in js and "Help Topics &amp; Glossary".replace("&amp;", "&") in js and "key:'assist'" in js, "command palette has Ask Assistant / Help Mode / Help Topics")
+check(".qa-panel" in _ac and "html.qa-help" in _ac and "@media print" in _ac, "assistant CSS: panel, help-mode outline, print hides it")
+check(len(__import__('re').findall(r"^ \['[a-z_]+','(?:kpi|spc|chart|howto)'", _as, __import__('re').M)) >= 30, "help knowledge base has 30+ topics")
+
 if ERR:
     print("CHEM SPC FAIL"); [print(" -", e) for e in ERR]; sys.exit(1)
 print("CHEM SPC PASS — SPC maths, import validation, spec matching, HTTP flow, heat join, backup round-trip.")

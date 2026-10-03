@@ -1,3 +1,27 @@
+## Free offline Assistant + Help mode — no version bump (2026-10-03, seventeenth pass)
+
+**Added** (no API key, no cost — everything runs in the browser; the only request is the dashboard's own `/api/qcr`)
+- **✨ Assistant button in the header** (beside the date/time card, so the title and the other buttons keep their width) and `Ctrl+/`. Side panel (bottom sheet on phones), light and dark theme.
+  - **💬 Ask** — type or speak (browser speech recognition where available) in English or Hinglish: summary / health score, any KPI ("reject % kitna hai?"), top defects,
+    worst / best grade or work center, monthly trend, *why did it change*, early warnings, *what should I do*, forecast. It also acts: open a tab, open Export,
+    switch theme, apply filters ("Sep-2026 dikhao", "reset filters") and open a heat by number ("NBS9001"). Numbers come from the current filters; KPI status uses the
+    targets set in Admin. 🔊 reads any answer aloud (browser voice, free).
+  - **📘 Help & Glossary** — 34 searchable topics: every KPI and quality decision, Cpk / Ppk / Cp / Pp, Std vs Aim limits, the trend chip, I-MR, histogram, Pareto,
+    6M fishbone, Control Room, forecast, filters, drill-down, export, shortcuts, saved views, compare, dark mode, admin. `?` opens it.
+  - **❓ Help mode** — click any KPI card, chart, Chemistry element card, tab, filter or header button and the assistant explains it, with the live numbers
+    (this is the "smart explain" for cards and charts). Dashed outline on hover, banner to exit, `Esc` leaves.
+  - **Language switch** EN / हिं (Hinglish, default), remembered in the browser.
+- **Command palette**: new *Assistant & Help* group — Ask Assistant, Help Mode, Help Topics & Glossary, Assistant Language.
+- Files: `src/js/23-assistant.js`, `src/css/18-assistant.css`; small edits in `index.html` and `src/js/04-preferences-palette-shortcuts.js`.
+
+**Notes**
+- It is a rules-and-data assistant, not a language model: it understands the questions listed above (English / Hinglish keywords) and says so when it does not.
+  Every number is read from the server, never invented. Plant-specific rules (e.g. exact meaning of each quality decision) are in your QA procedure.
+- Nothing leaves the plant network: no third-party AI service is called.
+
+**Tests**: `tests/test_chem_spc.py` (button placement, no paid API, help mode, palette entries, CSS, 30+ topics). Verified in Chromium: 14 questions, Help-mode clicks on
+KPI / Pareto / intensity / tab / filter / Chemistry card, Help tab search, palette entries, header height unchanged at 1440 / 1280 / 1100 px, mobile panel.
+
 ## Intro screen: no more blank screen while waiting for the first click — no version bump (2026-10-03, sixteenth pass)
 
 **Why it happened (not a crash)**
