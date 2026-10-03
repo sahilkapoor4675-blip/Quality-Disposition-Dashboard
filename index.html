@@ -237,9 +237,12 @@
       <div class="header-right-stack">
         <div class="qa-clock-row">
           <!-- Free offline assistant: Ask / Help & Glossary / Help mode (click any card or chart to have it explained). See src/js/23-assistant.js -->
-          <button class="cmdk-open-btn export-menu-btn qa-open-btn" id="qaOpenBtn" type="button" aria-haspopup="dialog" aria-controls="qaPanel" aria-expanded="false" title="Assistant — ask about the numbers, get help, click-to-explain (Ctrl+/)">
-            <span class="cmdk-ico" aria-hidden="true">✨</span><span class="cmdk-text">Assistant</span>
-          </button>
+          <div class="qa-split">
+            <button class="cmdk-open-btn export-menu-btn qa-open-btn" id="qaOpenBtn" type="button" aria-haspopup="dialog" aria-controls="qaPanel" aria-expanded="false" title="Assistant — ask about the numbers, get help, click-to-explain (Ctrl+/)">
+              <span class="cmdk-ico" aria-hidden="true">✨</span><span class="cmdk-text">Assistant</span>
+            </button>
+            <button class="cmdk-open-btn export-menu-btn qa-help-btn" id="qaHelpBtn" type="button" aria-pressed="false" title="Help mode — click any card, chart or column to have it explained"><span aria-hidden="true">❓</span></button>
+          </div>
         <div class="digital-clock-block" aria-label="Current local date and time">
           <div class="digital-clock-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">

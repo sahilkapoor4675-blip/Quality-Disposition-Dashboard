@@ -1,3 +1,24 @@
+## Assistant: Hindi / Hinglish / English, pop-up Help mode, guided tour, Help-list fix — no version bump (2026-10-03, eighteenth pass)
+
+**Fixed**
+- **Help & Glossary list was squashed** (every topic cut to a thin strip, text clipped). Cause: the topic buttons were flex items that shrank to fit the list.
+  They no longer shrink (`flex:0 0 auto`), the list scrolls (`min-height:0`) and chat bubbles are protected the same way.
+
+**Added / improved**
+- **Three languages — English, Hinglish, Hindi (हिन्दी, Devanagari)** for every answer, the Help topics, tour, buttons and tooltips. Switch from the panel (language list) or Ctrl+K.
+  It also *understands* what is typed in Devanagari ("रिजेक्ट % कितना है?", "शीर्ष दोष", "सबसे खराब ग्रेड", "सीपीके क्या है", "सितंबर 2026 दिखाओ", "डार्क मोड चालू करो") and replies in Hindi
+  automatically when you type in Devanagari. Months written as "september 2026" / "सितंबर 2026" now apply the Month filter. Voice input uses hi-IN for Hindi.
+  Text that comes from the server (the Control Room's story / *why changed* sentences) stays in English.
+- **Help mode is now a pop-up**: click a KPI card, chart, table column header, Chemistry card, tab, filter or header button and a small card appears next to the click
+  (live numbers, follow-up chips, 🔊 read aloud, *Ask more* to continue in the panel). The big side panel no longer covers the screen. Esc closes the pop-up, then Help mode.
+- **Header: Assistant + ❓ Help-mode as one split button** beside the clock card; ❓ turns amber while Help mode is on, the Assistant button pulses until it is opened once.
+  The header height is unchanged at every width checked (1920 → 390 px); the "Assistant" label shows from 1400 px up, icon-only below.
+- **Guided tour** (7 steps with spotlight: filters, KPI cards, tabs, Export, Commands, Assistant, Help mode) from the Help tab, the Help-mode banner, Ctrl+K or by typing "tour".
+- Help tab: *Take a tour* and *Click-to-explain* shortcuts; search also works with Hindi words. Command palette: *Take a Guided Tour* and one entry per other language.
+
+**Tests**: `tests/test_chem_spc.py` (languages, header Help button, list no longer shrinks, tour, palette). Verified in Chromium: 16 questions across the three languages,
+Help-mode pop-ups on a KPI card and the Pareto chart, Esc behaviour, all 7 tour steps, Help list at 430 px, header height at 9 widths. Release gate: PASS.
+
 ## Free offline Assistant + Help mode — no version bump (2026-10-03, seventeenth pass)
 
 **Added** (no API key, no cost — everything runs in the browser; the only request is the dashboard's own `/api/qcr`)

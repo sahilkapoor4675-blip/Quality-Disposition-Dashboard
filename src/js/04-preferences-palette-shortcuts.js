@@ -67,7 +67,8 @@ function initCommandPalette(){
       cmds.push({cat:'assist',icon:'✨',label:'Ask Assistant',hint:'Ctrl /',kw:'ai help chat assistant sawal poochho question bot',desc:'Ask about the numbers (free, offline)',run:()=>QDAssist.open('ask')});
       cmds.push({cat:'assist',icon:'❓',label:QDAssist.isHelpMode()?'Turn Off Help Mode':'Help Mode — click any card or chart to explain',kw:'help mode explain click samjhao card chart tooltip guide',desc:'Click a KPI, chart, tab or filter to have it explained',run:()=>QDAssist.helpMode()});
       cmds.push({cat:'assist',icon:'📘',label:'Help Topics & Glossary',hint:'?',kw:'help glossary cpk ppk fpy meaning matlab how to guide',desc:'KPIs, SPC terms and how-to',run:()=>QDAssist.help()});
-      cmds.push({cat:'assist',icon:'🌐',label:`Assistant Language: switch to ${QDAssist.lang()==='en'?'Hinglish':'English'}`,kw:'language hindi hinglish english bhasha',desc:'English / Hinglish answers',run:()=>{QDAssist.toggleLang();showToast('success','Assistant language',QDAssist.lang()==='en'?'English':'Hinglish');}});
+      cmds.push({cat:'assist',icon:'🧭',label:'Take a Guided Tour',kw:'tour guide walkthrough start help samjho shuru',desc:'7 steps: filters, cards, tabs, export, assistant',run:()=>QDAssist.tour()});
+      QDAssist.langs().filter(l=>l[0]!==QDAssist.lang()).forEach(l=>cmds.push({cat:'assist',icon:'🌐',label:`Assistant Language: ${l[1]}`,kw:'language hindi hinglish english bhasha',desc:'Answers and help in '+l[1],run:()=>{QDAssist.setLang(l[0]);showToast('success','Assistant language',l[1]);}}));
     }
     Object.keys(TAB_LABELS).forEach((key,i)=>cmds.push({cat:'nav',icon:'→',label:`Go to ${TAB_LABELS[key]}`,hint:String(i+1),desc:'Jump to this dashboard section',run:()=>activateTab(key)}));
     // Exports (Excel / PDF / PPT / CSV) live only in the header's "⬇ Export" button now
