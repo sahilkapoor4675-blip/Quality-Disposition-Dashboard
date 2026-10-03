@@ -230,7 +230,9 @@
   // allows it, otherwise on the first click / key press (a small prompt says so). If
   // nobody interacts, it starts silently after GATE_FALLBACK_MS so the dashboard can
   // never get stuck behind the intro. ----
-  var GATE_FALLBACK_MS=8000;
+  // 5 s (was 8 s): while the gate is waiting only the logo + the prompt are visible, so a long
+  // wait made the intro look blank/broken.
+  var GATE_FALLBACK_MS=5000;
   if(!ctx){ startTimeline(); }
   else if(ctx.state==='running'){ startTimeline(); }
   else{
@@ -238,6 +240,11 @@
     gate.type='button'; gate.className='intro-sound-gate';
     gate.textContent='\uD83D\uDD0A Click anywhere or press any key to start with sound';
     screen.appendChild(gate);
+    // Never leave the middle of the screen empty while we wait for the first click / key:
+    // show the brand logo straight away (the headline sequence still waits for the gate so the
+    // sound stays in sync). The prompt is centred where the title will appear (see the
+    // .intro-sound-gate rule in 15-intro-screen.css).
+    show(document.getElementById('ivLogo'));
     var evs=['pointerdown','keydown','touchend','click'], fallbackTimer=null;
     function hideGate(){ gate.classList.add('gone'); setTimeout(function(){ if(gate.parentNode) gate.parentNode.removeChild(gate); },350); }
     function detach(){ evs.forEach(function(ev){ window.removeEventListener(ev,unlock,true); }); }

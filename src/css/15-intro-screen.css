@@ -175,6 +175,9 @@ html[data-skin="classic"] .logo-3d::after{display:none;}
   }
 
 /* Intro sound gate: shown only when the browser blocks audio until a click / key press. */
-#introScreen .intro-sound-gate{position:absolute;left:50%;bottom:9vh;transform:translateX(-50%);z-index:30;max-width:90vw;padding:11px 22px;border-radius:999px;font:700 14px/1.3 'DM Sans',system-ui,sans-serif;letter-spacing:.03em;color:#c96a22;background:rgba(255,255,255,.9);border:1.5px solid #dc7d34;box-shadow:0 8px 20px rgba(220,125,52,.18);cursor:pointer;transition:opacity .3s}
+#introScreen .intro-sound-gate{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);z-index:30;max-width:90vw;padding:14px 28px;border-radius:999px;font:700 16px/1.35 'DM Sans',system-ui,sans-serif;letter-spacing:.03em;text-align:center;color:#c96a22;background:rgba(255,255,255,.94);border:1.5px solid #dc7d34;box-shadow:0 8px 20px rgba(220,125,52,.18);cursor:pointer;transition:opacity .3s;animation:introGatePulse 1.8s ease-in-out infinite}
+@keyframes introGatePulse{0%,100%{box-shadow:0 8px 20px rgba(220,125,52,.18),0 0 0 0 rgba(220,125,52,.35)}50%{box-shadow:0 8px 20px rgba(220,125,52,.18),0 0 0 10px rgba(220,125,52,0)}}
+@media (prefers-reduced-motion:reduce){#introScreen .intro-sound-gate{animation:none}}
+@media (max-width:520px){#introScreen .intro-sound-gate{font-size:13.5px;padding:11px 18px;max-width:86vw;border-radius:22px}}
 #introScreen .intro-sound-gate:hover{background:#fff}
 #introScreen .intro-sound-gate.gone{opacity:0;pointer-events:none}

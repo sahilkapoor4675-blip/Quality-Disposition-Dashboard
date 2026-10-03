@@ -1,3 +1,16 @@
+## Intro screen: no more blank screen while waiting for the first click — no version bump (2026-10-03, sixteenth pass)
+
+**Why it happened (not a crash)**
+- Browsers keep audio locked until the first click / key press. The intro deliberately holds its whole sequence (logo, tagline, NON-FERROUS, title, cards)
+  until audio can really play, so the sound stays in sync with the animation. While it waited, the middle of the screen was empty and only a small prompt
+  sat at the bottom edge (for up to 8 s) — it looked like a broken page.
+
+**Fixed**
+- The JSL logo is shown immediately while the gate waits (`src/js/01-intro-splash.js`); the headline sequence still starts on the click, so sound sync is unchanged.
+- The "Click anywhere or press any key to start with sound" prompt is now centred where the title will appear, slightly larger, with a soft pulse
+  (disabled under `prefers-reduced-motion`) and a compact version for phones (`src/css/15-intro-screen.css`).
+- If nobody clicks, the intro now starts silently after **5 s** instead of 8 s (`GATE_FALLBACK_MS`). A click later still switches the remaining sound cues on.
+
 ## Full audit pass — no version bump (2026-10-03, fifteenth pass)
 
 **Audit performed (nothing else needed fixing)**
