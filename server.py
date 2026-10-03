@@ -5910,7 +5910,9 @@ class Handler(BaseHTTPRequestHandler):
             filters = _filters_from_qs(qs)
             try:
                 metric = qs.get('metric',''); drill_value = qs.get('drill_value')
-                page = max(1, _safe_int(qs.get('page'), 1)); page_size = min(500, max(50, _safe_int(qs.get('page_size'), 250)))
+                # Cap `page` so (page-1)*page_size always fits a 64-bit SQL OFFSET: an absurd
+                # value (e.g. page=99999999999999999999) used to raise OverflowError -> HTTP 500.
+                page = min(1000000, max(1, _safe_int(qs.get('page'), 1))); page_size = min(500, max(50, _safe_int(qs.get('page_size'), 250)))
                 offset=(page-1)*page_size
                 where_sql, base_params = _drilldown_where(filters, metric, drill_value)
                 conn=get_conn(); cur=conn.cursor(); cur.execute(f"SELECT COUNT(*), COUNT(DISTINCT {BATCH_KEY_SQL}), COALESCE(SUM(output_weight),0) FROM disposition {where_sql}",base_params); total_rows,total_coils,total_weight=cur.fetchone(); conn.close()
@@ -7491,7 +7493,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body = _json_body(self)
                 limit = min(max(int(body.get("limit", 100)), 1), 500)
-                offset = max(int(body.get("offset", 0) or 0), 0)
+                offset = min(max(int(body.get("offset", 0) or 0), 0), 1000000000)  # cap: huge value would overflow SQL OFFSET
                 query = str(body.get("q", "")).strip()
                 if len(query) > 200:
                     raise ValueError("Search text is limited to 200 characters")

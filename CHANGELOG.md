@@ -1,3 +1,21 @@
+## Full audit pass — no version bump (2026-10-03, fifteenth pass)
+
+**Audit performed (nothing else needed fixing)**
+- Release gate (`python tests/run_gate.py --fast`): all 12 checks PASS (py_compile, node --check on 25 JS pieces + bundle, static checks, regression,
+  unit, import normalisation, 47-route smoke, data lifecycle, exports, real-Chromium UI regression).
+- Extra static analysis: pyflakes on every Python file (only unused-import / unused-variable cosmetics) and ESLint `no-undef` / unreachable-code /
+  duplicate-key rules on the bundled `app.js` (no real findings; every `SFX` use is guarded by `window.SFX`).
+- Hostile-input fuzz of ~3,300 requests across every public data endpoint (SQL-injection strings, 3,000-char values, NUL bytes, emoji, overflowing and
+  negative numbers, path-traversal strings): server stayed up, no SQL error, no traceback, nothing slow — except the one bug below.
+
+**Fixed**
+- **`/api/drilldown` returned HTTP 500 for an absurd `page` value** (e.g. `?page=99999999999999999999`): `(page-1)*page_size` overflowed the 64-bit SQL
+  `OFFSET` (`OverflowError: Python int too large to convert to SQLite INTEGER`). `page` is now capped at 1,000,000 (an empty page is returned, with the
+  real `total_pages`). Normal pagination is unchanged. The same unbounded-offset pattern in `POST /api/admin/records` (`offset`) is capped too.
+
+**Tests**
+- `tests/test_smoke.py`: new regression check for `page=99999999999999999999 / 1000000 / -5 / abc` on `/api/drilldown`.
+
 ## Chemistry SPC + export fixes — no version bump (2026-10-03, fourteenth pass)
 
 **Fixed**

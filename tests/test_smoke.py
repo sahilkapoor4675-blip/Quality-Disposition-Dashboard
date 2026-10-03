@@ -72,6 +72,10 @@ def smoke_server():
             assert_json("/api/period_trend", "weekly")
             assert_json("/api/data_freshness")
             assert_json("/api/connection_status")
+            # Regression: an absurd `page` used to overflow the SQL OFFSET -> HTTP 500.
+            for bad_page in ("99999999999999999999", "1000000", "-5", "abc"):
+                dd = assert_json(f"/api/drilldown?page={bad_page}", "rows")
+                assert dd["page"] >= 1 and dd["total_pages"] >= 1, f"drilldown page={bad_page}: bad paging {dd.get('page')}/{dd.get('total_pages')}"
             db = sqlite3.connect(db_path)
             after = db.execute("SELECT COUNT(*) FROM disposition").fetchone()[0]
             after_users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
