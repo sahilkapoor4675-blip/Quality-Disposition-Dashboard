@@ -110,7 +110,7 @@ html[data-theme="dark"] .chem-el-kpi.chem-cur{box-shadow:0 0 0 2px var(--accent)
 .chem-el-trendline .prev b{font-size:12px}
 .chem-el-trendline .trend{font-size:11px;white-space:nowrap}
 /* the absolute change "(-0.27)" only fits next to the % on wider cards, so every card keeps ONE Prev line of equal height */
-.chem-el-abs{display:none;margin-left:2px;font-weight:600;opacity:.85}
+.chem-el-abs{display:none;margin-left:2px;font-weight:800;opacity:1}
 @container chemcard (min-width:372px){.chem-el-abs{display:inline}}
 /* Dashboard parity: Chemistry reuses the shared KPI/chart interaction contract instead of introducing a second visual system. */
 .chem-el-kpi .kpi-bottom{display:block;margin-top:0;}
@@ -160,9 +160,11 @@ html[data-theme="dark"] .chem-el-tiles .kpi-target-item.target-bad b{color:#F5A3
 /* Grade = All: element cards grouped per grade; Parameter = All: one chart per element. Grade-only panels (charts, tables) are hidden while Grade = All. */
 .chem-grade-head{display:flex;align-items:center;gap:12px;margin:16px 0 10px;padding:9px 16px;border-radius:10px;border:1px solid #B7D5EA;border-left:4px solid #2388C9;background:linear-gradient(135deg,#E6F2FB 0%,#D3E8F7 100%);font-family:'DM Sans','Manrope',sans-serif;font-size:22px;font-weight:800;line-height:1.25;color:#1B5E8E}
 .chem-grade-head b{font-weight:800}
-.chem-grade-head span{font-family:'Manrope',sans-serif;font-size:14px;font-weight:700;color:#4A7FA5}
+.chem-grade-head{flex-wrap:wrap}
+.chem-grade-head .chem-gh-n{font:inherit;font-size:inherit;font-weight:800;line-height:inherit;color:#4A7FA5}   /* heat count: exactly the grade-name font (family, size, weight) */
+.chem-grade-head .chem-gh-win{font-family:'Manrope',sans-serif;font-size:14px;font-weight:700;color:#4A7FA5}   /* heat range / cast span (Heat Qty only) stays small */
 html[data-theme="dark"] .chem-grade-head{background:linear-gradient(135deg,#14304d 0%,#1a3f63 100%);border-color:#24507a;border-left-color:#4DA3FF;color:#8FC6EE}
-html[data-theme="dark"] .chem-grade-head span{color:#A9B8CE}
+html[data-theme="dark"] .chem-grade-head .chem-gh-n,html[data-theme="dark"] .chem-grade-head .chem-gh-win{color:#A9B8CE}
 .chem-pblock{margin:0 0 14px}.chem-pblock-t{font-weight:800;font-size:19px;color:var(--heading);margin:2px 2px 6px}
 #tab-chem.chem-all-grades .chem-grade-only{display:none!important}
 
@@ -297,3 +299,31 @@ html[data-theme="dark"] .chem-multi .chem-pblock-t{background:linear-gradient(13
 .chem-mr-note{margin:8px 4px 0;padding:8px 12px;border-radius:8px;background:rgba(217,119,6,.08);border-left:3px solid #D97706;color:var(--muted);font-size:12.5px;line-height:1.5}
 .chem-mr-note b{color:var(--heading)}
 .chem-mr-note b[style]{color:#D97706!important}
+
+/* ---- 14th pass: element-card trend chip is bold end to end (arrow, + / - sign, %, and the (absolute change)); heat count = grade-name font ---- */
+.kpi-card.chem-el-kpi .chem-el-trendline .trend,
+.kpi-card.chem-el-kpi .chem-el-trendline .trend b,
+.kpi-card.chem-el-kpi .chem-el-trendline .trend .kpi-change-val,
+.kpi-card.chem-el-kpi .chem-el-trendline .trend .kpi-delta-val,
+.kpi-card.chem-el-kpi .chem-el-trendline .trend .chem-el-abs{font-weight:800;font-variant-numeric:tabular-nums lining-nums}
+.kpi-card.chem-el-kpi .chem-el-trendline .trend[title]{cursor:help}
+
+/* ---- 14th pass: histogram bars behave like the dashboard's drill-down bars (clear hover, pointer, focus ring) ---- */
+.chem-hist-bar{cursor:pointer;transition:opacity .15s ease,transform .15s ease,filter .15s ease,stroke-width .15s ease;transform-box:fill-box;transform-origin:bottom}
+.chart-ready .chem-hist-bar{animation:barGrow .48s cubic-bezier(.22,.85,.32,1) calc(.06s + var(--i,0) * 35ms) backwards}   /* backwards (not both): after the grow-in the hover transform can apply again */
+.chem-hist-bar.has-heats:hover,.chem-hist-bar.has-heats:focus-visible,.chem-hist-bar.is-hot{opacity:1;fill-opacity:1;stroke:var(--chem-bar-edge,#0B5FB5);stroke-width:2;transform:scaleY(1.04) scaleX(1.06);filter:drop-shadow(0 3px 6px rgba(15,42,74,.35)) brightness(1.08);outline:none}
+.chem-hist-bar.is-empty{cursor:default}
+.chem-hist-bar.is-empty:hover{transform:none;filter:none}
+.chem-hist-svg:has(.chem-hist-bar.has-heats:hover) .chem-hist-bar:not(:hover){opacity:.55}   /* dim the other bars, same focus effect as the dashboard charts */
+.chem-hist-bar.is-out{--chem-bar-edge:#991B1B}
+html[data-theme="dark"] .chem-hist-bar.has-heats:hover{--chem-bar-edge:#9CCBFF;filter:drop-shadow(0 3px 8px rgba(0,0,0,.6)) brightness(1.15)}
+@media(prefers-reduced-motion:reduce){.chem-hist-bar{transition:none!important}.chem-hist-bar.has-heats:hover{transform:none!important}}
+/* Root cause of the "histogram bars don't react": the Aim band, the limit / mean lines and the normal curve are drawn AFTER the bars and covered them,
+   so the pointer never reached a bar. Everything that is not a bar ignores the pointer now. */
+.chem-hist-svg > *:not(.chem-hist-bar){pointer-events:none}
+/* ---- 14th pass: Export dialog file-type picker (Excel / CSV) + the CSV link beside "Export Selected Records" ---- */
+.chem-fmt-pick{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 8px;font:600 13px Manrope,sans-serif;color:#31516b}
+.chem-fmt-pick>span{font-weight:800;color:#0F2A4A}
+.chem-fmt-pick label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+html[data-theme="dark"] .chem-fmt-pick,html[data-theme="dark"] .chem-fmt-pick>span{color:#C9D6E8}
+.drill-export-csv{background:#fff!important;color:#31516b!important}

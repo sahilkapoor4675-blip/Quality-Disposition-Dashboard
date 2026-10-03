@@ -182,14 +182,35 @@ const QDHF = (function(){
   }
   function resetDrill(){ cur = null; closePop(); const b = document.getElementById('qdhfBar'); if(b) b.hidden = true; }
 
-  function csvCell(v){ const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
-  function exportFiltered(){
+  // Export = every stored column of every filtered record (not just the 9 on screen).
+  const EXP_HEADS = ['Insp Lot Date', 'UD Date', 'Heat No', 'Batch No', 'Work Center', 'Grade', 'Main Defect', 'Defect Intensity', 'Quality Decision', 'Output Weight (MT)', 'Month', 'Week', 'Quarter', 'Financial Year'];
+  const EXP_COLS = [{label: EXP_HEADS[0], icon: '📅', kind: 'date'}, {label: EXP_HEADS[1], icon: '📅', kind: 'date'}, {label: EXP_HEADS[2], icon: '🔥', kind: 'heat'}, {label: EXP_HEADS[3], icon: '📦', kind: 'text', width: 14},
+    {label: EXP_HEADS[4], icon: '🏭', kind: 'text', width: 16}, {label: EXP_HEADS[5], icon: '🏷️', kind: 'text', width: 22}, {label: EXP_HEADS[6], icon: '🛠️', kind: 'text', width: 24}, {label: EXP_HEADS[7], icon: '🔥', kind: 'text'},
+    {label: EXP_HEADS[8], icon: '🧾', kind: 'decision', width: 20}, {label: EXP_HEADS[9], icon: '⚖️', kind: 'num3'}, {label: EXP_HEADS[10], icon: '🗓️', kind: 'text'}, {label: EXP_HEADS[11], icon: '🗓️', kind: 'text', width: 16},
+    {label: EXP_HEADS[12], icon: '📊', kind: 'text'}, {label: EXP_HEADS[13], icon: '📆', kind: 'text', width: 14}];
+  const expCells = r => [fmtDate(r.insp_lot_date), fmtDate(r.ud_date), r.heat_no || '', String(r.batch_no || r.coil_lot || ''), r.work_center || '', r.grade || '', r.main_defect || '', r.defect_intensity || '', r.quality_decision || '', Number(r.output_weight || 0), r.month || '', r.week || '', r.quarter || '', r.financial_year || ''];
+  function csvCell(v){ const s = String(v == null ? '' : v); const t = /^[=+\-@]/.test(s) && isNaN(Number(s)) ? "'" + s : s; return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+  function filteredRows(st){ return (st.all || st.data.rows).filter(r => passes(st.cellCache.get(r) || cellsOf(r), st.filters, -1)); }
+  async function exportFiltered(kind){
     const st = cur; if(!st || !activeFilters(st)) return false;
-    const rows = (st.all || st.data.rows).filter(r => passes(st.cellCache.get(r) || cellsOf(r), st.filters, -1));
-    const lines = [DRILL_HEADS.map(csvCell).join(',')].concat(rows.map(r => cellsOf(r).map(csvCell).join(',')));
-    const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'drilldown_filtered_records.csv'; document.body.appendChild(a); a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    // make sure every page is loaded first, so the file holds all matching records, not just the page on screen
+    try { await loadAll(st); } catch(e){ if(typeof showToast === 'function') showToast('error', 'Export failed', String((e && e.message) || e)); return true; }
+    if(cur !== st) return true;
+    const rows = filteredRows(st);
+    if(kind === 'csv'){
+      const lines = [EXP_HEADS.map(csvCell).join(',')].concat(rows.map(r => expCells(r).map(csvCell).join(',')));
+      const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'drilldown_filtered_records.csv'; document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      return true;
+    }
+    const w = rows.reduce((n, r) => n + Number(r.output_weight || 0), 0), dr = (typeof currentDrill === 'function' ? currentDrill() : {}) || {};
+    const chips = [...st.filters].map(([c, set]) => `${DRILL_HEADS[c]}: ${set.size === 1 ? ([...set][0] === '' ? blankLabel : [...set][0]) : [...set].slice(0, 6).map(v => v === '' ? blankLabel : v).join(' | ') + (set.size > 6 ? ` … (+${set.size - 6})` : '')}`).join('  •  ');
+    const spec = {title: (t => /Underlying Records/i.test(t) ? t : 'Underlying Records — ' + t)(dr.title || st.metric || 'Current selection'), icon: '📋', sheet: 'Underlying Records', filename: 'drilldown_filtered_records',
+      subtitle: 'Drill-down export · filtered by column filters · every column of each record',
+      meta: [['Exported', qdNowDmy()], ['Dashboard filters', typeof activeFilterSummary === 'function' ? activeFilterSummary() : 'All'], ['Column filters', chips], ['Records', `${rows.length.toLocaleString()} of ${Number(st.data.row_count || 0).toLocaleString()}`]],
+      sections: [{title: 'Records', icon: '📦', columns: EXP_COLS, rows: rows.map(expCells), total: ['Grand Total', '', '', '', '', '', '', '', `${rows.length.toLocaleString()} records`, w.toFixed(3), '', '', '', '']}]};
+    qdDownloadXlsx(spec, 'drilldown_filtered_records');
     return true;
   }
 
@@ -204,7 +225,8 @@ const QDHF = (function(){
       return;
     }
     if(t.closest('.qdhf-clear-all')){ if(cur){ cur.filters.clear(); paint(cur); } return; }
-    if(t.closest('#drillExportBtn') && cur && activeFilters(cur)){ e.preventDefault(); exportFiltered(); }
+    if(t.closest('#drillExportBtn') && cur && activeFilters(cur)){ e.preventDefault(); exportFiltered('xlsx'); }
+    else if(t.closest('#drillExportCsvBtn') && cur && activeFilters(cur)){ e.preventDefault(); exportFiltered('csv'); }
   }, true);
   document.addEventListener('mousedown', e => { if(pop && !pop.contains(e.target) && !(e.target.closest && e.target.closest('.qdhf-btn'))) closePop(); }, true);
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && pop){ e.preventDefault(); e.stopImmediatePropagation(); closePop(); } }, true);

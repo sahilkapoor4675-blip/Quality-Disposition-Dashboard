@@ -96,7 +96,7 @@ class _QualityHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 from urllib.parse import urlparse, parse_qs
 
-from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report, _stream_csv
+from reports import _filter_summary, _safe_filename, _send_bytes, _excel_report, _pdf_report, _pptx_report, _stream_csv, _table_xlsx
 from logging_setup import configure_logging, tail_log_file
 from dr_storage import is_remote_configured, upload_file as dr_upload_file, verify_uploaded_file as dr_verify_uploaded_file
 import alerts  # webhook/email alerts for backup failures (see alerts.py)
@@ -5493,12 +5493,48 @@ def _drilldown_rows(filters, metric, drill_value=None, limit=5000, offset=0):
     """Return viewer-safe source records for KPI/chart drill-down using the same filters as dashboard."""
     where_sql, params = _drilldown_where(filters, metric, drill_value)
     conn=get_conn(); cur=conn.cursor()
-    sql=f"SELECT insp_lot_date, ud_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight FROM disposition {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
+    sql=f"SELECT insp_lot_date, ud_date, heat_no, batch_no, work_center, grade, main_defect, defect_intensity, quality_decision, output_weight, month, week, quarter, financial_year FROM disposition {where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
     cur.execute(sql, params+[limit,offset]); raw=cur.fetchall(); conn.close()
     rows=[]
     for r in raw:
-        rows.append({'insp_lot_date':r[0] or '', 'ud_date':r[1] or '', 'heat_no':r[2] or '', 'batch_no':r[3] or '', 'coil_lot':r[3] or '', 'work_center':r[4] or '', 'grade':r[5] or '', 'main_defect':r[6] or '', 'defect_intensity':r[7] or '', 'quality_decision':r[8] or '', 'output_weight':float(r[9] or 0)})
+        rows.append({'insp_lot_date':r[0] or '', 'ud_date':r[1] or '', 'heat_no':r[2] or '', 'batch_no':r[3] or '', 'coil_lot':r[3] or '', 'work_center':r[4] or '', 'grade':r[5] or '', 'main_defect':r[6] or '', 'defect_intensity':r[7] or '', 'quality_decision':r[8] or '', 'output_weight':float(r[9] or 0), 'month':r[10] or '', 'week':r[11] or '', 'quarter':r[12] or '', 'financial_year':r[13] or ''})
     return rows
+
+DRILL_EXPORT_KEYS = ['insp_lot_date','ud_date','heat_no','batch_no','work_center','grade','main_defect','defect_intensity','quality_decision','output_weight','month','week','quarter','financial_year']
+DRILL_EXPORT_HEADERS = ['Insp Lot Date','UD Date','HEAT NO','BATCH NO','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)','Month','Week','Quarter','Financial Year']
+
+def _drilldown_rows_all(filters, metric, drill_value=None, page=5000, cap=300000):
+    """EVERY record of a drill-down (the on-screen list is paginated; an export must not stop at a page or at a fixed row cap)."""
+    out=[]; off=0
+    while len(out) < cap:
+        chunk=_drilldown_rows(filters, metric, drill_value, limit=page, offset=off)
+        out.extend(chunk)
+        if len(chunk) < page: break
+        off += page
+    return out
+
+def drill_export_columns():
+    return [
+        {'label':'Insp Lot Date','icon':'📅','kind':'date'}, {'label':'UD Date','icon':'📅','kind':'date'},
+        {'label':'Heat No','icon':'🔥','kind':'heat'}, {'label':'Batch No','icon':'📦','kind':'text','width':14},
+        {'label':'Work Center','icon':'🏭','kind':'text','width':16}, {'label':'Grade','icon':'🏷️','kind':'text','width':22},
+        {'label':'Main Defect','icon':'🛠️','kind':'text','width':24}, {'label':'Defect Intensity','icon':'🔥','kind':'text'},
+        {'label':'Quality Decision','icon':'🧾','kind':'decision','width':20}, {'label':'Output Weight (MT)','icon':'⚖️','kind':'num3'},
+        {'label':'Month','icon':'🗓️','kind':'text'}, {'label':'Week','icon':'🗓️','kind':'text','width':16},
+        {'label':'Quarter','icon':'📊','kind':'text'}, {'label':'Financial Year','icon':'📆','kind':'text','width':14},
+    ]
+
+def _drill_export_spec(rows, filters, metric, title='', scope_note=''):
+    now=_dt.datetime.now().strftime('%d-%m-%Y %H:%M')
+    tot=sum(float(r.get('output_weight') or 0) for r in rows)
+    coils=len({str(r.get('batch_no') or '') for r in rows if r.get('batch_no')}) or len(rows)
+    meta=[['Exported', now], ['Filters', ', '.join(f'{k}: {v}' for k,v in _filter_summary(filters)) or 'All'], ['Records', f'{len(rows):,}  ({coils:,} coils)']]
+    if scope_note: meta.insert(1, ['Selection', scope_note])
+    return {'title': title or 'Underlying Records — ' + (metric or 'Current selection'), 'icon':'📋', 'sheet':'Underlying Records',
+            'subtitle':'Drill-down export · every record and column of the selection',
+            'meta':meta, 'sections':[{'title':'Records','icon':'📦','columns':drill_export_columns(),
+              'rows':[[r.get(k,'') for k in DRILL_EXPORT_KEYS] for r in rows],
+              'total':['Grand Total','','','','','','','',f'{len(rows):,} records','%.3f' % tot,'','','','']}]}
 
 def compute_data_freshness(filters):
     # "Data Through" is based on the latest inspection/source date, not UD Date.
@@ -5885,14 +5921,19 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/drilldown/export":
             try:
                 filters = _filters_from_qs(qs)
-                rows = _drilldown_rows(filters, qs.get('metric',''), qs.get('drill_value'), limit=50000)
-                out=io.StringIO(newline=''); w=csv.writer(out)
-                w.writerow(['Insp Lot Date','HEAT NO','BATCH NO','Work Center','Grade','Main Defect','Defect Intensity','Quality Decision','Output Weight (MT)'])
-                for r in rows: w.writerow([_csv_safe_value(_dmy_cell(r['insp_lot_date'])),_csv_safe_value(r['heat_no']),_csv_safe_value(r['batch_no']),_csv_safe_value(r['work_center']),_csv_safe_value(r['grade']),_csv_safe_value(r['main_defect']),_csv_safe_value(r['defect_intensity']),_csv_safe_value(r['quality_decision']),r['output_weight']])
-                _activity_event(self, 'drilldown_export_csv', filters=filters)
-                _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
+                metric = qs.get('metric',''); dval = qs.get('drill_value')
+                fmt = str(qs.get('fmt','xlsx') or 'xlsx').lower()
+                rows = _drilldown_rows_all(filters, metric, dval)
+                _activity_event(self, 'drilldown_export_' + ('csv' if fmt == 'csv' else 'xlsx'), filters=filters)
+                if fmt == 'csv':
+                    out=io.StringIO(newline=''); w=csv.writer(out); w.writerow(DRILL_EXPORT_HEADERS)
+                    for r in rows: w.writerow([_csv_safe_value(_dmy_cell(v)) if k in ('insp_lot_date','ud_date') else _csv_safe_value(v) for k,v in ((k, r.get(k, '')) for k in DRILL_EXPORT_KEYS)])
+                    _send_bytes(self,out.getvalue().encode('utf-8-sig'),'text/csv; charset=utf-8','drilldown_records.csv')
+                else:
+                    spec = _drill_export_spec(rows, filters, metric, qs.get('title',''), qs.get('chart_scope',''))
+                    _send_bytes(self, _table_xlsx(spec), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'drilldown_records.xlsx')
             except Exception as e:
-                self._send_json({'error':str(e)}, status=500)
+                log.exception("drilldown export failed"); self._send_json({'error':str(e)}, status=500)
         elif path == "/api/qcr":
             filters = _filters_from_qs(qs)
             cache_key = "qcr:" + json.dumps(filters, sort_keys=True, separators=(",", ":"))
@@ -6764,6 +6805,18 @@ class Handler(BaseHTTPRequestHandler):
                 if _meta_for_reset_check and _meta_for_reset_check.get("must_reset"):
                     self._send_json({"error": "A new password has been set for your account. Please set your own password before continuing.", "must_reset_password": True}, status=403)
                     return
+
+        if path == "/api/export/table":
+            try:
+                spec = _json_body(self)
+                if not isinstance(spec, dict) or not isinstance(spec.get("sections"), list): raise ValueError("Nothing to export")
+                data = _table_xlsx(spec)
+                _activity_event(self, "export_table_xlsx")
+                name = re.sub(r"[^A-Za-z0-9._-]+", "_", str(spec.get("filename") or "export")).strip("._-")[:80] or "export"
+                _send_bytes(self, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name + ".xlsx")
+            except Exception as e:
+                log.warning("table export failed: %s", e); self._send_json({"error": "Could not build the Excel file: " + str(e)[:200]}, status=400)
+            return
 
         if path == "/api/viewer/login":
             try:

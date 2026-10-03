@@ -272,7 +272,7 @@
     <kbd class="kbd-hint" title="Press ? for all keyboard shortcuts">/</kbd>
     <div class="global-search-results" id="globalSearchResults"></div>
   </div>
-  <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" id="drillDialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head" id="drillHead"><div><h3 id="drillTitle"><svg class="ic" aria-hidden="true"><use href="#ic-table"/></svg><span class="drill-title-text">Underlying Records</span></h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#"><svg class="ic" aria-hidden="true"><use href="#ic-download"/></svg>Export Selected Records</a><button id="drillCloseBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-x"/></svg>Close</button></div></div><nav class="drill-breadcrumb" id="drillBreadcrumb" aria-label="Drill-down path"></nav><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div><div class="drill-resize-handle" id="drillResizeHandle" title="Drag to resize" aria-hidden="true"></div></div></div>
+  <div class="drill-modal" id="drillModal" aria-hidden="true"><div class="drill-dialog" id="drillDialog" role="dialog" aria-modal="true" aria-labelledby="drillTitle"><div class="drill-head" id="drillHead"><div><h3 id="drillTitle"><svg class="ic" aria-hidden="true"><use href="#ic-table"/></svg><span class="drill-title-text">Underlying Records</span></h3><div class="drill-sub" id="drillSubtitle">Current selection</div></div><div class="drill-head-actions"><a id="drillExportBtn" class="drill-export" href="#"><svg class="ic" aria-hidden="true"><use href="#ic-download"/></svg>Export Selected Records</a><a id="drillExportCsvBtn" class="drill-export drill-export-csv" href="#" title="Same records as a plain CSV file"><svg class="ic" aria-hidden="true"><use href="#ic-file-text"/></svg>CSV</a><button id="drillCloseBtn" type="button"><svg class="ic" aria-hidden="true"><use href="#ic-x"/></svg>Close</button></div></div><nav class="drill-breadcrumb" id="drillBreadcrumb" aria-label="Drill-down path"></nav><div class="drill-body"><div class="drill-meta"><span class="drill-count" id="drillCount">0 records</span><span id="drillScope"></span></div><div id="drillContent"></div></div><div class="drill-resize-handle" id="drillResizeHandle" title="Drag to resize" aria-hidden="true"></div></div></div>
 
   <!-- Side-by-side compare: two independent copies of this very page, each
        loaded with a different value for one chosen filter (Month by
@@ -330,20 +330,21 @@
       </div>
       <div class="export-dialog-group hidden" id="exportChemGroup">
         <div class="export-dialog-group-title">Chemistry SPC &mdash; current Chemistry selection</div>
+        <div class="chem-fmt-pick" role="radiogroup" aria-label="Chemistry export file type"><span>File type</span><label><input type="radio" name="chemExpFmt" value="xlsx" checked> Excel (styled)</label><label><input type="radio" name="chemExpFmt" value="csv"> CSV (plain)</label></div>
         <div class="export-dialog-options export-dialog-options-chem" role="group" aria-label="Chemistry exports">
           <button type="button" class="export-dialog-option" data-chem-export="cpk">
             <span class="export-dialog-option-icon eo-csv" aria-hidden="true"><svg class="ic"><use href="#ic-file-sheet"/></svg></span>
-            <span class="export-dialog-option-copy"><strong>Cpk table (CSV)</strong><small>Cp / Cpk / Pp / Ppk and Std. Dev. of every parameter.</small></span>
+            <span class="export-dialog-option-copy"><strong>Cpk table (Excel)</strong><small>Cp / Cpk / Pp / Ppk and Std. Dev. of every parameter.</small></span>
             <span class="export-dialog-option-arrow" aria-hidden="true">&darr;</span>
           </button>
           <button type="button" class="export-dialog-option" data-chem-export="heats">
             <span class="export-dialog-option-icon eo-csv" aria-hidden="true"><svg class="ic"><use href="#ic-database"/></svg></span>
-            <span class="export-dialog-option-copy"><strong>Heat data (CSV)</strong><small>One row per heat for the charted parameter.</small></span>
+            <span class="export-dialog-option-copy"><strong>Heat data (Excel)</strong><small>One row per heat for the charted parameter.</small></span>
             <span class="export-dialog-option-arrow" aria-hidden="true">&darr;</span>
           </button>
           <button type="button" class="export-dialog-option" data-chem-export="oos">
             <span class="export-dialog-option-icon eo-csv" aria-hidden="true"><svg class="ic"><use href="#ic-file-text"/></svg></span>
-            <span class="export-dialog-option-copy"><strong>Out-of-spec heats (CSV)</strong><small>Heats outside their limits, with coils and defects.</small></span>
+            <span class="export-dialog-option-copy"><strong>Out-of-spec heats (Excel)</strong><small>Heats outside their limits, with coils and defects.</small></span>
             <span class="export-dialog-option-arrow" aria-hidden="true">&darr;</span>
           </button>
         </div>

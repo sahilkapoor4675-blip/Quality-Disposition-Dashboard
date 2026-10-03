@@ -119,7 +119,25 @@ def export_stress():
     print('EXPORT STRESS PASS')
 
 
+def table_export_acceptance():
+    """14th pass: the generic styled table workbook (drill-down + Chemistry exports) keeps every row and column, colours decisions and neutralises formulas."""
+    import io, openpyxl, reports
+    cols=[{'label':'Date','icon':'📅','kind':'date'},{'label':'Heat','icon':'🔥','kind':'heat'},{'label':'MT','kind':'num3'},{'label':'Decision','kind':'decision'},{'label':'Status','kind':'status'},{'label':'Cpk','kind':'idx','thr':{'target':1.33,'warning':1.0,'direction':'higher'}}]
+    rows=[['12-04-2026',f'NBS{i}',1.5,'REJECT' if i%2 else 'PRIME','OUT OF SPEC · ABOVE USL' if i%2 else 'OK',0.8 if i%2 else 1.6] for i in range(1200)]
+    rows[0][1]='=HYPERLINK("http://x")'
+    data=reports._table_xlsx({'title':'T','sections':[{'title':'Records','columns':cols,'rows':rows,'total':['Total']}]})
+    ws=openpyxl.load_workbook(io.BytesIO(data)).active
+    body=[r for r in ws.iter_rows(values_only=True) if r[1] and str(r[1]).lstrip("'").startswith(('NBS','=HYPER'))]
+    assert len(body)==1200, f'every row must be exported (got {len(body)})'
+    assert str(body[0][1]).startswith("'="), 'formula injection must be neutralised'
+    assert len(ws._images)==1, 'JSL logo is on the sheet'
+    fills={c.value:c.fill.fgColor.rgb for r in ws.iter_rows() for c in r if c.value in ('REJECT','PRIME')}
+    assert fills['REJECT']!=fills['PRIME'], 'decisions are coloured differently'
+    print('table export OK (1200 rows, logo, colours, formula-safe)')
+
+
 if __name__ == "__main__":
     export_acceptance()
+    table_export_acceptance()
     if "--stress" in sys.argv:
         export_stress()

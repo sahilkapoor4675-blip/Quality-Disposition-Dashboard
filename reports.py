@@ -386,6 +386,115 @@ def _xl_embed_charts(ws, charts_dict, names, start_row=3, anchor_col="J", width=
         except Exception: pass
     return placed
 
+# ---- Excel polish: the main report carries the dashboard look (JSL logo, icons, KPI accent colours, severity colours, zebra rows, filters, print setup) ----
+_XL_SHEET_ICON = {"Dashboard": "📊", "KPI Summary": "🎯", "Defect Analysis": "🛠️", "Work Center": "🏭", "Grade Analysis": "🏷️", "Monthly Trend": "🗓️", "Weekly Trend": "📆",
+                  "Quarterly Trend": "📈", "Financial Year": "💰", "Target vs Actual History": "🎯", "6M Fishbone Analysis": "🐟", "Quality Control Room": "🚨", "Management Intelligence": "🧭"}
+_XL_HEAD_ICON = {"KPI": "🎯", "Value": "🔢", "Format": "🔣", "Previous": "🕘", "Change": "📈", "Rank": "🏅", "Defect": "🛠️", "Records": "📋", "Qty (MT)": "⚖️", "% Records": "📊",
+                 "Name": "🏷️", "Coils": "📦", "Output MT": "⚖️", "Defect Coils": "🛠️", "Defect %": "📉", "Reject Qty MT": "❌", "Reject % Qty": "❌", "FPY %": "✅", "Month": "🗓️",
+                 "Period": "📆", "Target": "🎯", "Actual": "📌", "Attainment": "🏁", "Gap (pp)": "↔️", "Section": "🧩", "Item": "🔖", "Detail": "📝", "Action": "⚡", "Severity": "🚦",
+                 "Grade": "🏷️", "Work Center": "🏭", "Category": "🧭", "Cause": "❓", "6M Category": "🧭", "5-Why Chain": "🔗", "Root Cause": "🔍", "Preventive Action": "🛡️", "Role": "👤", "Responsibility": "👤"}
+_XL_SEV = {"critical": ("FEE2E2", "B91C1C"), "high": ("FEE2E2", "B91C1C"), "bad": ("FEE2E2", "B91C1C"), "red": ("FEE2E2", "B91C1C"), "action": ("FEE2E2", "B91C1C"),
+           "medium": ("FEF3C7", "B45309"), "warning": ("FEF3C7", "B45309"), "warn": ("FEF3C7", "B45309"), "amber": ("FEF3C7", "B45309"), "watch": ("FEF3C7", "B45309"),
+           "low": ("DCFCE7", "15803D"), "good": ("DCFCE7", "15803D"), "ok": ("DCFCE7", "15803D"), "green": ("DCFCE7", "15803D"), "on target": ("DCFCE7", "15803D"),
+           "info": ("DBEAFE", "1D4ED8")}
+
+
+def _xl_polish(wb, payload, navy, accent):
+    from openpyxl.utils import get_column_letter
+    import os
+    thin = Side(style="thin", color="DCE6EF"); edge = Border(left=thin, right=thin, top=thin, bottom=thin)
+    fill = lambda h: PatternFill("solid", fgColor=h)
+    logo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jsl-header-logo.png")
+    def is_head(c):
+        try: return c.fill is not None and c.fill.fill_type == "solid" and str(c.fill.fgColor.rgb or "").upper().endswith(accent)
+        except Exception: return False
+    for ws in wb.worksheets:
+        # ---- title band: icon + taller row + JSL logo just right of the band ----
+        a1 = ws["A1"]; band_end = 1
+        for mr in ws.merged_cells.ranges:
+            if mr.min_row == 1 and mr.min_col == 1: band_end = mr.max_col
+        if isinstance(a1.value, str) and ws.title in _XL_SHEET_ICON and not a1.value.startswith(_XL_SHEET_ICON[ws.title]):
+            a1.value = f"{_XL_SHEET_ICON[ws.title]}  {a1.value}"
+        a1.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+        if ws.title != "Dashboard": ws.row_dimensions[1].height = 30
+        try:
+            if os.path.exists(logo):
+                img = XLImage(logo); img.height = 34 if ws.title != "Dashboard" else 44; img.width = int(img.height * 1536 / 318)
+                ws.add_image(img, f"{get_column_letter(band_end + 1)}1")
+        except Exception: pass
+        # ---- table blocks: icon headers, zebra rows, total row, severity colours ----
+        sev_col = None; in_table = False; first_head = None; last_data = None; zebra = 0; n_blocks = 0
+        for row in ws.iter_rows(min_row=2):
+            c0 = row[0]
+            if is_head(c0):
+                in_table = True; zebra = 0; n_blocks += 1; sev_col = None
+                if first_head is None: first_head = c0.row
+                ws.row_dimensions[c0.row].height = 26
+                for c in row:
+                    if c.value is None: continue
+                    if isinstance(c.value, str):
+                        ic = _XL_HEAD_ICON.get(c.value)
+                        if ic and not c.value.startswith(ic): c.value = f"{ic} {c.value}"
+                        if "Severity" in c.value: sev_col = c.column
+                    c.fill = fill(accent); c.font = Font(bold=True, color="FFFFFF", size=10.5); c.border = edge
+                    c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                continue
+            if not in_table: continue
+            if all(c.value is None for c in row): in_table = False; continue
+            is_total = str(c0.value or "").strip() in ("Total", "Grand Total") or str(row[1].value if len(row) > 1 else "").strip() == "Total"
+            zebra += 1; last_data = None if is_total else c0.row
+            for c in row:
+                if c.value is None and c.column > ws.max_column: continue
+                c.border = edge
+                if is_total:
+                    c.fill = fill("EAF2FB"); c.font = Font(bold=True, color=navy); c.border = Border(top=Side(style="medium", color=navy), bottom=thin, left=thin, right=thin)
+                elif zebra % 2 == 0 and (c.fill is None or c.fill.fill_type is None):
+                    c.fill = fill("F6FAFE")
+            if ws.title in ("Quality Control Room", "Management Intelligence") and not is_total:
+                vc = ws.cell(c0.row, 6)
+                if isinstance(vc.value, float): vc.number_format = "#,##0.000"   # long unformatted floats (0.0406123...) read as numbers, not noise
+            if sev_col and not is_total:
+                c = ws.cell(c0.row, sev_col); v = str(c.value or "").strip().lower()
+                if v in _XL_SEV: c.fill = fill(_XL_SEV[v][0]); c.font = Font(bold=True, color=_XL_SEV[v][1])
+                if "Decision" in str(ws.cell(c0.row, 2).value or ""): pass
+        if first_head and n_blocks == 1 and ws.title not in ("Dashboard",):
+            hr = first_head; ws.freeze_panes = ws.cell(hr + 1, 1)
+            lastcol = max((c.column for c in ws[hr] if c.value is not None), default=1)
+            end = last_data or ws.max_row
+            if end > hr: ws.auto_filter.ref = f"A{hr}:{get_column_letter(lastcol)}{end}"
+        # ---- print setup: landscape, one page wide, repeat header, footer ----
+        ws.page_setup.orientation = "landscape"; ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True; ws.print_options.horizontalCentered = True
+        ws.oddFooter.center.text = "Quality Intelligence · &D · Page &P of &N"
+        if first_head and n_blocks == 1 and ws.title != "Dashboard": ws.print_title_rows = f"{first_head}:{first_head}"
+    # ---- Dashboard cover: KPI tiles take the card accent colour + trend line (arrow, sign, %), like the web cards ----
+    ws = wb["Dashboard"]
+    ws["A3"].font = Font(bold=True, color=navy); ws["D3"].font = Font(bold=True, color=navy)
+    ws.merge_cells("B3:C3"); ws["A3"].value = "🕒 Generated"; ws["D3"].value = "🔎 Filters"
+    ws["B3"].alignment = Alignment(horizontal="left", vertical="center"); ws["E3"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True); ws.row_dimensions[3].height = 20
+    tc = {"good": "15803D", "bad": "B91C1C", "info": "1D4ED8", "equal": "64748B"}
+    for i, k in enumerate((payload.get("kpis", {}).get("kpis", []) or [])[:16]):
+        col = (i % 4) * 4 + 1; row = 5 + (i // 4) * 3
+        accent_hex = str(k.get("color") or "#0f2a4a").lstrip("#").upper()[:6]
+        if len(accent_hex) != 6: accent_hex = navy
+        for cc in range(col, col + 4):
+            for rr in (row, row + 1, row + 2):
+                cell = ws.cell(rr, cc); cell.fill = fill("F8FBFE")
+                cell.border = Border(left=Side(style="thick", color=accent_hex) if cc == col else None, right=thin if cc == col + 3 else None, top=thin if rr == row else None, bottom=thin if rr == row + 2 else None)
+        ws.cell(row, col).fill = fill("EAF2FB"); ws.cell(row, col).font = Font(size=9, bold=True, color=navy)
+        for cc in range(col + 1, col + 4): ws.cell(row, cc).fill = fill("EAF2FB")
+        vc = ws.cell(row + 1, col); vc.font = Font(size=20, bold=True, color=accent_hex); vc.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[row + 1].height = 30
+        ws.merge_cells(start_row=row + 2, start_column=col, end_row=row + 2, end_column=col + 3)
+        t = ws.cell(row + 2, col); arrow = {"up": "▲", "down": "▼"}.get(k.get("arrow"), "")
+        ch = k.get("change_value")
+        if arrow and isinstance(ch, (int, float)) and k.get("change_type") == "pct": t.value = f"{arrow} {ch*100:+.2f}%  vs prev"
+        elif arrow and isinstance(ch, (int, float)): t.value = f"{arrow} {ch:+.2f}  vs prev"
+        else: t.value = "— no previous period"
+        t.font = Font(size=9, bold=True, color=tc.get(k.get("trend_color"), "64748B")); t.alignment = Alignment(horizontal="center", vertical="center")
+    ws.freeze_panes = "A5"
+
+
 def _excel_report(payload):
     if Workbook is None:
         raise RuntimeError("Excel export requires openpyxl")
@@ -399,10 +508,17 @@ def _excel_report(payload):
         for j,x in enumerate(labels,1):
             c=ws.cell(row,j,x); c.font=Font(bold=True,color=white); c.fill=PatternFill("solid",fgColor=accent); c.alignment=Alignment(horizontal="center"); c.border=Border(bottom=thin)
     def autofit(ws):
-        for col in ws.columns:
-            letter=col[0].column_letter if hasattr(col[0], "column_letter") else None;
-            if not letter: continue
-            ws.column_dimensions[letter].width=min(max(max(len(str(c.value or "")) for c in col)+2,12),32)
+        # Column letters come from the column index: row 1 is a merged title band, and its merged cells have no column_letter,
+        # which used to skip every column after the first (long names were cut off).
+        from openpyxl.utils import get_column_letter as _gcl
+        merged_title_rows = {mr.min_row for mr in ws.merged_cells.ranges}
+        for idx in range(1, ws.max_column + 1):
+            longest = 0
+            for r in range(1, ws.max_row + 1):
+                if r in merged_title_rows: continue
+                v = ws.cell(r, idx).value
+                if v is not None: longest = max(longest, max((len(x) for x in str(v).split("\n")), default=0))
+            ws.column_dimensions[_gcl(idx)].width = min(max(longest + 5, 12), 64)
 
     # ---- Dashboard cover page: KPI grid + a single headline chart, on one page. ----
     ws.merge_cells("A1:P2"); ws["A1"]="QUALITY INTELLIGENCE — Dashboard Export"; ws["A1"].font=Font(size=20,bold=True,color=white); ws["A1"].fill=PatternFill("solid",fgColor=navy); ws["A1"].alignment=Alignment(vertical="center")
@@ -562,6 +678,8 @@ def _excel_report(payload):
                 wrap = sheet.title == "Quality Control Room" and c.column in (2,3,4)
                 c.alignment=Alignment(horizontal=horiz, vertical="center", wrap_text=wrap)
         sheet.sheet_view.showGridLines=False
+
+    _xl_polish(wb, payload, navy, accent)
 
     # Neutralize spreadsheet formulas in text cells while preserving numeric cells.
     def _safe_excel_text(value):
@@ -909,3 +1027,195 @@ def _pptx_report(payload):
 
 
 
+
+
+# =====================================================================================================================
+# Styled table workbook (drill-down exports, Chemistry exports)
+# One builder for every "export what is on screen" button: the sheet carries the dashboard look - JSL logo, navy title band,
+# icons in the headers, the same status / decision colours - and every column and row of the table that was on screen.
+# `spec` (plain JSON, built by the server or posted by the browser):
+#   title, subtitle, icon            -> title band
+#   meta   [[label, value], ...]     -> "Scope / Filters / Exported" block
+#   sections [{title, icon, note, columns:[{label, icon, kind, width, thr}], rows:[[...]], row_flags:[...], total:[...]}]
+# kinds: text | int | num2 | num3 | num | pct | date | decision | status | idx | heat
+# =====================================================================================================================
+_TX_NAVY, _TX_ACCENT, _TX_SOFT = "0F2A4A", "118DFF", "EAF2FB"
+_TX_DECISION = {   # light tint of the dashboard's decision colours + a readable dark text colour
+    "PRIME": ("DCFCE7", "15803D"), "FOR NEXT PROCESS": ("DBEAFE", "1D4ED8"), "SALVAGE": ("EDE9FE", "6D28D9"),
+    "HOLD FOR DECISION": ("FEF3C7", "B45309"), "REJECT": ("FEE2E2", "B91C1C"), "RE-WORK": ("E2E8F0", "334155"), "DIVERT": ("E0E7FF", "4338CA"),
+}
+_TX_GOOD, _TX_WARN, _TX_BAD = ("DCFCE7", "15803D"), ("FEF3C7", "B45309"), ("FEE2E2", "B91C1C")
+_TX_MAX_ROWS, _TX_MAX_COLS = 300000, 40
+
+
+def _tx_text(v):
+    """Text cell: control characters out, length capped, spreadsheet-formula prefixes neutralised."""
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(v if v is not None else ""))[:2000]
+    return ("'" + s) if s[:1] in ("=", "@") or (s[:1] in ("+", "-") and len(s) > 1 and not re.match(r"^[+-][\d.,]+%?$", s)) else s
+
+
+def _tx_num(v):
+    if isinstance(v, bool): return None
+    if isinstance(v, (int, float)): return None if v != v or v in (float("inf"), float("-inf")) else v
+    if isinstance(v, str):
+        t = v.strip().replace(",", "")
+        if re.match(r"^[+-]?\d+(\.\d+)?$", t): return float(t) if "." in t else int(t)
+    return None
+
+
+def _tx_date(v):
+    t = str(v or "").strip()
+    for pat, order in ((r"^(\d{2})-(\d{2})-(\d{4})", "dmy"), (r"^(\d{4})-(\d{2})-(\d{2})", "ymd")):
+        m = re.match(pat, t)
+        if m:
+            try:
+                a, b, c = (int(x) for x in m.groups())
+                return datetime(c, b, a) if order == "dmy" else datetime(a, b, c)
+            except ValueError:
+                return None
+    return None
+
+
+def _table_xlsx(spec):
+    """Build the styled workbook for `spec` (see the block comment above) and return the .xlsx bytes."""
+    if Workbook is None:
+        raise RuntimeError("Excel export requires openpyxl")
+    from openpyxl.utils import get_column_letter
+    import os
+    sections = [s for s in (spec.get("sections") or []) if isinstance(s, dict)]
+    if not sections:
+        raise ValueError("Nothing to export")
+    ncols = max(1, min(_TX_MAX_COLS, max(len(s.get("columns") or []) for s in sections)))
+    wb = Workbook(); ws = wb.active
+    ws.title = re.sub(r"[\[\]:*?/\\]", " ", str(spec.get("sheet") or spec.get("title") or "Export"))[:31] or "Export"
+    ws.sheet_view.showGridLines = False
+    last = max(ncols, 6)
+    thin = Side(style="thin", color="DCE6EF"); edge = Border(left=thin, right=thin, top=thin, bottom=thin)
+    fill = lambda hex_: PatternFill("solid", fgColor=hex_)
+    widths = [0] * (last + 1)
+    def note_width(col, text):
+        widths[col] = max(widths[col], min(46, len(str(text)) + 2))
+
+    # ---- brand band: JSL logo + application name (same artwork as the dashboard header) ----
+    ws.row_dimensions[1].height = 46
+    for c in range(1, last + 1): ws.cell(1, c).fill = fill("FFFFFF")
+    logo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jsl-header-logo.png")
+    try:
+        if os.path.exists(logo):
+            img = XLImage(logo); img.height = 40; img.width = int(40 * 1536 / 318); ws.add_image(img, "A1")
+    except Exception:
+        pass
+    ws.merge_cells(start_row=1, start_column=max(4, last - 4), end_row=1, end_column=last)
+    c = ws.cell(1, max(4, last - 4), "QUALITY INTELLIGENCE  |  Disposition & Defect Analytics"); c.font = Font(bold=True, size=11, color=_TX_NAVY); c.alignment = Alignment(horizontal="right", vertical="center")
+    # ---- title band + subtitle band ----
+    ws.row_dimensions[2].height = 30
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last)
+    c = ws.cell(2, 1, _tx_text(f"{spec.get('icon') or '📋'}  {spec.get('title') or 'Export'}")); c.font = Font(bold=True, size=16, color="FFFFFF"); c.fill = fill(_TX_NAVY); c.alignment = Alignment(vertical="center", indent=1)
+    for cc in range(1, last + 1): ws.cell(2, cc).fill = fill(_TX_NAVY)
+    row = 3
+    if spec.get("subtitle"):
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=last)
+        c = ws.cell(row, 1, _tx_text(spec["subtitle"])); c.font = Font(bold=True, size=10.5, color="1B5E8E"); c.alignment = Alignment(vertical="center", indent=1, wrap_text=True)
+        for cc in range(1, last + 1): ws.cell(row, cc).fill = fill("D6E9F8")
+        ws.row_dimensions[row].height = 22; row += 1
+    # ---- meta block (Scope / Filters / Exported ...) ----
+    for k, v in (spec.get("meta") or [])[:30]:
+        ws.cell(row, 1, _tx_text(k)).font = Font(bold=True, size=10, color=_TX_NAVY); ws.cell(row, 1).fill = fill(_TX_SOFT); ws.cell(row, 1).border = edge
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=last)
+        cv = ws.cell(row, 2, _tx_text(v)); cv.font = Font(size=10, color="334155"); cv.alignment = Alignment(wrap_text=True, vertical="center"); cv.border = edge
+        ws.row_dimensions[row].height = 17 if len(str(v)) < 110 else 32
+        note_width(1, k); row += 1
+    row += 1
+
+    first_header_row = None; first_cols = 0; first_last_row = 0
+    for si, sec in enumerate(sections):
+        cols = [x for x in (sec.get("columns") or [])][:_TX_MAX_COLS]; rows = (sec.get("rows") or [])[:_TX_MAX_ROWS]
+        flags = sec.get("row_flags") or []
+        n = len(cols)
+        if not n: continue
+        if sec.get("title"):   # section band
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=max(n, 2))
+            c = ws.cell(row, 1, _tx_text(f"{sec.get('icon') or '▣'}  {sec['title']}" + (f"   ({len(rows):,} rows)" if rows else ""))); c.font = Font(bold=True, size=12, color="FFFFFF"); c.alignment = Alignment(vertical="center", indent=1)
+            for cc in range(1, max(n, 2) + 1): ws.cell(row, cc).fill = fill("2388C9")
+            ws.row_dimensions[row].height = 24; row += 1
+        if sec.get("note"):
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=max(n, 2))
+            c = ws.cell(row, 1, _tx_text(sec["note"])); c.font = Font(italic=True, size=9.5, color="6B7C93"); c.alignment = Alignment(wrap_text=True, vertical="center", indent=1)
+            ws.row_dimensions[row].height = 28 if len(str(sec["note"])) > 140 else 16; row += 1
+        hr = row; ws.row_dimensions[hr].height = 34
+        for j, col in enumerate(cols, 1):
+            label = f"{col.get('icon') + ' ' if col.get('icon') else ''}{col.get('label', '')}"
+            c = ws.cell(hr, j, _tx_text(label)); c.font = Font(bold=True, size=10.5, color="FFFFFF"); c.fill = fill(_TX_ACCENT)
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True); c.border = edge
+            note_width(j, max(col.get("width") or 0, min(22, len(str(label)) + 2)))
+        row += 1
+        data_first = row
+        for ri, r in enumerate(rows):
+            band = fill("F6FAFE") if ri % 2 else fill("FFFFFF")
+            flag = flags[ri] if ri < len(flags) else ""
+            for j, col in enumerate(cols, 1):
+                v = r[j - 1] if j - 1 < len(r) else ""
+                kind = col.get("kind") or "text"
+                c = ws.cell(row, j); c.border = edge; c.fill = band; c.font = Font(size=10, color="1F2937"); c.alignment = Alignment(vertical="center", horizontal="left" if kind in ("text", "heat") else "center", wrap_text=kind in ("text", "status"))
+                if flag == "bad": c.fill = fill("FEF2F2")
+                if kind in ("int", "num2", "num3", "num", "idx", "pct"):
+                    nv = _tx_num(v)
+                    if nv is None: c.value = _tx_text(v) if str(v or "").strip() else None; c.alignment = Alignment(horizontal="center", vertical="center")
+                    else:
+                        c.value = nv; c.number_format = {"int": "#,##0", "num2": "#,##0.00", "num3": "#,##0.000", "pct": '0.00"%"', "idx": "0.00", "num": "General"}[kind]
+                        c.alignment = Alignment(horizontal="right" if kind != "idx" else "center", vertical="center", indent=1)
+                        if kind == "idx":   # Cpk / Ppk colour bands (same thresholds as the dashboard cards)
+                            thr = col.get("thr") or {}
+                            try:
+                                t, w = float(thr.get("target")), float(thr.get("warning")); lower = str(thr.get("direction", "higher")).lower() == "lower"
+                                st = (_TX_GOOD if (nv <= t if lower else nv >= t) else _TX_WARN if (nv <= w if lower else nv >= w) else _TX_BAD)
+                                c.fill = fill(st[0]); c.font = Font(size=10, bold=True, color=st[1])
+                            except (TypeError, ValueError):
+                                c.font = Font(size=10, bold=True, color="1F2937")
+                elif kind == "date":
+                    dv = _tx_date(v)
+                    if dv: c.value = dv; c.number_format = "dd-mm-yyyy"
+                    else: c.value = _tx_text(v) if str(v or "").strip() else None
+                    c.alignment = Alignment(horizontal="center", vertical="center")
+                elif kind == "decision":
+                    c.value = _tx_text(v); bg, fg = _TX_DECISION.get(str(v or "").strip().upper(), ("F1F5F9", "334155"))
+                    c.fill = fill(bg); c.font = Font(size=10, bold=True, color=fg)
+                elif kind == "status":
+                    txt = str(v or "").strip(); up = txt.upper()
+                    c.value = _tx_text(txt)
+                    if "OUT OF SPEC" in up or "BELOW" in up or "ABOVE" in up or "REJECT" in up: c.fill = fill(_TX_BAD[0]); c.font = Font(size=10, bold=True, color=_TX_BAD[1])
+                    elif up.endswith("OK") or up in ("OK", "IN SPEC", "ON TARGET"): c.fill = fill(_TX_GOOD[0]); c.font = Font(size=10, bold=True, color=_TX_GOOD[1])
+                    elif up in ("WATCH",): c.fill = fill(_TX_WARN[0]); c.font = Font(size=10, bold=True, color=_TX_WARN[1])
+                    elif up in ("ACTION",): c.fill = fill(_TX_BAD[0]); c.font = Font(size=10, bold=True, color=_TX_BAD[1])
+                    c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                elif kind == "heat":
+                    c.value = _tx_text(v); c.font = Font(size=10, bold=True, color="0B5FB5")
+                else:
+                    c.value = _tx_text(v) if str(v if v is not None else "").strip() else None
+                if c.value is not None: note_width(j, len(str(c.value)) + (4 if kind in ("decision", "heat", "status") else 2))
+            row += 1
+        if sec.get("total"):
+            for j in range(1, n + 1):
+                v = sec["total"][j - 1] if j - 1 < len(sec["total"]) else ""
+                c = ws.cell(row, j); c.fill = fill(_TX_SOFT); c.border = Border(top=Side(style="medium", color=_TX_NAVY), bottom=thin, left=thin, right=thin); c.font = Font(bold=True, size=10.5, color=_TX_NAVY)
+                kind = (cols[j - 1].get("kind") or "text"); nv = _tx_num(v) if kind in ("int", "num2", "num3", "num", "pct") else None
+                if nv is not None: c.value = nv; c.number_format = {"int": "#,##0", "num2": "#,##0.00", "num3": "#,##0.000", "pct": '0.00"%"', "num": "General"}[kind]; c.alignment = Alignment(horizontal="right", vertical="center", indent=1)
+                else: c.value = _tx_text(v) if str(v or "").strip() else None; c.alignment = Alignment(horizontal="left" if j == 1 else "center", vertical="center")
+            ws.row_dimensions[row].height = 22; row += 1
+        if first_header_row is None:
+            first_header_row, first_cols, first_last_row = hr, n, data_first + len(rows) - 1
+        row += 1   # gap between sections
+
+    # ---- sheet furniture ----
+    for j in range(1, last + 1):
+        ws.column_dimensions[get_column_letter(j)].width = max(11, min(46, widths[j] if j < len(widths) and widths[j] else 11))
+    if first_header_row is not None:
+        ws.freeze_panes = ws.cell(first_header_row + 1, 1) if len(sections) == 1 else None
+        if len(sections) == 1 and first_last_row >= first_header_row + 1:
+            ws.auto_filter.ref = f"A{first_header_row}:{get_column_letter(first_cols)}{first_last_row}"
+        if len(sections) == 1: ws.print_title_rows = f"{first_header_row}:{first_header_row}"
+    ws.page_setup.orientation = "landscape"; ws.page_setup.fitToWidth = 1; ws.page_setup.fitToHeight = 0; ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_options.horizontalCentered = True; ws.oddFooter.center.text = "Quality Intelligence · &D · Page &P of &N"
+    bio = io.BytesIO(); wb.save(bio); data = bio.getvalue()
+    if not data: raise RuntimeError("Excel export produced an empty workbook")
+    return data

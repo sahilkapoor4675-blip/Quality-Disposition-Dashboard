@@ -52,7 +52,9 @@ function renderDrillPage(page=1){
   const cntEl=document.getElementById('drillCount'); if(cntEl){ cntEl.textContent='Loading…'; cntEl.classList.add('loading-pulse-text'); }
   const qs=drilldownFiltersQuery(Object.assign({metric,page,page_size:250},extra));
   const expEl=document.getElementById('drillExportBtn');
-  if(expEl) expEl.href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric},extra));
+  if(expEl) expEl.href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric,fmt:'xlsx',title:(t=>/Underlying Records/i.test(t)?t:'Underlying Records — '+t)(title||metric||'Current selection')},extra));
+  const expCsv=document.getElementById('drillExportCsvBtn');
+  if(expCsv) expCsv.href='/api/drilldown/export?'+drilldownFiltersQuery(Object.assign({metric,fmt:'csv'},extra));
   fetch('/api/drilldown?'+qs,{cache:'no-store'}).then(r=>r.json()).then(data=>{
     if(data.error)throw new Error(data.error);
     if(cntEl){ cntEl.textContent=Number(data.count||0).toLocaleString()+' coils'; cntEl.classList.remove('loading-pulse-text'); }
@@ -99,7 +101,7 @@ function wireDrillDialogDragResize(){
   }
   function onUp(){ mode=null; dialog.classList.remove('dragging'); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); }
   head.addEventListener('mousedown',e=>{
-    if(e.target.closest('#drillCloseBtn,#drillExportBtn')) return; // don't start a drag from the action buttons
+    if(e.target.closest('#drillCloseBtn,#drillExportBtn,#drillExportCsvBtn')) return; // don't start a drag from the action buttons
     mode='drag'; startX=e.clientX; startY=e.clientY; startRect=dialog.getBoundingClientRect(); dialog.classList.add('dragging');
     document.addEventListener('mousemove',onMove); document.addEventListener('mouseup',onUp);
   });

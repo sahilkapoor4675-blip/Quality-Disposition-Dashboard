@@ -790,7 +790,7 @@ function drawChemHist(el, d){
       const out = (d.lsl != null && b.x1 <= d.lsl) || (d.usl != null && b.x0 >= d.usl) || (chemSel.ins_aim && ((d.aim_lsl != null && b.x1 <= d.aim_lsl) || (d.aim_usl != null && b.x0 >= d.aim_usl)));
       const x0 = X(b.x0), w = Math.max(1, X(b.x1) - X(b.x0) - 1);
       const labelY = Math.max(m.t + 11, Y(b.n) - 5);
-      g += `<rect class="chart-bar chem-hist-bar" style="--i:${Math.min(h.bins.indexOf(b),10)}" data-bin="${h.bins.indexOf(b)}" data-tip="${escQcr(`${chemNum(b.x0)} – ${chemNum(b.x1)}: ${b.n} heat${b.n === 1 ? '' : 's'}${out ? ' (out of spec)' : ''}${b.n ? ' · click to see heats' : ''}`)}" x="${x0.toFixed(1)}" y="${Y(b.n).toFixed(1)}" width="${w.toFixed(1)}" height="${(m.t + ph - Y(b.n)).toFixed(1)}" fill="${out ? '#DC2626' : '#118DFF'}" fill-opacity=".78"/>`;
+      g += `<rect class="chart-bar chem-hist-bar ${b.n ? 'has-heats' : 'is-empty'}${out ? ' is-out' : ''}" style="--i:${Math.min(h.bins.indexOf(b),10)}" data-bin="${h.bins.indexOf(b)}" ${b.n ? `role="button" tabindex="0" aria-label="${escQcr(`${chemNum(b.x0)} to ${chemNum(b.x1)}: ${b.n} heats. Press Enter to open the heats`)}"` : ''} data-tip="${escQcr(`${chemNum(b.x0)} – ${chemNum(b.x1)}: ${b.n} heat${b.n === 1 ? '' : 's'}${out ? ' (out of spec)' : ''}${b.n ? ' · click to drill down' : ''}`)}" x="${x0.toFixed(1)}" y="${Y(b.n).toFixed(1)}" width="${w.toFixed(1)}" height="${(m.t + ph - Y(b.n)).toFixed(1)}" fill="${out ? '#DC2626' : '#118DFF'}" fill-opacity=".78"/>`;
       if(b.n > 0 && w >= 6){
         // Count above every bar, at any chart width: normal text on wide bars, smaller on medium bars, vertical on narrow ones (a halo keeps it readable).
         const cx = x0 + w / 2, txt = String(b.n), fs = w >= 22 ? 10 : w >= 14 ? 9 : 8.5, vert = w < txt.length * fs * 0.62 + 3;
@@ -818,8 +818,12 @@ function drawChemHist(el, d){
     if(aimOffR) g += `<text x="${m.l + pw - 6}" y="${m.t + 74}" text-anchor="end" font-size="11" font-weight="700" fill="#0D9488">Aim USL ${chemNum(d.aim_usl)} is far to the right of the data ▶</text>`;
     xt.forEach(v => { g += `<text x="${X(v)}" y="${m.t + ph + 16}" text-anchor="middle" font-size="11" fill="var(--chart-muted)">${xf(v)}</text>`; });
     g += `<line x1="${m.l}" x2="${m.l + pw}" y1="${m.t + ph}" y2="${m.t + ph}" stroke="var(--chart-axis)"/><text x="${m.l + pw / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--chart-axis-title)">Value (heats per bin; curve = normal fit on overall σ)</text>`;
-    el.innerHTML = `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Histogram with specification limits">${g}</svg>`;
-    el.querySelectorAll('.chem-hist-bar[data-bin]').forEach(r => r.addEventListener('click', () => { const b = h.bins[+r.getAttribute('data-bin')]; if(b && b.n) openChemBin(d, b, +r.getAttribute('data-bin') === h.bins.length - 1); }));
+    el.innerHTML = `<svg class="chart-svg chem-hist-svg" viewBox="0 0 ${W} ${H}" width="100%" role="group" aria-label="Histogram with specification limits. Click a bar to see its heats.">${g}</svg>`;
+    el.querySelectorAll('.chem-hist-bar[data-bin]').forEach(r => {
+      const open = () => { const i = +r.getAttribute('data-bin'), bin = h.bins[i]; if(bin && bin.n) openChemBin(d, bin, i === h.bins.length - 1); };
+      r.addEventListener('click', open);
+      r.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } });
+    });
   };
   redraw(); chartRemember(el, redraw);
 }
@@ -891,7 +895,8 @@ function renderChemMain(d){
     const c = chemIdxClass(v), t = type || 'info';
     const tc = t === 'up' ? 'good' : t === 'down' ? 'bad' : t === 'equal' ? 'equal' : 'info';
     const prevHtml = `<span class="prev">🕘 Prev <b class="kpi-prev-val" data-chem-prev="${key}">${prevV == null ? 'N/A' : chemIdx(prevV)}</b></span>`;
-    const trendHtml = prevV == null || chg == null ? '' : `<span class="trend ${tc}">${t === 'up' ? '▲' : t === 'down' ? '▼' : '▬'} ${t === 'equal' ? 'No change' : (pct != null ? `<b class="kpi-change-val" data-chem-pct="${key}">${pctTxt(pct)}</b><span class="chem-el-abs">(<span class="kpi-delta-val" data-chem-delta="${key}">${dTxt(chg)}</span>)</span>` : `<span class="kpi-delta-val" data-chem-delta="${key}">${dTxt(chg)}</span>`)}</span>`;
+    const trendTip = prevV == null || chg == null ? '' : `${k} vs previous period: ${pct != null ? pctTxt(pct) + ' = relative change. ' : ''}(${dTxt(chg)}) = absolute difference of the ${k} index itself (${chemIdx(v)} − ${chemIdx(prevV)}). ${k} has no unit, so this is not percentage points (pp).`;
+    const trendHtml = prevV == null || chg == null ? '' : `<span class="trend ${tc}" title="${escQcr(trendTip)}">${t === 'up' ? '▲' : t === 'down' ? '▼' : '▬'} ${t === 'equal' ? 'No change' : (pct != null ? `<b class="kpi-change-val" data-chem-pct="${key}">${pctTxt(pct)}</b><span class="chem-el-abs">(<span class="kpi-delta-val" data-chem-delta="${key}">${dTxt(chg)}</span>)</span>` : `<span class="kpi-delta-val" data-chem-delta="${key}">${dTxt(chg)}</span>`)}</span>`;
     return `<div class="chem-el-big"><span class="chem-el-bk">${k === 'Cpk' ? '📈' : '📊'} ${k}<small>${sub}</small></span><b class="chem-el-bv ${c ? 'is-' + c.replace('chem-', '') : ''}" data-chem-value="${k.toLowerCase()}">${chemIdx(v)}</b><div class="kpi-trendline chem-el-trendline">${prevHtml}${trendHtml}</div></div>`;
   };
   const tile = (k, v, cls) => `<div class="kpi-target-item ${cls || ''}"><span>${k}</span><b>${v}</b></div>`;
@@ -917,7 +922,7 @@ function renderChemMain(d){
   const thr = chemThr(), tf = v => v == null || !isFinite(Number(v)) ? '—' : Number(v).toFixed(2);
   const bandNote = `<div class="chem-band-note"><b>🎯 Capability bands</b> (Cpk / Ppk)<span class="chem-band bad">LOW ${tf(thr.critical)}</span><span class="chem-band amber">MID ${tf(thr.warning)}</span><span class="chem-band good">HIGH ${tf(thr.target)}</span><span class="chem-band-dir">↑ Higher is better</span></div>`;
   let ci = 0;
-  box.innerHTML = bandNote + groups.map(g => (d.all_grades ? `<div class="chem-grade-head"><b>🧪 ${escQcr(g.title)}</b><span>${g.n.toLocaleString()} heat${g.n === 1 ? '' : 's'}${g.win && chemSel.last_n ? ' · ' + escQcr([chemHeatRange(g.win), chemCastRange(g.win)].filter(Boolean).join(' · ')) : ''}</span></div>` : '')
+  box.innerHTML = bandNote + groups.map(g => (d.all_grades ? `<div class="chem-grade-head"><b>🧪 ${escQcr(g.title)}</b><span class="chem-gh-n">${g.n.toLocaleString()} heat${g.n === 1 ? '' : 's'}</span>${g.win && chemSel.last_n ? `<span class="chem-gh-win">${escQcr([chemHeatRange(g.win), chemCastRange(g.win)].filter(Boolean).join(' · '))}</span>` : ''}</div>` : '')
     + `<div class="chem-el-grid-wrap" data-n="${g.rows.length}">${g.rows.map(r => card(r, ci++, g)).join('')}</div>`).join('');
 
   // Same KPI interaction model: 5° pointer tilt, directional change classes, count-up/spring animation for headline + trend metrics.
@@ -1051,6 +1056,7 @@ function chemCsvHead(d, title){
 }
 // Capability of every parameter of the grade (main elements first) — the numbers behind the Cpk cards and table.
 function chemExportCpk(d){
+  if(chemXlsxOn()) return chemXlsxCpk(d);
   const sets = d && d.all_grades ? (d.grades || []).map(g => ({grade: g.description === '__none__' ? 'No spec assigned' : g.description, rows: g.overview || []}))
     : [{grade: (d && d.spec && d.spec.description) || '', rows: (d && d.overview) || []}];
   if(!sets.some(x => x.rows.length)) return;
@@ -1064,6 +1070,7 @@ function chemExportCpk(d){
 // Heat series of the view: the charted parameter, or (Parameter = All) the first main element's series (all elements are merged on export).
 function chemHeatSeries(d){ return d && d.param === '__all__' ? (((d.param_views || [])[0] || {}).series || []) : ((d && d.series) || []); }
 function chemExportHeats(d){
+  if(chemXlsxOn()) return chemXlsxHeats(d);
   const s = chemHeatSeries(d); if(!s.length) return;
   if(d.param === '__all__'){
     const pv = d.param_views || [], by = pv.map(p => new Map((p.series || []).map(x => [x.heat_no, x])));
@@ -1083,6 +1090,7 @@ function chemExportHeats(d){
   chemDownloadCsv('chemistry_heats_' + d.param + '_' + chemFileTag(d) + '.csv', lines);
 }
 function chemExportOos(d){
+  if(chemXlsxOn()) return chemXlsxOos(d);
   const cell = chemCsvCell;
   const lines = chemCsvHead(d, 'Chemistry SPC - Out-of-spec heats').concat([['Heat', 'Analyst', 'Chemistry problem', 'Coils', 'Reject %', 'Defect coils', 'Top defects'].map(cell).join(',')]);
   d.oos_heats.forEach(o => lines.push([o.heat_no, o.analyst, o.violations.map(v => `${v.param} ${v.value} ${v.side === 'below' ? '< LSL' : '> USL'} ${v.limit}`).join('; '),
@@ -1140,15 +1148,16 @@ function chemHeatModal(){
   return m;
 }
 function chemExportDrill(){
+  if(chemXlsxOn()) return chemXlsxDrill();
   if(!chemDrillLast && chemBinLast){
     const q = chemBinLast, lines = [['Heat', 'Cast date', q.label, 'Out of spec', 'Coils', 'Reject %'].map(chemCsvCell).join(',')];
-    q.heats.forEach(p => lines.push([p.heat_no, p.cast_date ? chemDmy(p.cast_date) : '', p.value, chemOutWhy(p.value, q.d, p.oos) || 'OK', p.disp ? p.disp.coils : '', p.disp ? p.disp.reject_pct : ''].map(chemCsvCell).join(',')));
+    chemVisible(q.heats, 0).forEach(p => lines.push([p.heat_no, p.cast_date ? chemDmy(p.cast_date) : '', p.value, chemOutWhy(p.value, q.d, p.oos) || 'OK', p.disp ? p.disp.coils : '', p.disp ? p.disp.reject_pct : ''].map(chemCsvCell).join(',')));
     chemDownloadCsv('histogram_bin_' + String(q.label).replace(/[^A-Za-z0-9]+/g, '_') + '.csv', lines); return;
   }
   const d = chemDrillLast; if(!d || !d.found) return;
-  const lines = [['Heat', 'Section', 'Item', 'Value / MT', 'LSL', 'USL', 'Status / Decision', 'Insp. date', 'Work center', 'Grade', 'Main defect', 'Intensity'].map(chemCsvCell).join(',')];
-  d.params.forEach(p => lines.push([d.heat_no, 'Chemistry', p.label, p.value, p.lsl == null ? '' : p.lsl, p.usl == null ? '' : p.usl, p.side ? (p.side === 'below' ? 'BELOW LSL' : 'ABOVE USL') : (p.lsl != null || p.usl != null) ? 'OK' : '', '', '', '', '', ''].map(chemCsvCell).join(',')));
-  (d.coils || []).forEach(r => lines.push([d.heat_no, 'Coil', r.batch_no, Number(r.output_weight || 0), '', '', r.quality_decision || '', chemDmy(r.insp_lot_date || ''), r.work_center || '', r.grade || '', r.main_defect || '', r.defect_intensity || ''].map(chemCsvCell).join(',')));
+  const lines = [['Heat', 'Section', 'Item', 'Value / MT', 'LSL', 'USL', 'Aim LSL', 'Aim USL', 'Status / Decision', 'Insp. date', 'Work center', 'Grade', 'Main defect', 'Intensity'].map(chemCsvCell).join(',')];
+  chemVisible(d.params || [], 0, d).forEach(p => lines.push([d.heat_no, 'Chemistry', p.label, p.value, p.lsl == null ? '' : p.lsl, p.usl == null ? '' : p.usl, p.aim_lsl == null ? '' : p.aim_lsl, p.aim_usl == null ? '' : p.aim_usl, chemParamStatus(p), '', '', '', '', ''].map(chemCsvCell).join(',')));
+  chemVisible(d.coils || [], 1, d).forEach(r => lines.push([d.heat_no, 'Coil', r.batch_no, Number(r.output_weight || 0), '', '', '', '', r.quality_decision || '', chemDmy(r.insp_lot_date || ''), r.work_center || '', r.grade || '', r.main_defect || '', r.defect_intensity || ''].map(chemCsvCell).join(',')));
   chemDownloadCsv('heat_' + String(d.heat_no).replace(/[^A-Za-z0-9]+/g, '_') + '.csv', lines);
 }
 async function openChemHeat(heat){
@@ -1229,3 +1238,100 @@ document.addEventListener('click', e => {
   };
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
+
+// =====================================================================================================================
+// Chemistry -> styled Excel (default). Same look as the dashboard: JSL logo, title band, icons in the headers, Cpk / status colours.
+// Every column the screen can show is exported (incl. Aim LSL / Aim USL and the Aim status), and the heat / bin drill-downs export only
+// the rows that pass the column filters on screen. "CSV (plain)" in the Export dialog keeps the old file type.
+// =====================================================================================================================
+function chemXlsxOn(){ const r = document.querySelector('input[name="chemExpFmt"]:checked'); return !r || r.value !== 'csv'; }
+// rows of the open drill-down table #idx that are not hidden by a column filter (same order as the source array)
+function chemVisible(arr, idx, d){
+  const m = document.getElementById('chemDrillContent'); if(!m) return arr;
+  const tbs = [...m.querySelectorAll('table.drill-table')];
+  const t = d && !d.found ? null : tbs[idx]; if(!t) return arr;
+  const trs = [...t.querySelectorAll('tbody > tr')]; if(trs.length !== arr.length) return arr;
+  return arr.filter((_, i) => !trs[i].classList.contains('qdhf-hide'));
+}
+function chemFilterNote(idx){
+  const m = document.getElementById('chemDrillContent'), t = m && m.querySelectorAll('table.drill-table')[idx]; if(!t) return '';
+  const hid = t.querySelectorAll('tbody > tr.qdhf-hide').length; return hid ? `${hid} row${hid === 1 ? '' : 's'} hidden by column filters are not included` : '';
+}
+function chemParamStatus(p){
+  const hasLim = p.lsl != null || p.usl != null || p.aim_lsl != null || p.aim_usl != null;
+  return p.side ? (p.side === 'below' ? 'BELOW LSL' : 'ABOVE USL') : p.aim_side ? (p.aim_side === 'below' ? 'BELOW AIM LSL' : 'ABOVE AIM USL') : hasLim ? 'OK' : '';
+}
+function chemXlsxMeta(d, extra){
+  const meta = [['Exported', chemNowDmy()], ['Selection', chemSelParts(d).join(' • ') || 'All']];
+  const info = chemWindowInfo(d, true);
+  if(info){ meta.push(['Current window', info.cur]); if(info.prev) meta.push(['Compared to', info.prev]); info.notes.forEach(n => meta.push(['Note', n])); }
+  if(d && d.all_grades) (d.grades || []).forEach(g => { const w = g.window && g.window.current; if(w) meta.push(['Window - ' + (g.description === '__none__' ? 'No spec assigned' : g.description), [`${w.n} heats`, chemHeatRange(w), chemCastRange(w)].filter(Boolean).join(' · ')]); });
+  return meta.concat(extra || []);
+}
+function chemXlsxCpk(d){
+  const sets = d && d.all_grades ? (d.grades || []).map(g => ({grade: g.description === '__none__' ? 'No spec assigned' : g.description, rows: g.overview || []}))
+    : [{grade: (d && d.spec && d.spec.description) || '', rows: (d && d.overview) || []}];
+  if(!sets.some(x => x.rows.length)) return;
+  const n = v => v == null || !isFinite(v) ? '' : Math.round(Number(v) * 1e5) / 1e5, thr = chemThr();
+  const idx = lbl => ({label: lbl, icon: '📈', kind: 'idx', thr: {target: thr.target, warning: thr.warning, direction: thr.direction || 'higher'}});
+  const cols = [{label: 'Grade / spec', icon: '🏷️', kind: 'text', width: 24}, {label: 'Parameter', icon: '🧪', kind: 'text', width: 16}, {label: 'Main element', icon: '⭐', kind: 'text'}, {label: 'Heats', icon: '🔥', kind: 'int'},
+    {label: 'Mean', icon: '➗', kind: 'num'}, {label: 'Std LSL', icon: '🔻', kind: 'num'}, {label: 'Std USL', icon: '🔺', kind: 'num'}, {label: 'Aim LSL', icon: '🎯', kind: 'num'}, {label: 'Aim USL', icon: '🎯', kind: 'num'},
+    {label: 'Cp', icon: '🎯', kind: 'num2'}, idx('Cpk (within σ)'), {label: 'Cpk rating', icon: '🚦', kind: 'status'}, {label: 'Std. Dev. (within, Cp/Cpk)', icon: '📉', kind: 'num3'},
+    {label: 'Pp', icon: '📐', kind: 'num2'}, idx('Ppk (overall σ)'), {label: 'Std. Dev. (overall, Pp/Ppk)', icon: '📉', kind: 'num3'}, {label: 'Out-of-spec heats', icon: '🚩', kind: 'int'}, {label: 'Indicative (< 30 heats)', icon: 'ℹ️', kind: 'text'}];
+  const rows = [], flags = [];
+  sets.forEach(st => st.rows.forEach(r => { rows.push([st.grade, r.label, r.main ? 'Yes' : 'No', r.n, n(r.mean), n(r.lsl), n(r.usl), n(r.aim_lsl), n(r.aim_usl), n(r.cp), n(r.cpk), r.cpk == null ? '' : chemIdxLabel(r.cpk).toUpperCase(), n(r.sigma_within), n(r.pp), n(r.ppk), n(r.sigma_overall), r.oos, r.n < 30 ? 'Yes' : 'No']); flags.push(r.oos ? 'bad' : ''); }));
+  qdDownloadXlsx({title: 'Chemistry SPC — Cpk table', icon: '🧪', sheet: 'Cpk table', filename: 'chemistry_cpk_' + chemFileTag(d), subtitle: 'Capability of every parameter · Cpk / Ppk coloured with the dashboard bands (On target / Watch / Action)',
+    meta: chemXlsxMeta(d), sections: [{title: 'Capability by parameter', icon: '📈', columns: cols, rows, row_flags: flags}]}, 'chemistry_cpk_' + chemFileTag(d));
+}
+function chemXlsxHeats(d){
+  const s = chemHeatSeries(d); if(!s.length) return;
+  const top = h => h.disp && h.disp.top_defects && h.disp.top_defects[0] ? h.disp.top_defects[0].defect : '';
+  const tail = [{label: 'Any parameter out of spec', icon: '🚩', kind: 'status'}, {label: 'Analyst', icon: '👤', kind: 'text', width: 14}, {label: 'Coils', icon: '📦', kind: 'int'}, {label: 'Reject %', icon: '❌', kind: 'pct'}, {label: 'Top defect', icon: '🛠️', kind: 'text', width: 24}];
+  const yn = v => v ? 'OUT OF SPEC' : 'OK', tailV = h => [yn(h.heat_oos), h.analyst || '', h.disp ? h.disp.coils : '', h.disp ? h.disp.reject_pct : '', top(h)];
+  let cols, rows, flags, title, tag;
+  if(d.param === '__all__'){
+    const pv = d.param_views || [], by = pv.map(p => new Map((p.series || []).map(x => [x.heat_no, x]))), heats = [], seen = new Set();
+    pv.forEach(p => (p.series || []).forEach(x => { if(!seen.has(x.heat_no)){ seen.add(x.heat_no); heats.push(x); } })); heats.sort((a, b) => (a.i || 0) - (b.i || 0));
+    cols = [{label: 'Heat no', icon: '🔥', kind: 'heat'}, {label: 'Cast date', icon: '📅', kind: 'date'}].concat(pv.map(p => ({label: chemParamLabel(p.param), icon: '🧪', kind: 'num'})), tail);
+    rows = heats.map(h => [h.heat_no, chemDmy(h.cast_date || '')].concat(by.map(m => m.has(h.heat_no) ? m.get(h.heat_no).value : ''), tailV(h))); flags = heats.map(h => h.heat_oos ? 'bad' : '');
+    title = 'Chemistry SPC — Heat data (all elements)'; tag = 'chemistry_heats_all_elements_';
+  } else {
+    const label = (chemMeta && chemMeta.params.find(p => p.key === d.param) || {}).label || d.param;
+    const lim = [['Std LSL', d.lsl], ['Std USL', d.usl], ['Aim LSL', d.aim_lsl], ['Aim USL', d.aim_usl]];
+    cols = [{label: 'Heat no', icon: '🔥', kind: 'heat'}, {label: 'Cast date', icon: '📅', kind: 'date'}, {label: label, icon: '🧪', kind: 'num'}, {label: 'Status (this parameter)', icon: '🚦', kind: 'status', width: 22}].concat(tail);
+    rows = s.map(p => { const why = chemOutWhy(p.value, d, p.oos); return [p.heat_no, chemDmy(p.cast_date || ''), p.value, why ? 'OUT OF SPEC · ' + why.toUpperCase() : 'OK'].concat(tailV(p)); }); flags = s.map(p => chemOutWhy(p.value, d, p.oos) ? 'bad' : '');
+    title = 'Chemistry SPC — Heat data (' + label + ')'; tag = 'chemistry_heats_' + d.param + '_';
+    var limMeta = [['Limits', lim.filter(x => x[1] != null).map(x => `${x[0]} ${chemNum(x[1])}`).join('  ·  ') || 'No limits set']];
+  }
+  qdDownloadXlsx({title, icon: '🔥', sheet: 'Heat data', filename: tag + chemFileTag(d), subtitle: 'One row per heat in heat-number order, with its coil disposition summary',
+    meta: chemXlsxMeta(d, typeof limMeta === 'undefined' ? [] : limMeta), sections: [{title: 'Heats', icon: '🔥', columns: cols, rows, row_flags: flags}]}, tag + chemFileTag(d));
+}
+function chemXlsxOos(d){
+  const list = d.oos_heats || []; if(!list.length){ showToast('info', 'Nothing to export', 'No out-of-spec heats in this selection.'); return; }
+  const cols = [{label: 'Heat', icon: '🔥', kind: 'heat'}, {label: 'Analyst', icon: '👤', kind: 'text', width: 14}, {label: 'Chemistry problem', icon: '🧪', kind: 'text', width: 46}, {label: 'Coils', icon: '📦', kind: 'int'}, {label: 'Reject %', icon: '❌', kind: 'pct'}, {label: 'Defect coils', icon: '🛠️', kind: 'int'}, {label: 'Top defects', icon: '🚩', kind: 'text', width: 40}];
+  const rows = list.map(o => [o.heat_no, o.analyst || '', o.violations.map(v => `${v.param} ${v.value} ${v.side === 'below' ? '< LSL' : '> USL'} ${v.limit}`).join('; '), o.disp ? o.disp.coils : '', o.disp ? o.disp.reject_pct : '', o.disp ? o.disp.defect_coils : '', o.disp ? o.disp.top_defects.map(t => `${t.defect} (${t.coils})`).join('; ') : '']);
+  const more = d.oos_total > list.length ? [['Note', `Showing ${list.length} of ${d.oos_total} out-of-spec heats`]] : [];
+  qdDownloadXlsx({title: 'Chemistry SPC — Out-of-spec heats', icon: '🚩', sheet: 'Out-of-spec heats', filename: 'out_of_spec_heats', subtitle: 'Heats with at least one parameter outside its specification, with the disposition of their coils',
+    meta: chemXlsxMeta(d, more), sections: [{title: 'Out-of-spec heats', icon: '🚩', columns: cols, rows, row_flags: rows.map(() => 'bad')}]}, 'out_of_spec_heats');
+}
+function chemXlsxDrill(){
+  if(!chemDrillLast && chemBinLast){
+    const q = chemBinLast, heats = chemVisible(q.heats, 0), note = chemFilterNote(0);
+    const cols = [{label: 'Heat', icon: '🔥', kind: 'heat'}, {label: 'Cast date', icon: '📅', kind: 'date'}, {label: q.label, icon: '🧪', kind: 'num'}, {label: 'Status', icon: '🚦', kind: 'status', width: 22}, {label: 'Coils', icon: '📦', kind: 'int'}, {label: 'Reject %', icon: '❌', kind: 'pct'}];
+    const rows = heats.map(p => { const why = chemOutWhy(p.value, q.d, p.oos); return [p.heat_no, p.cast_date ? chemDmy(p.cast_date) : '', p.value, why ? 'OUT OF SPEC · ' + why.toUpperCase() : 'OK', p.disp ? p.disp.coils : '', p.disp ? p.disp.reject_pct : '']; });
+    const tag = 'histogram_bin_' + String(q.label).replace(/[^A-Za-z0-9]+/g, '_');
+    qdDownloadXlsx({title: `${q.label} — histogram bar ${chemNum(q.b.x0)} – ${chemNum(q.b.x1)}`, icon: '📊', sheet: 'Histogram bar', filename: tag, subtitle: 'Heats that fall in the clicked histogram bar',
+      meta: chemXlsxMeta(q.d, note ? [['Filters', note]] : []), sections: [{title: 'Heats in this bar', icon: '🔥', columns: cols, rows, row_flags: heats.map(p => chemOutWhy(p.value, q.d, p.oos) ? 'bad' : '')}]}, tag); return;
+  }
+  const d = chemDrillLast; if(!d || !d.found) return;
+  const c = d.chem || {}, sec = [];
+  const pcols = [{label: 'Parameter', icon: '🧪', kind: 'text', width: 18}, {label: 'Value', icon: '🔢', kind: 'num'}, {label: 'Std LSL', icon: '🔻', kind: 'num'}, {label: 'Std USL', icon: '🔺', kind: 'num'}, {label: 'Aim LSL', icon: '🎯', kind: 'num'}, {label: 'Aim USL', icon: '🎯', kind: 'num'}, {label: 'Status', icon: '🚦', kind: 'status', width: 22}];
+  const ps = chemVisible(d.params || [], 0, d), fill = (lo, hi) => lo == null && hi != null && hi > 0 ? 0 : lo, nn = v => v == null ? '' : v;
+  sec.push({title: 'Chemistry of heat ' + d.heat_no, icon: '🧪', columns: pcols, rows: ps.map(p => [p.label, p.value, nn(fill(p.lsl, p.usl)), nn(p.usl), nn(fill(p.aim_lsl, p.aim_usl)), nn(p.aim_usl), (st => st === 'OK' || !st ? st : 'OUT OF SPEC · ' + st)(chemParamStatus(p))]), row_flags: ps.map(p => p.side || p.aim_side ? 'bad' : ''), note: chemFilterNote(0)});
+  const cs = chemVisible(d.coils || [], 1, d);
+  if((d.coils || []).length) sec.push({title: "Disposition of this heat's coils", icon: '🏭', columns: [{label: 'Batch no', icon: '📦', kind: 'text', width: 14}, {label: 'Insp. date', icon: '📅', kind: 'date'}, {label: 'Work center', icon: '🏭', kind: 'text', width: 16}, {label: 'Grade', icon: '🏷️', kind: 'text', width: 22}, {label: 'MT', icon: '⚖️', kind: 'num3'}, {label: 'Main defect', icon: '🛠️', kind: 'text', width: 24}, {label: 'Intensity', icon: '🔥', kind: 'text'}, {label: 'Decision', icon: '🧾', kind: 'decision', width: 20}],
+    rows: cs.map(r => [r.batch_no, chemDmy(r.insp_lot_date || ''), r.work_center || '', r.grade || '', Number(r.output_weight || 0), r.main_defect || '', r.defect_intensity || '', r.quality_decision || '']), total: ['Total', '', '', '', cs.reduce((a, r) => a + Number(r.output_weight || 0), 0).toFixed(3), '', '', `${cs.length} coils`], note: chemFilterNote(1)});
+  const s = d.summary;
+  qdDownloadXlsx({title: 'Heat ' + d.heat_no, icon: '🔥', sheet: 'Heat ' + d.heat_no, filename: 'heat_' + String(d.heat_no).replace(/[^A-Za-z0-9]+/g, '_'), subtitle: `${d.spec || 'No spec assigned'} · cast ${chemDmy(c.cast_date) || 'n/a'} · analyst ${c.analyst || '—'} · alloy ${c.alloy || '—'} ${c.denomination || ''}`.trim(),
+    meta: [['Exported', chemNowDmy()]].concat(s ? [['Disposition', `${s.coils} coils · ${s.qty_mt} MT · reject ${s.reject_mt} MT (${s.reject_pct}%) · ${s.defect_coils} coils with a defect (${s.defect_pct}%)`]] : []), sections: sec}, 'heat_' + String(d.heat_no).replace(/[^A-Za-z0-9]+/g, '_'));
+}

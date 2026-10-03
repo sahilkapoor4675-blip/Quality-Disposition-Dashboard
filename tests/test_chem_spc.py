@@ -329,6 +329,17 @@ check(all(r.get("cast_date") for r in _rws) and len(_rws) == 5, "a column full o
 _rws2, _ = _cs._rows_from_table("S", [("Heat No", "Alloy", "Name", "Cu%", "Zn%")] + [(f"NBS{7000 + i}", "05", "ab", 62.0, 18.0) for i in range(5)])
 check(not any(r.get("cast_date") for r in _rws2), "no false date column when the file has none (numbers / names are never taken for dates)")
 
+# ---- 14th pass: heat count font, bold trend, histogram hover, styled exports ----
+_css = (ROOT / "src" / "css" / "16-chem-spc.css").read_text(encoding="utf-8") if "ROOT" in globals() else ""
+if _css:
+    check(".chem-grade-head .chem-gh-n{font:inherit" in _css, "the heat count beside the grade name uses the grade-name font")
+    check(".chem-grade-head span{" not in _css, "no leftover small-font rule on the heat count")
+    check(".chem-el-abs{display:none;margin-left:2px;font-weight:800" in _css and "chem-el-trendline .trend b" in _css, "trend chip is bold end to end (arrow, sign, %, absolute change)")
+    check(".chem-hist-svg > *:not(.chem-hist-bar){pointer-events:none}" in _css and ".chem-hist-bar.has-heats:hover" in _css, "histogram bars get a hover effect and nothing covers them")
+check("chemXlsxCpk" in js and "chemXlsxHeats" in js and "chemXlsxOos" in js and "chemXlsxDrill" in js and "chemXlsxOn" in js, "Chemistry exports have a styled Excel version")
+check("'Aim LSL', 'Aim USL', 'Status / Decision'" in js and "chemVisible(d.params" in js, "heat drill-down CSV carries Aim LSL / Aim USL and honours the column filters")
+check('name="chemExpFmt"' in idx and "(Excel)" in idx, "Export dialog lets the person pick Excel or CSV for Chemistry downloads")
+
 if ERR:
     print("CHEM SPC FAIL"); [print(" -", e) for e in ERR]; sys.exit(1)
 print("CHEM SPC PASS — SPC maths, import validation, spec matching, HTTP flow, heat join, backup round-trip.")

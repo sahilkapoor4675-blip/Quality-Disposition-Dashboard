@@ -1,3 +1,40 @@
+## Chemistry SPC + export fixes — no version bump (2026-10-03, fourteenth pass)
+
+**Fixed**
+- **Heat count font.** `358 heats` beside the grade name is now the same font family, size and weight as the grade name (it was a small 14 px label).
+  The heat range / cast-date span shown when *Heat Qty (last N)* is chosen stays small.
+- **Element cards: trend chip is bold end to end** — arrow, `+` / `-` sign, `%` and the bracketed `(−0.27)`. The chip has a hover tooltip that says what
+  the numbers are: `%` = relative change, the bracket = absolute difference of the Cpk / Ppk index itself (e.g. 1.86 − 1.78). Cpk / Ppk have no unit, so
+  the bracket is **not** percentage points (pp).
+- **Histogram bars now react like the dashboard charts.** The drill-down existed but could not be reached: the Aim band / limit lines / normal curve are
+  drawn after the bars and covered them, so the pointer never touched a bar. Non-bar shapes now ignore the pointer. Hover = bar highlight (outline, lift,
+  shadow), the other bars dim, tooltip says *click to drill down*; click or Enter/Space opens the heats of that bar. Empty bars stay inert.
+- **Drill-down export was incomplete.**
+  - Main drill-down (*Export Selected Records*): the file had the 9 on-screen columns and the server export stopped at 50,000 rows. It now has **every stored
+    column** (adds UD Date, Month, Week, Quarter, Financial Year) and **every record**. With column filters active it exports exactly the filtered rows
+    (all pages are loaded first, not only the page on screen).
+  - Chemistry heat drill-down: Aim LSL / Aim USL and the Aim-based status were missing; column filters were ignored. Both fixed (Excel and CSV).
+  - Chemistry histogram-bin list: column filters are honoured.
+- **Main Excel report: columns cut off.** The auto-fit skipped every column after the first on sheets with a merged title row, so long names (defects, grades)
+  were truncated. Column widths are now computed per column.
+
+**Changed / Added**
+- **Styled Excel for every "export what you see" button** (new `reports._table_xlsx`, `POST /api/export/table`): JSL logo, navy title band, sub-title, meta block
+  (exported time, selection, window, filters, record count), icons in every header, status / decision / Cpk-band colours, zebra rows, total row, auto-filter,
+  frozen header, landscape fit-to-width print setup. Text cells are formula-safe. Used by the main drill-down, the Chemistry Cpk table, Heat data,
+  Out-of-spec heats, the histogram-bin list and the heat drill-down (heat sheet has a *Chemistry* block and a *Coils* block).
+- **Export dialog → Chemistry: file-type picker** (Excel styled / CSV plain). Excel is the default. The drill-down header has a new **CSV** button next to
+  *Export Selected Records* (`GET /api/drilldown/export?fmt=xlsx|csv`).
+- **Main Excel report (header Export → Excel)** now carries the dashboard look: JSL logo on every sheet, icons on sheet titles and headers, KPI tiles in each
+  card's accent colour with the trend line (▲/▼, %, "vs prev") like the web cards, severity colours (high / medium / low / info), zebra rows, bold total row,
+  auto-filter + frozen header, repeat-header and landscape one-page-wide printing (the workbook prints on 14 pages instead of 40).
+
+**Tests**
+- `tests/test_chem_spc.py`: heat-count font, bold trend, histogram hover / pointer-events, Excel exports present, CSV Aim columns, file-type picker.
+- `tests/test_exports.py`: `table_export_acceptance` (1,200 rows kept, logo, decision colours, formula injection neutralised).
+- Verified in Chromium: hover + click + keyboard on histogram bars, filtered and unfiltered drill-down exports (rows / columns / values), Chemistry exports.
+- Release gate: PASS.
+
 ## Chemistry SPC UI fixes — no version bump (2026-10-02, thirteenth pass)
 
 **Fixed**
